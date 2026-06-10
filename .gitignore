@@ -1,0 +1,18 @@
+# Dart
+.dart_tool/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Fixture app build artefacts
+fixtures/**/build/
+fixtures/**/.dart_tool/
+fixtures/**/ios/Pods/
+fixtures/**/ios/.symlinks/
+fixtures/**/android/.gradle/

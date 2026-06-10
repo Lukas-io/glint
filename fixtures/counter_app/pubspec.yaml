@@ -1,0 +1,17 @@
+name: counter_fixture
+description: P0 smoke-test target. The stock Flutter counter app.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
