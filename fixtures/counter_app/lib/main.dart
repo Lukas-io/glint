@@ -33,15 +33,22 @@ class _CounterPageState extends State<CounterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('glint counter fixture')),
-      body: Center(
+      body: SingleChildScrollView(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+              child: Text('You have pushed the button this many times:'),
+            ),
             Text(
               '$_count',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            const SizedBox(height: 24),
+            const Divider(),
+            // Painted/hittable edge cases — P1 verification surface.
+            const _FlagsLab(),
           ],
         ),
       ),
@@ -50,6 +57,76 @@ class _CounterPageState extends State<CounterPage> {
         tooltip: 'Increment',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+/// Three buttons that should resolve as:
+/// - `elevated_button_in_visible_row` — painted=true,  hittable=true
+/// - `elevated_button_in_opacity_zero_row` — painted=false, hittable=true
+///   (Flutter Opacity(0) still receives hits; that's the canonical
+///   painted-vs-hittable divergence.)
+/// - `elevated_button_in_absorb_pointer_row` — painted=true, hittable=false
+///   (AbsorbPointer eats the tap; button still paints.)
+class _FlagsLab extends StatelessWidget {
+  const _FlagsLab();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('flags lab', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          _LabRow(
+            label: 'visible',
+            child: ElevatedButton(
+              onPressed: () {},
+              child: const Text('tap me'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _LabRow(
+            label: 'opacity_zero',
+            child: Opacity(
+              opacity: 0,
+              child: ElevatedButton(
+                onPressed: () {},
+                child: const Text('opacity-0'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _LabRow(
+            label: 'absorb_pointer',
+            child: AbsorbPointer(
+              absorbing: true,
+              child: ElevatedButton(
+                onPressed: () {},
+                child: const Text('absorbed'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LabRow extends StatelessWidget {
+  const _LabRow({required this.label, required this.child});
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(width: 120, child: Text(label)),
+        Expanded(child: child),
+      ],
     );
   }
 }

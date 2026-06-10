@@ -326,9 +326,16 @@ Tap delivery in P0 is platform-honest: `simctl` has no input injection — OS-le
 - VM-service `evaluate()` accepts EXPRESSIONS only — no statement-block lambda bodies. Module B must do tree walks server-side (walking inspector JSON) rather than via in-VM evaluate. P0 used a fixture-side helper to sidestep this; Module B will not.
 - A backgrounded Android app gets a zero-size surface from the OS; layout reads return garbage until the app is foregrounded. Foregrounding the target is an interaction-layer responsibility (Module A in P2). The smoke harness's `_ensureAndroidForeground` is the seed of that helper.
 
-**Phase 1 — Module B core (perception minimum).**
+**Phase 1 — Module B core (perception minimum). ✅ Complete.**
 Render-tree walker over VM service. `painted` and `hittable` flags per the v1 definition. Lazy coordinate resolution + logical-to-physical pixel conversion. Stable id generation (§9 element identity scheme). No semantic layer yet — output is raw structured nodes.
 *Verify:* on a counter app and a list-detail demo app, the dumped scene matches what's actually on screen and what's actually tappable. `painted` vs `hittable` divergence demonstrable on a known case (e.g. a button under a transparent absorber).
+
+*Lessons banked into P3+:*
+- **VM `evaluate()` accepts EXPRESSIONS — including immediately-invoked lambdas, cascades, and record literals — but NOT statement-block function bodies.** A lambda body must be `=> expression`. Verified empirically: `((HitTestResult r) => ((WidgetsBinding.instance..hitTestInView(r, c, viewId)), r.path.any(...)).$2)(HitTestResult())` works. The arrow-body + record-literal pattern is the canonical way to thread side effects through a single eval. (And: raw newlines inside the expression are treated as EOF — keep it single-line.)
+- **The inspector's summary tree is ~10× smaller than the full tree** (counter+flags-lab fixture: 11 KB summary vs 2.5 MB full). Summary stays the agent-facing read surface in P3; full tree is server-internal only.
+- **`textPreview` is a node-local property, not part of identity.** Stable id generation must NOT key on it — proven by Gate 2 (counter ticks, ids hold).
+- **`Opacity(opacity: 0)` is the canonical painted=false, hittable=true case.** Flutter's RenderOpacity does not override hit testing, so taps still land. The matrix `(painted, hittable) ∈ {(T,T), (F,T), (T,F)}` is empirically demonstrable on a single screen — keep this as the canonical demo for Module B regressions.
+- **The agent-facing id scheme passes the "two consecutive instances" test for free.** Three `SizedBox`es in the same Column got `sized_box_in_flags_lab#mqif`, `#sjjf`, `#a6gf` automatically — descriptive scope + hash fallback Just Works without per-shape tuning.
 
 **Phase 2 — Module A core (interaction minimum).**
 iOS Swift bridge against `CoreSimulator` for tap/swipe/type/buttons. Android `adb shell input` equivalents. Action set abstraction. Interaction layer accepts only resolved coordinates from Module B; agent-facing API is symbolic ids.
@@ -368,9 +375,10 @@ Use this section as the running checklist. Update status as work lands.
 | A | Android interaction via adb | P0 seed (`adb shell input tap` working in smoke) |
 | A | Android foregrounding helper | P0 seed (`_ensureAndroidForeground` in `tool/smoke.dart`) |
 | A | Action abstraction (tap, swipe, type, buttons) | not started |
-| B | Render-tree reader over VM service | P0 seed (`debugDumpRenderTree` + inspector tree both proven) |
-| B | painted / hittable flagging | not started |
-| B | Lazy coordinate resolution + DPR conversion | P0 seed (fixture-side; Module B replaces with server-side walk) |
+| B | Render-tree reader over VM service | ✅ `InspectorClient` (summary + full) |
+| B | painted / hittable flagging | ✅ painted from JSON + ancestor walk; hittable via real `hitTestInView` |
+| B | Lazy coordinate resolution + DPR conversion | ✅ single-eval `CoordinateResolver` (geometry + painted + hittable in one round trip) |
+| B | Stable id generation | ✅ snake_case + descriptive scope + FNV-32 hash fallback; 8 unit tests pass |
 | B | Navigation-stack / Overlay awareness | not started |
 | C | Zero-config primitive describer | not started |
 | C | Plain-language scene output | not started |
