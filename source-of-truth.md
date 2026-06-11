@@ -371,8 +371,8 @@ Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major re
 
 | Xcode | iOS Sim runtime | Status | Notes |
 |---|---|---|---|
-| 26.x | 26 | **research in progress** | `SimDeviceLegacyHIDClient` + `IndigoHIDMessageForMouseNSEvent` confirmed exported. Message at offset 24 begins with `innerSize=0xA0`, `eventType=2`, `field1=0x0B` (matches idb's Xcode-14 layout shifted by 24 bytes — likely an outer container header was added). Single-payload send executes without crash but simulator does not register the touch — likely needs idb's 2-payload reconstruction (finger + digitizer summary) or further field tuning. |
-| ≤14 | ≤14 | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 | xRatio @ 0x3C, yRatio @ 0x44, payload stride 0xA0, target=0x32 |
+| 26.x | 26 | **✅ tap working** | Layout: 24-byte outer envelope (all zero), then `innerSize=0xA0` @ 0x18, `eventType=2` @ 0x1C, payload[0] @ 0x20, payload[1] (digitizer mirror) @ 0xC0. Touch xRatio @ 0x3C / 0xDC, yRatio @ 0x44 / 0xE4, payload[1].touch.field1=1 @ 0xCC, field2=2 @ 0xD0. Target=0x32, eventType down=1, up=2. Total message 0x160 bytes. |
+| ≤14 | ≤14 | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 | Same offsets minus the 24-byte outer envelope. |
 
 **Investigation log lives in commits to `native/ios_sim_bridge/`**. Each Xcode release goes through:
 1. `nm -gU` on SimulatorKit/CoreSimulator to confirm exported `IndigoHID*` symbols.

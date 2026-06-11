@@ -312,10 +312,36 @@ struct SimDeviceProxy {
     // "main display" target id). Tested unchanged through Xcode 14 → 26.
     private static let displayTarget: Int32 = 0x32
 
-    // Byte offsets of (xRatio, yRatio) inside an IndigoHIDMessageStruct
-    // emitted by IndigoHIDMessageForMouseNSEvent. Same as idb.
-    private static let xRatioOffset = 0x3C
-    private static let yRatioOffset = 0x44
+    // Xcode-26 IndigoHIDMessageStruct layout (verified by `swift build &&
+    // glint-iossim tap` + hex dump):
+    //
+    //   0x00..0x17  (24 bytes) — outer envelope, all zeros from the builder
+    //   0x18..0x1B   innerSize          = 0xA0 (one IndigoPayload)
+    //   0x1C..0x1F   eventType          = 2 (IndigoEventTypeTouch)
+    //   0x20..0xBF   payload[0] — 160 bytes
+    //     0x20..0x23   payload.field1   = 0x0B
+    //     0x24..0x2B   payload.timestamp (mach_absolute_time)
+    //     0x2C..0x33   touch.field1/field2/field3 (uint32 × 3)
+    //     0x34..0x3B   touch.field4 / pad / pad
+    //     0x3C..0x43   touch.xRatio (double)
+    //     0x44..0x4B   touch.yRatio (double)
+    //     ...
+    //   0xC0..0x15F  payload[1] (digitizer summary; mirrors payload[0])
+    //     0xCC..0xCF   payload[1].touch.field1 = 1 (digitizer marker)
+    //     0xD0..0xD3   payload[1].touch.field2 = 2 (digitizer marker)
+    //     0xDC..0xE3   payload[1].touch.xRatio
+    //     0xE4..0xEB   payload[1].touch.yRatio
+    //
+    // Total message size = 0x20 (outer + inner header) + 2 * 0xA0 = 0x160 (352).
+    private static let payloadStride = 0xA0
+    private static let messageHeaderSize = 0x20
+    private static let totalMessageSize = 0x20 + 2 * 0xA0   // 0x160
+    private static let xRatioOffset0 = 0x3C   // payload[0].touch.xRatio
+    private static let yRatioOffset0 = 0x44
+    private static let xRatioOffset1 = 0xDC   // payload[1].touch.xRatio
+    private static let yRatioOffset1 = 0xE4
+    private static let p1TouchField1Offset = 0xCC
+    private static let p1TouchField2Offset = 0xD0
 
     /// Tap at logical device coordinates (`x`, `y` in points, normalised
     /// against `deviceLogicalSize.width/height` to get the 0..1 ratio the
@@ -324,15 +350,11 @@ struct SimDeviceProxy {
              deviceLogicalSize: CGSize) throws {
         let ratio = CGPoint(x: x / deviceLogicalSize.width,
                             y: y / deviceLogicalSize.height)
-        SimBridge.log("tap ratio=(\(ratio.x), \(ratio.y))")
         let client = try makeHidClient()
-        SimBridge.log("HID client: \(client)")
         try sendTouch(client: client, ratio: ratio, direction: Self.touchDown)
-        SimBridge.log("sent touch DOWN")
         // Held-down dwell so the OS recognises it as a tap; idb used ~50ms.
         Thread.sleep(forTimeInterval: 0.05)
         try sendTouch(client: client, ratio: ratio, direction: Self.touchUp)
-        SimBridge.log("sent touch UP")
     }
 
     private func sendTouch(client: AnyObject,
@@ -356,45 +378,54 @@ struct SimDeviceProxy {
         // simulator actually reads, but we feed both for parity in case
         // a future SimulatorKit decides to use the arg.
         var point = ratio
-        guard let message = build(&point, nil, Self.displayTarget, direction,
+        guard let oneShot = build(&point, nil, Self.displayTarget, direction,
                                   DarwinBoolean(false)) else {
             throw SimError(message:
                 "IndigoHIDMessageForMouseNSEvent returned nil for (\(ratio.x), \(ratio.y))")
         }
-        SimBridge.log("got message ptr=\(message)")
-        SimBridge.log("  bytes 0..64:  \(hexDump(message, count: 64))")
-        SimBridge.log("  bytes 60..72: \(hexDump(message.advanced(by: 60), count: 12))  // 0x3C-0x47 (xRatio)")
-        SimBridge.log("  bytes 68..80: \(hexDump(message.advanced(by: 68), count: 12))  // 0x44-0x4F (yRatio)")
-        // Patch the ratio at the documented offsets — this is what the
-        // simulator actually consumes for the touch coordinates.
-        let bytes = message.assumingMemoryBound(to: UInt8.self)
-        let xPtr = UnsafeMutableRawPointer(bytes + Self.xRatioOffset)
-            .assumingMemoryBound(to: Double.self)
-        let yPtr = UnsafeMutableRawPointer(bytes + Self.yRatioOffset)
-            .assumingMemoryBound(to: Double.self)
-        xPtr.pointee = Double(ratio.x)
-        yPtr.pointee = Double(ratio.y)
+        // The builder returns a 1-payload (160-byte payload) message. The
+        // simulator's HID stream actually consumes a 2-payload message:
+        // payload[0] is the finger event, payload[1] is the digitizer
+        // summary (mirrors payload[0] but with touch.field1=1, field2=2).
+        // We reconstruct that here following idb/FBSimulatorIndigoHID's
+        // approach.
+        let buf = calloc(1, Self.totalMessageSize)!
+        // Copy the 1-payload skeleton into our 2-payload buffer.
+        buf.copyMemory(from: oneShot,
+                       byteCount: Self.messageHeaderSize + Self.payloadStride)
+        // Replicate payload[0] into payload[1] slot.
+        let payload0Start = buf.advanced(by: Self.messageHeaderSize)
+        let payload1Start = payload0Start.advanced(by: Self.payloadStride)
+        payload1Start.copyMemory(from: payload0Start,
+                                 byteCount: Self.payloadStride)
+        // Patch finger ratio in payload[0].
+        patchDouble(buf, offset: Self.xRatioOffset0, value: Double(ratio.x))
+        patchDouble(buf, offset: Self.yRatioOffset0, value: Double(ratio.y))
+        // Patch digitizer-summary ratio in payload[1].
+        patchDouble(buf, offset: Self.xRatioOffset1, value: Double(ratio.x))
+        patchDouble(buf, offset: Self.yRatioOffset1, value: Double(ratio.y))
+        // Mark payload[1] as the digitizer summary.
+        patchUInt32(buf, offset: Self.p1TouchField1Offset, value: 1)
+        patchUInt32(buf, offset: Self.p1TouchField2Offset, value: 2)
+        // The builder's one-shot allocation is owned by us; release it
+        // since we copied what we needed.
+        free(oneShot)
 
-        // -[SimDeviceLegacyHIDClient sendWithMessage:freeWhenDone:completionQueue:completion:]
-        // The selector takes 4 args, exceeding Swift's perform() 2-arg limit.
-        // Drop one level lower: call objc_msgSend with a typed Swift cast.
         let sel = NSSelectorFromString(
             "sendWithMessage:freeWhenDone:completionQueue:completion:")
         guard client.responds(to: sel) else {
-            free(message)
+            free(buf)
             throw SimError(message:
                 "SimDeviceLegacyHIDClient missing sendWithMessage: — " +
                 "private API drift; see source-of-truth §13 compat matrix.")
         }
-        // `freeWhenDone:true` hands ownership of `message` to SimulatorKit.
-        // Both queue and completion are nil — we don't await completion.
+        // freeWhenDone:true — SimulatorKit owns the buffer.
         try SimBridge.callSendWithMessage(
             on: client,
             selector: sel,
-            message: message,
+            message: buf,
             freeWhenDone: true,
         )
-        // SimulatorKit owns `message` past this point — do NOT free.
     }
 
     private func makeHidClient() throws -> AnyObject {
@@ -463,6 +494,16 @@ extension SimBridge {
 func hexDump(_ p: UnsafeMutableRawPointer, count: Int) -> String {
     let bytes = p.assumingMemoryBound(to: UInt8.self)
     return (0..<count).map { String(format: "%02x", bytes[$0]) }.joined(separator: " ")
+}
+
+func patchDouble(_ buf: UnsafeMutableRawPointer, offset: Int, value: Double) {
+    let p = buf.advanced(by: offset).assumingMemoryBound(to: Double.self)
+    p.pointee = value
+}
+
+func patchUInt32(_ buf: UnsafeMutableRawPointer, offset: Int, value: UInt32) {
+    let p = buf.advanced(by: offset).assumingMemoryBound(to: UInt32.self)
+    p.pointee = value
 }
 
 extension SimBridge {
