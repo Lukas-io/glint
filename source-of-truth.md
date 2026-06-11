@@ -246,7 +246,7 @@ Coarse and top-level only. Capture user-visible state changes on the top-level s
 - **MCP transport:** stdio in v1. Code structured so streamable HTTP can drop in later without a rewrite.
 - **Element identity scheme:** every element has a unique, *stable* symbolic id. The agent never has to disambiguate at action time because names never collide. Generation: developer-assigned `Key` when present; otherwise a descriptive context-derived suffix (`submit_in_bottomsheet`) when ancestors give enough signal; otherwise a short deterministic hash (`submit#a3f1`). Stability across reads is required (same widget in same place ⇒ same id, every time) — IDs are derived from stable properties (tree path + ancestor labels + key), never random.
 - **Armed-intent state machine:** single armed slot, at most one move ahead (matches §7.2). Arming a second while one is pending → structured error. Hard ceiling reuses settle detection (§8.4). Scene reads and cancel-armed allowed while armed; immediate (non-armed) actions are blocked while an intent is armed (they would race).
-- **iOS interaction bridge:** Swift, linked against `CoreSimulator.framework` (private), injecting `IOHIDEvent` taps directly into `SimDevice`. Same path `simctl` uses internally. In-house, owned end to end, no third-party update cycle.
+- **iOS interaction bridge:** Swift, against private `CoreSimulator` + `SimulatorKit`. Modern Xcode (≥14) replaced the legacy `-[SimDevice sendEvent:]` API with `SimulatorKit.SimDeviceLegacyHIDClient.send(message:freeWhenDone:completionQueue:completion:)` taking an `UnsafePointer<IndigoHIDMessageStruct>` built via SimulatorKit's exported C function `IndigoHIDMessageForMouseNSEvent`. The IO subsystem above this (`SimDevice.io.ioPorts` → `SimDeviceIOClient`) is an XPC overlay (`ROCKRemoteProxy`); the legacy HID client is the canonical glint entry. *Per-Xcode reverse engineering is the maintenance model* — message offsets and required fields shift between Xcode majors. Compat matrix is §13.
 - **`painted` v1 definition:** element has non-empty paint bounds AND bounds intersect the viewport AND no *direct* ancestor sets `opacity: 0` or `Visibility(visible: false)`. Deferred: transitive opacity multiplication, custom clip paths, non-identity transforms, in-flight animation states.
 - **MCP server language:** Dart, on `package:dart_mcp` + `package:vm_service` + `package:dtd`. Reuses DTD discovery, attach lifecycle, structured response shapes (`summary` / `nextSteps` / `warnings`), and AOT install flow from `flutter_network_mcp`.
 
@@ -365,7 +365,26 @@ Action-set fill-out (long-press, drag, hardware buttons, `scroll_to_find`) and s
 
 ---
 
-## 13. Milestone tracking
+## 13. Xcode compatibility matrix (Module A iOS bridge)
+
+Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major release per backend. The maintenance model is per-release reverse engineering of `IndigoHIDMessageStruct`'s byte layout in `SimulatorKit.framework`, then patching the right fields and dispatching via `SimDeviceLegacyHIDClient.sendWithMessage:`. Each row below is a discrete contribution opportunity — community PRs welcome.
+
+| Xcode | iOS Sim runtime | Status | Notes |
+|---|---|---|---|
+| 26.x | 26 | **research in progress** | `SimDeviceLegacyHIDClient` + `IndigoHIDMessageForMouseNSEvent` confirmed exported. Message at offset 24 begins with `innerSize=0xA0`, `eventType=2`, `field1=0x0B` (matches idb's Xcode-14 layout shifted by 24 bytes — likely an outer container header was added). Single-payload send executes without crash but simulator does not register the touch — likely needs idb's 2-payload reconstruction (finger + digitizer summary) or further field tuning. |
+| ≤14 | ≤14 | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 | xRatio @ 0x3C, yRatio @ 0x44, payload stride 0xA0, target=0x32 |
+
+**Investigation log lives in commits to `native/ios_sim_bridge/`**. Each Xcode release goes through:
+1. `nm -gU` on SimulatorKit/CoreSimulator to confirm exported `IndigoHID*` symbols.
+2. `objc_copyProtocolList` + `class_copyMethodList` (the `dump-protocols` / `dump-classes` / `dump-class-methods` commands in `glint-iossim`) to map the live ObjC class graph.
+3. Hex-dump the message returned by the builder to spot layout shifts vs prior release.
+4. Try the 1-payload send; if no touch, port idb's 2-payload reconstruction and retry.
+5. Iterate on `xRatio/yRatio` offsets if simulator still doesn't see the touch.
+6. Once green, lock the per-Xcode Swift module behind a runtime version detector.
+
+---
+
+## 14. Milestone tracking
 
 Use this section as the running checklist. Update status as work lands.
 
