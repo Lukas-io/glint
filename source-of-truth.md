@@ -337,9 +337,15 @@ Render-tree walker over VM service. `painted` and `hittable` flags per the v1 de
 - **`Opacity(opacity: 0)` is the canonical painted=false, hittable=true case.** Flutter's RenderOpacity does not override hit testing, so taps still land. The matrix `(painted, hittable) ∈ {(T,T), (F,T), (T,F)}` is empirically demonstrable on a single screen — keep this as the canonical demo for Module B regressions.
 - **The agent-facing id scheme passes the "two consecutive instances" test for free.** Three `SizedBox`es in the same Column got `sized_box_in_flags_lab#mqif`, `#sjjf`, `#a6gf` automatically — descriptive scope + hash fallback Just Works without per-shape tuning.
 
-**Phase 2 — Module A core (interaction minimum).**
+**Phase 2 — Module A core (interaction minimum).** ✅ Core path green; full action-set fill-out in the Swift bridge is P2.2.
 iOS Swift bridge against `CoreSimulator` for tap/swipe/type/buttons. Android `adb shell input` equivalents. Action set abstraction. Interaction layer accepts only resolved coordinates from Module B; agent-facing API is symbolic ids.
 *Verify:* tap, swipe, type, and a hardware-button event each work on both platforms, addressed by stable id resolved by Module B. Manual smoke covers the action set in §4.
+
+*Lessons banked:*
+- **VM-service `valueAsString` is a 128-char preview.** Longer strings need `service.getObject(isolateId, ref.id)` to refetch the full content. Bit us when the Pixel 8's logical viewport (`411.42857142857144`) pushed our geometry JSON past the limit. Module B's resolver now refetches on `valueAsStringIsTruncated`.
+- **Backend contract: `summary` / `nextSteps` / `warnings`** — same envelope as `flutter_network_mcp`. Errors carry a typed `errorClass` (`UnresolvedTarget`, `NotHittable`, `UnsupportedBackendAction`, `BackendToolError`, `GeometryResolveError`) so the agent branches on cause without parsing prose.
+- **Permissive-by-default hittable.** The Interactor surfaces `hittable=false` as a warning, not a refusal. Strict mode (`refuseNotHittable=true`) flips it to `errorClass:"NotHittable"`. §3 "agent gets everything; structured response shows what was found" — let the agent decide.
+- **iOS uses logical points, Android uses physical pixels.** The Interactor speaks physical pixels uniformly; `IosSimBackend` divides by DPR before handing the logical coords to `glint-iossim`. Keeps the orchestrator backend-agnostic.
 
 **Phase 3 — Module C minimum (semantic scene).**
 Compact plain-language scene derived from render primitives. Overlay-anchored navigation-stack awareness (§4). Output is the agent's actual reading surface.
@@ -390,10 +396,10 @@ Use this section as the running checklist. Update status as work lands.
 
 | Module | Component | Status |
 |---|---|---|
-| A | iOS native interaction bridge (Swift) | not started |
-| A | Android interaction via adb | P0 seed (`adb shell input tap` working in smoke) |
-| A | Android foregrounding helper | P0 seed (`_ensureAndroidForeground` in `tool/smoke.dart`) |
-| A | Action abstraction (tap, swipe, type, buttons) | not started |
+| A | iOS native interaction bridge (Swift) | ✅ tap on Xcode 26 / iOS 26.5 via SimDeviceLegacyHIDClient (see §13 compat matrix) |
+| A | Android interaction via adb | ✅ `AdbBackend` (`lib/src/interaction/backends/adb_backend.dart`) — tap/longPress/swipe/typeText/hardwareButton all wired |
+| A | Android foregrounding helper | P0 seed (`_ensureAndroidForeground` in `tool/smoke.dart`); MCP wrapper (P4) owns the policy |
+| A | Action abstraction (tap, swipe, type, buttons) | ✅ Sealed `Action` hierarchy + `Target` + `InteractionBackend` contract + `Interactor` orchestrator; tap fully verified on both platforms, swipe/typeText/hardwareButton wired in `AdbBackend`. `IosSimBackend` raises `UnsupportedBackendAction` for the swift-bridge gaps until P2.2 fills them in. |
 | B | Render-tree reader over VM service | ✅ `InspectorClient` (summary + full) |
 | B | painted / hittable flagging | ✅ painted from JSON + ancestor walk; hittable via real `hitTestInView` |
 | B | Lazy coordinate resolution + DPR conversion | ✅ single-eval `CoordinateResolver` (geometry + painted + hittable in one round trip) |

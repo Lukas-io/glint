@@ -186,7 +186,22 @@ class CoordinateResolver {
         'evaluate(geometry) returned ${raw.runtimeType}, expected String',
       );
     }
-    final jsonString = raw.valueAsString!;
+    // `valueAsString` is a preview — VM service truncates at ~128 chars.
+    // Our JSON blob can exceed that on devices whose viewport prints with
+    // many fractional digits (e.g. Pixel 8: 411.42857142857144). When the
+    // preview reports truncated, refetch the full Instance.
+    String jsonString = raw.valueAsString!;
+    if (raw.valueAsStringIsTruncated == true) {
+      final full = await svc.getObject(isolateId, raw.id!);
+      if (full is Instance && full.valueAsString != null) {
+        jsonString = full.valueAsString!;
+      } else {
+        throw GeometryResolveError(
+          'geometry JSON was truncated and getObject returned '
+          '${full.runtimeType} (expected Instance with valueAsString)',
+        );
+      }
+    }
     final decoded =
         jsonDecode(jsonString) as Map<String, Object?>; // synchronous; small
     return ResolvedCoord(
