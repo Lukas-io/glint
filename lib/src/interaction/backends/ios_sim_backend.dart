@@ -47,12 +47,11 @@ class IosSimBackend implements InteractionBackend {
         longPress: true,
         doubleTap: true,     // composed by the Interactor from two taps
         swipe: true,         // proven on Xcode 26 (2-payload + `field1=2` move marker)
-        // Typing + hardware buttons are gated on the per-Xcode mapping
-        // research described in source-of-truth §13. The Swift bridge has
-        // the dispatch code wired (see `IndigoHIDMessageForKeyboardArbitrary`
-        // and `IndigoHIDMessageForButton`); the gap is empirical: keymaps
-        // and button enum case → integer codes shift per Xcode major.
-        typeText: false,
+        typeText: true,      // proven on Xcode 26 (HID keyboard usage map)
+        // Hardware buttons still need IndigoHIDTargetForScreen + per-device
+        // mapping (code 1 ⇒ Apple Pay overlay on iPhone 17 Pro / Face ID;
+        // Home is a gesture on Face ID devices, not a button event). See
+        // source-of-truth §13 "Xcode 26 open work".
         hardwareButtons: <HardwareButton>{},
       );
 
@@ -113,19 +112,8 @@ class IosSimBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> typeText(String text) async {
-    // The Swift bridge has the `type` command wired through
-    // IndigoHIDMessageForKeyboardArbitrary with a printable-ASCII HID
-    // usage table (`native/ios_sim_bridge/Sources/glint-iossim/HidKeymap.swift`).
-    // Whether the simulator's input pipeline actually consumes those
-    // messages on Xcode 26 is the unverified bit — until source-of-truth
-    // §13 lands a green checkmark, we refuse and steer the agent at the
-    // adb path.
-    throw UnsupportedBackendAction(
-      label,
-      'typeText: Swift dispatch wired but Xcode 26 mapping is not yet '
-          'verified end-to-end — see source-of-truth §13 compat matrix',
-    );
+  Future<void> typeText(String text) {
+    return _run(['type', udid, text]);
   }
 
   @override

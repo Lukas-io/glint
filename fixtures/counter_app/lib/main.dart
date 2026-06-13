@@ -57,6 +57,17 @@ class _CounterPageState extends State<CounterPage> {
             const Divider(),
             // Painted/hittable edge cases — P1 verification surface.
             const _FlagsLab(),
+            // Typing surface — focus the TextField then send glint-iossim type.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: TextField(
+                key: const Key('glint_test_text_field'),
+                decoration: const InputDecoration(
+                  labelText: 'glint type target',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
             // Tall block of items so the page genuinely overflows the
             // viewport on every supported simulator (iPhone 17 Pro down
             // to iPhone SE). 30 × 80pt rows = 2400 logical px — taller

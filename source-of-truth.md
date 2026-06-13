@@ -377,7 +377,7 @@ Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major re
 
 | Xcode | iOS Sim runtime | tap | swipe | long-press | type | buttons | Notes |
 |---|---|---|---|---|---|---|---|
-| 26.x | 26 | ✅ | ✅ | ✅ (dispatch) | ⚠️ wired, untested | ⚠️ 1 of 5 mapped | See "Xcode 26 layout" + "Xcode 26 open work" below |
+| 26.x | 26 | ✅ | ✅ | ✅ (dispatch) | ✅ | ⚠️ 1 of 5 mapped, Home requires gesture path | See "Xcode 26 layout" + "Xcode 26 open work" below |
 | ≤14 | ≤14 | — | — | — | — | — | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 |
 
 ### Xcode 26 layout (verified)
@@ -390,8 +390,8 @@ Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major re
 
 ### Xcode 26 open work (deferred from P2.2)
 
-- **Hardware buttons.** `IndigoHIDMessageForButton(keyCode, op, target)`. Empirically: `keyCode=1` on iPhone 17 Pro triggers the Apple Pay / Face ID confirmation overlay; codes 2..5 are silent. The right path appears to be via `SimulatorKit.SimDeviceScreen.buttonTarget: IndigoHIDTarget` + the C export `_IndigoHIDTargetForScreen` (so the target isn't a hardcoded `0x32` per device) plus an `IndigoHIDButton` Swift enum case → integer mapping (known case strings on Xcode 26: `home`, `lock`, `crown`). Likely an additional codepath for Face ID iPhones uses the system swipe-up-from-bezel gesture rather than a button event — but the gesture starts outside the touchscreen, which our coordinate-based swipe can't reach.
-- **Typing.** `IndigoHIDMessageForKeyboardArbitrary(keyCode, op)` is wired (`HidKeymap.swift` maps printable ASCII to USB HID usage codes), but actually-typing-into-a-TextField hasn't been verified end-to-end on Xcode 26.
+- **Hardware buttons.** `IndigoHIDMessageForButton(keyCode, op, target)`. Empirically: `keyCode=1` on iPhone 17 Pro fires the Lock / Apple Pay overlay; codes 0, 2..5, and 0x191 (the constant in Simulator.app's `homeButtonPressed:` impl) are silent. Disassembly of `homeButtonPressed:` shows a `cmovel` that zeroes the button code when `hasHomeButton` returns false — i.e. **Face ID iPhones never receive a Home button event**; Simulator.app dispatches a different path for them (likely a gesture). Next-iteration plan: (a) use `_IndigoHIDTargetForScreen` (exported by SimulatorKit) so the target isn't a hardcoded `0x32` per device; (b) read the device class (Face ID vs Touch ID) from `SimDeviceType` and branch — Home on Face ID = swipe-up-from-bezel gesture, on Touch ID = `IndigoHIDButton.home` integer code; (c) map `Lock` to code 1 (already proven). Known `IndigoHIDButton` case strings on Xcode 26: `home`, `lock`, `crown`.
+- **Typing.** ✅ Verified end-to-end on Xcode 26: `IndigoHIDMessageForKeyboardArbitrary(usage, op)` with the `HidKeymap.swift` printable-ASCII HID usage table types into a focused Flutter `TextField`. Non-ASCII / IME input is still out of scope for v1.
 - **Long press effect.** Dispatch verified by smoke test (no error); the fixture's FAB recogniser cancels the underlying tap so the counter doesn't increment, which is expected behaviour — pending a long-press-aware widget in the verify fixture to confirm.
 
 ### Reverse-engineering toolkit (reusable per release)
