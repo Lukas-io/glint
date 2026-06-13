@@ -94,6 +94,7 @@ void main() {
           'scroll_to_find',
           'type',
           'hardware_button',
+          'wait_for_settle',
         ]),
       );
     });

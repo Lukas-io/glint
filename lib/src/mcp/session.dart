@@ -17,6 +17,8 @@ class GlintSession {
   Interactor? _interactor;
   Semanticizer? _semanticizer;
   InputEnricher? _inputEnricher;
+  ReadinessGate? _readinessGate;
+  SettleDetector? _settleDetector;
 
   bool get isAttached => _vm != null;
 
@@ -30,6 +32,10 @@ class GlintSession {
   Semanticizer get semanticizer => _requireAttached(_semanticizer, 'semanticizer');
   InputEnricher get inputEnricher =>
       _requireAttached(_inputEnricher, 'input enricher');
+  ReadinessGate get readinessGate =>
+      _requireAttached(_readinessGate, 'readiness gate');
+  SettleDetector get settleDetector =>
+      _requireAttached(_settleDetector, 'settle detector');
 
   /// Idempotent — re-attach replaces the previous connection.
   Future<void> attach({
@@ -48,6 +54,8 @@ class GlintSession {
     final interactor = Interactor(backend: backend, resolver: resolver);
     final semanticizer = Semanticizer();
     final inputEnricher = InputEnricher(vm: vm, inspector: inspector);
+    final readinessGate = ReadinessGate(reader: reader, resolver: resolver);
+    final settleDetector = SettleDetector(vm: vm, reader: reader);
 
     _vm = vm;
     _device = device;
@@ -58,6 +66,8 @@ class GlintSession {
     _interactor = interactor;
     _semanticizer = semanticizer;
     _inputEnricher = inputEnricher;
+    _readinessGate = readinessGate;
+    _settleDetector = settleDetector;
   }
 
   /// Logical viewport size + dpr in physical pixels, probed via the
@@ -93,6 +103,8 @@ class GlintSession {
     _interactor = null;
     _semanticizer = null;
     _inputEnricher = null;
+    _readinessGate = null;
+    _settleDetector = null;
     if (vm != null) await vm.disconnect();
   }
 
