@@ -11,20 +11,25 @@ class GlintSession {
   VmClient? _vm;
   DeviceTarget? _device;
   InteractionBackend? _backend;
+  InspectorClient? _inspector;
   SceneReader? _reader;
   CoordinateResolver? _resolver;
   Interactor? _interactor;
   Semanticizer? _semanticizer;
+  InputEnricher? _inputEnricher;
 
   bool get isAttached => _vm != null;
 
   VmClient get vm => _requireAttached(_vm, 'vm client');
   DeviceTarget get device => _requireAttached(_device, 'device');
   InteractionBackend get backend => _requireAttached(_backend, 'backend');
+  InspectorClient get inspector => _requireAttached(_inspector, 'inspector');
   SceneReader get reader => _requireAttached(_reader, 'scene reader');
   CoordinateResolver get resolver => _requireAttached(_resolver, 'resolver');
   Interactor get interactor => _requireAttached(_interactor, 'interactor');
   Semanticizer get semanticizer => _requireAttached(_semanticizer, 'semanticizer');
+  InputEnricher get inputEnricher =>
+      _requireAttached(_inputEnricher, 'input enricher');
 
   /// Idempotent — re-attach replaces the previous connection.
   Future<void> attach({
@@ -36,19 +41,23 @@ class GlintSession {
     final vm = VmClient();
     await vm.attach(vmUri);
 
-    final reader = SceneReader(InspectorClient(vm));
+    final inspector = InspectorClient(vm);
+    final reader = SceneReader(inspector);
     final resolver = CoordinateResolver(vm);
     final backend = device.createBackend();
     final interactor = Interactor(backend: backend, resolver: resolver);
     final semanticizer = Semanticizer();
+    final inputEnricher = InputEnricher(vm: vm, inspector: inspector);
 
     _vm = vm;
     _device = device;
     _backend = backend;
+    _inspector = inspector;
     _reader = reader;
     _resolver = resolver;
     _interactor = interactor;
     _semanticizer = semanticizer;
+    _inputEnricher = inputEnricher;
   }
 
   /// Logical viewport size + dpr in physical pixels, probed via the
@@ -78,10 +87,12 @@ class GlintSession {
     _vm = null;
     _device = null;
     _backend = null;
+    _inspector = null;
     _reader = null;
     _resolver = null;
     _interactor = null;
     _semanticizer = null;
+    _inputEnricher = null;
     if (vm != null) await vm.disconnect();
   }
 

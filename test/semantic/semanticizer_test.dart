@@ -253,6 +253,28 @@ void main() {
       expect(out, contains('"hi"'));
     });
 
+    test('input renders hint when currentValue is unset', () {
+      final input = SemanticInput(glintId: 'email_field')..hint = 'email';
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [input]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('> input email_field (email)'));
+    });
+
+    test('input renders both hint and currentValue when both set', () {
+      final input = SemanticInput(glintId: 'email_field')
+        ..hint = 'email'
+        ..currentValue = 'a@b';
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [input]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('> input email_field (email) "a@b"'));
+    });
+
     test('collapses runs of identical-role siblings sharing an id prefix', () {
       final rows = [
         for (var i = 0; i < 30; i++)

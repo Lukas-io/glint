@@ -73,6 +73,31 @@ void main() {
       final s = _structured(result);
       expect(s['errorKind'], 'invalidArgument');
     });
+
+    test('neither targetGlintId nor targetTextContent → invalidArgument',
+        () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+
+    test('both targetGlintId AND targetTextContent → invalidArgument',
+        () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {
+          'targetGlintId': 'x',
+          'targetTextContent': 'y',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
   });
 
   group('tap (unattached session)', () {

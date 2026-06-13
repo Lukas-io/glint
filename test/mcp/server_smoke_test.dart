@@ -85,6 +85,7 @@ void main() {
         containsAll([
           'attach',
           'get_scene',
+          'resolve',
           'tap',
           'long_press',
           'swipe',

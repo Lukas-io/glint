@@ -43,6 +43,42 @@ class InspectorClient {
         fullDetails: false,
       );
 
+  /// Returns the raw DiagnosticsNode subtree rooted at [inspectorId],
+  /// including each node's properties. Used for selective per-node
+  /// detail reads (e.g. extracting an input's `controller.text`).
+  Future<Map<String, Object?>> getDetailsSubtree({
+    required String inspectorId,
+    required String groupName,
+    int subtreeDepth = 5,
+  }) async {
+    final Response resp;
+    try {
+      resp = await _vm.service.callServiceExtension(
+        'ext.flutter.inspector.getDetailsSubtree',
+        isolateId: _vm.flutterIsolateId,
+        args: {
+          'arg': inspectorId,
+          'objectGroup': groupName,
+          'subtreeDepth': subtreeDepth.toString(),
+        },
+      );
+    } on RPCError catch (e) {
+      throw InspectorReadError(
+        'getDetailsSubtree($inspectorId) failed (${e.code}): '
+        '${e.details ?? e.message}',
+        cause: e,
+      );
+    }
+    final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
+    if (result == null) {
+      throw InspectorReadError(
+        'getDetailsSubtree returned a response without a `result` map: '
+        '${resp.json}',
+      );
+    }
+    return result;
+  }
+
   /// Drops the group's inspector id table. Best-effort cleanup.
   Future<void> disposeGroup(String groupName) async {
     try {

@@ -10,6 +10,7 @@ import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
 import 'tools/long_press_tool.dart';
+import 'tools/resolve_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
 import 'tools/scroll_tool.dart';
 import 'tools/swipe_tool.dart';
@@ -67,6 +68,7 @@ abstract class GlintTool {
 const List<GlintTool> kDefaultGlintTools = [
   AttachTool(),
   GetSceneTool(),
+  ResolveTool(),
   TapTool(),
   LongPressTool(),
   SwipeTool(),

@@ -147,22 +147,24 @@ class SemanticInput extends SemanticNode {
           affordances: const {Affordance.typeable},
         );
 
-  /// Placeholder / labelText, when discoverable.
-  final String? hint;
+  /// Placeholder / labelText. Populated by [InputEnricher] post-classify;
+  /// stays null when the input doesn't expose one.
+  String? hint;
 
-  /// Current text the user / harness typed, when discoverable.
-  final String? currentValue;
+  /// Live text in the field. Populated by [InputEnricher].
+  String? currentValue;
 
   @override
   SemanticRole get role => SemanticRole.input;
 
   @override
   String get displayLabel {
+    final parts = <String>[];
+    if (hint != null && hint!.isNotEmpty) parts.add('($hint)');
     if (currentValue != null && currentValue!.isNotEmpty) {
-      return 'input "$currentValue"';
+      parts.add('"$currentValue"');
     }
-    if (hint != null && hint!.isNotEmpty) return 'input ($hint)';
-    return 'input';
+    return parts.isEmpty ? 'input' : parts.join(' ');
   }
 
   @override

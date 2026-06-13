@@ -1,26 +1,32 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
 import 'scroll_tool.dart';
 
-/// Loops `get_scene` + `scroll` until `targetGlintId` shows up hittable
-/// or the attempt ceiling is reached. Stops early if the target is
-/// already visible.
+/// Loops `get_scene` + `scroll` until a target (glintId or text content)
+/// is hittable, or the ceiling is reached. Stops early if already visible.
 class ScrollToFindTool extends GlintTool {
   const ScrollToFindTool();
 
   @override
   Tool get definition => Tool(
         name: 'scroll_to_find',
-        description:
-            'Scroll until a target glintId becomes hittable, or give up after a ceiling.',
+        description: 'Scroll until a target shows up hittable. Match by either '
+            '`targetGlintId` (exact id) or `targetTextContent` '
+            '(text node whose content contains the substring).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
-              description: 'Stable id to find.',
+              description: 'Stable id to find. Mutually exclusive with `targetTextContent`.',
+            ),
+            'targetTextContent': Schema.string(
+              description:
+                  'Substring to match against any text node\'s content. '
+                  'Useful when the compact renderer collapsed the id you wanted.',
             ),
             'direction': Schema.string(
               description: 'One of: up, down, left, right. Default down.',
@@ -32,7 +38,6 @@ class ScrollToFindTool extends GlintTool {
               description: 'Scroll size per step. Default 0.6.',
             ),
           },
-          required: ['targetGlintId'],
         ),
       );
 
@@ -40,10 +45,18 @@ class ScrollToFindTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final target = args['targetGlintId']! as String;
+    final targetGlintId = args['targetGlintId'] as String?;
+    final targetText = args['targetTextContent'] as String?;
     final dirName = (args['direction'] as String?) ?? 'down';
     final maxScrolls = (args['maxScrolls'] as int?) ?? 8;
     final amount = ((args['amountFraction'] as num?) ?? 0.6).toDouble();
+
+    if ((targetGlintId == null) == (targetText == null)) {
+      return StructuredResponse.error(
+        summary: 'exactly one of targetGlintId or targetTextContent is required',
+        errorKind: GlintErrorKind.invalidArgument,
+      );
+    }
 
     final dir = ScrollDirection.values
         .where((d) => d.name == dirName)
@@ -60,23 +73,28 @@ class ScrollToFindTool extends GlintTool {
       'amountFraction': amount,
     });
     final scroller = const ScrollTool();
+    final criterion = targetGlintId != null
+        ? 'glintId=$targetGlintId'
+        : 'text~"$targetText"';
 
     for (var i = 0; i <= maxScrolls; i++) {
       final scene = await session.reader.readSummary();
       try {
-        final node = scene.findByGlintId(target);
-        if (node != null) {
-          // Found in tree. Resolve to confirm hittable.
+        final hit = targetGlintId != null
+            ? scene.findByGlintId(targetGlintId)
+            : _findTextNode(scene.root, targetText!);
+        if (hit != null && hit.glintId != null) {
           try {
-            final coord = await session.resolver.resolve(scene, target);
+            final coord = await session.resolver.resolve(scene, hit.glintId!);
             if (coord.hittable) {
               return StructuredResponse(
-                summary: 'found $target after $i scroll(s)',
+                summary: 'found $criterion after $i scroll(s)',
                 data: {
                   'attempts': i,
-                  'glintId': target,
+                  'glintId': hit.glintId,
                   'hittable': true,
                   'painted': coord.painted,
+                  if (hit.textPreview != null) 'matchedText': hit.textPreview,
                 },
               );
             }
@@ -101,13 +119,21 @@ class ScrollToFindTool extends GlintTool {
     }
 
     return StructuredResponse.error(
-      summary: '$target not found after $maxScrolls scroll(s) in $dirName',
+      summary: '$criterion not found after $maxScrolls scroll(s) in $dirName',
       errorKind: GlintErrorKind.unresolvedTarget,
       nextSteps: const [
         'try a different `direction`',
         'increase `maxScrolls`',
-        'read the current scene with `get_scene` and pick a different glintId',
+        'read the current scene with `get_scene` and pick a different target',
       ],
     );
+  }
+
+  SceneNode? _findTextNode(SceneNode root, String needle) {
+    for (final n in root.walk()) {
+      final preview = n.textPreview;
+      if (preview != null && preview.contains(needle)) return n;
+    }
+    return null;
   }
 }

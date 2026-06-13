@@ -5,6 +5,7 @@ library;
 
 export 'src/semantic/classifier.dart';
 export 'src/semantic/compactor.dart';
+export 'src/semantic/enricher.dart';
 export 'src/semantic/renderer.dart';
 export 'src/semantic/semantic_node.dart';
 export 'src/semantic/semantic_scene.dart';

@@ -36,6 +36,7 @@ class GetSceneTool extends GlintTool {
     final scene = await session.reader.readSummary();
     try {
       final semantic = session.semanticizer.semanticize(scene);
+      await session.inputEnricher.enrich(semantic);
 
       final String rendered;
       switch (format) {

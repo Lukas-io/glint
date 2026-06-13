@@ -12,6 +12,7 @@ export 'src/mcp/tools/drag_tool.dart';
 export 'src/mcp/tools/get_scene_tool.dart';
 export 'src/mcp/tools/hardware_button_tool.dart';
 export 'src/mcp/tools/long_press_tool.dart';
+export 'src/mcp/tools/resolve_tool.dart';
 export 'src/mcp/tools/scroll_to_find_tool.dart';
 export 'src/mcp/tools/scroll_tool.dart';
 export 'src/mcp/tools/swipe_tool.dart';
