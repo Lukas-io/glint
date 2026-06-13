@@ -46,20 +46,21 @@ Future<void> main(List<String> argv) async {
   final probe = await resolver.resolve(probeScene, 'floating_action_button');
   await probeScene.dispose();
 
-  final InteractionBackend backend = switch (opts['platform'] as String) {
-    'android' => AdbBackend(
-        deviceSerial: opts['device'] as String,
+  final DeviceTarget device = switch (opts['platform'] as String) {
+    'android' => AndroidDevice(
+        serial: opts['device'] as String,
         adbPath: opts['adb-path'] as String,
       ),
-    'ios' => IosSimBackend(
+    'ios' => IosSimulator(
         udid: opts['device'] as String,
-        deviceLogicalWidth: probe.logicalViewSize.w,
-        deviceLogicalHeight: probe.logicalViewSize.h,
+        logicalWidth: probe.logicalViewSize.w,
+        logicalHeight: probe.logicalViewSize.h,
         devicePixelRatio: probe.devicePixelRatio,
-        binaryPath: opts['ios-bridge'] as String,
+        bridgePath: opts['ios-bridge'] as String,
       ),
     _ => throw StateError('unreachable'),
   };
+  final InteractionBackend backend = device.createBackend();
 
   var failed = 0;
   try {

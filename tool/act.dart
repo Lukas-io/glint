@@ -56,33 +56,8 @@ Future<void> main(List<String> argv) async {
   final scene = await reader.readSummary();
   final resolver = CoordinateResolver(vm);
 
-  // Build backend.
-  final InteractionBackend backend;
-  switch (opts['platform'] as String) {
-    case 'android':
-      backend = AdbBackend(
-        deviceSerial: opts['device'] as String,
-        adbPath: opts['adb-path'] as String,
-      );
-    case 'ios':
-      // Look up the device's logical viewport from any resolved node.
-      // Picking the root: its bounds are the full view.
-      final probeId = scene.root.children.isNotEmpty
-          ? _firstHittableId(scene.root) ?? scene.root.glintId!
-          : scene.root.glintId!;
-      final probe = await resolver.resolve(scene, probeId);
-      backend = IosSimBackend(
-        udid: opts['device'] as String,
-        deviceLogicalWidth: probe.logicalViewSize.w,
-        deviceLogicalHeight: probe.logicalViewSize.h,
-        devicePixelRatio: probe.devicePixelRatio,
-        binaryPath: opts['ios-bridge'] as String,
-      );
-    default:
-      throw StateError('unreachable: ${opts['platform']}');
-  }
-
-  final interactor = Interactor(backend: backend, resolver: resolver)
+  final device = await _resolveDevice(opts, scene, resolver);
+  final interactor = Interactor(backend: device.createBackend(), resolver: resolver)
     ..refuseNotHittable = opts.flag('refuse-not-hittable');
 
   // Parse the action command.
@@ -95,6 +70,34 @@ Future<void> main(List<String> argv) async {
   } finally {
     await scene.dispose();
     await vm.disconnect();
+  }
+}
+
+Future<DeviceTarget> _resolveDevice(
+  ArgResults opts,
+  Scene scene,
+  CoordinateResolver resolver,
+) async {
+  switch (opts['platform'] as String) {
+    case 'android':
+      return AndroidDevice(
+        serial: opts['device'] as String,
+        adbPath: opts['adb-path'] as String,
+      );
+    case 'ios':
+      // Probe any resolvable node so IosSimulator can carry the live
+      // viewport + dpr (the bridge needs them to compute touch ratios).
+      final probeId = _firstHittableId(scene.root) ?? scene.root.glintId!;
+      final probe = await resolver.resolve(scene, probeId);
+      return IosSimulator(
+        udid: opts['device'] as String,
+        logicalWidth: probe.logicalViewSize.w,
+        logicalHeight: probe.logicalViewSize.h,
+        devicePixelRatio: probe.devicePixelRatio,
+        bridgePath: opts['ios-bridge'] as String,
+      );
+    default:
+      throw StateError('unreachable: ${opts['platform']}');
   }
 }
 
