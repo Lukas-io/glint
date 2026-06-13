@@ -61,6 +61,13 @@ void main() {
       expect(initResp['error'], isNull,
           reason: 'initialize must succeed: $initResp');
 
+      // The initialize result must carry the Module D instruction text.
+      final initResult = initResp['result'] as Map<String, Object?>;
+      final instructions = initResult['instructions'] as String?;
+      expect(instructions, isNotNull);
+      expect(instructions, contains('## Workflow'));
+      expect(instructions, contains('## Recovery'));
+
       // Send the initialized notification (no response expected).
       proc.stdin.writeln(jsonEncode({
         'jsonrpc': '2.0',

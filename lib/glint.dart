@@ -4,6 +4,7 @@
 /// `package:glint/mcp.dart` directly.
 library;
 
+export 'instructions.dart';
 export 'interaction.dart';
 export 'mcp.dart';
 export 'perception.dart';
