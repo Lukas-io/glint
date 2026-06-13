@@ -16,7 +16,7 @@ class StructuredResponse {
 
   factory StructuredResponse.error({
     required String summary,
-    required String errorKind,
+    required GlintErrorKind errorKind,
     String? detail,
     List<String> nextSteps = const [],
   }) {
@@ -24,7 +24,7 @@ class StructuredResponse {
       summary: summary,
       isError: true,
       data: {
-        'errorKind': errorKind,
+        'errorKind': errorKind.name,
         if (detail != null) 'detail': detail,
       },
       nextSteps: nextSteps,

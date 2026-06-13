@@ -3,37 +3,14 @@ import 'dart:convert';
 import 'semantic_node.dart';
 import 'semantic_scene.dart';
 
-/// Strategy for serialising a [SemanticScene] for a downstream consumer.
-///
-/// Two implementations ship:
-///
-///   - [PlainTextSceneRenderer] — the agent's reading surface. Indented
-///     bullet list, leading affordance marker, role + glintId + label.
-///   - [JsonSceneRenderer] — structured payload for MCP tool returns.
-///
-/// Consumers can subclass [SceneRenderer] to plug in app-specific
-/// surfaces (Markdown table for a doc tool, YAML for tests, etc.).
 abstract class SceneRenderer {
   const SceneRenderer();
   String render(SemanticScene scene);
 }
 
-/// Compact indented format tuned for token-efficient agent prompts.
-///
-/// Format per line: `<indent><marker> <role> <glintId> <label>` with
-/// brackets dropped and runs of identical-shape siblings collapsed into
-/// a single summary line. Examples:
-///
-///     - page scaffold
-///       <> list single_child_scroll_view
-///         - column column_in_single_child_scroll_view
-///           - text text_in_single_child_scroll_view#tso5 "..."
-///           - text text_in_single_child_scroll_view#* (30 more rows)
-///       * button floating_action_button
-///
-/// The marker mirrors [Affordance]: `*` tappable, `>` typeable, `<>`
-/// scrollable, `-` static. Runs trigger when [groupThreshold]+ siblings
-/// share the same role and a non-trivial glintId prefix.
+/// Compact indented form for agent prompts. Marker is `*` tappable,
+/// `>` typeable, `<>` scrollable, `-` static. Runs of 5+ siblings with
+/// the same role and glintId prefix collapse into one summary line.
 class PlainTextSceneRenderer extends SceneRenderer {
   const PlainTextSceneRenderer({this.indent = 2, this.groupThreshold = 5});
 
@@ -100,8 +77,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
   void _writeRun(StringBuffer buf, List<SemanticNode> all, int start,
       _SiblingRun run,
       {required int depth}) {
-    // Emit the first item normally so the agent sees one concrete example
-    // (full id + label), then a single collapsed summary line.
+    // First item full, rest collapsed: agent gets one concrete example.
     _write(buf, all[start], depth: depth);
     final hidden = run.length - 1;
     if (hidden == 0) return;
@@ -127,9 +103,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
     return ' $label';
   }
 
-  /// Detects a run of identical-role children at [start] sharing a
-  /// non-trivial glintId prefix. Returns null when the run is shorter
-  /// than [groupThreshold] or no prefix is shared.
+  /// Null when shorter than [groupThreshold] or no shared prefix.
   _SiblingRun? _detectRun(List<SemanticNode> children, int start) {
     final head = children[start];
     if (head.glintId == null) return null;
@@ -151,8 +125,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
     return _SiblingRun(prefix: prefix, length: length);
   }
 
-  /// glintIds look like `<base>#<hash>` for disambiguated siblings; the
-  /// run-detector keys off the `<base>` portion.
+  /// glintIds are `<base>#<hash>` for disambiguated siblings; key on `<base>`.
   String _prefixOf(String id) {
     final hashIdx = id.indexOf('#');
     return hashIdx < 0 ? id : id.substring(0, hashIdx);

@@ -68,7 +68,7 @@ class AttachTool extends GlintTool {
       default:
         return StructuredResponse.error(
           summary: 'unknown platform: $platform',
-          errorKind: 'InvalidArgument',
+          errorKind: GlintErrorKind.invalidArgument,
           nextSteps: const ['use one of: ios, android'],
         );
     }
@@ -105,7 +105,7 @@ class AttachTool extends GlintTool {
       final resolver = CoordinateResolver(probeVm);
       final scene = await reader.readSummary();
       try {
-        final probeId = _firstAddressableId(scene.root);
+        final probeId = scene.firstAddressableId();
         if (probeId == null) {
           throw StateError(
               'could not find an addressable node in the scene to probe iOS viewport');
@@ -126,11 +126,4 @@ class AttachTool extends GlintTool {
     }
   }
 
-  String? _firstAddressableId(SceneNode n) {
-    for (final c in n.walk()) {
-      final id = c.glintId;
-      if (id != null && id.isNotEmpty) return id;
-    }
-    return null;
-  }
 }

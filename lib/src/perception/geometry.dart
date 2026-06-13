@@ -6,10 +6,8 @@ import '../vm/vm_client.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
-/// One node's geometry resolved against the live render tree.
-///
-/// Coordinates are global to the FlutterView origin in Flutter logical
-/// pixels. `painted` / `hittable` follow §3 (separate truths) and §9 v1.
+/// One node's live geometry. Global coords in logical pixels.
+/// `painted` and `hittable` are independent (see §3, §9).
 class ResolvedCoord {
   ResolvedCoord({
     required this.glintId,
@@ -95,9 +93,7 @@ class ResolvedCoord {
       };
 }
 
-/// Resolves [SceneNode]s to live geometry against the running VM.
-///
-/// §3 lazy: every call re-queries the live tree, never cached.
+/// Resolves nodes to live geometry. Lazy — re-queries every call.
 class CoordinateResolver {
   CoordinateResolver(this._vm);
 
@@ -190,13 +186,10 @@ class GeometryResolveError implements Exception {
   String toString() => 'GeometryResolveError: $message';
 }
 
-/// Builder for the single-line Dart expression we send via `evaluate`.
-///
-/// The CFE expression evaluator treats raw newlines as end-of-input and
-/// rejects statement-block lambdas, so we compose one long concatenation
-/// of getters plus a record-literal trick that side-effects `hitTestInView`
-/// before reading `r.path`. Dart record evaluation order (left-to-right)
-/// guarantees the side effect happens first.
+// Single-line Dart expression sent via `evaluate`. CFE rejects newlines
+// and statement-block lambdas, so we string-concat and rely on Dart's
+// left-to-right record evaluation to sequence the hitTest side effect
+// before reading r.path.
 class _GeometryExpr {
   static const _ro = 'WidgetInspectorService.instance.selection.current!';
   static const _el =

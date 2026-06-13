@@ -45,7 +45,7 @@ class TypeTool extends GlintTool {
         if (!focusResult.ok) {
           return StructuredResponse.error(
             summary: 'failed to focus $focus before typing',
-            errorKind: focusResult.errorKind?.name ?? 'TapFailed',
+            errorKind: focusResult.errorKind ?? GlintErrorKind.internal,
             detail: focusResult.error,
             nextSteps: focusResult.nextSteps,
           );

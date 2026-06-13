@@ -124,7 +124,7 @@ Future<void> main(List<String> argv) async {
     );
     info('result: ok=${r3.ok} errorKind=${r3.errorKind?.name}');
     await scene3.dispose();
-    if (!r3.ok && r3.errorKind == ActionFailureKind.notHittable) {
+    if (!r3.ok && r3.errorKind == GlintErrorKind.notHittable) {
       pass('refused with errorKind=notHittable');
     } else {
       fail('expected ok=false errorKind=notHittable; got ok=${r3.ok} '
@@ -141,7 +141,7 @@ Future<void> main(List<String> argv) async {
     );
     info('result: ok=${r4.ok} errorKind=${r4.errorKind?.name}');
     await scene4.dispose();
-    if (!r4.ok && r4.errorKind == ActionFailureKind.unresolvedTarget) {
+    if (!r4.ok && r4.errorKind == GlintErrorKind.unresolvedTarget) {
       pass('refused with errorKind=unresolvedTarget');
     } else {
       fail('expected ok=false errorKind=unresolvedTarget; got ok=${r4.ok} '

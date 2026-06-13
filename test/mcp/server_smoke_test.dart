@@ -79,7 +79,11 @@ void main() {
           'attach',
           'get_scene',
           'tap',
+          'long_press',
           'swipe',
+          'drag',
+          'scroll',
+          'scroll_to_find',
           'type',
           'hardware_button',
         ]),
@@ -106,7 +110,7 @@ void main() {
       final result = resp['result'] as Map<String, Object?>;
       expect(result['isError'], true);
       final structured = result['structuredContent'] as Map<String, Object?>;
-      expect(structured['errorKind'], 'SessionNotAttached');
+      expect(structured['errorKind'], 'sessionNotAttached');
     });
   });
 }

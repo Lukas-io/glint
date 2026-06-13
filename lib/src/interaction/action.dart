@@ -3,10 +3,7 @@ import 'target.dart';
 sealed class Action {
   const Action();
 
-  /// One-line description for logs and result summaries.
   String get label;
-
-  /// Just the target portion (or composite) — used in success summaries.
   String get targetSummary => label;
 }
 
@@ -69,8 +66,7 @@ class TypeText extends Action {
   }
 }
 
-/// Cross-platform hardware button identity. Each backend declares which
-/// subset it supports via [BackendCapabilities.hardwareButtons].
+/// Each backend declares its supported subset via BackendCapabilities.
 enum HardwareButton {
   home,
   back,

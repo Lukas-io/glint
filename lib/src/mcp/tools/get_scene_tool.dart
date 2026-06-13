@@ -1,5 +1,6 @@
 import 'package:dart_mcp/server.dart';
 
+import '../../../interaction.dart';
 import '../../../semantic.dart';
 import '../envelope.dart';
 import '../session.dart';
@@ -45,7 +46,7 @@ class GetSceneTool extends GlintTool {
         default:
           return StructuredResponse.error(
             summary: 'unknown scene format: $format',
-            errorKind: 'InvalidArgument',
+            errorKind: GlintErrorKind.invalidArgument,
             nextSteps: const ['use one of: text, json'],
           );
       }

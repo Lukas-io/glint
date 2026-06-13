@@ -1,10 +1,7 @@
-/// What an [Action] is aimed at.
 sealed class Target {
   const Target();
 }
 
-/// Names an element by its stable [glintId] from a [Scene].
-/// Interactor resolves to live coordinates at action time, never cached.
 class SymbolicTarget extends Target {
   const SymbolicTarget(this.glintId);
   final String glintId;
@@ -13,8 +10,9 @@ class SymbolicTarget extends Target {
   String toString() => 'SymbolicTarget($glintId)';
 }
 
-/// Raw logical-pixel point on the device. Escape hatch when the target
-/// genuinely isn't in the render tree (custom canvas, native overlay).
+/// Physical-pixel point on the device. Escape hatch when the target
+/// isn't in the render tree (custom canvas, native overlay) — also
+/// used internally by direction-based scroll tools.
 class CoordinateTarget extends Target {
   const CoordinateTarget({required this.x, required this.y});
   final double x;

@@ -11,9 +11,9 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
   GlintMcpServer.fromStreamChannel(
     super.channel, {
     GlintSession? session,
-    ToolRegistry? registry,
+    List<GlintTool> tools = kDefaultGlintTools,
   })  : session = session ?? GlintSession(),
-        _registry = registry ?? ToolRegistry.defaults(),
+        _tools = tools,
         super.fromStreamChannel(
           implementation: Implementation(name: 'glint', version: _version),
           instructions: _instructions,
@@ -29,16 +29,17 @@ Workflow:
   2. `get_scene` to read the current screen. Lines are addressable by their glintId; leading marker indicates affordance (`*` tappable, `>` typeable, `<>` scrollable).
   3. `tap` / `swipe` / `type` / `hardware_button` to drive the app.
 
-Every tool response uses the same envelope: a short `summary`, optional `warnings` (non-fatal observations), and optional `nextSteps`. Failures carry an `errorKind` you can branch on (UnresolvedTarget, NotHittable, UnsupportedBackendAction, BackendToolError, GeometryResolveError, SessionNotAttached).
+Every tool response uses the same envelope: a short `summary`, optional `warnings` (non-fatal observations), and optional `nextSteps`. Failures carry an `errorKind` you can branch on: one of
+unresolvedTarget, notHittable, unsupportedBackendAction, backendToolError, geometryResolveError, sessionNotAttached, invalidArgument, internal.
 ''';
 
   final GlintSession session;
-  final ToolRegistry _registry;
+  final List<GlintTool> _tools;
 
   @override
   FutureOr<InitializeResult> initialize(InitializeRequest request) async {
     final result = await super.initialize(request);
-    for (final tool in _registry.tools) {
+    for (final tool in _tools) {
       registerTool(
         tool.definition,
         (req) => tool.invoke(session, req),

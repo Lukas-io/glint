@@ -51,6 +51,28 @@ class GlintSession {
     _semanticizer = semanticizer;
   }
 
+  /// Logical viewport size + dpr in physical pixels, probed via the
+  /// geometry resolver on any addressable node. Used by direction-based
+  /// scroll tools that need a "scroll N% of viewport" delta.
+  Future<({double logicalW, double logicalH, double dpr})>
+      probeViewport() async {
+    final scene = await reader.readSummary();
+    try {
+      final probeId = scene.firstAddressableId();
+      if (probeId == null) {
+        throw StateError('no addressable node in scene to probe viewport from');
+      }
+      final c = await resolver.resolve(scene, probeId);
+      return (
+        logicalW: c.logicalViewSize.w,
+        logicalH: c.logicalViewSize.h,
+        dpr: c.devicePixelRatio,
+      );
+    } finally {
+      await scene.dispose();
+    }
+  }
+
   Future<void> detach() async {
     final vm = _vm;
     _vm = null;

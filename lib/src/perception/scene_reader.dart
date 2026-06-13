@@ -2,19 +2,18 @@ import 'inspector_client.dart';
 import 'scene_node.dart';
 import 'stable_id.dart';
 
-/// Module B's top-level read: connect → fetch tree → assign stable ids
-/// → return a [Scene]. Caller owns the Scene's lifetime via [Scene.dispose].
+/// Reads the inspector tree, assigns stable ids, returns a [Scene] the
+/// caller disposes when done.
 class SceneReader {
   SceneReader(this._inspector);
 
   final InspectorClient _inspector;
   final StableIdGenerator _ids = StableIdGenerator();
 
-  /// User-code-only summary tree. The agent's read surface (Module C / P3).
+  /// User-code-only tree — the agent's reading surface.
   Future<Scene> readSummary() => _read(TreeDepth.summary);
 
-  /// Every framework element. Server-internal use only (hit-test,
-  /// containment, ancestor walks). Never shipped to the agent verbatim.
+  /// Every framework element. Server-internal only.
   Future<Scene> readFull() => _read(TreeDepth.full);
 
   Future<Scene> _read(TreeDepth depth) async {
@@ -32,8 +31,7 @@ class SceneReader {
 
 enum TreeDepth { summary, full }
 
-/// Owns one inspector group plus its SceneNode tree. Disposing releases the
-/// inspector's id table in the target VM.
+/// One inspector group + its SceneNode tree. Dispose releases the VM-side id table.
 class Scene {
   Scene._(
       {required this.root,
@@ -51,6 +49,19 @@ class Scene {
       if (n.glintId == glintId) return n;
     }
     return null;
+  }
+
+  /// Pick a node that's safe to probe geometry against. Skips the root
+  /// (often a StatelessWidget with no RenderObject) and prefers a leaf —
+  /// leaves are guaranteed to have a RenderObject hit-test can resolve.
+  String? firstAddressableId() {
+    SceneNode? best;
+    for (final n in root.walk().skip(1)) {
+      if (n.glintId == null || n.glintId!.isEmpty) continue;
+      if (n.children.isEmpty) return n.glintId;
+      best ??= n;
+    }
+    return best?.glintId;
   }
 
   Future<void> dispose() async {

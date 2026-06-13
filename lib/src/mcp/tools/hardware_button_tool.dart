@@ -39,7 +39,7 @@ class HardwareButtonTool extends GlintTool {
     if (button == null) {
       return StructuredResponse.error(
         summary: 'unknown hardware button: $name',
-        errorKind: 'InvalidArgument',
+        errorKind: GlintErrorKind.invalidArgument,
         nextSteps: [
           'use one of: ${HardwareButton.values.map((b) => b.name).join(', ')}'
         ],

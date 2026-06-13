@@ -1,8 +1,7 @@
 import 'action.dart';
 
-/// Platform-native input layer for one device. Dumb on purpose (§4):
-/// accepts already-resolved physical-pixel coordinates and a typed
-/// [Action]. The [Interactor] resolves symbols first.
+/// Platform-native input layer. Speaks physical pixels; the Interactor
+/// resolves symbolic targets before calling here.
 abstract class InteractionBackend {
   BackendCapabilities get capabilities;
   String get label;

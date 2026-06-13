@@ -1,15 +1,7 @@
-/// Module C — the agent-facing read surface.
-///
-/// A [SemanticNode] is what we want the agent to reason about: a role
-/// (button, text, input) and the few properties needed to act on it,
-/// stripped of the framework wrappers ([Padding] / [Center] / element
-/// diagnostic nodes) that drown the raw [SceneNode] tree.
-///
-/// The sealed hierarchy lives in one file so consumers `import` once and
-/// pattern-match exhaustively.
+/// Module C — sealed SemanticNode hierarchy: a role-typed scene the
+/// agent reads instead of the raw SceneNode tree.
 library;
 
-/// Top-level kind for fast filtering / pattern-match exhaustiveness.
 enum SemanticRole {
   page,
   appBar,
@@ -23,17 +15,7 @@ enum SemanticRole {
   unknown,
 }
 
-/// Orthogonal capability flags. A node can have any subset.
-enum Affordance {
-  /// Tap / long-press / double-tap will reach this node.
-  tappable,
-
-  /// Accepts keyboard input (TextField, TextFormField).
-  typeable,
-
-  /// Scrollable surface (ListView, ScrollView, etc.).
-  scrollable,
-}
+enum Affordance { tappable, typeable, scrollable }
 
 sealed class SemanticNode {
   SemanticNode({
@@ -42,21 +24,15 @@ sealed class SemanticNode {
     Set<Affordance>? affordances,
   }) : affordances = affordances ?? const <Affordance>{};
 
-  /// May be null for purely structural nodes that the stable-id pass
-  /// chose not to name (collapsed wrappers, anonymous containers).
+  /// Null when the node is purely structural.
   final String? glintId;
-
-  /// Orthogonal capability flags — see [Affordance].
   final Set<Affordance> affordances;
-
-  /// Children in their semantic form (never raw [SceneNode]).
   final List<SemanticNode> children;
 
   SemanticRole get role;
 
-  /// Short single-line label used by the plain-text renderer. Each
-  /// variant decides what's most useful (button label, text content,
-  /// input hint, …).
+  /// Short label for the plain-text renderer; each variant picks the
+  /// most useful field (button label, text content, etc.).
   String get displayLabel;
 
   /// Pre-order traversal.

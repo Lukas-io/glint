@@ -1,5 +1,4 @@
-/// One node in the perception model, parsed from the inspector's
-/// DiagnosticsNode JSON.
+/// One node in the perception tree, parsed from inspector DiagnosticsNode JSON.
 class SceneNode {
   SceneNode({
     required this.depth,

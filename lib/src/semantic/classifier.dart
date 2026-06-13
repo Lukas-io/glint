@@ -1,21 +1,13 @@
-import '../perception/scene_node.dart';
+import '../../perception.dart';
 import 'semantic_node.dart';
 
-/// Provider for one widget-recognition rule. The registry walks the
-/// providers in priority order and the first whose [matches] returns
-/// true builds the [SemanticNode].
-///
-/// Concrete classifiers are kept in this file so the whole recognition
-/// table reads top-to-bottom in priority order.
+/// One widget-recognition rule. Lower priority runs first; first match
+/// wins. [UnknownClassifier] is the floor.
 abstract class WidgetClassifier {
   const WidgetClassifier();
 
-  /// Lower runs first. The first match wins; [UnknownClassifier]
-  /// occupies the bottom and matches everything.
   int get priority;
-
   bool matches(SceneNode node);
-
   SemanticNode build(SceneNode node, List<SemanticNode> children);
 }
 
@@ -24,9 +16,6 @@ class ClassifierRegistry {
       : _classifiers = [...classifiers]
           ..sort((a, b) => a.priority.compareTo(b.priority));
 
-  /// Default registry covering MaterialApp's common widgets. Callers can
-  /// supply a custom registry to plug in app-specific classifiers
-  /// without touching glint.
   factory ClassifierRegistry.defaults() => ClassifierRegistry(const [
         PageClassifier(),
         AppBarClassifier(),
@@ -146,9 +135,8 @@ class InputClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // hint / currentValue extraction needs runtime evaluation against
-    // the InputDecoration / TextEditingController; deferred to a Module
-    // C v2 once we wire selective property reads.
+    // hint + currentValue need a property read against InputDecoration
+    // / TextEditingController — Module C v2.
     return SemanticInput(glintId: node.glintId);
   }
 }
@@ -242,7 +230,7 @@ class IconClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // IconData name needs a property read; deferred. Falls back to null.
+    // IconData name needs a property read — deferred.
     return SemanticIcon(glintId: node.glintId);
   }
 }
@@ -338,8 +326,7 @@ class ContainerClassifier extends WidgetClassifier {
       };
 }
 
-/// Floor. Matches everything; produces a [SemanticUnknown] that keeps
-/// the original widget label so the renderer can still surface it.
+/// Floor — matches everything; keeps the original widget label.
 class UnknownClassifier extends WidgetClassifier {
   const UnknownClassifier();
 

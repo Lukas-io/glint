@@ -1,8 +1,7 @@
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
-/// Thin VM-service connection. Picks the Flutter isolate (first one with
-/// any `ext.flutter.*` extension) and exposes [VmService] + [Isolate].
+/// VM-service connection scoped to the first Flutter isolate.
 class VmClient {
   VmService? _service;
   Uri? _connectedUri;

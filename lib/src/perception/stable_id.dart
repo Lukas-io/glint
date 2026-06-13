@@ -2,12 +2,8 @@ import 'dart:convert';
 
 import 'scene_node.dart';
 
-/// Generates the stable, unique, agent-facing symbolic id per §9.
-///
-/// Three-tier disambiguation: base snake_case name → descriptive scope
-/// suffix from the nearest uniquely-named ancestor → short deterministic
-/// hash of (locationId, indexPath). Same widget at same source location
-/// with same tree path → same id every read.
+/// Assigns symbolic glintIds — see §9 of source-of-truth for the algorithm.
+/// Same widget at the same source location + tree path → same id every read.
 class StableIdGenerator {
   void assignIds(SceneNode root) {
     final pass = _IdPass(root);

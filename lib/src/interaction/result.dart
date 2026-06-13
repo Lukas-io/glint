@@ -1,13 +1,18 @@
 import 'action.dart';
 
-/// Symbolic cause of a failed [ActionResult]. Lets the agent branch on
-/// failure mode without parsing prose.
-enum ActionFailureKind {
+/// Closed set of failure modes — interaction, perception, MCP all use this.
+enum GlintErrorKind {
+  // interaction-layer failures
   unsupportedBackendAction,
   backendToolError,
   unresolvedTarget,
   notHittable,
   geometryResolveError,
+  // mcp-layer failures
+  sessionNotAttached,
+  invalidArgument,
+  // bug bucket — should never happen; if it does, it's on us
+  internal,
 }
 
 class ActionResult {
@@ -47,7 +52,7 @@ class ActionResult {
   final List<String> warnings;
   final List<String> nextSteps;
   final String? error;
-  final ActionFailureKind? errorKind;
+  final GlintErrorKind? errorKind;
 
   Map<String, Object?> toJson() => {
         'action': action.label,

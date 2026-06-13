@@ -1,5 +1,4 @@
-import '../perception/geometry.dart';
-import '../perception/scene_reader.dart';
+import '../../perception.dart';
 import 'action.dart';
 import 'backend.dart';
 import 'result.dart';
@@ -13,7 +12,7 @@ class Interactor {
   final InteractionBackend backend;
   final CoordinateResolver resolver;
 
-  /// When true, non-hittable targets cause [ActionFailureKind.notHittable]
+  /// When true, non-hittable targets cause [GlintErrorKind.notHittable]
   /// instead of a warning. §3 keeps the default permissive: agent decides.
   bool refuseNotHittable = false;
 
@@ -25,21 +24,21 @@ class Interactor {
         action: action,
         summary: 'backend rejected ${action.label}: ${e.detail}',
         error: e.detail,
-        errorKind: ActionFailureKind.unsupportedBackendAction,
+        errorKind: GlintErrorKind.unsupportedBackendAction,
       );
     } on BackendToolError catch (e) {
       return ActionResult.failure(
         action: action,
         summary: '${backend.label} failed ${action.label}',
         error: 'exit=${e.exitCode} ${e.stderr}',
-        errorKind: ActionFailureKind.backendToolError,
+        errorKind: GlintErrorKind.backendToolError,
       );
     } on UnresolvedTarget catch (e) {
       return ActionResult.failure(
         action: action,
         summary: e.message,
         error: e.message,
-        errorKind: ActionFailureKind.unresolvedTarget,
+        errorKind: GlintErrorKind.unresolvedTarget,
         nextSteps: const [
           'read the scene with get_scene to see current glintIds',
           'use CoordinateTarget if the target genuinely isn\'t in the tree',
@@ -50,7 +49,7 @@ class Interactor {
         action: action,
         summary: e.message,
         error: e.message,
-        errorKind: ActionFailureKind.notHittable,
+        errorKind: GlintErrorKind.notHittable,
         physicalCenter: e.physicalCenter,
         devicePixelRatio: e.devicePixelRatio,
         painted: e.painted,
@@ -64,7 +63,7 @@ class Interactor {
         action: action,
         summary: 'resolve failed for ${action.label}',
         error: e.message,
-        errorKind: ActionFailureKind.geometryResolveError,
+        errorKind: GlintErrorKind.geometryResolveError,
       );
     }
   }
