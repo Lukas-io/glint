@@ -121,13 +121,13 @@ Future<void> main(List<String> argv) async {
       scene3,
       const Tap(SymbolicTarget('elevated_button_in_absorb_pointer')),
     );
-    info('result: ok=${r3.ok} errorClass=${r3.errorClass}');
+    info('result: ok=${r3.ok} errorKind=${r3.errorKind?.name}');
     await scene3.dispose();
-    if (!r3.ok && r3.errorClass == 'NotHittable') {
-      pass('refused with errorClass=NotHittable');
+    if (!r3.ok && r3.errorKind == ActionFailureKind.notHittable) {
+      pass('refused with errorKind=notHittable');
     } else {
-      fail('expected ok=false errorClass=NotHittable; got ok=${r3.ok} '
-          'errorClass=${r3.errorClass}');
+      fail('expected ok=false errorKind=notHittable; got ok=${r3.ok} '
+          'errorKind=${r3.errorKind?.name}');
       failed++;
     }
 
@@ -138,13 +138,13 @@ Future<void> main(List<String> argv) async {
       scene4,
       const Tap(SymbolicTarget('definitely_not_a_real_id_42')),
     );
-    info('result: ok=${r4.ok} errorClass=${r4.errorClass}');
+    info('result: ok=${r4.ok} errorKind=${r4.errorKind?.name}');
     await scene4.dispose();
-    if (!r4.ok && r4.errorClass == 'UnresolvedTarget') {
-      pass('refused with errorClass=UnresolvedTarget');
+    if (!r4.ok && r4.errorKind == ActionFailureKind.unresolvedTarget) {
+      pass('refused with errorKind=unresolvedTarget');
     } else {
-      fail('expected ok=false errorClass=UnresolvedTarget; got ok=${r4.ok} '
-          'errorClass=${r4.errorClass}');
+      fail('expected ok=false errorKind=unresolvedTarget; got ok=${r4.ok} '
+          'errorKind=${r4.errorKind?.name}');
       failed++;
     }
   } finally {

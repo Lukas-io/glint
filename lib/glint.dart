@@ -21,18 +21,19 @@ export 'src/interaction/backend.dart'
         BackendToolError,
         InteractionBackend,
         UnsupportedBackendAction;
-export 'src/interaction/backends/adb_backend.dart' show AdbBackend;
+export 'src/interaction/backends/adb_backend.dart'
+    show AdbBackend, AndroidKeyCode;
 export 'src/interaction/backends/ios_sim_backend.dart' show IosSimBackend;
 export 'src/interaction/interactor.dart'
     show Interactor, NotHittableRefused, UnresolvedTarget;
-export 'src/interaction/result.dart' show ActionResult;
+export 'src/interaction/result.dart' show ActionFailureKind, ActionResult;
 export 'src/interaction/target.dart'
     show CoordinateTarget, SymbolicTarget, Target;
 export 'src/perception/geometry.dart'
     show CoordinateResolver, GeometryResolveError, ResolvedCoord;
 export 'src/perception/inspector_client.dart'
-    show InspectorClient, InspectorReadError;
-export 'src/perception/scene_node.dart' show SceneNode, CreationLocation;
-export 'src/perception/scene_reader.dart' show Scene, SceneReader;
+    show InspectorClient, InspectorGroup, InspectorReadError;
+export 'src/perception/scene_node.dart' show CreationLocation, SceneNode;
+export 'src/perception/scene_reader.dart' show Scene, SceneReader, TreeDepth;
 export 'src/perception/stable_id.dart' show StableIdGenerator;
 export 'src/vm/vm_client.dart' show VmClient;

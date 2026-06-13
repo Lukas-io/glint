@@ -1,9 +1,6 @@
 // HidKeymap.swift — USB HID Usage Page 7 (Keyboard) codes for printable
-// ASCII + a handful of control characters. v1 keyboard scope: ASCII only.
-// Non-Latin / IME input would need an `am broadcast` (Android) or
-// keystroke-by-keystroke unicode insertion (iOS) — out of scope for v1.
-//
-// Reference: USB HID Usage Tables 1.5, §10 (Keyboard/Keypad Page 0x07).
+// ASCII + a handful of control characters. Non-Latin / IME input is out
+// of v1 scope. Reference: USB HID Usage Tables 1.5 §10 (Keyboard 0x07).
 
 import Foundation
 
@@ -13,21 +10,19 @@ struct HidMapping {
 }
 
 enum HidKeymap {
-    /// Left-shift modifier — the keyboard sends this as a held key before
-    /// the shifted character's down/up.
+    /// Left-shift modifier. Held before / released after a shifted character.
     static let shiftUsage: Int32 = 0xE1
 
-    /// Look up the HID usage + shift state for a Unicode scalar. Returns
-    /// nil if the scalar isn't in the v1 ASCII subset.
     static func map(_ s: Unicode.Scalar) -> HidMapping? {
-        // Letters: a..z -> 0x04..0x1D, shifted for uppercase.
+        // a..z -> 0x04..0x1D
         if s.value >= 0x61, s.value <= 0x7A {
             return HidMapping(usage: Int32(0x04 + (s.value - 0x61)), shift: false)
         }
+        // A..Z -> shifted a..z
         if s.value >= 0x41, s.value <= 0x5A {
             return HidMapping(usage: Int32(0x04 + (s.value - 0x41)), shift: true)
         }
-        // Digits: 1..9 -> 0x1E..0x26, 0 -> 0x27.
+        // 1..9 -> 0x1E..0x26, 0 -> 0x27
         if s.value >= 0x31, s.value <= 0x39 {
             return HidMapping(usage: Int32(0x1E + (s.value - 0x31)), shift: false)
         }
@@ -39,7 +34,7 @@ enum HidKeymap {
         case 0x0A: return HidMapping(usage: 0x28, shift: false)  // \n -> Enter
         case 0x09: return HidMapping(usage: 0x2B, shift: false)  // \t -> Tab
         case 0x08: return HidMapping(usage: 0x2A, shift: false)  // \b -> Backspace
-        // Symbols (unshifted).
+        // Unshifted symbols.
         case 0x2D: return HidMapping(usage: 0x2D, shift: false)  // -
         case 0x3D: return HidMapping(usage: 0x2E, shift: false)  // =
         case 0x5B: return HidMapping(usage: 0x2F, shift: false)  // [

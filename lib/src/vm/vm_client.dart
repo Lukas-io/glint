@@ -1,16 +1,8 @@
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
-/// Thin VM-service connection.
-///
-/// Connects to a Dart VM by URI, picks the Flutter isolate (the first one
-/// that exposes any `ext.flutter.*` extension), and exposes the raw
-/// [VmService] plus the resolved [Isolate]/`isolateId` to callers.
-///
-/// Patterns ported from `flutter_network_mcp/lib/src/vm/vm_client.dart`:
-/// the zombie-DTD probe (5s deadline on `getVersion`) and the WS-URI
-/// normalisation. Stripped of the HTTP/socket profiling concern — Module
-/// B only needs raw service-extension calls.
+/// Thin VM-service connection. Picks the Flutter isolate (first one with
+/// any `ext.flutter.*` extension) and exposes [VmService] + [Isolate].
 class VmClient {
   VmService? _service;
   Uri? _connectedUri;
@@ -30,6 +22,8 @@ class VmClient {
   Future<void> attach(Uri vmServiceUri) async {
     if (_service != null) await disconnect();
     final svc = await vmServiceConnectUri(_toWs(vmServiceUri));
+    // Zombie-DDS probe: a stale DDS accepts the WS upgrade but never answers
+    // RPCs. 5s deadline fails fast with a clear error.
     try {
       await svc.getVersion().timeout(const Duration(seconds: 5));
     } on Object {

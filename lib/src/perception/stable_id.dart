@@ -2,147 +2,106 @@ import 'dart:convert';
 
 import 'scene_node.dart';
 
-/// Generates the stable, unique, agent-facing symbolic id per §9 of the
-/// source-of-truth.
+/// Generates the stable, unique, agent-facing symbolic id per §9.
 ///
-/// Rules in order of preference:
-/// 1. **Base name.** snake_case of the node's label (`FloatingActionButton`
-///    → `floating_action_button`). All ids start as base names.
-/// 2. **Descriptive disambiguation.** If two or more nodes share a base
-///    name, suffix each with the nearest ancestor whose own base name is
-///    unique across the tree. `text` + `text` becomes `text_in_app_bar` +
-///    `text_in_column`.
-/// 3. **Hash fallback.** If descriptive disambiguation still leaves a
-///    collision (e.g. three `text` nodes in the same `Column`), append a
-///    short deterministic hash of `(locationId, index path)` — both of
-///    which are stable across reads. `text#a3f1`.
-///
-/// Stability guarantee: same widget at the same source location with the
-/// same tree path → same id, every read. No timestamps, no randomness, no
-/// inspector-id leakage (inspector ids renumber across reads; we never
-/// derive a glint id from them).
+/// Three-tier disambiguation: base snake_case name → descriptive scope
+/// suffix from the nearest uniquely-named ancestor → short deterministic
+/// hash of (locationId, indexPath). Same widget at same source location
+/// with same tree path → same id every read.
 class StableIdGenerator {
-  /// Walks `root`, assigns `glintId` to every node in the subtree.
   void assignIds(SceneNode root) {
-    final all = root.walk().toList();
+    final pass = _IdPass(root);
+    pass.computeBaseNames();
+    pass.assignWithDisambiguation();
+  }
+}
 
-    // Pass 1: compute base names.
-    final base = <SceneNode, String>{};
-    for (final n in all) {
-      base[n] = _snake(n.label);
+class _IdPass {
+  _IdPass(this.root) {
+    nodes = root.walk().toList();
+    _linkParents(root);
+  }
+
+  final SceneNode root;
+  late final List<SceneNode> nodes;
+  final Map<SceneNode, String> baseName = {};
+  final Map<String, int> baseCount = {};
+  final Map<SceneNode, SceneNode> parentOf = {};
+
+  void _linkParents(SceneNode n) {
+    for (final c in n.children) {
+      parentOf[c] = n;
+      _linkParents(c);
     }
+  }
 
-    // Pass 2: count base-name collisions to find which names are unique.
-    final baseCount = <String, int>{};
-    for (final name in base.values) {
+  void computeBaseNames() {
+    for (final n in nodes) {
+      final name = _Snake.case_(n.label);
+      baseName[n] = name;
       baseCount.update(name, (v) => v + 1, ifAbsent: () => 1);
     }
+  }
 
-    // Parent index for walking up.
-    final parentOf = <SceneNode, SceneNode>{};
-    void link(SceneNode n) {
-      for (final c in n.children) {
-        parentOf[c] = n;
-        link(c);
-      }
-    }
-    link(root);
-
-    // Pass 3: provisional ids with descriptive disambiguation.
+  void assignWithDisambiguation() {
     final proposed = <SceneNode, String>{};
-    for (final n in all) {
-      final name = base[n]!;
+    for (final n in nodes) {
+      final name = baseName[n]!;
       if (baseCount[name] == 1) {
         proposed[n] = name;
         continue;
       }
-      // Walk ancestors looking for one whose base name is unique tree-wide.
-      // That ancestor becomes our scope tag.
-      String? scope;
-      var p = parentOf[n];
-      while (p != null) {
-        final pName = base[p]!;
-        if (baseCount[pName] == 1) {
-          scope = pName;
-          break;
-        }
-        p = parentOf[p];
-      }
+      final scope = _findUniqueAncestorScope(n);
       proposed[n] = scope == null ? name : '${name}_in_$scope';
     }
 
-    // Pass 4: detect still-ambiguous ids and add hash suffixes.
     final proposedCount = <String, int>{};
     for (final v in proposed.values) {
       proposedCount.update(v, (k) => k + 1, ifAbsent: () => 1);
     }
-    for (final n in all) {
+    for (final n in nodes) {
       final id = proposed[n]!;
-      if (proposedCount[id] == 1) {
-        n.glintId = id;
-        continue;
-      }
-      n.glintId = '$id#${_shortHash(n, root)}';
+      n.glintId = (proposedCount[id] == 1) ? id : '$id#${_shortHash(n)}';
     }
   }
 
-  /// Path of `indexInParent` from `root` to `node`, root excluded.
-  /// Stable across reads.
-  List<int> _indexPath(SceneNode node, SceneNode root) {
-    final path = <int>[];
-    // Rebuild parent map locally so this helper stays usable standalone.
-    final parents = <SceneNode, SceneNode>{};
-    void rec(SceneNode n) {
-      for (final c in n.children) {
-        parents[c] = n;
-        rec(c);
-      }
+  String? _findUniqueAncestorScope(SceneNode n) {
+    var p = parentOf[n];
+    while (p != null) {
+      final name = baseName[p]!;
+      if (baseCount[name] == 1) return name;
+      p = parentOf[p];
     }
-    rec(root);
+    return null;
+  }
+
+  String _shortHash(SceneNode node) {
+    final seed = '${node.locationId ?? ''}:${_indexPath(node).join(',')}';
+    return _Hash.fnvBase32(seed, length: 4);
+  }
+
+  List<int> _indexPath(SceneNode node) {
+    final path = <int>[];
     var cur = node;
-    while (parents.containsKey(cur)) {
+    while (parentOf.containsKey(cur)) {
       path.insert(0, cur.indexInParent);
-      cur = parents[cur]!;
+      cur = parentOf[cur]!;
     }
     return path;
   }
+}
 
-  /// Hashes (locationId, indexPath) into a 4-char base32 suffix. Empty
-  /// locationId is fine — the index path alone is enough to keep stability.
-  String _shortHash(SceneNode node, SceneNode root) {
-    final seed = '${node.locationId ?? ''}:${_indexPath(node, root).join(',')}';
-    final bytes = utf8.encode(seed);
-    // FNV-1a 32-bit.
-    var hash = 0x811C9DC5;
-    for (final b in bytes) {
-      hash ^= b;
-      hash = (hash * 0x01000193) & 0xFFFFFFFF;
-    }
-    // Base32, lowercase, padded — keeps suffix human-readable.
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz234567';
-    final buf = StringBuffer();
-    var v = hash;
-    for (var i = 0; i < 4; i++) {
-      buf.write(alphabet[v & 31]);
-      v >>= 5;
-    }
-    return buf.toString();
-  }
-
-  /// CamelCase / PascalCase → snake_case. Strips leading underscores,
-  /// collapses runs of upper-case (`HTTPSConnection` → `https_connection`),
-  /// preserves digits.
-  ///
-  /// Examples:
-  ///   FloatingActionButton → floating_action_button
-  ///   Text                 → text
-  ///   _ElementTreeNode     → element_tree_node
-  ///   MaterialApp          → material_app
-  ///   Sliver2DPanel        → sliver2_d_panel  (acceptable v1 quirk)
-  static String _snake(String input) {
+class _Snake {
+  // PascalCase → snake_case. Strips leading `_`, splits at upper-to-lower
+  // boundaries and (run-of-uppers) → next-is-lower transitions.
+  //
+  // FloatingActionButton → floating_action_button
+  // _ElementTreeNode     → element_tree_node
+  // HTTPSConnection      → https_connection
+  // Sliver2DPanel        → sliver2_d_panel (acceptable v1 quirk)
+  static String case_(String input) {
     if (input.isEmpty) return '_unknown';
     var s = input;
-    // Strip leading underscores.
     while (s.startsWith('_') && s.length > 1) {
       s = s.substring(1);
     }
@@ -151,10 +110,9 @@ class StableIdGenerator {
       final c = s[i];
       final isUpper = c.toUpperCase() == c && c.toLowerCase() != c;
       if (isUpper) {
-        // Avoid leading underscore.
-        final prevLower = i > 0 && s[i - 1].toLowerCase() == s[i - 1] &&
+        final prevLower = i > 0 &&
+            s[i - 1].toLowerCase() == s[i - 1] &&
             s[i - 1] != '_';
-        // Run of uppers: split before the last upper when the next char is lower.
         final nextLower = i + 1 < s.length &&
             s[i + 1].toLowerCase() == s[i + 1] &&
             s[i + 1] != '_';
@@ -170,11 +128,29 @@ class StableIdGenerator {
       }
     }
     var result = out.toString();
-    // Sanitize: only [a-z0-9_], runs of `_` collapsed.
     result = result.replaceAll(RegExp('[^a-z0-9_]'), '_');
     result = result.replaceAll(RegExp('_+'), '_');
     if (result.startsWith('_')) result = result.substring(1);
     if (result.endsWith('_')) result = result.substring(0, result.length - 1);
     return result.isEmpty ? '_unknown' : result;
+  }
+}
+
+class _Hash {
+  static const _base32 = 'abcdefghijklmnopqrstuvwxyz234567';
+
+  static String fnvBase32(String seed, {required int length}) {
+    var hash = 0x811C9DC5;
+    for (final b in utf8.encode(seed)) {
+      hash ^= b;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    final buf = StringBuffer();
+    var v = hash;
+    for (var i = 0; i < length; i++) {
+      buf.write(_base32[v & 31]);
+      v >>= 5;
+    }
+    return buf.toString();
   }
 }

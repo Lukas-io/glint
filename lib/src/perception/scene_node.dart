@@ -1,19 +1,5 @@
-/// One node in the perception model.
-///
-/// Built from a single DiagnosticsNode entry in the inspector JSON returned
-/// by `ext.flutter.inspector.getRootWidgetTree`. The fields here are what
-/// Module B uses internally; the agent-facing semantic view (Module C, P3)
-/// is derived from these.
-///
-/// `inspectorId` is the inspector's per-read object handle ("inspector-N").
-/// It is reused for the duration of the inspector group but is NOT stable
-/// across reads — for the agent's stable handle, see [SceneNode.glintId].
-///
-/// `locationId` is the inspector's source-location identifier (a per-file
-/// integer) — stable across reads for the same widget instance at the same
-/// source location. It is the bedrock of stable-id generation, but two
-/// sibling instances of the same widget share a locationId, so it is not
-/// unique on its own.
+/// One node in the perception model, parsed from the inspector's
+/// DiagnosticsNode JSON.
 class SceneNode {
   SceneNode({
     required this.depth,
@@ -32,70 +18,57 @@ class SceneNode {
     this.children = const <SceneNode>[],
   });
 
-  /// 0 for the root; child depth = parent depth + 1.
+  /// 0 for root; child = parent + 1.
   final int depth;
 
-  /// Index of this node inside its parent's `children` array. -1 for the
-  /// root. Used by the stable-id generator as a tiebreaker among siblings
-  /// that share the same locationId.
+  /// -1 for root. Stable-id generator tiebreaker among siblings sharing a
+  /// locationId.
   final int indexInParent;
 
-  /// Diagnostic description, usually the widget runtime type
-  /// (`"FloatingActionButton"`, `"Text"`). For non-widget framework nodes
-  /// this can be something like `"_ElementDiagnosticableTreeNode"`.
+  /// Usually the widget runtime type. Falls back to a framework-internal
+  /// type name when the inspector emits one (e.g.
+  /// `_ElementDiagnosticableTreeNode`).
   final String description;
 
-  /// Diagnostics node type, e.g. `"_ElementDiagnosticableTreeNode"`.
+  /// DiagnosticsNode `type` field — typically
+  /// `"_ElementDiagnosticableTreeNode"`.
   final String type;
 
-  /// Inspector handle, valid only for the current inspector group.
+  /// Inspector handle (`"inspector-N"`). Valid only for the current
+  /// inspector group; NOT stable across reads.
   final String inspectorId;
 
-  /// Stable source-location id (when the inspector emits one). Same widget
-  /// at same source location → same locationId every read.
+  /// Inspector source-location id — same widget at same source location
+  /// produces the same value every read. Bedrock for stable-id generation
+  /// but not unique on its own.
   final int? locationId;
 
-  /// File / line / column / name from the inspector's creation tracking.
   final CreationLocation? creationLocation;
 
-  /// Some framework-internal nodes carry their concrete widget runtime type
-  /// in this field instead of in [description].
+  /// Some framework nodes carry the widget runtime type here instead of in
+  /// [description].
   final String? widgetRuntimeType;
 
-  /// Text content for nodes that render text (RenderParagraph-backed).
+  /// RenderParagraph-backed nodes only.
   final String? textPreview;
 
-  /// True for widgets whose creationLocation belongs to a directory the
-  /// inspector considers "the user's code". Used by the agent-facing
-  /// summary projection (P3) to keep framework chrome out by default.
   final bool createdByLocalProject;
-
-  /// True for StatefulElement-style nodes.
   final bool stateful;
-
-  /// Whether the inspector reported `hasChildren: true`. May be true even
-  /// when `children` is empty in a summary tree.
   final bool hasChildren;
 
-  /// Glint's stable, unique, agent-facing id (set after the stable-id pass
-  /// runs on the assembled tree). Null until then.
+  /// Glint's stable, unique, agent-facing id. Null until
+  /// [StableIdGenerator.assignIds] runs over the tree.
   String? glintId;
 
-  /// Children in tree order.
   List<SceneNode> children;
 
-  /// The most useful single-word label for this node — `widgetRuntimeType`
-  /// when present, otherwise `description`. Strips the framework-internal
-  /// fallback (`_ElementDiagnosticableTreeNode`) by checking `description`
-  /// only when it doesn't look like a synthetic type.
-  String get label {
-    if (widgetRuntimeType != null && widgetRuntimeType!.isNotEmpty) {
-      return widgetRuntimeType!;
-    }
-    return description;
-  }
+  /// Best single-word label: widgetRuntimeType when present, else description.
+  String get label =>
+      (widgetRuntimeType != null && widgetRuntimeType!.isNotEmpty)
+          ? widgetRuntimeType!
+          : description;
 
-  /// Walk this subtree in pre-order, yielding each node once.
+  /// Pre-order traversal of this subtree.
   Iterable<SceneNode> walk() sync* {
     yield this;
     for (final c in children) {

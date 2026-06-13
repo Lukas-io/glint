@@ -3,28 +3,23 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 
+/// Android KEYCODE_* values that map to glint's [HardwareButton] enum.
+extension AndroidKeyCode on HardwareButton {
+  int get androidKeyCode => switch (this) {
+        HardwareButton.home => 3,
+        HardwareButton.back => 4,
+        HardwareButton.lock => 26, // KEYCODE_POWER (toggle)
+        HardwareButton.volumeUp => 24,
+        HardwareButton.volumeDown => 25,
+        HardwareButton.appSwitcher => 187,
+      };
+}
+
 /// Android emulator / device backend over `adb shell input`.
-///
-/// Notes carried forward from the P0 smoke harness:
-///   - `adb` lives at `~/Library/Android/sdk/platform-tools/adb` on dev
-///     machines that installed Android Studio, but isn't always on PATH.
-///     We accept an explicit [adbPath]; defaults to bare `"adb"`.
-///   - On Android, OS-level taps go to whichever app is foreground. If
-///     the target app is alive but backgrounded, the Flutter view has a
-///     zero-size surface and Module B's geometry is garbage. The
-///     [foregroundPackage] hint is exposed so callers (or the MCP
-///     server in P4) can bring the target up before tapping; this
-///     backend itself stays focused on input delivery.
 class AdbBackend implements InteractionBackend {
-  AdbBackend({
-    required this.deviceSerial,
-    this.adbPath = 'adb',
-  });
+  AdbBackend({required this.deviceSerial, this.adbPath = 'adb'});
 
-  /// `-s <serial>` argument. e.g. `emulator-5554`.
   final String deviceSerial;
-
-  /// Path to the `adb` binary. Defaults to whatever's on PATH.
   final String adbPath;
 
   @override
@@ -32,11 +27,6 @@ class AdbBackend implements InteractionBackend {
 
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
-        tap: true,
-        longPress: true,
-        doubleTap: true,
-        swipe: true,
-        typeText: true,
         hardwareButtons: {
           HardwareButton.home,
           HardwareButton.back,
@@ -48,28 +38,26 @@ class AdbBackend implements InteractionBackend {
       );
 
   @override
-  Future<void> tap({required int physicalX, required int physicalY}) {
-    return _run(['input', 'tap', '$physicalX', '$physicalY']);
-  }
+  Future<void> tap({required int physicalX, required int physicalY}) =>
+      _shell(['input', 'tap', '$physicalX', '$physicalY']);
 
+  // adb has no dedicated long-press; `input swipe x y x y duration` with
+  // zero displacement is the canonical workaround.
   @override
   Future<void> longPress({
     required int physicalX,
     required int physicalY,
     required int durationMs,
-  }) {
-    // `input swipe x y x y duration` with zero displacement is the
-    // canonical adb long-press pattern.
-    return _run([
-      'input',
-      'swipe',
-      '$physicalX',
-      '$physicalY',
-      '$physicalX',
-      '$physicalY',
-      '$durationMs',
-    ]);
-  }
+  }) =>
+      _shell([
+        'input',
+        'swipe',
+        '$physicalX',
+        '$physicalY',
+        '$physicalX',
+        '$physicalY',
+        '$durationMs',
+      ]);
 
   @override
   Future<void> swipe({
@@ -78,46 +66,34 @@ class AdbBackend implements InteractionBackend {
     required int physicalX2,
     required int physicalY2,
     required int durationMs,
-  }) {
-    return _run([
-      'input',
-      'swipe',
-      '$physicalX1',
-      '$physicalY1',
-      '$physicalX2',
-      '$physicalY2',
-      '$durationMs',
-    ]);
-  }
+  }) =>
+      _shell([
+        'input',
+        'swipe',
+        '$physicalX1',
+        '$physicalY1',
+        '$physicalX2',
+        '$physicalY2',
+        '$durationMs',
+      ]);
 
+  // `input text` treats `%s` as space and chokes on quote / backtick.
+  // Latin only — non-ASCII would need an IME via `am broadcast` (v2).
   @override
   Future<void> typeText(String text) {
-    // `input text` interprets `%s` as space and chokes on quotes/specials.
-    // Encode each character — Latin charset only for v1; non-ASCII text
-    // input requires `am broadcast` to an IME, which is out of v1 scope.
     final escaped = text
         .replaceAll('\\', '\\\\')
         .replaceAll('"', '\\"')
         .replaceAll('`', '\\`')
         .replaceAll(' ', '%s');
-    return _run(['input', 'text', escaped]);
+    return _shell(['input', 'text', escaped]);
   }
 
   @override
-  Future<void> pressHardwareButton(HardwareButton button) {
-    final code = switch (button) {
-      HardwareButton.home => 3,         // KEYCODE_HOME
-      HardwareButton.back => 4,         // KEYCODE_BACK
-      HardwareButton.lock => 26,        // KEYCODE_POWER (lock toggle)
-      HardwareButton.volumeUp => 24,    // KEYCODE_VOLUME_UP
-      HardwareButton.volumeDown => 25,  // KEYCODE_VOLUME_DOWN
-      HardwareButton.appSwitcher => 187, // KEYCODE_APP_SWITCH
-    };
-    return _run(['input', 'keyevent', '$code']);
-  }
+  Future<void> pressHardwareButton(HardwareButton button) =>
+      _shell(['input', 'keyevent', '${button.androidKeyCode}']);
 
-  /// Shell-on-device wrapper. `adb -s <serial> shell <args>`.
-  Future<void> _run(List<String> shellArgs) async {
+  Future<void> _shell(List<String> shellArgs) async {
     final result = await Process.run(
       adbPath,
       ['-s', deviceSerial, 'shell', ...shellArgs],

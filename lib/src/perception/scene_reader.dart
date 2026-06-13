@@ -2,41 +2,38 @@ import 'inspector_client.dart';
 import 'scene_node.dart';
 import 'stable_id.dart';
 
-/// Module B's top-level read.
-///
-/// One call: connect → read → assign stable ids → return the SceneNode tree.
-/// Callers own the inspector group's lifetime via [Scene.dispose].
+/// Module B's top-level read: connect → fetch tree → assign stable ids
+/// → return a [Scene]. Caller owns the Scene's lifetime via [Scene.dispose].
 class SceneReader {
   SceneReader(this._inspector);
 
   final InspectorClient _inspector;
   final StableIdGenerator _ids = StableIdGenerator();
 
-  /// Reads the user-code-only summary tree, assigns stable ids, returns
-  /// the tree handle. The caller is responsible for calling `dispose` on
-  /// the returned [Scene] when done so the inspector's id table can be
-  /// released — keeping it alive too long is harmless but wastes memory
-  /// in the target VM.
-  Future<Scene> readSummary() async {
-    final groupName = _inspector.nextReadGroup();
-    final root = await _inspector.readSummaryTree(groupName: groupName);
-    _ids.assignIds(root);
-    return Scene._(root: root, groupName: groupName, inspector: _inspector);
-  }
+  /// User-code-only summary tree. The agent's read surface (Module C / P3).
+  Future<Scene> readSummary() => _read(TreeDepth.summary);
 
-  /// Reads the full element tree. Same shape as [readSummary] but includes
-  /// every framework node — useful for hit-test reasoning and ancestor
-  /// walks that need framework chrome (Overlay, RenderView, etc.). Not
-  /// what the agent reads.
-  Future<Scene> readFull() async {
+  /// Every framework element. Server-internal use only (hit-test,
+  /// containment, ancestor walks). Never shipped to the agent verbatim.
+  Future<Scene> readFull() => _read(TreeDepth.full);
+
+  Future<Scene> _read(TreeDepth depth) async {
     final groupName = _inspector.nextReadGroup();
-    final root = await _inspector.readFullTree(groupName: groupName);
+    final root = switch (depth) {
+      TreeDepth.summary =>
+        await _inspector.readSummaryTree(groupName: groupName),
+      TreeDepth.full =>
+        await _inspector.readFullTree(groupName: groupName),
+    };
     _ids.assignIds(root);
     return Scene._(root: root, groupName: groupName, inspector: _inspector);
   }
 }
 
-/// Owns one inspector group and the SceneNode tree built from it.
+enum TreeDepth { summary, full }
+
+/// Owns one inspector group plus its SceneNode tree. Disposing releases the
+/// inspector's id table in the target VM.
 class Scene {
   Scene._(
       {required this.root,
@@ -49,7 +46,6 @@ class Scene {
   final InspectorClient _inspector;
   bool _disposed = false;
 
-  /// Look up a node by its stable id. O(n).
   SceneNode? findByGlintId(String glintId) {
     for (final n in root.walk()) {
       if (n.glintId == glintId) return n;
@@ -57,7 +53,6 @@ class Scene {
     return null;
   }
 
-  /// Drops the inspector's id table for this read. Idempotent.
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;

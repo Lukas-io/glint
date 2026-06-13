@@ -1,29 +1,10 @@
-// SimBridge.swift — investigates private CoreSimulator / SimulatorKit
-// surface so glint can drive iOS Simulator touch input through Apple's
-// own HID stream (not via macOS GUI events).
-//
-// Status: P2.1 — protocol archaeology phase. The legacy path
-// `-[SimDevice sendEvent:]` is gone in modern Xcode. The replacement
-// lives behind `SimDeviceIOClient.ioPorts`, each of which is an XPC
-// `ROCKRemoteProxy`. We need to:
-//   1. Dump the protocols Apple's binaries declare (the protocol metadata
-//      survives even when implementations are XPC-forwarded).
-//   2. Identify which port is the HID (Indigo) port via its descriptor.
-//   3. Find the consumer entry point and the wire format for HID events.
-//
-// Once mapped, the per-Xcode Swift module compiles against this protocol
-// and is the canonical glint-iossim backend for that Xcode major release.
-// Compat matrix lives in source-of-truth §13.
-//
-// Historical reference: FBSimulatorControl / idb implemented this on
-// Xcode 14 and earlier (FBSimulatorControl/FBSimulatorIOClient.m). The
-// pattern those projects used was:
-//   - Find port with descriptor.UUID == kSimDeviceIOIndigoDescriptorUUID
-//   - Build IndigoMessage binary (touch type, finger index, x/y, ts)
-//   - Call -[port consumeData:] (or similar) with NSData wrapping the message
-//
-// Whether that exact shape survives in Xcode 26 is what this scaffold
-// answers.
+// SimBridge.swift — drives iOS Simulator HID input via private
+// CoreSimulator + SimulatorKit. Per-Xcode mapping lives in
+// source-of-truth §13 compat matrix; the Xcode-26 path goes through
+// `SimulatorKit.SimDeviceLegacyHIDClient.sendWithMessage:...` carrying
+// an IndigoHIDMessageStruct built by SimulatorKit's exported C builders
+// (IndigoHIDMessageForMouseNSEvent / IndigoHIDMessageForButton /
+// IndigoHIDMessageForKeyboardArbitrary).
 
 import Foundation
 
@@ -37,22 +18,30 @@ struct BootedDevice {
     let name: String
 }
 
+/// 1 = key/touch down, 2 = key/touch up. Same encoding for mouse, button,
+/// and keyboard `op` args in SimulatorKit's IndigoHID builders.
+enum TouchDirection: Int32 {
+    case down = 1
+    case up = 2
+}
+
+/// Display target hardcoded since idb's Xcode 14 path; survives unchanged
+/// through Xcode 26 for mouse/touch events. `IndigoHIDTargetForScreen`
+/// would supersede this for hardware-button work — see §13.
+enum IndigoTarget {
+    static let defaultDisplay: Int32 = 0x32
+}
+
 enum SimBridge {
     private static var loaded = false
 
-    /// Load every private framework whose protocols/classes we may need to
-    /// dump or call. `RTLD_LAZY` so we don't pay for symbol resolution we
-    /// don't use. The frameworks ship inside Xcode; if Xcode isn't
-    /// installed at the path the user's `xcode-select` points to, we
-    /// surface that as a clear error.
     static func ensureLoaded() throws {
         if loaded { return }
         let devDir = developerDir() as String
         let frameworks = [
             "\(devDir)/Library/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",
             "\(devDir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit",
-            // Fallbacks for systems where CoreSimulator is in /Library, not
-            // inside Xcode's developer dir.
+            // Fallback: pre-Xcode-15 installs put CoreSimulator under /Library.
             "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",
         ]
         var loadedAny = false
@@ -72,49 +61,49 @@ enum SimBridge {
 
     static func bootedDevices() throws -> [BootedDevice] {
         try ensureLoaded()
-        guard let SimServiceContext = NSClassFromString("SimServiceContext") else {
-            throw SimError(message: "SimServiceContext class not found")
-        }
-        let sel = NSSelectorFromString("sharedServiceContextForDeveloperDir:error:")
-        guard let ctx = (SimServiceContext as AnyObject)
-            .perform(sel, with: developerDir(), with: NSNull())?
-            .takeUnretainedValue() as AnyObject? else {
-            throw SimError(message: "sharedServiceContextForDeveloperDir returned nil")
-        }
-        guard let set = ctx.perform(
-            NSSelectorFromString("defaultDeviceSetWithError:"),
-            with: NSNull()
-        )?.takeUnretainedValue() as AnyObject? else {
-            throw SimError(message: "defaultDeviceSetWithError returned nil")
-        }
-        guard let devices = set.perform(NSSelectorFromString("devices"))?
-            .takeUnretainedValue() as? [AnyObject] else {
-            throw SimError(message: "devices returned nil")
-        }
+        let devices = try _allDevices()
         var out: [BootedDevice] = []
-        for d in devices {
-            let state = ((d as? NSObject)?.value(forKey: "state") as? NSNumber)?.intValue ?? -1
-            if state != 3 { continue }  // 3 == Booted
-            let udid = ((d as? NSObject)?.value(forKey: "UDID") as? NSUUID)?.uuidString ?? ""
-            let name = ((d as? NSObject)?.value(forKey: "name") as? String) ?? ""
-            out.append(BootedDevice(udid: udid, name: name))
+        for d in devices where _deviceState(d) == .booted {
+            out.append(BootedDevice(
+                udid: _deviceUdid(d),
+                name: _deviceName(d),
+            ))
         }
         return out
     }
 
     static func requireBootedDevice(udid: String) throws -> SimDeviceProxy {
         try ensureLoaded()
+        let target = udid.uppercased()
+        for d in try _allDevices() where _deviceUdid(d).uppercased() == target {
+            return SimDeviceProxy(device: d)
+        }
+        throw SimError(message: "no SimDevice with UDID \(udid)")
+    }
+
+    /// CoreSimulator's SimDeviceState enum.
+    enum DeviceState: Int {
+        case creating = 0
+        case shutdown = 1
+        case booting = 2
+        case booted = 3
+        case shuttingDown = 4
+        case unknown = -1
+    }
+
+    private static func _allDevices() throws -> [AnyObject] {
         guard let SimServiceContext = NSClassFromString("SimServiceContext") else {
             throw SimError(message: "SimServiceContext class not found")
         }
         guard let ctx = (SimServiceContext as AnyObject).perform(
             NSSelectorFromString("sharedServiceContextForDeveloperDir:error:"),
-            with: developerDir(), with: NSNull()
+            with: developerDir(),
+            with: NSNull(),
         )?.takeUnretainedValue() as AnyObject? else {
             throw SimError(message: "sharedServiceContextForDeveloperDir returned nil")
         }
         guard let set = ctx.perform(
-            NSSelectorFromString("defaultDeviceSetWithError:"), with: NSNull()
+            NSSelectorFromString("defaultDeviceSetWithError:"), with: NSNull(),
         )?.takeUnretainedValue() as AnyObject? else {
             throw SimError(message: "defaultDeviceSetWithError returned nil")
         }
@@ -122,14 +111,20 @@ enum SimBridge {
             .takeUnretainedValue() as? [AnyObject] else {
             throw SimError(message: "devices returned nil")
         }
-        let target = udid.uppercased()
-        for d in devices {
-            let did = ((d as? NSObject)?.value(forKey: "UDID") as? NSUUID)?.uuidString.uppercased() ?? ""
-            if did == target {
-                return SimDeviceProxy(device: d)
-            }
-        }
-        throw SimError(message: "no SimDevice with UDID \(udid)")
+        return devices
+    }
+
+    private static func _deviceState(_ d: AnyObject) -> DeviceState {
+        let raw = ((d as? NSObject)?.value(forKey: "state") as? NSNumber)?.intValue ?? -1
+        return DeviceState(rawValue: raw) ?? .unknown
+    }
+
+    private static func _deviceUdid(_ d: AnyObject) -> String {
+        ((d as? NSObject)?.value(forKey: "UDID") as? NSUUID)?.uuidString ?? ""
+    }
+
+    private static func _deviceName(_ d: AnyObject) -> String {
+        ((d as? NSObject)?.value(forKey: "name") as? String) ?? ""
     }
 
     private static func developerDir() -> NSString {
@@ -144,9 +139,10 @@ enum SimBridge {
         do {
             try p.run()
             p.waitUntilExit()
-            let s = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
-                           encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let s = String(
+                data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8,
+            )?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return s as NSString
         } catch {
             return "/Applications/Xcode.app/Contents/Developer" as NSString
@@ -157,35 +153,28 @@ enum SimBridge {
         FileHandle.standardError.write(Data("[glint-iossim] \(msg)\n".utf8))
     }
 
-    // MARK: - Protocol archaeology
+    // MARK: - Reverse-engineering helpers
     //
-    // The two next sections are diagnostic-only. Output goes to stdout in a
-    // shape that's easy to grep / pipe to `tee` / save as evidence.
+    // Used by the dump-* and probe-* CLI commands. Output goes to stdout
+    // so the human running the probe can grep / pipe it.
 
-    /// Dump every ObjC protocol whose name matches one of the needles.
-    /// Protocols come from frameworks we've already loaded — call after
-    /// `ensureLoaded()`.
     static func dumpProtocols(matching needles: [String]) {
         var count: UInt32 = 0
         guard let list = objc_copyProtocolList(&count) else {
             print("no protocols")
             return
         }
-        let needlesLower = needles.map { $0.lowercased() }
+        let lower = needles.map { $0.lowercased() }
         for i in 0..<Int(count) {
             let p: Protocol = list[i]
             let name = String(cString: protocol_getName(p))
-            let lower = name.lowercased()
-            guard needlesLower.contains(where: { lower.contains($0) }) else { continue }
+            guard lower.contains(where: { name.lowercased().contains($0) }) else { continue }
             print("\n## protocol \(name) ##")
-            // Required / optional × instance / class methods. objc4's
-            // method_description struct exposes name/types as optionals
-            // post-Swift-5.9, so we have to nil-check both.
+            // post-Swift-5.9 method_description name/types are optionals
             for (req, inst) in [(true, true), (true, false), (false, true), (false, false)] {
                 var mcount: UInt32 = 0
-                guard let methods = protocol_copyMethodDescriptionList(
-                    p, req, inst, &mcount
-                ) else { continue }
+                guard let methods = protocol_copyMethodDescriptionList(p, req, inst, &mcount)
+                else { continue }
                 let prefix = inst ? "-" : "+"
                 let tag = req ? "@required" : "@optional"
                 for j in 0..<Int(mcount) {
@@ -196,10 +185,11 @@ enum SimBridge {
                 }
                 free(methods)
             }
-            // Adopted protocols.
             var pcount: UInt32 = 0
             if let adopted = protocol_copyProtocolList(p, &pcount), pcount > 0 {
-                let names = (0..<Int(pcount)).map { String(cString: protocol_getName(adopted[$0])) }
+                let names = (0..<Int(pcount)).map {
+                    String(cString: protocol_getName(adopted[$0]))
+                }
                 print("  conforms-to: \(names.joined(separator: ", "))")
                 free(UnsafeMutableRawPointer(adopted))
             }
@@ -207,8 +197,6 @@ enum SimBridge {
         free(UnsafeMutableRawPointer(list))
     }
 
-    /// Dump every class whose name contains any of `needles` (case-insensitive).
-    /// Used to find `IndigoMessage`, the descriptor types, etc.
     static func dumpClasses(matching needles: [String]) {
         let expected = objc_getClassList(nil, 0)
         guard expected > 0 else {
@@ -219,13 +207,11 @@ enum SimBridge {
         defer { buf.deallocate() }
         let n = Int(objc_getClassList(
             AutoreleasingUnsafeMutablePointer<AnyClass>(buf), expected))
-        let needlesLower = needles.map { $0.lowercased() }
+        let lower = needles.map { $0.lowercased() }
         var matched = 0
         for i in 0..<n {
-            let cls: AnyClass = buf[i]
-            let name = NSStringFromClass(cls)
-            let lower = name.lowercased()
-            if needlesLower.contains(where: { lower.contains($0) }) {
+            let name = NSStringFromClass(buf[i])
+            if lower.contains(where: { name.lowercased().contains($0) }) {
                 print("- \(name)")
                 matched += 1
             }
@@ -233,18 +219,16 @@ enum SimBridge {
         print("(\(matched) classes matched; \(n) total registered)")
     }
 
-    /// Dump every instance and class method declared on a class, plus its
-    /// adopted protocols. Walks superclasses up to (but not including)
-    /// NSObject so we don't drown in inherited boilerplate.
     static func dumpAllMethods(of cls: AnyClass) {
         var c: AnyClass? = cls
         while let cur = c {
             let name = NSStringFromClass(cur)
             print("== \(name) ==")
-            // Adopted protocols on this class only.
             var pcount: UInt32 = 0
             if let protos = class_copyProtocolList(cur, &pcount), pcount > 0 {
-                let names = (0..<Int(pcount)).map { String(cString: protocol_getName(protos[$0])) }
+                let names = (0..<Int(pcount)).map {
+                    String(cString: protocol_getName(protos[$0]))
+                }
                 print("  conforms-to: \(names.joined(separator: ", "))")
             }
             for forClass in [false, true] {
@@ -255,7 +239,9 @@ enum SimBridge {
                     for i in 0..<Int(mcount) {
                         let m = methods[i]
                         let sel = NSStringFromSelector(method_getName(m))
-                        let types = method_getTypeEncoding(m).map { String(cString: $0) } ?? "<?>"
+                        let types = method_getTypeEncoding(m).map {
+                            String(cString: $0)
+                        } ?? "<?>"
                         print("  \(prefix)[\(name) \(sel)]  types=\(types)")
                     }
                     free(methods)
@@ -266,11 +252,9 @@ enum SimBridge {
         }
     }
 
-    /// Enumerate ObjC methods on a class chain whose name contains any of
-    /// the given substrings (case-insensitive).
     static func dumpDeviceMethods(of device: AnyObject, matching needles: [String]) {
         var cls: AnyClass? = object_getClass(device)
-        let lowerNeedles = needles.map { $0.lowercased() }
+        let lower = needles.map { $0.lowercased() }
         while let c = cls {
             print("== \(NSStringFromClass(c)) ==")
             var count: UInt32 = 0
@@ -278,9 +262,13 @@ enum SimBridge {
                 for i in 0..<Int(count) {
                     let m = methods[i]
                     let name = NSStringFromSelector(method_getName(m)).lowercased()
-                    if lowerNeedles.contains(where: { name.contains($0) }) {
+                    if lower.contains(where: { name.contains($0) }) {
                         let types = String(cString: method_getTypeEncoding(m)!)
-                        print("  -[\(NSStringFromClass(c)) \(NSStringFromSelector(method_getName(m)))]  types=\(types)")
+                        print(
+                            "  -[\(NSStringFromClass(c))" +
+                            " \(NSStringFromSelector(method_getName(m)))]" +
+                            "  types=\(types)",
+                        )
                     }
                 }
                 free(methods)
@@ -291,318 +279,175 @@ enum SimBridge {
     }
 }
 
-/// Wraps a private `SimDevice` ObjC instance and exposes the actions we
-/// need. Xcode 26 path: `SimulatorKit.SimDeviceLegacyHIDClient` accepts
-/// an `IndigoHIDMessageStruct*` via `send(message:...)`. The message is
-/// built by SimulatorKit's exported C function
-/// `IndigoHIDMessageForMouseNSEvent`; idb's reverse engineering
-/// (FBSimulatorIndigoHID.m) showed the touch-ratio fields live at byte
-/// offsets `0x3C` (xRatio) and `0x44` (yRatio) of the returned message.
-/// We patch those with the ratio (0..1) of our tap point against the
-/// device's logical bounds.
+/// Drives one booted SimDevice's HID stream.
 struct SimDeviceProxy {
     let device: AnyObject
 
-    // ── Direction codes for IndigoHIDMessageForMouseNSEvent's `eventType` arg.
-    // Same values idb uses; mapping verified by experiment in P2.1.
-    private static let touchDown: Int32 = 1
-    private static let touchUp: Int32 = 2
-
-    // Display target. idb hardcodes `0x32` = 50 (the simulator's
-    // "main display" target id). Tested unchanged through Xcode 14 → 26.
-    private static let displayTarget: Int32 = 0x32
-
-    // Xcode-26 IndigoHIDMessageStruct layout (verified by `swift build &&
-    // glint-iossim tap` + hex dump):
-    //
-    //   0x00..0x17  (24 bytes) — outer envelope, all zeros from the builder
-    //   0x18..0x1B   innerSize          = 0xA0 (one IndigoPayload)
-    //   0x1C..0x1F   eventType          = 2 (IndigoEventTypeTouch)
-    //   0x20..0xBF   payload[0] — 160 bytes
-    //     0x20..0x23   payload.field1   = 0x0B
-    //     0x24..0x2B   payload.timestamp (mach_absolute_time)
-    //     0x2C..0x33   touch.field1/field2/field3 (uint32 × 3)
-    //     0x34..0x3B   touch.field4 / pad / pad
-    //     0x3C..0x43   touch.xRatio (double)
-    //     0x44..0x4B   touch.yRatio (double)
-    //     ...
-    //   0xC0..0x15F  payload[1] (digitizer summary; mirrors payload[0])
-    //     0xCC..0xCF   payload[1].touch.field1 = 1 (digitizer marker)
-    //     0xD0..0xD3   payload[1].touch.field2 = 2 (digitizer marker)
-    //     0xDC..0xE3   payload[1].touch.xRatio
-    //     0xE4..0xEB   payload[1].touch.yRatio
-    //
-    // Total message size = 0x20 (outer + inner header) + 2 * 0xA0 = 0x160 (352).
-    private static let payloadStride = 0xA0
-    private static let messageHeaderSize = 0x20
-    private static let totalMessageSize = 0x20 + 2 * 0xA0   // 0x160
-    private static let xRatioOffset0 = 0x3C   // payload[0].touch.xRatio
-    private static let yRatioOffset0 = 0x44
-    private static let xRatioOffset1 = 0xDC   // payload[1].touch.xRatio
-    private static let yRatioOffset1 = 0xE4
-    private static let p1TouchField1Offset = 0xCC
-    private static let p1TouchField2Offset = 0xD0
-
-    /// Tap at logical device coordinates (`x`, `y` in points, normalised
-    /// against `deviceLogicalSize.width/height` to get the 0..1 ratio the
-    /// HID message takes).
-    func tap(x: Double, y: Double,
-             deviceLogicalSize: CGSize) throws {
-        let ratio = CGPoint(x: x / deviceLogicalSize.width,
-                            y: y / deviceLogicalSize.height)
+    func tap(x: Double, y: Double, deviceLogicalSize: CGSize) throws {
+        let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
         let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: Self.touchDown)
-        // Held-down dwell so the OS recognises it as a tap; idb used ~50ms.
+        try sendTouch(client: client, ratio: ratio, direction: .down)
+        // ~50ms dwell so the OS recognises a tap (idb's value).
         Thread.sleep(forTimeInterval: 0.05)
-        try sendTouch(client: client, ratio: ratio, direction: Self.touchUp)
+        try sendTouch(client: client, ratio: ratio, direction: .up)
     }
 
-    /// Long press: touch down, hold for `durationMs`, release. Tap is just
-    /// long-press with a ~50ms hold; long-press is the same primitive with
-    /// a real hold (default ~600ms matches iOS gesture recogniser).
-    func longPress(x: Double, y: Double,
-                   deviceLogicalSize: CGSize,
-                   durationMs: Int) throws {
-        let ratio = CGPoint(x: x / deviceLogicalSize.width,
-                            y: y / deviceLogicalSize.height)
+    func longPress(
+        x: Double,
+        y: Double,
+        deviceLogicalSize: CGSize,
+        durationMs: Int,
+    ) throws {
+        let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
         let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: Self.touchDown)
+        try sendTouch(client: client, ratio: ratio, direction: .down)
         Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
-        try sendTouch(client: client, ratio: ratio, direction: Self.touchUp)
+        try sendTouch(client: client, ratio: ratio, direction: .up)
     }
 
-    /// Swipe: touch down at (x1,y1), interpolate to (x2,y2) over
-    /// `durationMs` with intermediate touch updates, touch up at end.
-    ///
-    /// Intermediate samples use a different digitizer marker than the
-    /// start/end ones (`field1=2` instead of `1`) — this is the empirical
-    /// "this is a touch UPDATE, not a fresh begin" signal that lets the
-    /// simulator's UIKit hit-test deliver continuous touch-move events
-    /// rather than tearing the swipe into a sequence of independent taps.
-    func swipe(from: CGPoint, to: CGPoint,
-               deviceLogicalSize: CGSize,
-               durationMs: Int) throws {
+    func swipe(
+        from: CGPoint,
+        to: CGPoint,
+        deviceLogicalSize: CGSize,
+        durationMs: Int,
+    ) throws {
         let steps = max(8, durationMs / 16)
         let perStepMs = max(1, durationMs / steps)
         let client = try makeHidClient()
-        let r1 = CGPoint(x: from.x / deviceLogicalSize.width,
-                         y: from.y / deviceLogicalSize.height)
-        let r2 = CGPoint(x: to.x / deviceLogicalSize.width,
-                         y: to.y / deviceLogicalSize.height)
-        try sendTouch(client: client, ratio: r1, direction: Self.touchDown,
-                      digitizerMarker: .start)
+        let r1 = _ratio(x: from.x, y: from.y, in: deviceLogicalSize)
+        let r2 = _ratio(x: to.x, y: to.y, in: deviceLogicalSize)
+        try sendTouch(client: client, ratio: r1, direction: .down, marker: .start)
         for i in 1..<steps {
             let t = Double(i) / Double(steps)
             let r = CGPoint(
                 x: r1.x + (r2.x - r1.x) * t,
                 y: r1.y + (r2.y - r1.y) * t,
             )
-            try sendTouch(client: client, ratio: r, direction: Self.touchDown,
-                          digitizerMarker: .move)
+            try sendTouch(client: client, ratio: r, direction: .down, marker: .move)
             Thread.sleep(forTimeInterval: Double(perStepMs) / 1000.0)
         }
-        try sendTouch(client: client, ratio: r2, direction: Self.touchUp,
-                      digitizerMarker: .end)
+        try sendTouch(client: client, ratio: r2, direction: .up, marker: .end)
     }
 
-    /// Distinguishes start / move / end frames for a swipe so the
-    /// simulator's HID stream interprets them as a continuous gesture.
-    enum DigitizerMarker {
-        case start, move, end
-
-        /// `(field1, field2)` written into payload[1]'s touch event.
-        /// Values empirically derived from idb's Xcode-14 markers + a
-        /// move-marker delta that this glint maintains in its own
-        /// compat matrix.
-        var fields: (UInt32, UInt32) {
-            switch self {
-            case .start: return (1, 2)
-            case .move:  return (2, 2)
-            case .end:   return (1, 2)
-            }
-        }
-    }
-
-    /// Hardware button (home / lock / side / siri / etc.) via
-    /// IndigoHIDMessageForButton. `buttonCode` is the simulator's internal
-    /// button id (see `SimButton` in `Sources/glint-iossim/main.swift`).
     func pressButton(_ buttonCode: Int32) throws {
         let client = try makeHidClient()
-        try sendButton(client: client, code: buttonCode, direction: Self.touchDown)
+        try sendButton(client: client, code: buttonCode, direction: .down)
         Thread.sleep(forTimeInterval: 0.05)
-        try sendButton(client: client, code: buttonCode, direction: Self.touchUp)
+        try sendButton(client: client, code: buttonCode, direction: .up)
     }
 
-    /// Send literal text. Each character maps to a USB HID usage code; we
-    /// send keyDown then keyUp per character. Shifted characters (uppercase,
-    /// symbols) ride the same usage with the shift modifier — we handle
-    /// that by toggling shift down before the keypress and back up after.
+    /// Sends literal ASCII text via per-character HID key down/up. Shifted
+    /// characters bracket the key with shift-down / shift-up.
     func typeText(_ text: String) throws {
         let client = try makeHidClient()
         for scalar in text.unicodeScalars {
-            let mapping = HidKeymap.map(scalar)
-            if mapping == nil {
+            guard let m = HidKeymap.map(scalar) else {
                 throw SimError(message:
-                    "no HID mapping for U+\(String(scalar.value, radix: 16, uppercase: true)) " +
-                    "— v1 keyboard supports ASCII printable + space/newline/tab/backspace")
+                    "no HID mapping for U+\(String(scalar.value, radix: 16, uppercase: true))" +
+                    " — v1 keyboard supports ASCII printable + space/newline/tab/backspace")
             }
-            let m = mapping!
             if m.shift {
-                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: Self.touchDown)
+                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .down)
             }
-            try sendKey(client: client, usage: m.usage, direction: Self.touchDown)
-            // Very small dwell — modern simulators register key events on
-            // the down edge but some IMEs need the up to commit.
+            try sendKey(client: client, usage: m.usage, direction: .down)
+            // ~5ms dwell — modern simulators register on the down edge but
+            // some IMEs need the up to commit.
             Thread.sleep(forTimeInterval: 0.005)
-            try sendKey(client: client, usage: m.usage, direction: Self.touchUp)
+            try sendKey(client: client, usage: m.usage, direction: .up)
             if m.shift {
-                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: Self.touchUp)
+                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .up)
             }
         }
     }
 
-    private func sendTouch(client: AnyObject,
-                           ratio: CGPoint,
-                           direction: Int32,
-                           digitizerMarker: DigitizerMarker = .start) throws {
-        guard let builderSym = dlsym(SimBridge.simulatorKitHandle(), "IndigoHIDMessageForMouseNSEvent") else {
-            throw SimError(message:
-                "dlsym(IndigoHIDMessageForMouseNSEvent) failed: " +
-                String(cString: dlerror()))
-        }
-        typealias Builder = @convention(c) (
-            UnsafePointer<CGPoint>,
-            UnsafePointer<CGPoint>?,
-            Int32,
-            Int32,
-            DarwinBoolean
-        ) -> UnsafeMutableRawPointer?
-        let build = unsafeBitCast(builderSym, to: Builder.self)
-        // `point` carries the ratio; idb fed the same value as both
-        // (point arg + patched offset). The patched offset is what the
-        // simulator actually reads, but we feed both for parity in case
-        // a future SimulatorKit decides to use the arg.
-        var point = ratio
-        guard let oneShot = build(&point, nil, Self.displayTarget, direction,
-                                  DarwinBoolean(false)) else {
-            throw SimError(message:
-                "IndigoHIDMessageForMouseNSEvent returned nil for (\(ratio.x), \(ratio.y))")
-        }
-        // The builder returns a 1-payload (160-byte payload) message. The
-        // simulator's HID stream actually consumes a 2-payload message:
-        // payload[0] is the finger event, payload[1] is the digitizer
-        // summary (mirrors payload[0] but with touch.field1=1, field2=2).
-        // We reconstruct that here following idb/FBSimulatorIndigoHID's
-        // approach.
-        let buf = calloc(1, Self.totalMessageSize)!
-        // Copy the 1-payload skeleton into our 2-payload buffer.
-        buf.copyMemory(from: oneShot,
-                       byteCount: Self.messageHeaderSize + Self.payloadStride)
-        // Replicate payload[0] into payload[1] slot.
-        let payload0Start = buf.advanced(by: Self.messageHeaderSize)
-        let payload1Start = payload0Start.advanced(by: Self.payloadStride)
-        payload1Start.copyMemory(from: payload0Start,
-                                 byteCount: Self.payloadStride)
-        // Patch finger ratio in payload[0].
-        patchDouble(buf, offset: Self.xRatioOffset0, value: Double(ratio.x))
-        patchDouble(buf, offset: Self.yRatioOffset0, value: Double(ratio.y))
-        // Patch digitizer-summary ratio in payload[1].
-        patchDouble(buf, offset: Self.xRatioOffset1, value: Double(ratio.x))
-        patchDouble(buf, offset: Self.yRatioOffset1, value: Double(ratio.y))
-        // Mark payload[1] as the digitizer summary — fields differ for
-        // start/move/end of a swipe gesture so the simulator's hit-test
-        // stream sees a continuous drag, not a stream of taps.
-        let (f1, f2) = digitizerMarker.fields
-        patchUInt32(buf, offset: Self.p1TouchField1Offset, value: f1)
-        patchUInt32(buf, offset: Self.p1TouchField2Offset, value: f2)
-        // The builder's one-shot allocation is owned by us; release it
-        // since we copied what we needed.
-        free(oneShot)
+    private func _ratio(x: CGFloat, y: CGFloat, in size: CGSize) -> CGPoint {
+        CGPoint(x: x / size.width, y: y / size.height)
+    }
 
+    private func _ratio(x: Double, y: Double, in size: CGSize) -> CGPoint {
+        CGPoint(x: CGFloat(x) / size.width, y: CGFloat(y) / size.height)
+    }
+
+    private func sendTouch(
+        client: AnyObject,
+        ratio: CGPoint,
+        direction: TouchDirection,
+        marker: DigitizerMarker = .start,
+    ) throws {
+        let buf = try IndigoTouchMessage(
+            ratio: ratio,
+            direction: direction,
+            marker: marker,
+        ).buffer
+        try send(client: client, message: buf)
+    }
+
+    private func sendButton(
+        client: AnyObject,
+        code: Int32,
+        direction: TouchDirection,
+    ) throws {
+        let buf = try _buildVia(
+            symbol: "IndigoHIDMessageForButton",
+            buildSignature: ButtonBuilder.self,
+        ).build(code, direction.rawValue, IndigoTarget.defaultDisplay)
+        guard let buf else {
+            throw SimError(message:
+                "IndigoHIDMessageForButton returned nil for code \(code)")
+        }
+        try send(client: client, message: buf)
+    }
+
+    private func sendKey(
+        client: AnyObject,
+        usage: Int32,
+        direction: TouchDirection,
+    ) throws {
+        let buf = try _buildVia(
+            symbol: "IndigoHIDMessageForKeyboardArbitrary",
+            buildSignature: KeyBuilder.self,
+        ).build(usage, direction.rawValue)
+        guard let buf else {
+            throw SimError(message:
+                "IndigoHIDMessageForKeyboardArbitrary returned nil for usage \(usage)")
+        }
+        try send(client: client, message: buf)
+    }
+
+    private func send(client: AnyObject, message: UnsafeMutableRawPointer) throws {
         let sel = NSSelectorFromString(
             "sendWithMessage:freeWhenDone:completionQueue:completion:")
         guard client.responds(to: sel) else {
-            free(buf)
+            free(message)
             throw SimError(message:
                 "SimDeviceLegacyHIDClient missing sendWithMessage: — " +
                 "private API drift; see source-of-truth §13 compat matrix.")
         }
-        // freeWhenDone:true — SimulatorKit owns the buffer.
+        // freeWhenDone:true hands ownership to SimulatorKit.
         try SimBridge.callSendWithMessage(
             on: client,
             selector: sel,
-            message: buf,
+            message: message,
             freeWhenDone: true,
         )
     }
 
-    /// Build + dispatch one IndigoHIDMessageForButton message.
-    private func sendButton(client: AnyObject, code: Int32, direction: Int32) throws {
-        guard let builderSym = dlsym(SimBridge.simulatorKitHandle(),
-                                     "IndigoHIDMessageForButton") else {
-            throw SimError(message:
-                "dlsym(IndigoHIDMessageForButton) failed: " +
-                String(cString: dlerror()))
-        }
-        typealias Builder = @convention(c) (
-            Int32,  // keyCode (button id)
-            Int32,  // op (1=down, 2=up)
-            Int32,  // target (display id)
-        ) -> UnsafeMutableRawPointer?
-        let build = unsafeBitCast(builderSym, to: Builder.self)
-        guard let message = build(code, direction, Self.displayTarget) else {
-            throw SimError(message:
-                "IndigoHIDMessageForButton returned nil for code \(code)")
-        }
-        let sel = NSSelectorFromString(
-            "sendWithMessage:freeWhenDone:completionQueue:completion:")
-        try SimBridge.callSendWithMessage(
-            on: client, selector: sel, message: message, freeWhenDone: true)
-    }
-
-    /// Build + dispatch one IndigoHIDMessageForKeyboardArbitrary message.
-    private func sendKey(client: AnyObject, usage: Int32, direction: Int32) throws {
-        guard let builderSym = dlsym(SimBridge.simulatorKitHandle(),
-                                     "IndigoHIDMessageForKeyboardArbitrary") else {
-            throw SimError(message:
-                "dlsym(IndigoHIDMessageForKeyboardArbitrary) failed: " +
-                String(cString: dlerror()))
-        }
-        typealias Builder = @convention(c) (
-            Int32,  // keyCode (HID usage)
-            Int32,  // op (1=down, 2=up)
-        ) -> UnsafeMutableRawPointer?
-        let build = unsafeBitCast(builderSym, to: Builder.self)
-        guard let message = build(usage, direction) else {
-            throw SimError(message:
-                "IndigoHIDMessageForKeyboardArbitrary returned nil for usage \(usage)")
-        }
-        let sel = NSSelectorFromString(
-            "sendWithMessage:freeWhenDone:completionQueue:completion:")
-        try SimBridge.callSendWithMessage(
-            on: client, selector: sel, message: message, freeWhenDone: true)
-    }
-
     private func makeHidClient() throws -> AnyObject {
         try SimBridge.ensureLoaded()
-        // Force SimulatorKit to load so its Swift classes register.
         _ = SimBridge.simulatorKitHandle()
         guard let cls = NSClassFromString("SimulatorKit.SimDeviceLegacyHIDClient")
             ?? NSClassFromString("SimDeviceLegacyHIDClient") else {
             throw SimError(message:
                 "SimDeviceLegacyHIDClient not found — SimulatorKit not loaded?")
         }
-        let allocSel = NSSelectorFromString("alloc")
-        guard let alloced = (cls as AnyObject).perform(allocSel)?
+        guard let alloced = (cls as AnyObject).perform(NSSelectorFromString("alloc"))?
             .takeUnretainedValue() as AnyObject? else {
             throw SimError(message: "alloc returned nil")
         }
-        // -[SimDeviceLegacyHIDClient initWithDevice:error:] — 2 args fits
-        // perform(_:with:with:).
         let initSel = NSSelectorFromString("initWithDevice:error:")
         var nsError: NSError? = nil
         let initResult = withUnsafeMutablePointer(to: &nsError) { errPtr in
-            return alloced.perform(
+            alloced.perform(
                 initSel,
                 with: device,
                 with: NSValue(pointer: UnsafeRawPointer(errPtr)),
@@ -610,26 +455,172 @@ struct SimDeviceProxy {
         }
         guard let client = initResult?.takeUnretainedValue() as AnyObject? else {
             throw SimError(message:
-                "initWithDevice: returned nil — \(nsError?.localizedDescription ?? "no error reported")")
+                "initWithDevice: returned nil — " +
+                (nsError?.localizedDescription ?? "no error reported"))
         }
         return client
     }
+
+    private typealias ButtonBuilder = @convention(c) (
+        Int32,  // keyCode
+        Int32,  // op
+        Int32,  // target
+    ) -> UnsafeMutableRawPointer?
+
+    private typealias KeyBuilder = @convention(c) (
+        Int32,  // keyCode
+        Int32,  // op
+    ) -> UnsafeMutableRawPointer?
+
+    private struct _Builder<F> {
+        let build: F
+    }
+
+    private func _buildVia<F>(
+        symbol: String,
+        buildSignature: F.Type,
+    ) throws -> _Builder<F> {
+        guard let sym = dlsym(SimBridge.simulatorKitHandle(), symbol) else {
+            throw SimError(message:
+                "dlsym(\(symbol)) failed: " + String(cString: dlerror()))
+        }
+        return _Builder(build: unsafeBitCast(sym, to: F.self))
+    }
+}
+
+/// Distinguishes start / move / end frames for a swipe so the simulator
+/// hit-test reads them as a continuous drag rather than discrete taps.
+enum DigitizerMarker {
+    case start, move, end
+
+    /// `(field1, field2)` written into payload[1]'s touch event.
+    /// Values empirically derived from idb's Xcode-14 markers + a
+    /// move-marker delta this glint maintains in §13.
+    var fields: (UInt32, UInt32) {
+        switch self {
+        case .start: return (1, 2)
+        case .move:  return (2, 2)
+        case .end:   return (1, 2)
+        }
+    }
+}
+
+/// Builds the Xcode-26 IndigoHIDMessageStruct for one touch frame.
+///
+/// Layout (verified by hex-dumping the builder output):
+///   0x00..0x17  outer envelope (zero)
+///   0x18        innerSize = 0xA0
+///   0x1C        eventType = 2 (touch)
+///   0x20..0xBF  payload[0] (finger)
+///     0x3C       touch.xRatio (double)
+///     0x44       touch.yRatio (double)
+///   0xC0..0x15F payload[1] (digitizer summary — mirrors payload[0])
+///     0xCC       touch.field1 (varies by DigitizerMarker)
+///     0xD0       touch.field2 (varies by DigitizerMarker)
+///     0xDC       touch.xRatio
+///     0xE4       touch.yRatio
+///   total = 0x160 (352) bytes
+private struct IndigoTouchMessage {
+    enum Layout {
+        static let payloadStride = 0xA0
+        static let headerSize = 0x20
+        static let totalSize = headerSize + 2 * payloadStride
+        static let xRatio0 = 0x3C
+        static let yRatio0 = 0x44
+        static let xRatio1 = 0xDC
+        static let yRatio1 = 0xE4
+        static let p1Field1 = 0xCC
+        static let p1Field2 = 0xD0
+    }
+
+    let ratio: CGPoint
+    let direction: TouchDirection
+    let marker: DigitizerMarker
+
+    /// Allocated buffer ready to hand to SimulatorKit (freeWhenDone:true).
+    var buffer: UnsafeMutableRawPointer {
+        get throws {
+            guard let sym = dlsym(
+                SimBridge.simulatorKitHandle(),
+                "IndigoHIDMessageForMouseNSEvent",
+            ) else {
+                throw SimError(message:
+                    "dlsym(IndigoHIDMessageForMouseNSEvent) failed: " +
+                    String(cString: dlerror()))
+            }
+            typealias Builder = @convention(c) (
+                UnsafePointer<CGPoint>,
+                UnsafePointer<CGPoint>?,
+                Int32,
+                Int32,
+                DarwinBoolean,
+            ) -> UnsafeMutableRawPointer?
+            let build = unsafeBitCast(sym, to: Builder.self)
+            var point = ratio
+            guard let oneShot = build(
+                &point,
+                nil,
+                IndigoTarget.defaultDisplay,
+                direction.rawValue,
+                DarwinBoolean(false),
+            ) else {
+                throw SimError(message:
+                    "IndigoHIDMessageForMouseNSEvent returned nil for " +
+                    "(\(ratio.x), \(ratio.y))")
+            }
+            defer { free(oneShot) }
+
+            // Build the 2-payload structure: copy header+payload[0] from
+            // the one-shot, then replicate payload[0] → payload[1], then
+            // patch ratios and the digitizer-summary markers.
+            let buf = calloc(1, Layout.totalSize)!
+            buf.copyMemory(
+                from: oneShot,
+                byteCount: Layout.headerSize + Layout.payloadStride,
+            )
+            let p0 = buf.advanced(by: Layout.headerSize)
+            let p1 = p0.advanced(by: Layout.payloadStride)
+            p1.copyMemory(from: p0, byteCount: Layout.payloadStride)
+
+            _writeDouble(buf, at: Layout.xRatio0, value: Double(ratio.x))
+            _writeDouble(buf, at: Layout.yRatio0, value: Double(ratio.y))
+            _writeDouble(buf, at: Layout.xRatio1, value: Double(ratio.x))
+            _writeDouble(buf, at: Layout.yRatio1, value: Double(ratio.y))
+
+            let (f1, f2) = marker.fields
+            _writeUInt32(buf, at: Layout.p1Field1, value: f1)
+            _writeUInt32(buf, at: Layout.p1Field2, value: f2)
+            return buf
+        }
+    }
+}
+
+private func _writeDouble(
+    _ buf: UnsafeMutableRawPointer,
+    at offset: Int,
+    value: Double,
+) {
+    buf.advanced(by: offset).assumingMemoryBound(to: Double.self).pointee = value
+}
+
+private func _writeUInt32(
+    _ buf: UnsafeMutableRawPointer,
+    at offset: Int,
+    value: UInt32,
+) {
+    buf.advanced(by: offset).assumingMemoryBound(to: UInt32.self).pointee = value
 }
 
 extension SimBridge {
-    /// Call -[SimDeviceLegacyHIDClient sendWithMessage:freeWhenDone:completionQueue:completion:]
-    /// without going through `perform(_:with:with:)` (which caps at 2 args).
-    /// Goes one level lower: dlsym `objc_msgSend`, cast to the actual ObjC
-    /// dispatch signature, call it directly. Same pattern Foundation
-    /// itself uses on the inside.
+    /// `sendWithMessage:freeWhenDone:completionQueue:completion:` takes 4
+    /// args, exceeding Swift's `perform(_:with:with:)`. We drop to
+    /// objc_msgSend with a typed cast — same shape Foundation uses internally.
     static func callSendWithMessage(
         on receiver: AnyObject,
         selector: Selector,
         message: UnsafeMutableRawPointer,
         freeWhenDone: Bool,
     ) throws {
-        // ObjC ABI for the four-arg method:
-        //   id self, SEL _cmd, void* msg, BOOL freeWhenDone, id queue, id completion
         typealias SendT = @convention(c) (
             AnyObject, Selector,
             UnsafeMutableRawPointer,
@@ -638,32 +629,13 @@ extension SimBridge {
         ) -> Void
         guard let handle = dlopen(nil, RTLD_LAZY),
               let sym = dlsym(handle, "objc_msgSend") else {
-            throw SimError(message: "dlsym(objc_msgSend) failed: " +
-                String(cString: dlerror()))
+            throw SimError(message:
+                "dlsym(objc_msgSend) failed: " + String(cString: dlerror()))
         }
         let send = unsafeBitCast(sym, to: SendT.self)
         send(receiver, selector, message, ObjCBool(freeWhenDone), nil, nil)
     }
-}
 
-func hexDump(_ p: UnsafeMutableRawPointer, count: Int) -> String {
-    let bytes = p.assumingMemoryBound(to: UInt8.self)
-    return (0..<count).map { String(format: "%02x", bytes[$0]) }.joined(separator: " ")
-}
-
-func patchDouble(_ buf: UnsafeMutableRawPointer, offset: Int, value: Double) {
-    let p = buf.advanced(by: offset).assumingMemoryBound(to: Double.self)
-    p.pointee = value
-}
-
-func patchUInt32(_ buf: UnsafeMutableRawPointer, offset: Int, value: UInt32) {
-    let p = buf.advanced(by: offset).assumingMemoryBound(to: UInt32.self)
-    p.pointee = value
-}
-
-extension SimBridge {
-    /// Handle for the SimulatorKit dlopen, used to dlsym Indigo* C
-    /// functions. Caches the handle on first call.
     private static var _simKitHandle: UnsafeMutableRawPointer?
 
     static func simulatorKitHandle() -> UnsafeMutableRawPointer? {
