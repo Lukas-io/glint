@@ -13,9 +13,12 @@
 //   glint-iossim dump-ports <UDID>
 //   glint-iossim dump-port-protocol <UDID> <port-index>
 //
-// Usage (intended for backends, currently unimplemented):
-//   glint-iossim tap   <UDID> <x> <y>
-//   glint-iossim swipe <UDID> <x1> <y1> <x2> <y2> <duration_ms>
+// Usage (interaction backend):
+//   glint-iossim tap        <UDID> <dev_w> <dev_h> <x> <y>
+//   glint-iossim long-press <UDID> <dev_w> <dev_h> <x> <y> <duration_ms>
+//   glint-iossim swipe      <UDID> <dev_w> <dev_h> <x1> <y1> <x2> <y2> <duration_ms>
+//   glint-iossim button     <UDID> <home|lock|side|siri>
+//   glint-iossim type       <UDID> <text>   (escape with shell quoting)
 //
 // Exits 0 on success, 1 on error with a one-line message on stderr.
 
@@ -163,8 +166,83 @@ do {
         try proxy.tap(x: x, y: y, deviceLogicalSize: CGSize(width: dw, height: dh))
         print("OK tap \(args[2]) (\(x),\(y)) of (\(dw)x\(dh))")
 
+    case "long-press":
+        guard args.count == 8 else {
+            die("usage: glint-iossim long-press <UDID> <dev_w> <dev_h> <x> <y> <duration_ms>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        let dw = Double(args[3]) ?? -1
+        let dh = Double(args[4]) ?? -1
+        let x = Double(args[5]) ?? -1
+        let y = Double(args[6]) ?? -1
+        let durMs = Int(args[7]) ?? -1
+        guard dw > 0, dh > 0, durMs > 0 else {
+            die("dev_w/dev_h/duration_ms must be positive")
+        }
+        try proxy.longPress(x: x, y: y,
+                            deviceLogicalSize: CGSize(width: dw, height: dh),
+                            durationMs: durMs)
+        print("OK long-press \(args[2]) (\(x),\(y)) hold=\(durMs)ms")
+
     case "swipe":
-        die("swipe not yet implemented — wiring up after tap proof")
+        guard args.count == 10 else {
+            die("usage: glint-iossim swipe <UDID> <dev_w> <dev_h> <x1> <y1> <x2> <y2> <duration_ms>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        let dw = Double(args[3]) ?? -1
+        let dh = Double(args[4]) ?? -1
+        let x1 = Double(args[5]) ?? -1
+        let y1 = Double(args[6]) ?? -1
+        let x2 = Double(args[7]) ?? -1
+        let y2 = Double(args[8]) ?? -1
+        let durMs = Int(args[9]) ?? -1
+        guard dw > 0, dh > 0, durMs > 0 else {
+            die("dev_w/dev_h/duration_ms must be positive")
+        }
+        try proxy.swipe(from: CGPoint(x: x1, y: y1),
+                        to: CGPoint(x: x2, y: y2),
+                        deviceLogicalSize: CGSize(width: dw, height: dh),
+                        durationMs: durMs)
+        print("OK swipe \(args[2]) (\(x1),\(y1)) -> (\(x2),\(y2)) dur=\(durMs)ms")
+
+    case "button":
+        guard args.count == 4 else {
+            die("usage: glint-iossim button <UDID> <home|lock|side|siri>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        // Button codes for IndigoHIDMessageForButton.
+        // Verified by experiment on Xcode 26 / iOS 26.5; see source-of-truth
+        // §13 Xcode 26 row. Compat matrix may need a per-Xcode update if
+        // these shift.
+        let code: Int32
+        switch args[3] {
+        case "home":      code = 1
+        case "lock":      code = 2
+        case "side":      code = 4
+        case "siri":      code = 5
+        default:          die("unknown button: \(args[3])")
+        }
+        try proxy.pressButton(code)
+        print("OK button \(args[2]) \(args[3])")
+
+    case "probe-button":
+        // Diagnostic-only: fire IndigoHIDMessageForButton with a raw int
+        // code. Used during P2.2 to calibrate the button-code -> physical
+        // button mapping for each new Xcode release.
+        guard args.count == 4, let code = Int32(args[3]) else {
+            die("usage: glint-iossim probe-button <UDID> <int-code>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        try proxy.pressButton(code)
+        print("OK probe-button \(args[2]) code=\(code)")
+
+    case "type":
+        guard args.count == 4 else {
+            die("usage: glint-iossim type <UDID> <text>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        try proxy.typeText(args[3])
+        print("OK type \(args[2]) \(args[3].count) chars")
 
     default:
         die("unknown command: \(command)")

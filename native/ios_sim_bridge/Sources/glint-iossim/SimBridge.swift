@@ -357,9 +357,114 @@ struct SimDeviceProxy {
         try sendTouch(client: client, ratio: ratio, direction: Self.touchUp)
     }
 
+    /// Long press: touch down, hold for `durationMs`, release. Tap is just
+    /// long-press with a ~50ms hold; long-press is the same primitive with
+    /// a real hold (default ~600ms matches iOS gesture recogniser).
+    func longPress(x: Double, y: Double,
+                   deviceLogicalSize: CGSize,
+                   durationMs: Int) throws {
+        let ratio = CGPoint(x: x / deviceLogicalSize.width,
+                            y: y / deviceLogicalSize.height)
+        let client = try makeHidClient()
+        try sendTouch(client: client, ratio: ratio, direction: Self.touchDown)
+        Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
+        try sendTouch(client: client, ratio: ratio, direction: Self.touchUp)
+    }
+
+    /// Swipe: touch down at (x1,y1), interpolate to (x2,y2) over
+    /// `durationMs` with intermediate touch updates, touch up at end.
+    ///
+    /// Intermediate samples use a different digitizer marker than the
+    /// start/end ones (`field1=2` instead of `1`) — this is the empirical
+    /// "this is a touch UPDATE, not a fresh begin" signal that lets the
+    /// simulator's UIKit hit-test deliver continuous touch-move events
+    /// rather than tearing the swipe into a sequence of independent taps.
+    func swipe(from: CGPoint, to: CGPoint,
+               deviceLogicalSize: CGSize,
+               durationMs: Int) throws {
+        let steps = max(8, durationMs / 16)
+        let perStepMs = max(1, durationMs / steps)
+        let client = try makeHidClient()
+        let r1 = CGPoint(x: from.x / deviceLogicalSize.width,
+                         y: from.y / deviceLogicalSize.height)
+        let r2 = CGPoint(x: to.x / deviceLogicalSize.width,
+                         y: to.y / deviceLogicalSize.height)
+        try sendTouch(client: client, ratio: r1, direction: Self.touchDown,
+                      digitizerMarker: .start)
+        for i in 1..<steps {
+            let t = Double(i) / Double(steps)
+            let r = CGPoint(
+                x: r1.x + (r2.x - r1.x) * t,
+                y: r1.y + (r2.y - r1.y) * t,
+            )
+            try sendTouch(client: client, ratio: r, direction: Self.touchDown,
+                          digitizerMarker: .move)
+            Thread.sleep(forTimeInterval: Double(perStepMs) / 1000.0)
+        }
+        try sendTouch(client: client, ratio: r2, direction: Self.touchUp,
+                      digitizerMarker: .end)
+    }
+
+    /// Distinguishes start / move / end frames for a swipe so the
+    /// simulator's HID stream interprets them as a continuous gesture.
+    enum DigitizerMarker {
+        case start, move, end
+
+        /// `(field1, field2)` written into payload[1]'s touch event.
+        /// Values empirically derived from idb's Xcode-14 markers + a
+        /// move-marker delta that this glint maintains in its own
+        /// compat matrix.
+        var fields: (UInt32, UInt32) {
+            switch self {
+            case .start: return (1, 2)
+            case .move:  return (2, 2)
+            case .end:   return (1, 2)
+            }
+        }
+    }
+
+    /// Hardware button (home / lock / side / siri / etc.) via
+    /// IndigoHIDMessageForButton. `buttonCode` is the simulator's internal
+    /// button id (see `SimButton` in `Sources/glint-iossim/main.swift`).
+    func pressButton(_ buttonCode: Int32) throws {
+        let client = try makeHidClient()
+        try sendButton(client: client, code: buttonCode, direction: Self.touchDown)
+        Thread.sleep(forTimeInterval: 0.05)
+        try sendButton(client: client, code: buttonCode, direction: Self.touchUp)
+    }
+
+    /// Send literal text. Each character maps to a USB HID usage code; we
+    /// send keyDown then keyUp per character. Shifted characters (uppercase,
+    /// symbols) ride the same usage with the shift modifier — we handle
+    /// that by toggling shift down before the keypress and back up after.
+    func typeText(_ text: String) throws {
+        let client = try makeHidClient()
+        for scalar in text.unicodeScalars {
+            let mapping = HidKeymap.map(scalar)
+            if mapping == nil {
+                throw SimError(message:
+                    "no HID mapping for U+\(String(scalar.value, radix: 16, uppercase: true)) " +
+                    "— v1 keyboard supports ASCII printable + space/newline/tab/backspace")
+            }
+            let m = mapping!
+            if m.shift {
+                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: Self.touchDown)
+            }
+            try sendKey(client: client, usage: m.usage, direction: Self.touchDown)
+            // Very small dwell — modern simulators register key events on
+            // the down edge but some IMEs need the up to commit.
+            Thread.sleep(forTimeInterval: 0.005)
+            try sendKey(client: client, usage: m.usage, direction: Self.touchUp)
+            if m.shift {
+                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: Self.touchUp)
+            }
+        }
+    }
+
     private func sendTouch(client: AnyObject,
                            ratio: CGPoint,
-                           direction: Int32) throws {
+                           direction: Int32,
+                           digitizerMarker: DigitizerMarker = .start) throws {
         guard let builderSym = dlsym(SimBridge.simulatorKitHandle(), "IndigoHIDMessageForMouseNSEvent") else {
             throw SimError(message:
                 "dlsym(IndigoHIDMessageForMouseNSEvent) failed: " +
@@ -404,9 +509,12 @@ struct SimDeviceProxy {
         // Patch digitizer-summary ratio in payload[1].
         patchDouble(buf, offset: Self.xRatioOffset1, value: Double(ratio.x))
         patchDouble(buf, offset: Self.yRatioOffset1, value: Double(ratio.y))
-        // Mark payload[1] as the digitizer summary.
-        patchUInt32(buf, offset: Self.p1TouchField1Offset, value: 1)
-        patchUInt32(buf, offset: Self.p1TouchField2Offset, value: 2)
+        // Mark payload[1] as the digitizer summary — fields differ for
+        // start/move/end of a swipe gesture so the simulator's hit-test
+        // stream sees a continuous drag, not a stream of taps.
+        let (f1, f2) = digitizerMarker.fields
+        patchUInt32(buf, offset: Self.p1TouchField1Offset, value: f1)
+        patchUInt32(buf, offset: Self.p1TouchField2Offset, value: f2)
         // The builder's one-shot allocation is owned by us; release it
         // since we copied what we needed.
         free(oneShot)
@@ -426,6 +534,53 @@ struct SimDeviceProxy {
             message: buf,
             freeWhenDone: true,
         )
+    }
+
+    /// Build + dispatch one IndigoHIDMessageForButton message.
+    private func sendButton(client: AnyObject, code: Int32, direction: Int32) throws {
+        guard let builderSym = dlsym(SimBridge.simulatorKitHandle(),
+                                     "IndigoHIDMessageForButton") else {
+            throw SimError(message:
+                "dlsym(IndigoHIDMessageForButton) failed: " +
+                String(cString: dlerror()))
+        }
+        typealias Builder = @convention(c) (
+            Int32,  // keyCode (button id)
+            Int32,  // op (1=down, 2=up)
+            Int32,  // target (display id)
+        ) -> UnsafeMutableRawPointer?
+        let build = unsafeBitCast(builderSym, to: Builder.self)
+        guard let message = build(code, direction, Self.displayTarget) else {
+            throw SimError(message:
+                "IndigoHIDMessageForButton returned nil for code \(code)")
+        }
+        let sel = NSSelectorFromString(
+            "sendWithMessage:freeWhenDone:completionQueue:completion:")
+        try SimBridge.callSendWithMessage(
+            on: client, selector: sel, message: message, freeWhenDone: true)
+    }
+
+    /// Build + dispatch one IndigoHIDMessageForKeyboardArbitrary message.
+    private func sendKey(client: AnyObject, usage: Int32, direction: Int32) throws {
+        guard let builderSym = dlsym(SimBridge.simulatorKitHandle(),
+                                     "IndigoHIDMessageForKeyboardArbitrary") else {
+            throw SimError(message:
+                "dlsym(IndigoHIDMessageForKeyboardArbitrary) failed: " +
+                String(cString: dlerror()))
+        }
+        typealias Builder = @convention(c) (
+            Int32,  // keyCode (HID usage)
+            Int32,  // op (1=down, 2=up)
+        ) -> UnsafeMutableRawPointer?
+        let build = unsafeBitCast(builderSym, to: Builder.self)
+        guard let message = build(usage, direction) else {
+            throw SimError(message:
+                "IndigoHIDMessageForKeyboardArbitrary returned nil for usage \(usage)")
+        }
+        let sel = NSSelectorFromString(
+            "sendWithMessage:freeWhenDone:completionQueue:completion:")
+        try SimBridge.callSendWithMessage(
+            on: client, selector: sel, message: message, freeWhenDone: true)
     }
 
     private func makeHidClient() throws -> AnyObject {

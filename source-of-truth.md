@@ -375,10 +375,33 @@ Action-set fill-out (long-press, drag, hardware buttons, `scroll_to_find`) and s
 
 Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major release per backend. The maintenance model is per-release reverse engineering of `IndigoHIDMessageStruct`'s byte layout in `SimulatorKit.framework`, then patching the right fields and dispatching via `SimDeviceLegacyHIDClient.sendWithMessage:`. Each row below is a discrete contribution opportunity — community PRs welcome.
 
-| Xcode | iOS Sim runtime | Status | Notes |
-|---|---|---|---|
-| 26.x | 26 | **✅ tap working** | Layout: 24-byte outer envelope (all zero), then `innerSize=0xA0` @ 0x18, `eventType=2` @ 0x1C, payload[0] @ 0x20, payload[1] (digitizer mirror) @ 0xC0. Touch xRatio @ 0x3C / 0xDC, yRatio @ 0x44 / 0xE4, payload[1].touch.field1=1 @ 0xCC, field2=2 @ 0xD0. Target=0x32, eventType down=1, up=2. Total message 0x160 bytes. |
-| ≤14 | ≤14 | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 | Same offsets minus the 24-byte outer envelope. |
+| Xcode | iOS Sim runtime | tap | swipe | long-press | type | buttons | Notes |
+|---|---|---|---|---|---|---|---|
+| 26.x | 26 | ✅ | ✅ | ✅ (dispatch) | ⚠️ wired, untested | ⚠️ 1 of 5 mapped | See "Xcode 26 layout" + "Xcode 26 open work" below |
+| ≤14 | ≤14 | — | — | — | — | — | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 |
+
+### Xcode 26 layout (verified)
+
+- IndigoHIDMessageStruct: 24-byte outer envelope (all zero), then `innerSize=0xA0` @ 0x18, `eventType=2` @ 0x1C, payload[0] @ 0x20, payload[1] (digitizer mirror) @ 0xC0.
+- Touch `xRatio` @ 0x3C / 0xDC, `yRatio` @ 0x44 / 0xE4.
+- Payload[1] touch markers: tap uses `field1=1 @ 0xCC, field2=2 @ 0xD0`; **swipe-intermediate samples use `field1=2 @ 0xCC, field2=2 @ 0xD0`** to signal touch-move (otherwise the simulator hit-test sees a stream of discrete taps).
+- `target=0x32` (works for tap/swipe on iPhone 17 Pro), eventType `down=1, up=2`.
+- Total message 0x160 bytes.
+
+### Xcode 26 open work (deferred from P2.2)
+
+- **Hardware buttons.** `IndigoHIDMessageForButton(keyCode, op, target)`. Empirically: `keyCode=1` on iPhone 17 Pro triggers the Apple Pay / Face ID confirmation overlay; codes 2..5 are silent. The right path appears to be via `SimulatorKit.SimDeviceScreen.buttonTarget: IndigoHIDTarget` + the C export `_IndigoHIDTargetForScreen` (so the target isn't a hardcoded `0x32` per device) plus an `IndigoHIDButton` Swift enum case → integer mapping (known case strings on Xcode 26: `home`, `lock`, `crown`). Likely an additional codepath for Face ID iPhones uses the system swipe-up-from-bezel gesture rather than a button event — but the gesture starts outside the touchscreen, which our coordinate-based swipe can't reach.
+- **Typing.** `IndigoHIDMessageForKeyboardArbitrary(keyCode, op)` is wired (`HidKeymap.swift` maps printable ASCII to USB HID usage codes), but actually-typing-into-a-TextField hasn't been verified end-to-end on Xcode 26.
+- **Long press effect.** Dispatch verified by smoke test (no error); the fixture's FAB recogniser cancels the underlying tap so the counter doesn't increment, which is expected behaviour — pending a long-press-aware widget in the verify fixture to confirm.
+
+### Reverse-engineering toolkit (reusable per release)
+
+- `glint-iossim dump-protocols` — every protocol declared by CoreSimulator + SimulatorKit matching needles (`Indigo`, `HID`, `Port`, …).
+- `glint-iossim dump-classes` — every concrete class matching needles.
+- `glint-iossim dump-class-methods <class>` — every method on a class (and superclasses) including ObjC type encodings.
+- `glint-iossim probe-button <UDID> <int>` — fire `IndigoHIDMessageForButton` with a raw integer code so the human can call out which physical button (if any) it triggered.
+- `nm -gU /Applications/Xcode.app/.../SimulatorKit.framework/SimulatorKit | grep _Indigo` — list every exported C function (the available `IndigoHIDMessageFor*` builders).
+- `strings -a <Simulator.app binary> | grep -E "^(home|lock|...)"` — recover enum case names that survived stripping.
 
 **Investigation log lives in commits to `native/ios_sim_bridge/`**. Each Xcode release goes through:
 1. `nm -gU` on SimulatorKit/CoreSimulator to confirm exported `IndigoHID*` symbols.

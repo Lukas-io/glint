@@ -44,12 +44,15 @@ class IosSimBackend implements InteractionBackend {
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
         tap: true,
-        longPress: false,    // not yet exposed by the Swift bridge — P2.2
+        longPress: true,
         doubleTap: true,     // composed by the Interactor from two taps
-        swipe: false,        // not yet exposed by the Swift bridge — P2.2
-        typeText: false,     // hardware keyboard / NSEvent path — P2.2
-        // No hardware-button entries yet — depends on
-        // IndigoHIDMessageForButton support in the Swift bridge.
+        swipe: true,         // proven on Xcode 26 (2-payload + `field1=2` move marker)
+        // Typing + hardware buttons are gated on the per-Xcode mapping
+        // research described in source-of-truth §13. The Swift bridge has
+        // the dispatch code wired (see `IndigoHIDMessageForKeyboardArbitrary`
+        // and `IndigoHIDMessageForButton`); the gap is empirical: keymaps
+        // and button enum case → integer codes shift per Xcode major.
+        typeText: false,
         hardwareButtons: <HardwareButton>{},
       );
 
@@ -72,11 +75,18 @@ class IosSimBackend implements InteractionBackend {
     required int physicalX,
     required int physicalY,
     required int durationMs,
-  }) async {
-    throw UnsupportedBackendAction(
-      label,
-      'long-press is not yet exposed by glint-iossim (P2.2)',
-    );
+  }) {
+    final lx = physicalX / devicePixelRatio;
+    final ly = physicalY / devicePixelRatio;
+    return _run([
+      'long-press',
+      udid,
+      '$deviceLogicalWidth',
+      '$deviceLogicalHeight',
+      '$lx',
+      '$ly',
+      '$durationMs',
+    ]);
   }
 
   @override
@@ -104,17 +114,34 @@ class IosSimBackend implements InteractionBackend {
 
   @override
   Future<void> typeText(String text) async {
+    // The Swift bridge has the `type` command wired through
+    // IndigoHIDMessageForKeyboardArbitrary with a printable-ASCII HID
+    // usage table (`native/ios_sim_bridge/Sources/glint-iossim/HidKeymap.swift`).
+    // Whether the simulator's input pipeline actually consumes those
+    // messages on Xcode 26 is the unverified bit — until source-of-truth
+    // §13 lands a green checkmark, we refuse and steer the agent at the
+    // adb path.
     throw UnsupportedBackendAction(
       label,
-      'typing is not yet exposed by glint-iossim (P2.2)',
+      'typeText: Swift dispatch wired but Xcode 26 mapping is not yet '
+          'verified end-to-end — see source-of-truth §13 compat matrix',
     );
   }
 
   @override
   Future<void> pressHardwareButton(HardwareButton button) async {
+    // The Swift bridge has the `button` command wired through
+    // IndigoHIDMessageForButton (see SimBridge.swift's `pressButton`),
+    // but the button-code → physical-button mapping for iPhone 17 Pro /
+    // iOS 26.5 is empirically only `code=1 ⇒ Apple Pay (Face ID prompt)`.
+    // The richer mapping needs `IndigoHIDTargetForScreen` (now identified
+    // as the right target source) plus a per-device codes table — see
+    // source-of-truth §13.
     throw UnsupportedBackendAction(
       label,
-      'hardware buttons are not yet exposed by glint-iossim (P2.2)',
+      'pressHardwareButton: Swift dispatch wired but Xcode 26 button '
+          'codes + IndigoHIDTargetForScreen integration is incomplete — '
+          'see source-of-truth §13 compat matrix',
     );
   }
 

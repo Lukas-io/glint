@@ -2,6 +2,9 @@
 .dart_tool/
 build/
 
+# RTK runtime
+.rtk/
+
 # IDE
 .idea/
 .vscode/
