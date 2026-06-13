@@ -1,6 +1,13 @@
+// glint MCP server — speaks JSON-RPC over stdio.
+// Logs must go to stderr; stdout is the wire protocol.
+//
+//   dart run bin/glint.dart [--version | --help]
+
 import 'dart:io';
 
 import 'package:args/args.dart';
+import 'package:dart_mcp/stdio.dart';
+import 'package:glint/glint.dart';
 
 const String version = '0.0.1';
 
@@ -9,30 +16,30 @@ Future<void> main(List<String> args) async {
     ..addFlag('version', negatable: false, help: 'Print version and exit.')
     ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.');
 
-  final ArgResults results;
+  final ArgResults opts;
   try {
-    results = parser.parse(args);
+    opts = parser.parse(args);
   } on FormatException catch (e) {
     stderr.writeln(e.message);
     stderr.writeln(parser.usage);
     exit(64);
   }
 
-  if (results.flag('help')) {
-    stdout.writeln('glint — let an AI agent use your Flutter app.');
-    stdout.writeln(parser.usage);
+  if (opts.flag('help')) {
+    stdout
+      ..writeln('glint — MCP server letting AI agents drive Flutter apps.')
+      ..writeln(parser.usage);
     return;
   }
-  if (results.flag('version')) {
+  if (opts.flag('version')) {
     stdout.writeln('glint $version');
     return;
   }
 
-  // MCP server lands in Phase 4. Until then this binary is a placeholder;
-  // the working surface is tool/smoke.dart.
-  stderr.writeln(
-    'glint $version — MCP server not implemented yet (Phase 4). '
-    'Run the P0 smoke harness instead: dart run tool/smoke.dart --help',
-  );
-  exit(1);
+  final channel = stdioChannel(input: stdin, output: stdout);
+  final server = GlintMcpServer.fromStreamChannel(channel);
+
+  // Block until the client disconnects. dart_mcp closes `done` when the
+  // underlying channel goes away or shutdown completes.
+  await server.done;
 }
