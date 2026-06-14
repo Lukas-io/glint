@@ -36,7 +36,9 @@ class ScrollTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final dirName = args['direction']! as String;
-    final amount = ((args['amountFraction'] as num?) ?? 0.6).toDouble();
+    final amount = ((args['amountFraction'] as num?) ??
+            session.config.scrollAmountFraction)
+        .toDouble();
 
     final dir = ScrollDirection.values
         .where((d) => d.name == dirName)

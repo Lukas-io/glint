@@ -10,11 +10,13 @@ import '../../semantic.dart';
 /// [attach] throws [SessionNotAttachedError]. [actionLog] is always
 /// available — survives detach so cross-attach history stays queryable.
 class GlintSession {
-  GlintSession()
-      : actionLog = ActionLog(),
+  GlintSession({GlintConfig? config})
+      : config = config ?? GlintConfig(),
+        actionLog = ActionLog(),
         appLogs = AppLogBuffer(),
         sessions = SessionManager();
 
+  final GlintConfig config;
   final ActionLog actionLog;
   final AppLogBuffer appLogs;
   final SessionManager sessions;

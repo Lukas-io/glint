@@ -37,8 +37,10 @@ class WaitForSettleTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final ceilingMs = (args['ceilingMs'] as int?) ?? 5000;
-    final quietFrames = (args['quietFrames'] as int?) ?? 3;
+    final ceilingMs =
+        (args['ceilingMs'] as int?) ?? session.config.settleCeilingMs;
+    final quietFrames =
+        (args['quietFrames'] as int?) ?? session.config.settleQuietFrames;
     final checkAffordances = (args['checkLoadingAffordances'] as bool?) ?? true;
 
     final result = await session.settleDetector.awaitSettle(

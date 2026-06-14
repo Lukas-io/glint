@@ -40,7 +40,8 @@ class TypeTool extends GlintTool {
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
     final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs = (args['readyTimeoutMs'] as int?) ?? 5000;
+    final ceilingMs =
+        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
 
     final warnings = <String>[];
     ArmingReady? focusArming;

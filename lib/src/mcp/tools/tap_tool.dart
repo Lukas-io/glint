@@ -46,7 +46,8 @@ class TapTool extends GlintTool {
     final glintId = args['glintId']! as String;
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
     final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs = (args['readyTimeoutMs'] as int?) ?? 5000;
+    final ceilingMs =
+        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
 
     final arming = await maybeAwaitReady(
       session: session,

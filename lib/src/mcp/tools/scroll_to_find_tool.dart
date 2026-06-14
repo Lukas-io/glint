@@ -48,8 +48,11 @@ class ScrollToFindTool extends GlintTool {
     final targetGlintId = args['targetGlintId'] as String?;
     final targetText = args['targetTextContent'] as String?;
     final dirName = (args['direction'] as String?) ?? 'down';
-    final maxScrolls = (args['maxScrolls'] as int?) ?? 8;
-    final amount = ((args['amountFraction'] as num?) ?? 0.6).toDouble();
+    final maxScrolls =
+        (args['maxScrolls'] as int?) ?? session.config.scrollMaxScrolls;
+    final amount = ((args['amountFraction'] as num?) ??
+            session.config.scrollAmountFraction)
+        .toDouble();
 
     if ((targetGlintId == null) == (targetText == null)) {
       return StructuredResponse.error(

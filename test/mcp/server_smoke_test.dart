@@ -98,6 +98,8 @@ void main() {
           'logs',
           'app_logs',
           'session',
+          'config',
+          'report_issue',
         ]),
       );
     });

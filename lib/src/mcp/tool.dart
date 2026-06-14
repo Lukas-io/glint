@@ -8,11 +8,13 @@ import 'envelope.dart';
 import 'session.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
+import 'tools/config_tool.dart';
 import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
 import 'tools/logs_tool.dart';
 import 'tools/long_press_tool.dart';
+import 'tools/report_issue_tool.dart';
 import 'tools/resolve_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
 import 'tools/scroll_tool.dart';
@@ -138,4 +140,6 @@ const List<GlintTool> kDefaultGlintTools = [
   LogsTool(),
   AppLogsTool(),
   SessionTool(),
+  ConfigTool(),
+  ReportIssueTool(),
 ];
