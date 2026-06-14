@@ -10,9 +10,14 @@ import '../../semantic.dart';
 /// [attach] throws [SessionNotAttachedError]. [actionLog] is always
 /// available — survives detach so cross-attach history stays queryable.
 class GlintSession {
-  GlintSession() : actionLog = ActionLog();
+  GlintSession()
+      : actionLog = ActionLog(),
+        appLogs = AppLogBuffer(),
+        sessions = SessionManager();
 
   final ActionLog actionLog;
+  final AppLogBuffer appLogs;
+  final SessionManager sessions;
 
   VmClient? _vm;
   DeviceTarget? _device;
@@ -84,11 +89,49 @@ class GlintSession {
     _navEnricher = navEnricher;
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
+    // Wire the app log buffer to the new VM. Best-effort: a stream
+    // subscription failure shouldn't fail attach.
+    try {
+      await appLogs.subscribe(vm);
+    } on Object {
+      // app logs stay empty; everything else works
+    }
   }
 
   /// Logical viewport size + dpr in physical pixels, probed via the
   /// geometry resolver on any addressable node. Used by direction-based
   /// scroll tools that need a "scroll N% of viewport" delta.
+  /// Focused widget runtime type + keyboard inset, in one VM eval.
+  /// Returns `(focusedType, keyboardBottomPx)`; focusedType is null when
+  /// nothing is focused. keyboardBottomPx > 0 means soft keyboard is up.
+  Future<({String? focusedType, double keyboardBottomPx})> uiState() async {
+    final svc = vm.service;
+    final isolateId = vm.flutterIsolateId;
+    final rootLib = vm.flutterIsolate.rootLib?.id;
+    if (rootLib == null) {
+      return (focusedType: null, keyboardBottomPx: 0.0);
+    }
+    try {
+      final raw = await svc.evaluate(
+        isolateId,
+        rootLib,
+        '((FocusManager.instance.primaryFocus?.context?.widget.runtimeType.toString() ?? "")'
+            ' + "|" + '
+            '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+            ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString()))',
+      );
+      if (raw is! InstanceRef || raw.valueAsString == null) {
+        return (focusedType: null, keyboardBottomPx: 0.0);
+      }
+      final parts = raw.valueAsString!.split('|');
+      final focusedType = parts[0].isEmpty ? null : parts[0];
+      final kb = parts.length > 1 ? double.tryParse(parts[1]) ?? 0.0 : 0.0;
+      return (focusedType: focusedType, keyboardBottomPx: kb);
+    } on Object {
+      return (focusedType: null, keyboardBottomPx: 0.0);
+    }
+  }
+
   /// Reads the current Flutter app lifecycle state via VM eval. Returns
   /// one of: resumed, inactive, paused, detached, hidden, or null when
   /// the binding hasn't been set yet. Cheap single eval (~50ms).
@@ -131,6 +174,7 @@ class GlintSession {
   }
 
   Future<void> detach() async {
+    await appLogs.unsubscribe();
     final vm = _vm;
     _vm = null;
     _device = null;

@@ -58,6 +58,7 @@ class GetSceneTool extends GlintTool {
       final counts = _coverage(semantic);
       final state = const StateObserver().observe(semantic);
       final lifecycle = await session.lifecycleState();
+      final ui = await session.uiState();
       return StructuredResponse(
         summary: rendered,
         data: {
@@ -65,6 +66,8 @@ class GetSceneTool extends GlintTool {
           'coverage': counts,
           'state': state.name,
           if (lifecycle != null) 'lifecycle': lifecycle,
+          if (ui.focusedType != null) 'focusedType': ui.focusedType,
+          'keyboardVisible': ui.keyboardBottomPx > 0,
           if (semantic.routeStack.isNotEmpty)
             'route':
                 semantic.routeStack.map((r) => r.toJson()).toList().first,

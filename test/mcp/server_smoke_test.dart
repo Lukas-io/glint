@@ -96,6 +96,8 @@ void main() {
           'hardware_button',
           'wait_for_settle',
           'logs',
+          'app_logs',
+          'session',
         ]),
       );
     });
