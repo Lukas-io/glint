@@ -23,5 +23,6 @@ export 'src/mcp/tools/scroll_tool.dart';
 export 'src/mcp/tools/session_tool.dart';
 export 'src/mcp/tools/swipe_tool.dart';
 export 'src/mcp/tools/tap_tool.dart';
+export 'src/mcp/tools/telemetry_tool.dart';
 export 'src/mcp/tools/type_tool.dart';
 export 'src/mcp/tools/wait_for_settle_tool.dart';

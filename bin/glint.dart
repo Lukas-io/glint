@@ -3,6 +3,7 @@
 //
 //   dart run bin/glint.dart [--version | --help]
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -38,6 +39,10 @@ Future<void> main(List<String> args) async {
 
   final channel = stdioChannel(input: stdin, output: stdout);
   final server = GlintMcpServer.fromStreamChannel(channel);
+
+  // Daily-gated, fire-and-forget. Runs the rollup ship for events
+  // accumulated by the previous instance(s). Never throws.
+  unawaited(server.session.usageReporter.maybeAutoShip());
 
   // Block until the client disconnects. dart_mcp closes `done` when the
   // underlying channel goes away or shutdown completes.

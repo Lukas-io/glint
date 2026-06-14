@@ -21,6 +21,7 @@ import 'tools/scroll_tool.dart';
 import 'tools/session_tool.dart';
 import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
+import 'tools/telemetry_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
 
@@ -79,6 +80,8 @@ abstract class GlintTool {
   ) {
     final elapsedMs = DateTime.now().difference(start).inMilliseconds;
     final seq = session.actionLog.allocateSequence();
+    final argKeys = UsageRecorder.argKeysFrom(request.arguments);
+    final resultBytes = _resultBytes(response);
     if (!response.isError) {
       session.actionLog.record(SuccessEntry(
         sequence: seq,
@@ -89,10 +92,15 @@ abstract class GlintTool {
         args: _scrubArgs(request.arguments),
         armed: response.data?['armed'] as Map<String, Object?>?,
       ));
-      session.telemetry.noteToolCall(
-        name: definition.name,
-        elapsedMs: elapsedMs,
-        armed: response.data?['armed'] != null,
+      session.usage.record(
+        tool: definition.name,
+        outcome: UsageRecorder.outcomeFrom(
+          isError: false,
+          structured: response.data,
+        ),
+        argKeys: argKeys,
+        durationMs: elapsedMs,
+        resultBytes: resultBytes,
       );
       return;
     }
@@ -111,12 +119,16 @@ abstract class GlintTool {
       detail: response.data?['detail'] as String?,
       args: _scrubArgs(request.arguments),
     ));
-    session.telemetry.noteToolCall(
-      name: definition.name,
-      elapsedMs: elapsedMs,
-      errorKind: errorKind.name,
+    session.usage.record(
+      tool: definition.name,
+      outcome: ToolOutcome.error,
+      argKeys: argKeys,
+      durationMs: elapsedMs,
+      resultBytes: resultBytes,
     );
   }
+
+  int _resultBytes(StructuredResponse r) => r.summary.length;
 
   String _shortSummary(String s) {
     const max = 160;
@@ -152,4 +164,5 @@ const List<GlintTool> kDefaultGlintTools = [
   SessionTool(),
   ConfigTool(),
   ReportIssueTool(),
+  TelemetryTool(),
 ];

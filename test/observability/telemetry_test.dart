@@ -1,111 +1,243 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:glint/glint.dart';
 import 'package:test/test.dart';
 
-Future<({HttpServer server, List<Map<String, Object?>> events})>
-    _startMockCollector() async {
-  final received = <Map<String, Object?>>[];
-  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  unawaited(server.forEach((req) async {
-    if (req.method == 'POST' && req.uri.path == '/v1/event') {
-      final body = await utf8.decoder.bind(req).join();
-      received.add(jsonDecode(body) as Map<String, Object?>);
-      req.response.statusCode = 204;
-    } else {
-      req.response.statusCode = 404;
-    }
-    await req.response.close();
-  }));
-  return (server: server, events: received);
-}
-
 void main() {
-  group('TelemetryClient', () {
-    test('respects opt-out (no POST issued)', () async {
-      final mock = await _startMockCollector();
-      try {
-        final cfg = GlintConfig()
-          ..telemetryEndpoint = 'http://127.0.0.1:${mock.server.port}/v1/event';
-        final client = TelemetryClient(cfg);
-        client.noteAttach('ios');
-        client.noteToolCall(name: 'tap', elapsedMs: 12);
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        expect(mock.events, isEmpty);
-        await client.close();
-      } finally {
-        await mock.server.close(force: true);
-      }
+  group('UsageRecorder', () {
+    test('opt-out: record is a no-op', () {
+      final r = UsageRecorder.config(enabled: false);
+      r.record(
+        tool: 'tap',
+        outcome: ToolOutcome.ok,
+        argKeys: const ['glintId'],
+        durationMs: 10,
+        resultBytes: 50,
+      );
+      expect(r.length, 0);
     });
 
-    test('opt-in sends well-formed events', () async {
-      final mock = await _startMockCollector();
-      try {
-        final cfg = GlintConfig()
-          ..telemetryEndpoint = 'http://127.0.0.1:${mock.server.port}/v1/event'
-          ..telemetryEnabled = true;
-        final client = TelemetryClient(cfg);
-
-        client.noteAttach('ios');
-        client.noteToolCall(
-          name: 'tap',
-          elapsedMs: 42,
-          errorKind: 'notHittable',
+    test('opt-in: record appends; ids are 1-based', () {
+      final r = UsageRecorder.config(enabled: true);
+      for (var i = 0; i < 3; i++) {
+        r.record(
+          tool: 'tap',
+          outcome: ToolOutcome.ok,
+          argKeys: const ['glintId'],
+          durationMs: 10,
+          resultBytes: 50,
         );
-        client.noteSession('open');
-
-        // Wait for the detached POSTs to land.
-        final deadline = DateTime.now().add(const Duration(seconds: 5));
-        while (mock.events.length < 3 && DateTime.now().isBefore(deadline)) {
-          await Future<void>.delayed(const Duration(milliseconds: 50));
-        }
-
-        expect(mock.events.length, 3);
-
-        final byEvent = {
-          for (final e in mock.events) e['event'] as String: e,
-        };
-
-        final attach = byEvent['attach']!;
-        expect(attach['v'], 1);
-        expect(attach['instance'], isA<String>());
-        expect((attach['fields'] as Map)['platform'], 'ios');
-
-        final tool = byEvent['tool_call']!;
-        expect((tool['fields'] as Map)['name'], 'tap');
-        expect((tool['fields'] as Map)['elapsedMs'], 42);
-        expect((tool['fields'] as Map)['errorKind'], 'notHittable');
-        expect(tool['platform'], 'ios',
-            reason: 'platform set on attach should ride along subsequent events');
-
-        final session = byEvent['session']!;
-        expect((session['fields'] as Map)['op'], 'open');
-
-        // All events share the same instance id.
-        final instances =
-            mock.events.map((e) => e['instance']).toSet();
-        expect(instances.length, 1);
-
-        await client.close();
-      } finally {
-        await mock.server.close(force: true);
       }
+      expect(r.length, 3);
+      // First id=1, nextId=4 after three records (1-based).
+      expect(r.nextId, 4);
     });
 
-    test('a transport failure never throws', () async {
-      // Point at a closed port — connect will fail.
-      final cfg = GlintConfig()
-        ..telemetryEndpoint = 'http://127.0.0.1:1/v1/event'
-        ..telemetryEnabled = true;
-      final client = TelemetryClient(cfg);
+    test('correlationIdFor rolls over after the idle gap', () {
+      final r = UsageRecorder.config(enabled: true, gapMs: 1000);
+      final a = r.correlationIdFor(1000);
+      final b = r.correlationIdFor(1500);
+      final c = r.correlationIdFor(3000); // gap exceeded
+      expect(a, b);
+      expect(c, isNot(a));
+    });
 
-      // Should not throw despite the dead endpoint.
-      client.noteAttach('ios');
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+    test('eventsAfterId filters by watermark', () {
+      final r = UsageRecorder.config(enabled: true);
+      for (var i = 0; i < 5; i++) {
+        r.record(
+          tool: 't',
+          outcome: ToolOutcome.ok,
+          argKeys: const [],
+          durationMs: i,
+          resultBytes: 0,
+        );
+      }
+      // ids assigned 1..5; afterId=2 yields ids 3, 4, 5.
+      final rows = r.eventsAfterId(2);
+      expect(rows.length, 3);
+      expect((rows.first['id'] as int), 3);
+    });
 
-      await client.close();
+    test('argKeysFrom returns sorted keys, never values', () {
+      final keys = UsageRecorder.argKeysFrom({
+        'zeta': 1,
+        'alpha': 'secret',
+        'mu': [1, 2, 3],
+      });
+      expect(keys, ['alpha', 'mu', 'zeta']);
+    });
+
+    test('outcomeFrom maps cleanly', () {
+      expect(UsageRecorder.outcomeFrom(isError: true), ToolOutcome.error);
+      expect(UsageRecorder.outcomeFrom(isError: false), ToolOutcome.ok);
+      expect(
+        UsageRecorder.outcomeFrom(isError: false, structured: {'count': 0}),
+        ToolOutcome.empty,
+      );
+    });
+  });
+
+  group('summarizeUsage', () {
+    test('produces per-tool counts + p50/p95 + transitions', () {
+      final rows = [
+        {
+          'correlation_id': 't1',
+          'tool': 'tap',
+          'outcome': 'ok',
+          'duration_ms': 10,
+          'result_bytes': 0,
+        },
+        {
+          'correlation_id': 't1',
+          'tool': 'get_scene',
+          'outcome': 'ok',
+          'duration_ms': 30,
+          'result_bytes': 1000,
+        },
+        {
+          'correlation_id': 't2',
+          'tool': 'tap',
+          'outcome': 'error',
+          'duration_ms': 50,
+          'result_bytes': 0,
+        },
+      ];
+      final out = summarizeUsage(rows);
+      expect(out['totalEvents'], 3);
+      expect(out['totalTurns'], 2);
+      final tools = out['tools'] as List;
+      expect(tools.length, 2);
+      final tap = tools.firstWhere((t) => (t as Map)['tool'] == 'tap') as Map;
+      expect(tap['count'], 2);
+      expect(tap['error'], 1);
+      final trans = out['transitions'] as List;
+      expect(trans.length, 1);
+      expect((trans.first as Map)['from'], 'tap');
+      expect((trans.first as Map)['to'], 'get_scene');
+    });
+  });
+
+  group('AuditLog', () {
+    late Directory tmp;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('glint-audit-test-');
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('append + verify intact on a fresh chain', () {
+      AuditLog.append(tmp.path, '{"a":1}');
+      AuditLog.append(tmp.path, '{"b":2}');
+      AuditLog.append(tmp.path, '{"c":3}');
+      final res = AuditLog.verify(tmp.path);
+      expect(res.intact, true);
+      expect(res.totalEntries, 3);
+    });
+
+    test('verify detects payload tampering', () {
+      AuditLog.append(tmp.path, '{"a":1}');
+      AuditLog.append(tmp.path, '{"b":2}');
+      final file = File('${tmp.path}/${AuditLog.fileName}');
+      final lines = file.readAsLinesSync();
+      // Tamper the payload of line 1 (keep structure but change content).
+      final parts = lines[1].split('|');
+      parts[2] = base64.encode(utf8.encode('{"b":999}'));
+      lines[1] = parts.join('|');
+      file.writeAsStringSync('${lines.join('\n')}\n');
+      final res = AuditLog.verify(tmp.path);
+      expect(res.intact, false);
+      expect(res.brokenAtIndex, 1);
+    });
+  });
+
+  group('UsageReporter', () {
+    late Directory tmp;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('glint-ship-test-');
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('ship returns no-new-events when recorder is empty', () async {
+      final r = UsageRecorder.config(enabled: true);
+      final reporter = UsageReporter(r);
+      final res = await reporter.ship(dataDir: tmp.path);
+      expect(res.shipped, false);
+      expect(res.events, 0);
+    });
+
+    test('dryRun composes a valid payload without writing', () async {
+      final r = UsageRecorder.config(enabled: true);
+      r.record(
+        tool: 'tap',
+        outcome: ToolOutcome.ok,
+        argKeys: const ['glintId'],
+        durationMs: 12,
+        resultBytes: 100,
+      );
+      final reporter = UsageReporter(r);
+      final res =
+          await reporter.ship(dataDir: tmp.path, dryRun: true);
+      expect(res.shipped, false);
+      expect(res.dryRun, true);
+      expect(res.payloadJson, isNotNull);
+      final payload =
+          jsonDecode(res.payloadJson!) as Map<String, Object?>;
+      expect(payload['kind'], 'usage_rollup');
+      expect(payload['version'], 'glint/0.0.1');
+      final tools = payload['tools'] as List;
+      expect(tools.length, 1);
+      expect((tools.first as Map)['tool'], 'tap');
+      // audit log not touched on dry-run
+      final auditFile = File('${tmp.path}/${AuditLog.fileName}');
+      expect(auditFile.existsSync(), false);
+    });
+
+    test('ship writes audit log even if POST fails', () async {
+      final r = UsageRecorder.config(enabled: true);
+      r.record(
+        tool: 'tap',
+        outcome: ToolOutcome.ok,
+        argKeys: const [],
+        durationMs: 1,
+        resultBytes: 0,
+      );
+      final reporter = UsageReporter(r);
+      // Use a dead endpoint so POST fails fast.
+      final res = await reporter.ship(
+        dataDir: tmp.path,
+        endpointOverride: 'http://127.0.0.1:1/v1/telemetry',
+      );
+      expect(res.shipped, true);
+      expect(res.posted, false);
+      final auditFile = File('${tmp.path}/${AuditLog.fileName}');
+      expect(auditFile.existsSync(), true);
+      expect(AuditLog.verify(tmp.path).intact, true);
+    });
+
+    test('watermark advances; double-ship is a no-op', () async {
+      final r = UsageRecorder.config(enabled: true);
+      r.record(
+        tool: 'tap',
+        outcome: ToolOutcome.ok,
+        argKeys: const [],
+        durationMs: 1,
+        resultBytes: 0,
+      );
+      final reporter = UsageReporter(r);
+      final first = await reporter.ship(
+        dataDir: tmp.path,
+        endpointOverride: 'http://127.0.0.1:1/v1/telemetry',
+      );
+      expect(first.shipped, true);
+      final second = await reporter.ship(
+        dataDir: tmp.path,
+        endpointOverride: 'http://127.0.0.1:1/v1/telemetry',
+      );
+      expect(second.shipped, false);
+      expect(second.events, 0);
     });
   });
 }

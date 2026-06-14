@@ -100,6 +100,7 @@ void main() {
           'session',
           'config',
           'report_issue',
+          'telemetry',
         ]),
       );
     });
