@@ -9,4 +9,5 @@ export 'interaction.dart';
 export 'mcp.dart';
 export 'observability.dart';
 export 'perception.dart';
+export 'runtime.dart';
 export 'semantic.dart';

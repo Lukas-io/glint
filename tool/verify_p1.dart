@@ -13,7 +13,6 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:glint/glint.dart';
-import 'package:vm_service/vm_service.dart';
 
 const _expectations = <String, ({bool painted, bool hittable})>{
   'elevated_button_in_flags_lab': (painted: true, hittable: true),
@@ -29,7 +28,7 @@ Future<void> main(List<String> args) async {
   final parser = ArgParser()..addOption('vm-uri', mandatory: true);
   final opts = parser.parse(args);
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   final inspector = InspectorClient(vm);
   final reader = SceneReader(inspector);
@@ -55,14 +54,11 @@ Future<void> main(List<String> args) async {
     // We use the fixture's helpers (glintLocateByRuntimeType +
     // glintSyntheticTap) only to drive the state — Module B itself stays
     // out of fixture cooperation.
-    final iso = vm.flutterIsolateId;
-    final rootLib = vm.flutterIsolate.rootLib!.id!;
-    final fabLocate = await vm.service.evaluate(iso, rootLib,
-        'glintLocateByRuntimeType("FloatingActionButton")');
-    final coords = (fabLocate as InstanceRef).valueAsString!.split(',');
+    final fabLocate = await vm
+        .evaluateString('glintLocateByRuntimeType("FloatingActionButton")');
+    final coords = fabLocate!.split(',');
     final x = double.parse(coords[0]), y = double.parse(coords[1]);
-    await vm.service
-        .evaluate(iso, rootLib, 'glintSyntheticTap($x, $y)');
+    await vm.evaluate('glintSyntheticTap($x, $y)');
     await Future<void>.delayed(const Duration(milliseconds: 250));
     final c = await reader.readSummary();
     final idsC = c.root.walk().map((n) => n.glintId).toList();

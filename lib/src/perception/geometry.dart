@@ -1,8 +1,6 @@
 import 'dart:convert';
 
-import 'package:vm_service/vm_service.dart';
-
-import '../vm/vm_client.dart';
+import '../runtime/flutter_runtime.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
@@ -95,9 +93,9 @@ class ResolvedCoord {
 
 /// Resolves nodes to live geometry. Lazy — re-queries every call.
 class CoordinateResolver {
-  CoordinateResolver(this._vm);
+  CoordinateResolver(this._runtime);
 
-  final VmClient _vm;
+  final FlutterRuntime _runtime;
 
   Future<ResolvedCoord> resolve(Scene scene, String glintId) async {
     final node = scene.findByGlintId(glintId);
@@ -108,51 +106,25 @@ class CoordinateResolver {
   }
 
   Future<ResolvedCoord> _resolveNode(Scene scene, SceneNode node) async {
-    final svc = _vm.service;
-    final isolateId = _vm.flutterIsolateId;
-    final rootLib = _vm.flutterIsolate.rootLib?.id;
-    if (rootLib == null) {
-      throw GeometryResolveError('flutter isolate has no rootLib');
-    }
-
     try {
-      await svc.callServiceExtension(
-        'ext.flutter.inspector.setSelectionById',
-        isolateId: isolateId,
-        args: {'arg': node.inspectorId, 'objectGroup': scene.groupName},
+      await _runtime.setInspectorSelection(
+        inspectorId: node.inspectorId,
+        groupName: scene.groupName,
       );
-    } on RPCError catch (e) {
+    } on Object catch (e) {
       throw GeometryResolveError(
-        'setSelectionById(${node.inspectorId}) failed: ${e.details ?? e.message}',
+        'setSelectionById(${node.inspectorId}) failed: $e',
       );
     }
 
-    final Object? raw;
+    final String? json;
     try {
-      raw = await svc.evaluate(isolateId, rootLib, _GeometryExpr.build());
-    } on RPCError catch (e) {
-      throw GeometryResolveError(
-        'evaluate(geometry) failed: ${e.details ?? e.message}',
-      );
+      json = await _runtime.evaluateString(_GeometryExpr.build());
+    } on RuntimeEvalError catch (e) {
+      throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
     }
-    if (raw is! InstanceRef || raw.valueAsString == null) {
-      throw GeometryResolveError(
-        'evaluate(geometry) returned ${raw.runtimeType}, expected String',
-      );
-    }
-    // valueAsString is a ~128-char preview; refetch the full instance on
-    // truncation (long fractional viewports e.g. Pixel 8 411.428…).
-    String json = raw.valueAsString!;
-    if (raw.valueAsStringIsTruncated == true) {
-      final full = await svc.getObject(isolateId, raw.id!);
-      if (full is Instance && full.valueAsString != null) {
-        json = full.valueAsString!;
-      } else {
-        throw GeometryResolveError(
-          'geometry JSON was truncated and getObject returned '
-          '${full.runtimeType} (expected Instance with valueAsString)',
-        );
-      }
+    if (json == null) {
+      throw GeometryResolveError('evaluate(geometry) returned non-string');
     }
     final decoded = jsonDecode(json) as Map<String, Object?>;
     return ResolvedCoord(

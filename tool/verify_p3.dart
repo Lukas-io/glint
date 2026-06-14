@@ -20,7 +20,7 @@ Future<void> main(List<String> argv) async {
         allowed: ['text', 'json', 'both'], defaultsTo: 'text');
   final opts = parser.parse(argv);
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   try {
     final reader = SceneReader(InspectorClient(vm));

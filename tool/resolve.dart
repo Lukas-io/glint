@@ -16,7 +16,7 @@ Future<void> main(List<String> args) async {
     ..addOption('id', mandatory: true);
   final opts = parser.parse(args);
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   final inspector = InspectorClient(vm);
   final reader = SceneReader(inspector);

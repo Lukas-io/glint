@@ -50,7 +50,7 @@ Future<void> main(List<String> argv) async {
     exit(opts.flag('help') ? 0 : 64);
   }
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   final reader = SceneReader(InspectorClient(vm));
   final scene = await reader.readSummary();

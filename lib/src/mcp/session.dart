@@ -1,21 +1,25 @@
-import 'package:vm_service/vm_service.dart';
-
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
+import '../runtime/flutter_runtime.dart';
+import '../runtime/vm_service_runtime.dart';
 
-/// Per-connection state: VM client, device, readers, interactor.
-/// Tools access these via the typed getters; accessing before
-/// [attach] throws [SessionNotAttachedError]. [actionLog] is always
-/// available — survives detach so cross-attach history stays queryable.
+/// Per-connection state: runtime, device, readers, interactor. Tools
+/// access these via the typed getters; accessing before [attach] throws
+/// [SessionNotAttachedError]. [actionLog] is always available — survives
+/// detach so cross-attach history stays queryable.
 class GlintSession {
-  GlintSession({GlintConfig? config, UsageRecorder? usage})
-      : config = config ?? GlintConfig(),
+  GlintSession({
+    GlintConfig? config,
+    UsageRecorder? usage,
+    FlutterRuntime Function()? runtimeFactory,
+  })  : config = config ?? GlintConfig(),
         actionLog = ActionLog(),
         appLogs = AppLogBuffer(),
         sessions = SessionManager(),
-        usage = usage ?? UsageRecorder.fromEnv() {
+        usage = usage ?? UsageRecorder.fromEnv(),
+        _runtimeFactory = runtimeFactory ?? VmServiceRuntime.new {
     usageReporter = UsageReporter(this.usage);
   }
 
@@ -25,8 +29,9 @@ class GlintSession {
   final SessionManager sessions;
   final UsageRecorder usage;
   late final UsageReporter usageReporter;
+  final FlutterRuntime Function() _runtimeFactory;
 
-  VmClient? _vm;
+  FlutterRuntime? _runtime;
   DeviceTarget? _device;
   InteractionBackend? _backend;
   InspectorClient? _inspector;
@@ -40,9 +45,9 @@ class GlintSession {
   ReadinessGate? _readinessGate;
   SettleDetector? _settleDetector;
 
-  bool get isAttached => _vm != null;
+  bool get isAttached => _runtime != null;
 
-  VmClient get vm => _requireAttached(_vm, 'vm client');
+  FlutterRuntime get runtime => _requireAttached(_runtime, 'runtime');
   DeviceTarget get device => _requireAttached(_device, 'device');
   InteractionBackend get backend => _requireAttached(_backend, 'backend');
   InspectorClient get inspector => _requireAttached(_inspector, 'inspector');
@@ -66,24 +71,24 @@ class GlintSession {
     required Uri vmUri,
     required DeviceTarget device,
   }) async {
-    if (_vm != null) await detach();
+    if (_runtime != null) await detach();
 
-    final vm = VmClient();
-    await vm.attach(vmUri);
+    final runtime = _runtimeFactory();
+    await runtime.attach(vmUri);
 
-    final inspector = InspectorClient(vm);
+    final inspector = InspectorClient(runtime);
     final reader = SceneReader(inspector);
-    final resolver = CoordinateResolver(vm);
+    final resolver = CoordinateResolver(runtime);
     final backend = device.createBackend();
     final interactor = Interactor(backend: backend, resolver: resolver);
     final semanticizer = Semanticizer();
-    final inputEnricher = InputEnricher(vm: vm, inspector: inspector);
-    final iconEnricher = IconEnricher(vm: vm);
-    final navEnricher = NavigationEnricher(vm: vm);
+    final inputEnricher = InputEnricher(runtime: runtime, inspector: inspector);
+    final iconEnricher = IconEnricher(runtime: runtime);
+    final navEnricher = NavigationEnricher(runtime: runtime);
     final readinessGate = ReadinessGate(reader: reader, resolver: resolver);
-    final settleDetector = SettleDetector(vm: vm, reader: reader);
+    final settleDetector = SettleDetector(runtime: runtime, reader: reader);
 
-    _vm = vm;
+    _runtime = runtime;
     _device = device;
     _backend = backend;
     _inspector = inspector;
@@ -96,20 +101,16 @@ class GlintSession {
     _navEnricher = navEnricher;
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
-    // Wire the app log buffer to the new VM. Best-effort: a stream
-    // subscription failure shouldn't fail attach.
+    // Hook app log buffer onto the new runtime's streams.
     try {
-      await appLogs.subscribe(vm);
+      await appLogs.subscribe(runtime);
     } on Object {
       // app logs stay empty; everything else works
     }
   }
 
-  /// Logical viewport size + dpr in physical pixels, probed via the
-  /// geometry resolver on any addressable node. Used by direction-based
-  /// scroll tools that need a "scroll N% of viewport" delta.
   /// Focused widget runtime type + keyboard inset + orientation +
-  /// brightness + locale, in one VM eval. ~50ms.
+  /// brightness + locale in one VM eval. ~50ms.
   Future<
       ({
         String? focusedType,
@@ -118,9 +119,6 @@ class GlintSession {
         String? brightness,
         String? locale,
       })> uiState() async {
-    final svc = vm.service;
-    final isolateId = vm.flutterIsolateId;
-    final rootLib = vm.flutterIsolate.rootLib?.id;
     const empty = (
       focusedType: null,
       keyboardBottomPx: 0.0,
@@ -128,66 +126,49 @@ class GlintSession {
       brightness: null,
       locale: null,
     );
-    if (rootLib == null) return empty;
-    try {
-      final raw = await svc.evaluate(
-        isolateId,
-        rootLib,
-        '((FocusManager.instance.primaryFocus?.context?.widget.runtimeType.toString() ?? "")'
-            ' + "|" + '
-            '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
-            ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString())'
-            ' + "|" + '
-            '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
-            ' : WidgetsBinding.instance.platformDispatcher.views.first.physicalSize.aspectRatio.toString())'
-            ' + "|" + '
-            'WidgetsBinding.instance.platformDispatcher.platformBrightness.name'
-            ' + "|" + '
-            'WidgetsBinding.instance.platformDispatcher.locale.toString())',
-      );
-      if (raw is! InstanceRef || raw.valueAsString == null) return empty;
-      final parts = raw.valueAsString!.split('|');
-      final focusedType = parts[0].isEmpty ? null : parts[0];
-      final kb = parts.length > 1 ? double.tryParse(parts[1]) ?? 0.0 : 0.0;
-      final aspect = parts.length > 2 ? double.tryParse(parts[2]) ?? 0 : 0;
-      final orientation = aspect == 0 ? null : (aspect > 1 ? 'landscape' : 'portrait');
-      final brightness =
-          parts.length > 3 && parts[3].isNotEmpty ? parts[3] : null;
-      final locale = parts.length > 4 && parts[4].isNotEmpty ? parts[4] : null;
-      return (
-        focusedType: focusedType,
-        keyboardBottomPx: kb,
-        orientation: orientation,
-        brightness: brightness,
-        locale: locale,
-      );
-    } on Object {
-      return empty;
-    }
+    final raw = await runtime.evaluateString(
+      '((FocusManager.instance.primaryFocus?.context?.widget.runtimeType.toString() ?? "")'
+          ' + "|" + '
+          '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+          ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString())'
+          ' + "|" + '
+          '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+          ' : WidgetsBinding.instance.platformDispatcher.views.first.physicalSize.aspectRatio.toString())'
+          ' + "|" + '
+          'WidgetsBinding.instance.platformDispatcher.platformBrightness.name'
+          ' + "|" + '
+          'WidgetsBinding.instance.platformDispatcher.locale.toString())',
+    );
+    if (raw == null) return empty;
+    final parts = raw.split('|');
+    final focusedType = parts[0].isEmpty ? null : parts[0];
+    final kb = parts.length > 1 ? double.tryParse(parts[1]) ?? 0.0 : 0.0;
+    final aspect = parts.length > 2 ? double.tryParse(parts[2]) ?? 0 : 0;
+    final orientation =
+        aspect == 0 ? null : (aspect > 1 ? 'landscape' : 'portrait');
+    final brightness =
+        parts.length > 3 && parts[3].isNotEmpty ? parts[3] : null;
+    final locale = parts.length > 4 && parts[4].isNotEmpty ? parts[4] : null;
+    return (
+      focusedType: focusedType,
+      keyboardBottomPx: kb,
+      orientation: orientation,
+      brightness: brightness,
+      locale: locale,
+    );
   }
 
-  /// Reads the current Flutter app lifecycle state via VM eval. Returns
-  /// one of: resumed, inactive, paused, detached, hidden, or null when
-  /// the binding hasn't been set yet. Cheap single eval (~50ms).
+  /// One of: resumed, inactive, paused, detached, hidden. Null when the
+  /// binding hasn't set a state yet.
   Future<String?> lifecycleState() async {
-    final svc = vm.service;
-    final isolateId = vm.flutterIsolateId;
-    final rootLib = vm.flutterIsolate.rootLib?.id;
-    if (rootLib == null) return null;
-    try {
-      final raw = await svc.evaluate(
-        isolateId,
-        rootLib,
-        'WidgetsBinding.instance.lifecycleState?.name ?? ""',
-      );
-      if (raw is! InstanceRef || raw.valueAsString == null) return null;
-      final s = raw.valueAsString!;
-      return s.isEmpty ? null : s;
-    } on Object {
-      return null;
-    }
+    final s = await runtime
+        .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
+    return (s == null || s.isEmpty) ? null : s;
   }
 
+  /// Logical viewport size + dpr in physical pixels, probed via the
+  /// geometry resolver on any addressable node. Used by direction-based
+  /// scroll tools that need a "scroll N% of viewport" delta.
   Future<({double logicalW, double logicalH, double dpr})>
       probeViewport() async {
     final scene = await reader.readSummary();
@@ -209,8 +190,8 @@ class GlintSession {
 
   Future<void> detach() async {
     await appLogs.unsubscribe();
-    final vm = _vm;
-    _vm = null;
+    final runtime = _runtime;
+    _runtime = null;
     _device = null;
     _backend = null;
     _inspector = null;
@@ -223,7 +204,7 @@ class GlintSession {
     _navEnricher = null;
     _readinessGate = null;
     _settleDetector = null;
-    if (vm != null) await vm.disconnect();
+    if (runtime != null) await runtime.disconnect();
   }
 
   T _requireAttached<T>(T? value, String name) {

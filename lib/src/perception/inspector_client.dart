@@ -1,6 +1,4 @@
-import 'package:vm_service/vm_service.dart';
-
-import '../vm/vm_client.dart';
+import '../runtime/flutter_runtime.dart';
 import 'scene_node.dart';
 
 /// Inspector group identity used by [InspectorClient].
@@ -16,12 +14,13 @@ enum InspectorGroup {
   final String prefix;
 }
 
-/// Talks to `ext.flutter.inspector.*` and returns typed [SceneNode] trees.
-/// Walks happen server-side; no in-VM evaluate.
+/// Parses inspector trees into typed [SceneNode]s. Talks to the running
+/// app via [FlutterRuntime] only — no direct RPC calls. Walks happen
+/// server-side.
 class InspectorClient {
-  InspectorClient(this._vm);
+  InspectorClient(this._runtime);
 
-  final VmClient _vm;
+  final FlutterRuntime _runtime;
   int _seq = 0;
 
   String nextReadGroup() => '${InspectorGroup.read.prefix}${_seq++}';
@@ -30,99 +29,47 @@ class InspectorClient {
   Future<SceneNode> readSummaryTree({String? groupName}) => _readTree(
         groupName: groupName ?? nextReadGroup(),
         isSummaryTree: true,
-        withPreviews: true,
-        fullDetails: false,
       );
 
-  // fullDetails=false: omits per-node DiagnosticsProperty serialisation,
-  // which blows the JSON up ~10× without anything Module B uses today.
   Future<SceneNode> readFullTree({String? groupName}) => _readTree(
         groupName: groupName ?? nextReadGroup(),
         isSummaryTree: false,
-        withPreviews: true,
-        fullDetails: false,
       );
 
-  /// Returns the raw DiagnosticsNode subtree rooted at [inspectorId],
-  /// including each node's properties. Used for selective per-node
-  /// detail reads (e.g. extracting an input's `controller.text`).
+  /// Raw DiagnosticsNode subtree rooted at [inspectorId], including each
+  /// node's properties. Used for selective per-node detail reads (input
+  /// `controller.text`, icon codepoint, …).
   Future<Map<String, Object?>> getDetailsSubtree({
     required String inspectorId,
     required String groupName,
     int subtreeDepth = 5,
   }) async {
-    final Response resp;
     try {
-      resp = await _vm.service.callServiceExtension(
-        'ext.flutter.inspector.getDetailsSubtree',
-        isolateId: _vm.flutterIsolateId,
-        args: {
-          'arg': inspectorId,
-          'objectGroup': groupName,
-          'subtreeDepth': subtreeDepth.toString(),
-        },
+      return await _runtime.readDetailsSubtree(
+        inspectorId: inspectorId,
+        groupName: groupName,
+        subtreeDepth: subtreeDepth,
       );
-    } on RPCError catch (e) {
-      throw InspectorReadError(
-        'getDetailsSubtree($inspectorId) failed (${e.code}): '
-        '${e.details ?? e.message}',
-        cause: e,
-      );
+    } on Object catch (e) {
+      throw InspectorReadError('getDetailsSubtree($inspectorId): $e');
     }
-    final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
-    if (result == null) {
-      throw InspectorReadError(
-        'getDetailsSubtree returned a response without a `result` map: '
-        '${resp.json}',
-      );
-    }
-    return result;
   }
 
-  /// Drops the group's inspector id table. Best-effort cleanup.
-  Future<void> disposeGroup(String groupName) async {
-    try {
-      await _vm.service.callServiceExtension(
-        'ext.flutter.inspector.disposeGroup',
-        isolateId: _vm.flutterIsolateId,
-        args: {'groupName': groupName},
-      );
-    } on Object {
-      // ignore — dispose is best effort
-    }
-  }
+  Future<void> disposeGroup(String groupName) =>
+      _runtime.disposeInspectorGroup(groupName);
 
   Future<SceneNode> _readTree({
     required String groupName,
     required bool isSummaryTree,
-    required bool withPreviews,
-    required bool fullDetails,
   }) async {
-    // §10 pin: getRootWidgetTree is primary on Flutter 3.44+.
-    final Response resp;
+    final Map<String, Object?> root;
     try {
-      resp = await _vm.service.callServiceExtension(
-        'ext.flutter.inspector.getRootWidgetTree',
-        isolateId: _vm.flutterIsolateId,
-        args: {
-          'groupName': groupName,
-          'isSummaryTree': isSummaryTree.toString(),
-          'withPreviews': withPreviews.toString(),
-          'fullDetails': fullDetails.toString(),
-        },
+      root = await _runtime.readWidgetTree(
+        groupName: groupName,
+        isSummaryTree: isSummaryTree,
       );
-    } on RPCError catch (e) {
-      throw InspectorReadError(
-        'getRootWidgetTree RPC failed (${e.code}): ${e.details ?? e.message}',
-        cause: e,
-      );
-    }
-    final root = (resp.json?['result'] as Map?)?.cast<String, Object?>();
-    if (root == null) {
-      throw InspectorReadError(
-        'getRootWidgetTree returned a response without a `result` map: '
-        '${resp.json}',
-      );
+    } on Object catch (e) {
+      throw InspectorReadError('readWidgetTree failed: $e');
     }
     return _SceneNodeParser().parse(root);
   }
@@ -185,9 +132,8 @@ class _SceneNodeParser {
 }
 
 class InspectorReadError implements Exception {
-  InspectorReadError(this.message, {this.cause});
+  InspectorReadError(this.message);
   final String message;
-  final Object? cause;
   @override
   String toString() => 'InspectorReadError: $message';
 }

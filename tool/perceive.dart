@@ -29,15 +29,15 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   try {
     await vm.attach(Uri.parse(opts['vm-uri'] as String));
   } on Object catch (e) {
     stderr.writeln('attach failed: $e');
     exit(1);
   }
-  stderr.writeln('attached to ${vm.connectedUri}');
-  stderr.writeln('flutter isolate: ${vm.flutterIsolate.name}');
+  stderr.writeln('attached to ${vm.attachedUri}');
+  stderr.writeln('flutter isolate id: ${vm.flutterIsolateId}');
 
   final reader = SceneReader(InspectorClient(vm));
   final scene = (opts['depth'] as String) == 'full'

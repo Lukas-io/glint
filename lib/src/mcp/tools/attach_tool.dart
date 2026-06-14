@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../../../perception.dart';
+import '../../../runtime.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -98,11 +99,11 @@ class AttachTool extends GlintTool {
     required String udid,
     required String bridgePath,
   }) async {
-    final probeVm = VmClient();
-    await probeVm.attach(vmUri);
+    final probeRuntime = VmServiceRuntime();
+    await probeRuntime.attach(vmUri);
     try {
-      final reader = SceneReader(InspectorClient(probeVm));
-      final resolver = CoordinateResolver(probeVm);
+      final reader = SceneReader(InspectorClient(probeRuntime));
+      final resolver = CoordinateResolver(probeRuntime);
       final scene = await reader.readSummary();
       try {
         final probeId = scene.firstAddressableId();
@@ -122,8 +123,7 @@ class AttachTool extends GlintTool {
         await scene.dispose();
       }
     } finally {
-      await probeVm.disconnect();
+      await probeRuntime.disconnect();
     }
   }
-
 }

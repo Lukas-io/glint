@@ -4,7 +4,7 @@ import 'dart:convert';
 
 import 'package:vm_service/vm_service.dart';
 
-import '../../perception.dart';
+import '../runtime/flutter_runtime.dart';
 
 /// Where a log entry came from. `stderr` captures direct stderr writes,
 /// `stdout` captures FlutterError dumps + print() (Flutter routes
@@ -64,23 +64,11 @@ class AppLogBuffer {
   int get length => _entries.length;
   int get nextSequence => _seq;
 
-  Future<void> subscribe(VmClient vm) async {
+  Future<void> subscribe(FlutterRuntime runtime) async {
     await unsubscribe();
-    final svc = vm.service;
-    for (final stream in const [
-      EventStreams.kStderr,
-      EventStreams.kStdout,
-      EventStreams.kLogging,
-    ]) {
-      try {
-        await svc.streamListen(stream);
-      } on Object {
-        // already listening — fine
-      }
-    }
-    _stderrSub = svc.onStderrEvent.listen(_onStderr);
-    _stdoutSub = svc.onStdoutEvent.listen(_onStdout);
-    _logSub = svc.onLoggingEvent.listen(_onLog);
+    _stderrSub = runtime.stderrEvents.listen(_onStderr);
+    _stdoutSub = runtime.stdoutEvents.listen(_onStdout);
+    _logSub = runtime.loggingEvents.listen(_onLog);
   }
 
   Future<void> unsubscribe() async {

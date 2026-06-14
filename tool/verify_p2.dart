@@ -36,7 +36,7 @@ Future<void> main(List<String> argv) async {
     ..addOption('adb-path', defaultsTo: 'adb');
   final opts = parser.parse(argv);
 
-  final vm = VmClient();
+  final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   final reader = SceneReader(InspectorClient(vm));
   final resolver = CoordinateResolver(vm);

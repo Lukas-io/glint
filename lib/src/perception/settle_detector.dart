@@ -1,6 +1,4 @@
-import 'package:vm_service/vm_service.dart';
-
-import '../vm/vm_client.dart';
+import '../runtime/flutter_runtime.dart';
 import 'scene_reader.dart';
 
 /// §8.4 settle detection. Layered poll:
@@ -13,12 +11,12 @@ import 'scene_reader.dart';
 ///   - Hard ceiling on total time.
 class SettleDetector {
   SettleDetector({
-    required this.vm,
+    required this.runtime,
     required this.reader,
     this.pollIntervalMs = 100,
   });
 
-  final VmClient vm;
+  final FlutterRuntime runtime;
   final SceneReader reader;
   final int pollIntervalMs;
 
@@ -77,16 +75,8 @@ class SettleDetector {
   /// connected to the VM service keep a frame perpetually scheduled
   /// (hot reload / devtools observation), so that flag never goes false.
   Future<bool> _isIdle() async {
-    final svc = vm.service;
-    final isolateId = vm.flutterIsolateId;
-    final rootLib = vm.flutterIsolate.rootLib?.id;
-    if (rootLib == null) return false;
-    final raw = await svc.evaluate(
-      isolateId,
-      rootLib,
-      'WidgetsBinding.instance.schedulerPhase.toString()',
-    );
-    final s = raw is InstanceRef ? raw.valueAsString : null;
+    final s = await runtime
+        .evaluateString('WidgetsBinding.instance.schedulerPhase.toString()');
     return s == 'SchedulerPhase.idle';
   }
 
