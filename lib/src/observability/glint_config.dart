@@ -48,7 +48,7 @@ class GlintConfig {
 
   /// Where to POST telemetry events. Set this to your own collector or
   /// leave at the default (the Cloudflare Worker shipped with glint).
-  String telemetryEndpoint = 'https://glint-telemetry.lukas-io.workers.dev/v1/event';
+  String telemetryEndpoint = 'https://glint-telemetry.wisdomiyamu.workers.dev/v1/event';
 
   /// All known keys → string of current value, for the `config get` view.
   Map<String, Object> toJson() => {
