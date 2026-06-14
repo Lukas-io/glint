@@ -1,3 +1,5 @@
+import 'package:vm_service/vm_service.dart';
+
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
@@ -87,6 +89,28 @@ class GlintSession {
   /// Logical viewport size + dpr in physical pixels, probed via the
   /// geometry resolver on any addressable node. Used by direction-based
   /// scroll tools that need a "scroll N% of viewport" delta.
+  /// Reads the current Flutter app lifecycle state via VM eval. Returns
+  /// one of: resumed, inactive, paused, detached, hidden, or null when
+  /// the binding hasn't been set yet. Cheap single eval (~50ms).
+  Future<String?> lifecycleState() async {
+    final svc = vm.service;
+    final isolateId = vm.flutterIsolateId;
+    final rootLib = vm.flutterIsolate.rootLib?.id;
+    if (rootLib == null) return null;
+    try {
+      final raw = await svc.evaluate(
+        isolateId,
+        rootLib,
+        'WidgetsBinding.instance.lifecycleState?.name ?? ""',
+      );
+      if (raw is! InstanceRef || raw.valueAsString == null) return null;
+      final s = raw.valueAsString!;
+      return s.isEmpty ? null : s;
+    } on Object {
+      return null;
+    }
+  }
+
   Future<({double logicalW, double logicalH, double dpr})>
       probeViewport() async {
     final scene = await reader.readSummary();

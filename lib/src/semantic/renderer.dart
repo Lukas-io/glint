@@ -60,7 +60,9 @@ class PlainTextSceneRenderer extends SceneRenderer {
       ..write(_affordanceMarker(node.affordances))
       ..write(' ')
       ..write(node.role.name);
-    if (node.glintId != null) {
+    // Skip the glintId when it duplicates the role name (e.g. an only-Icon
+    // that stable_id named bare "icon" — renders cleaner as `- icon add`).
+    if (node.glintId != null && node.glintId != node.role.name) {
       buf
         ..write(' ')
         ..write(node.glintId);
