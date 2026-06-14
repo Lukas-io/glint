@@ -13,8 +13,9 @@ class SemanticScene {
   final SemanticNode root;
   final Scene sourceScene;
 
-  /// Topmost-first. Empty until overlay reading lands.
-  final List<RouteFrame> routeStack;
+  /// Topmost-first. v0 surfaces only the topmost route; deeper-stack
+  /// enumeration is deferred.
+  List<RouteFrame> routeStack;
 
   SemanticNode? findByGlintId(String glintId) {
     for (final n in root.walk()) {

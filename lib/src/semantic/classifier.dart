@@ -55,15 +55,6 @@ String? _firstTextIn(List<SemanticNode> nodes) {
   return null;
 }
 
-SemanticIcon? _firstIconIn(List<SemanticNode> nodes) {
-  for (final n in nodes) {
-    if (n is SemanticIcon) return n;
-    final inner = _firstIconIn(n.children);
-    if (inner != null) return inner;
-  }
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // Concrete classifiers, top of priority list first.
 // ---------------------------------------------------------------------------
@@ -170,11 +161,15 @@ class ButtonClassifier extends WidgetClassifier {
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
     final label = _firstTextIn(children);
-    final icon = _firstIconIn(children);
+    // Absorb Text into the label; keep Icon / Image as children so the
+    // IconEnricher can populate them post-classify.
+    final kept = children
+        .where((c) => c is SemanticIcon || c is SemanticImage)
+        .toList(growable: false);
     return SemanticButton(
       glintId: node.glintId,
       label: label,
-      iconName: icon?.name,
+      children: kept,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../armed.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -12,16 +13,14 @@ class SwipeTool extends GlintTool {
   Tool get definition => Tool(
         name: 'swipe',
         description:
-            'Swipe from one glintId to another. Useful for scrolling (swipe from a row near '
-            'the bottom toward a row near the top) and drag-and-drop.',
+            'Swipe from one glintId to another. `awaitReady` gates on the '
+            '`from` endpoint — the `to` only needs to resolve, not be hittable.',
         inputSchema: ObjectSchema(
           properties: {
-            'fromGlintId': Schema.string(
-              description: 'Starting point — a glintId from `get_scene`.',
-            ),
-            'toGlintId': Schema.string(
-              description: 'End point — a glintId from `get_scene`.',
-            ),
+            'fromGlintId': Schema.string(),
+            'toGlintId': Schema.string(),
+            'awaitReady': Schema.bool(),
+            'readyTimeoutMs': Schema.int(),
           },
           required: ['fromGlintId', 'toGlintId'],
         ),
@@ -33,6 +32,17 @@ class SwipeTool extends GlintTool {
     final args = request.arguments ?? const {};
     final from = args['fromGlintId']! as String;
     final to = args['toGlintId']! as String;
+    final armed = (args['awaitReady'] as bool?) ?? false;
+    final ceilingMs = (args['readyTimeoutMs'] as int?) ?? 5000;
+
+    final arming = await maybeAwaitReady(
+      session: session,
+      glintId: from,
+      awaitReady: armed,
+      ceilingMs: ceilingMs,
+      toolLabel: 'swipe',
+    );
+    if (arming is ArmingFailed) return arming.envelope;
 
     final scene = await session.reader.readSummary();
     try {
@@ -40,7 +50,10 @@ class SwipeTool extends GlintTool {
         scene,
         Swipe(SymbolicTarget(from), SymbolicTarget(to)),
       );
-      return StructuredResponse.fromActionResult(result);
+      final response = StructuredResponse.fromActionResult(result);
+      return arming is ArmingReady
+          ? withArmedMetadata(response, arming)
+          : response;
     } finally {
       await scene.dispose();
     }

@@ -1,12 +1,16 @@
 import '../../interaction.dart';
+import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
 
 /// Per-connection state: VM client, device, readers, interactor.
 /// Tools access these via the typed getters; accessing before
-/// [attach] throws [SessionNotAttachedError].
+/// [attach] throws [SessionNotAttachedError]. [actionLog] is always
+/// available — survives detach so cross-attach history stays queryable.
 class GlintSession {
-  GlintSession();
+  GlintSession() : actionLog = ActionLog();
+
+  final ActionLog actionLog;
 
   VmClient? _vm;
   DeviceTarget? _device;
@@ -17,6 +21,8 @@ class GlintSession {
   Interactor? _interactor;
   Semanticizer? _semanticizer;
   InputEnricher? _inputEnricher;
+  IconEnricher? _iconEnricher;
+  NavigationEnricher? _navEnricher;
   ReadinessGate? _readinessGate;
   SettleDetector? _settleDetector;
 
@@ -32,6 +38,10 @@ class GlintSession {
   Semanticizer get semanticizer => _requireAttached(_semanticizer, 'semanticizer');
   InputEnricher get inputEnricher =>
       _requireAttached(_inputEnricher, 'input enricher');
+  IconEnricher get iconEnricher =>
+      _requireAttached(_iconEnricher, 'icon enricher');
+  NavigationEnricher get navEnricher =>
+      _requireAttached(_navEnricher, 'nav enricher');
   ReadinessGate get readinessGate =>
       _requireAttached(_readinessGate, 'readiness gate');
   SettleDetector get settleDetector =>
@@ -54,6 +64,8 @@ class GlintSession {
     final interactor = Interactor(backend: backend, resolver: resolver);
     final semanticizer = Semanticizer();
     final inputEnricher = InputEnricher(vm: vm, inspector: inspector);
+    final iconEnricher = IconEnricher(vm: vm);
+    final navEnricher = NavigationEnricher(vm: vm);
     final readinessGate = ReadinessGate(reader: reader, resolver: resolver);
     final settleDetector = SettleDetector(vm: vm, reader: reader);
 
@@ -66,6 +78,8 @@ class GlintSession {
     _interactor = interactor;
     _semanticizer = semanticizer;
     _inputEnricher = inputEnricher;
+    _iconEnricher = iconEnricher;
+    _navEnricher = navEnricher;
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
   }
@@ -103,6 +117,8 @@ class GlintSession {
     _interactor = null;
     _semanticizer = null;
     _inputEnricher = null;
+    _iconEnricher = null;
+    _navEnricher = null;
     _readinessGate = null;
     _settleDetector = null;
     if (vm != null) await vm.disconnect();

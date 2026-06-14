@@ -110,30 +110,22 @@ class SemanticButton extends SemanticNode {
   SemanticButton({
     super.glintId,
     this.label,
-    this.iconName,
     super.children = const [],
   }) : super(affordances: const {Affordance.tappable});
 
-  /// Best-effort human label: contained text, tooltip, or icon name.
+  /// Best-effort human label — contained text or tooltip. Icons stay as
+  /// children so [IconEnricher] can populate their name post-classify.
   final String? label;
-
-  /// Material icon name when discoverable (`Icons.add` → "add").
-  final String? iconName;
 
   @override
   SemanticRole get role => SemanticRole.button;
 
   @override
-  String get displayLabel {
-    if (label != null && label!.isNotEmpty) return label!;
-    if (iconName != null) return 'icon $iconName';
-    return 'button';
-  }
+  String get displayLabel => label ?? '';
 
   @override
   Map<String, Object?> _extraJson() => {
         if (label != null) 'label': label,
-        if (iconName != null) 'iconName': iconName,
       };
 }
 
@@ -196,19 +188,32 @@ class SemanticIcon extends SemanticNode {
   SemanticIcon({
     super.glintId,
     this.name,
+    this.codePoint,
   }) : super(children: const []);
 
-  final String? name;
+  /// Set by [IconEnricher] when the codepoint matches a known table entry.
+  String? name;
+
+  /// Raw IconData codepoint, populated by [IconEnricher]. Hex-rendered
+  /// in [displayLabel] as the fallback when [name] is unknown.
+  int? codePoint;
 
   @override
   SemanticRole get role => SemanticRole.icon;
 
   @override
-  String get displayLabel => name ?? 'icon';
+  String get displayLabel {
+    if (name != null && name!.isNotEmpty) return name!;
+    if (codePoint != null) {
+      return 'U+${codePoint!.toRadixString(16).toUpperCase().padLeft(4, '0')}';
+    }
+    return 'icon';
+  }
 
   @override
   Map<String, Object?> _extraJson() => {
         if (name != null) 'name': name,
+        if (codePoint != null) 'codePoint': codePoint,
       };
 }
 

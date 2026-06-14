@@ -24,14 +24,13 @@ class IosSimBackend implements InteractionBackend {
   @override
   String get label => 'ios-sim(${_shortPath(udid)})';
 
-  // Hardware buttons: see source-of-truth §13 "Xcode 26 open work".
-  // Bridge has dispatch wired (IndigoHIDMessageForButton), but the
-  // per-device button-code mapping + IndigoHIDTargetForScreen integration
-  // isn't complete. Lock works (code 1), Home on Face ID needs the gesture
-  // path, others need the per-screen target.
+  // Lock: raw IndigoHIDMessageForButton code 1 (verified Xcode 26).
+  // Home: Face ID gesture — bottom-edge swipe up; the iOS Sim interprets
+  //   any swipe starting within the home-indicator strip as a home press.
+  // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
-        hardwareButtons: <HardwareButton>{},
+        hardwareButtons: {HardwareButton.lock, HardwareButton.home},
       );
 
   @override
@@ -89,11 +88,36 @@ class IosSimBackend implements InteractionBackend {
 
   @override
   Future<void> pressHardwareButton(HardwareButton button) {
-    throw UnsupportedBackendAction(
-      label,
-      'pressHardwareButton: per-device IndigoHIDButton mapping incomplete — '
-          'see source-of-truth §13 compat matrix',
-    );
+    switch (button) {
+      case HardwareButton.lock:
+        // The Swift bridge's SimButton.home enum case happens to map to
+        // raw code 1, which on Face ID devices actually fires Lock /
+        // Apple Pay overlay (the bridge's enum naming pre-dates the
+        // §13 reverse engineering). probe-button takes the raw int and
+        // dodges the misleading name.
+        return _run(_BridgeCommand.probeButton, [udid, '1']);
+      case HardwareButton.home:
+        // Face ID gesture: bottom-edge swipe up. Start within the
+        // home-indicator strip and travel ~half the viewport.
+        final centerX = deviceLogicalWidth / 2;
+        return _run(_BridgeCommand.swipe, [
+          udid,
+          '$deviceLogicalWidth',
+          '$deviceLogicalHeight',
+          '$centerX', '${deviceLogicalHeight - 1}',
+          '$centerX', '${deviceLogicalHeight / 2}',
+          '200',
+        ]);
+      case HardwareButton.back:
+      case HardwareButton.volumeUp:
+      case HardwareButton.volumeDown:
+      case HardwareButton.appSwitcher:
+        throw UnsupportedBackendAction(
+          label,
+          'pressHardwareButton(${button.name}): not wired on Xcode 26 yet — '
+              'see source-of-truth §13',
+        );
+    }
   }
 
   ({double x, double y}) _logical(int physicalX, int physicalY) => (
@@ -125,7 +149,8 @@ enum _BridgeCommand {
   tap('tap'),
   longPress('long-press'),
   swipe('swipe'),
-  type('type');
+  type('type'),
+  probeButton('probe-button');
 
   const _BridgeCommand(this.cliName);
   final String cliName;

@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../observability.dart';
 import '../../../semantic.dart';
 import '../envelope.dart';
 import '../session.dart';
@@ -37,6 +38,8 @@ class GetSceneTool extends GlintTool {
     try {
       final semantic = session.semanticizer.semanticize(scene);
       await session.inputEnricher.enrich(semantic);
+      await session.iconEnricher.enrich(semantic);
+      await session.navEnricher.enrich(semantic);
 
       final String rendered;
       switch (format) {
@@ -53,11 +56,16 @@ class GetSceneTool extends GlintTool {
       }
 
       final counts = _coverage(semantic);
+      final state = const StateObserver().observe(semantic);
       return StructuredResponse(
         summary: rendered,
         data: {
           'format': format,
           'coverage': counts,
+          'state': state.name,
+          if (semantic.routeStack.isNotEmpty)
+            'route':
+                semantic.routeStack.map((r) => r.toJson()).toList().first,
         },
       );
     } finally {

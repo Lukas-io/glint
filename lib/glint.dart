@@ -7,5 +7,6 @@ library;
 export 'instructions.dart';
 export 'interaction.dart';
 export 'mcp.dart';
+export 'observability.dart';
 export 'perception.dart';
 export 'semantic.dart';

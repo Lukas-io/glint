@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
+import '../../observability.dart';
 import 'envelope.dart';
 import 'session.dart';
 import 'tools/attach_tool.dart';
 import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
+import 'tools/logs_tool.dart';
 import 'tools/long_press_tool.dart';
 import 'tools/resolve_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
@@ -41,25 +43,77 @@ abstract class GlintTool {
     GlintSession session,
     CallToolRequest request,
   ) async {
+    final start = DateTime.now();
+    StructuredResponse response;
     try {
-      final response = await handle(session, request);
-      return response.toCallResult();
+      response = await handle(session, request);
     } on SessionNotAttachedError catch (e) {
-      return StructuredResponse.error(
+      response = StructuredResponse.error(
         summary: 'glint is not attached to a Flutter app yet',
         errorKind: GlintErrorKind.sessionNotAttached,
         detail: e.toString(),
         nextSteps: const [
           'call the `attach` tool first with the running app\'s VM URI and device target',
         ],
-      ).toCallResult();
+      );
     } catch (e, st) {
-      return StructuredResponse.error(
+      response = StructuredResponse.error(
         summary: '${definition.name} failed',
         errorKind: GlintErrorKind.internal,
         detail: '$e\n$st',
-      ).toCallResult();
+      );
     }
+    _log(session, request, response, start);
+    return response.toCallResult();
+  }
+
+  void _log(
+    GlintSession session,
+    CallToolRequest request,
+    StructuredResponse response,
+    DateTime start,
+  ) {
+    final elapsedMs = DateTime.now().difference(start).inMilliseconds;
+    final seq = session.actionLog.allocateSequence();
+    if (!response.isError) {
+      session.actionLog.record(SuccessEntry(
+        sequence: seq,
+        timestamp: start,
+        tool: definition.name,
+        elapsedMs: elapsedMs,
+        summary: _shortSummary(response.summary),
+        args: _scrubArgs(request.arguments),
+        armed: response.data?['armed'] as Map<String, Object?>?,
+      ));
+      return;
+    }
+    final kindName = response.data?['errorKind'] as String?;
+    final errorKind = GlintErrorKind.values
+            .where((e) => e.name == kindName)
+            .firstOrNull ??
+        GlintErrorKind.internal;
+    session.actionLog.record(FailureEntry(
+      sequence: seq,
+      timestamp: start,
+      tool: definition.name,
+      elapsedMs: elapsedMs,
+      summary: _shortSummary(response.summary),
+      errorKind: errorKind,
+      detail: response.data?['detail'] as String?,
+      args: _scrubArgs(request.arguments),
+    ));
+  }
+
+  String _shortSummary(String s) {
+    const max = 160;
+    if (s.length <= max) return s;
+    return '${s.substring(0, max - 1)}…';
+  }
+
+  Map<String, Object?>? _scrubArgs(Map<String, Object?>? args) {
+    if (args == null) return null;
+    // Drop the vmUri — long and sensitive-ish.
+    return {for (final e in args.entries) if (e.key != 'vmUri') e.key: e.value};
   }
 }
 
@@ -79,4 +133,5 @@ const List<GlintTool> kDefaultGlintTools = [
   TypeTool(),
   HardwareButtonTool(),
   WaitForSettleTool(),
+  LogsTool(),
 ];

@@ -1,7 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
-import '../../../perception.dart';
+import '../armed.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -48,56 +48,23 @@ class TapTool extends GlintTool {
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs = (args['readyTimeoutMs'] as int?) ?? 5000;
 
-    Map<String, Object?>? armedData;
-    if (armed) {
-      final result = await session.readinessGate
-          .awaitReady(glintId: glintId, ceilingMs: ceilingMs);
-      switch (result) {
-        case ReadyResult():
-          armedData = {
-            'attempts': result.attempts,
-            'elapsedMs': result.elapsedMs,
-          };
-        case NotFoundResult():
-          return StructuredResponse.error(
-            summary: 'armed tap on $glintId: target never appeared '
-                '(${result.attempts} polls, ${result.elapsedMs}ms)',
-            errorKind: GlintErrorKind.unresolvedTarget,
-            detail: 'no scene poll within $ceilingMs ms ever saw glintId="$glintId"',
-            nextSteps: const [
-              'verify the glintId via `get_scene`',
-              'raise `readyTimeoutMs` if the target arrives slowly',
-            ],
-          );
-        case NeverReadyResult():
-          return StructuredResponse.error(
-            summary: 'armed tap on $glintId: present but never hittable '
-                '(${result.attempts} polls, ${result.elapsedMs}ms)',
-            errorKind: GlintErrorKind.targetNeverReady,
-            detail: result.detail,
-            nextSteps: const [
-              'check if a modal, absorber, or overlay covers the target',
-              'raise `readyTimeoutMs` if the target settles slowly',
-            ],
-          );
-      }
-    }
+    final arming = await maybeAwaitReady(
+      session: session,
+      glintId: glintId,
+      awaitReady: armed,
+      ceilingMs: ceilingMs,
+      toolLabel: 'tap',
+    );
+    if (arming is ArmingFailed) return arming.envelope;
 
     final scene = await session.reader.readSummary();
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
       final response = StructuredResponse.fromActionResult(result);
-      if (armedData == null) return response;
-      return StructuredResponse(
-        summary: 'armed tap on $glintId fired after '
-            '${armedData['attempts']} polls / ${armedData['elapsedMs']}ms — '
-            '${response.summary}',
-        warnings: response.warnings,
-        nextSteps: response.nextSteps,
-        data: {...?response.data, 'armed': armedData},
-        isError: response.isError,
-      );
+      return arming is ArmingReady
+          ? withArmedMetadata(response, arming)
+          : response;
     } finally {
       await scene.dispose();
     }

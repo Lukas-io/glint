@@ -95,6 +95,7 @@ void main() {
           'type',
           'hardware_button',
           'wait_for_settle',
+          'logs',
         ]),
       );
     });
