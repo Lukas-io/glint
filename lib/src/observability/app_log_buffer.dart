@@ -6,10 +6,11 @@ import 'package:vm_service/vm_service.dart';
 
 import '../../perception.dart';
 
-/// Where a log entry came from. `stderr` captures uncaught Flutter
-/// exceptions (FlutterError dumps); `logging` captures `developer.log`
-/// calls. `stdout` is intentionally not subscribed — too noisy in debug.
-enum AppLogStream { stderr, logging }
+/// Where a log entry came from. `stderr` captures direct stderr writes,
+/// `stdout` captures FlutterError dumps + print() (Flutter routes
+/// FlutterError through debugPrint → stdout, not stderr), `logging`
+/// captures `developer.log` calls.
+enum AppLogStream { stderr, stdout, logging }
 
 class AppLogEntry {
   AppLogEntry({
@@ -57,6 +58,7 @@ class AppLogBuffer {
   final Queue<AppLogEntry> _entries = Queue();
   int _seq = 0;
   StreamSubscription<Event>? _stderrSub;
+  StreamSubscription<Event>? _stdoutSub;
   StreamSubscription<Event>? _logSub;
 
   int get length => _entries.length;
@@ -65,27 +67,32 @@ class AppLogBuffer {
   Future<void> subscribe(VmClient vm) async {
     await unsubscribe();
     final svc = vm.service;
-    try {
-      await svc.streamListen(EventStreams.kStderr);
-    } on Object {
-      // already listening — fine
-    }
-    try {
-      await svc.streamListen(EventStreams.kLogging);
-    } on Object {
-      // already listening — fine
+    for (final stream in const [
+      EventStreams.kStderr,
+      EventStreams.kStdout,
+      EventStreams.kLogging,
+    ]) {
+      try {
+        await svc.streamListen(stream);
+      } on Object {
+        // already listening — fine
+      }
     }
     _stderrSub = svc.onStderrEvent.listen(_onStderr);
+    _stdoutSub = svc.onStdoutEvent.listen(_onStdout);
     _logSub = svc.onLoggingEvent.listen(_onLog);
   }
 
   Future<void> unsubscribe() async {
-    final s = _stderrSub;
-    final l = _logSub;
+    final futures = [
+      _stderrSub?.cancel(),
+      _stdoutSub?.cancel(),
+      _logSub?.cancel(),
+    ];
     _stderrSub = null;
+    _stdoutSub = null;
     _logSub = null;
-    await s?.cancel();
-    await l?.cancel();
+    await Future.wait(futures.whereType<Future<void>>());
   }
 
   void _onStderr(Event event) {
@@ -93,6 +100,13 @@ class AppLogBuffer {
     if (bytes == null) return;
     final text = utf8.decode(base64Decode(bytes), allowMalformed: true);
     _append(stream: AppLogStream.stderr, content: text);
+  }
+
+  void _onStdout(Event event) {
+    final bytes = event.bytes;
+    if (bytes == null) return;
+    final text = utf8.decode(base64Decode(bytes), allowMalformed: true);
+    _append(stream: AppLogStream.stdout, content: text);
   }
 
   void _onLog(Event event) {

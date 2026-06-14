@@ -10,16 +10,22 @@ import '../../semantic.dart';
 /// [attach] throws [SessionNotAttachedError]. [actionLog] is always
 /// available — survives detach so cross-attach history stays queryable.
 class GlintSession {
-  GlintSession({GlintConfig? config})
-      : config = config ?? GlintConfig(),
-        actionLog = ActionLog(),
+  factory GlintSession({GlintConfig? config}) {
+    final cfg = config ?? GlintConfig();
+    return GlintSession._(cfg);
+  }
+
+  GlintSession._(this.config)
+      : actionLog = ActionLog(),
         appLogs = AppLogBuffer(),
-        sessions = SessionManager();
+        sessions = SessionManager(),
+        telemetry = TelemetryClient(config);
 
   final GlintConfig config;
   final ActionLog actionLog;
   final AppLogBuffer appLogs;
   final SessionManager sessions;
+  final TelemetryClient telemetry;
 
   VmClient? _vm;
   DeviceTarget? _device;
@@ -103,16 +109,27 @@ class GlintSession {
   /// Logical viewport size + dpr in physical pixels, probed via the
   /// geometry resolver on any addressable node. Used by direction-based
   /// scroll tools that need a "scroll N% of viewport" delta.
-  /// Focused widget runtime type + keyboard inset, in one VM eval.
-  /// Returns `(focusedType, keyboardBottomPx)`; focusedType is null when
-  /// nothing is focused. keyboardBottomPx > 0 means soft keyboard is up.
-  Future<({String? focusedType, double keyboardBottomPx})> uiState() async {
+  /// Focused widget runtime type + keyboard inset + orientation +
+  /// brightness + locale, in one VM eval. ~50ms.
+  Future<
+      ({
+        String? focusedType,
+        double keyboardBottomPx,
+        String? orientation,
+        String? brightness,
+        String? locale,
+      })> uiState() async {
     final svc = vm.service;
     final isolateId = vm.flutterIsolateId;
     final rootLib = vm.flutterIsolate.rootLib?.id;
-    if (rootLib == null) {
-      return (focusedType: null, keyboardBottomPx: 0.0);
-    }
+    const empty = (
+      focusedType: null,
+      keyboardBottomPx: 0.0,
+      orientation: null,
+      brightness: null,
+      locale: null,
+    );
+    if (rootLib == null) return empty;
     try {
       final raw = await svc.evaluate(
         isolateId,
@@ -120,17 +137,33 @@ class GlintSession {
         '((FocusManager.instance.primaryFocus?.context?.widget.runtimeType.toString() ?? "")'
             ' + "|" + '
             '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
-            ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString()))',
+            ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString())'
+            ' + "|" + '
+            '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+            ' : WidgetsBinding.instance.platformDispatcher.views.first.physicalSize.aspectRatio.toString())'
+            ' + "|" + '
+            'WidgetsBinding.instance.platformDispatcher.platformBrightness.name'
+            ' + "|" + '
+            'WidgetsBinding.instance.platformDispatcher.locale.toString())',
       );
-      if (raw is! InstanceRef || raw.valueAsString == null) {
-        return (focusedType: null, keyboardBottomPx: 0.0);
-      }
+      if (raw is! InstanceRef || raw.valueAsString == null) return empty;
       final parts = raw.valueAsString!.split('|');
       final focusedType = parts[0].isEmpty ? null : parts[0];
       final kb = parts.length > 1 ? double.tryParse(parts[1]) ?? 0.0 : 0.0;
-      return (focusedType: focusedType, keyboardBottomPx: kb);
+      final aspect = parts.length > 2 ? double.tryParse(parts[2]) ?? 0 : 0;
+      final orientation = aspect == 0 ? null : (aspect > 1 ? 'landscape' : 'portrait');
+      final brightness =
+          parts.length > 3 && parts[3].isNotEmpty ? parts[3] : null;
+      final locale = parts.length > 4 && parts[4].isNotEmpty ? parts[4] : null;
+      return (
+        focusedType: focusedType,
+        keyboardBottomPx: kb,
+        orientation: orientation,
+        brightness: brightness,
+        locale: locale,
+      );
     } on Object {
-      return (focusedType: null, keyboardBottomPx: 0.0);
+      return empty;
     }
   }
 

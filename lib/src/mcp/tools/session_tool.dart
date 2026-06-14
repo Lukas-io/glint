@@ -53,6 +53,7 @@ class SessionTool extends GlintTool {
           return _bad('op=open requires `name`');
         }
         final s = mgr.open(name, seq);
+        session.telemetry.noteSession('open');
         return StructuredResponse(
           summary: 'opened session "$name" (id=${s.id}) at seq=$seq',
           data: {'session': s.toJson()},
@@ -63,6 +64,7 @@ class SessionTool extends GlintTool {
         if (s == null) {
           return _bad('no active session to close');
         }
+        session.telemetry.noteSession('close');
         return StructuredResponse(
           summary: 'closed session "${s.name}" (id=${s.id}); '
               'spans seq=${s.firstSeq}..${s.lastSeq ?? seq - 1}',

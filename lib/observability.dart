@@ -7,3 +7,4 @@ export 'src/observability/glint_config.dart';
 export 'src/observability/log_renderer.dart';
 export 'src/observability/sessions.dart';
 export 'src/observability/state_observer.dart';
+export 'src/observability/telemetry.dart';

@@ -42,6 +42,14 @@ class GlintConfig {
   /// Max SemanticInputs enriched per scene (each costs ~2 VM evals).
   int inputEnrichMax;
 
+  /// Opt in to anonymous usage telemetry. Default off. Events have no
+  /// PII — see [TelemetryClient] for the schema.
+  bool telemetryEnabled = false;
+
+  /// Where to POST telemetry events. Set this to your own collector or
+  /// leave at the default (the Cloudflare Worker shipped with glint).
+  String telemetryEndpoint = 'https://glint-telemetry.lukas-io.workers.dev/v1/event';
+
   /// All known keys → string of current value, for the `config get` view.
   Map<String, Object> toJson() => {
         'readyTimeoutMs': readyTimeoutMs,
@@ -53,6 +61,8 @@ class GlintConfig {
         'appLogCapacity': appLogCapacity,
         'iconEnrichMax': iconEnrichMax,
         'inputEnrichMax': inputEnrichMax,
+        'telemetryEnabled': telemetryEnabled,
+        'telemetryEndpoint': telemetryEndpoint,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -96,6 +106,14 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'inputEnrichMax must be a positive int';
         inputEnrichMax = v;
+      case 'telemetryEnabled':
+        if (value is! bool) return 'telemetryEnabled must be a bool';
+        telemetryEnabled = value;
+      case 'telemetryEndpoint':
+        if (value is! String || value.isEmpty) {
+          return 'telemetryEndpoint must be a non-empty string';
+        }
+        telemetryEndpoint = value;
       default:
         return 'unknown config key: $key';
     }

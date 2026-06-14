@@ -89,6 +89,11 @@ abstract class GlintTool {
         args: _scrubArgs(request.arguments),
         armed: response.data?['armed'] as Map<String, Object?>?,
       ));
+      session.telemetry.noteToolCall(
+        name: definition.name,
+        elapsedMs: elapsedMs,
+        armed: response.data?['armed'] != null,
+      );
       return;
     }
     final kindName = response.data?['errorKind'] as String?;
@@ -106,6 +111,11 @@ abstract class GlintTool {
       detail: response.data?['detail'] as String?,
       args: _scrubArgs(request.arguments),
     ));
+    session.telemetry.noteToolCall(
+      name: definition.name,
+      elapsedMs: elapsedMs,
+      errorKind: errorKind.name,
+    );
   }
 
   String _shortSummary(String s) {

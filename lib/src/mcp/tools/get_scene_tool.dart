@@ -68,6 +68,9 @@ class GetSceneTool extends GlintTool {
           if (lifecycle != null) 'lifecycle': lifecycle,
           if (ui.focusedType != null) 'focusedType': ui.focusedType,
           'keyboardVisible': ui.keyboardBottomPx > 0,
+          if (ui.orientation != null) 'orientation': ui.orientation,
+          if (ui.brightness != null) 'brightness': ui.brightness,
+          if (ui.locale != null) 'locale': ui.locale,
           if (semantic.routeStack.isNotEmpty)
             'route':
                 semantic.routeStack.map((r) => r.toJson()).toList().first,

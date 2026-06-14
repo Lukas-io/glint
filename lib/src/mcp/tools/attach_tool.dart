@@ -74,6 +74,7 @@ class AttachTool extends GlintTool {
     }
 
     await session.attach(vmUri: vmUri, device: device);
+    session.telemetry.noteAttach(platform);
 
     return StructuredResponse(
       summary: 'attached to $platform device $deviceId at $vmUri',
