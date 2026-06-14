@@ -4,14 +4,18 @@ import '../action.dart';
 import '../backend.dart';
 
 /// Android KEYCODE_* values that map to glint's [HardwareButton] enum.
+/// `unlock` is intentionally absent — Android has no stock biometric-match
+/// equivalent and lock-screen behaviour varies per OEM. AdbBackend
+/// surfaces it as [UnsupportedBackendAction] until v1.
 extension AndroidKeyCode on HardwareButton {
-  int get androidKeyCode => switch (this) {
+  int? get androidKeyCode => switch (this) {
         HardwareButton.home => 3,
         HardwareButton.back => 4,
         HardwareButton.lock => 26, // KEYCODE_POWER (toggle)
         HardwareButton.volumeUp => 24,
         HardwareButton.volumeDown => 25,
         HardwareButton.appSwitcher => 187,
+        HardwareButton.unlock => null,
       };
 }
 
@@ -90,8 +94,16 @@ class AdbBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> pressHardwareButton(HardwareButton button) =>
-      _shell(['input', 'keyevent', '${button.androidKeyCode}']);
+  Future<void> pressHardwareButton(HardwareButton button) {
+    final code = button.androidKeyCode;
+    if (code == null) {
+      throw UnsupportedBackendAction(
+        label,
+        'pressHardwareButton(${button.name}): no Android keyevent equivalent',
+      );
+    }
+    return _shell(['input', 'keyevent', '$code']);
+  }
 
   Future<void> _shell(List<String> shellArgs) async {
     final result = await Process.run(

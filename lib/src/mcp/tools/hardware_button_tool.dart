@@ -5,8 +5,9 @@ import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
 
-/// iOS Xcode 26: `lock` works; others raise UnsupportedBackendAction
-/// (see source-of-truth §13).
+/// iOS Xcode 26: lock + unlock + home all wired. Others
+/// (back, volumeUp/Down, appSwitcher) raise UnsupportedBackendAction.
+/// See source-of-truth §13.
 class HardwareButtonTool extends GlintTool {
   const HardwareButtonTool();
 
@@ -14,8 +15,10 @@ class HardwareButtonTool extends GlintTool {
   Tool get definition => Tool(
         name: 'hardware_button',
         description:
-            'Press a physical hardware button. iOS coverage is partial today '
-            '(`lock` works on Xcode 26; `home` differs by device class — see project notes).',
+            'Press a physical hardware button. iOS Sim: lock + unlock '
+            '(Face ID auth via Darwin notification + bottom-edge swipe) + '
+            'home (Face ID gesture) all work on Xcode 26. Others are '
+            'platform-dependent; check capabilities.',
         inputSchema: ObjectSchema(
           properties: {
             'button': Schema.string(

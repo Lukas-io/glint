@@ -24,13 +24,24 @@ class IosSimBackend implements InteractionBackend {
   @override
   String get label => 'ios-sim(${_shortPath(udid)})';
 
-  // Lock: raw IndigoHIDMessageForButton code 1 (verified Xcode 26).
-  // Home: Face ID gesture — bottom-edge swipe up; the iOS Sim interprets
-  //   any swipe starting within the home-indicator strip as a home press.
+  // Lock:   IndigoHIDMessageForButton code 1 (verified Xcode 26).
+  // Home:   Face ID gesture — bottom-edge swipe up; the simulator
+  //         interprets any swipe starting within the home-indicator strip
+  //         as a home press.
+  // Unlock: post Darwin notification `com.apple.BiometricKit_Sim.pearl.match`
+  //         (Face ID auth) then a bottom-edge swipe to transition past
+  //         the "authenticated lock screen" state. Verified by inspecting
+  //         the Simulator.app binary — Pearl = Apple codename for Face ID,
+  //         Oyster = Touch ID; we default to Pearl since iPhone 17 Pro and
+  //         every modern test target is Face ID.
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
-        hardwareButtons: {HardwareButton.lock, HardwareButton.home},
+        hardwareButtons: {
+          HardwareButton.lock,
+          HardwareButton.unlock,
+          HardwareButton.home,
+        },
       );
 
   @override
@@ -99,15 +110,9 @@ class IosSimBackend implements InteractionBackend {
       case HardwareButton.home:
         // Face ID gesture: bottom-edge swipe up. Start within the
         // home-indicator strip and travel ~half the viewport.
-        final centerX = deviceLogicalWidth / 2;
-        return _run(_BridgeCommand.swipe, [
-          udid,
-          '$deviceLogicalWidth',
-          '$deviceLogicalHeight',
-          '$centerX', '${deviceLogicalHeight - 1}',
-          '$centerX', '${deviceLogicalHeight / 2}',
-          '200',
-        ]);
+        return _bottomEdgeSwipeUp();
+      case HardwareButton.unlock:
+        return _unlockFaceID();
       case HardwareButton.back:
       case HardwareButton.volumeUp:
       case HardwareButton.volumeDown:
@@ -118,6 +123,39 @@ class IosSimBackend implements InteractionBackend {
               'see source-of-truth §13',
         );
     }
+  }
+
+  Future<void> _bottomEdgeSwipeUp() {
+    final centerX = deviceLogicalWidth / 2;
+    return _run(_BridgeCommand.swipe, [
+      udid,
+      '$deviceLogicalWidth',
+      '$deviceLogicalHeight',
+      '$centerX', '${deviceLogicalHeight - 1}',
+      '$centerX', '${deviceLogicalHeight / 2}',
+      '200',
+    ]);
+  }
+
+  /// Post the Face ID match Darwin notification + swipe up. The match
+  /// authenticates; the swipe transitions past the "authenticated lock
+  /// screen" to home.
+  Future<void> _unlockFaceID() async {
+    final result = await Process.run(
+      'notifyutil',
+      ['-p', 'com.apple.BiometricKit_Sim.pearl.match'],
+    );
+    if (result.exitCode != 0) {
+      throw BackendToolError(
+        backend: label,
+        command: 'notifyutil -p com.apple.BiometricKit_Sim.pearl.match',
+        exitCode: result.exitCode,
+        stderr: ((result.stderr as String?) ?? '').trim(),
+      );
+    }
+    // Give the daemon a tick to propagate the auth before we swipe.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await _bottomEdgeSwipeUp();
   }
 
   ({double x, double y}) _logical(int physicalX, int physicalY) => (

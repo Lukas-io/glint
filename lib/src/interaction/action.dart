@@ -71,6 +71,7 @@ enum HardwareButton {
   home,
   back,
   lock,
+  unlock,
   volumeUp,
   volumeDown,
   appSwitcher,

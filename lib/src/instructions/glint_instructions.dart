@@ -56,7 +56,7 @@ Failures carry `errorKind` in `structuredContent`:
 const _gotchas = '''
 ## Gotchas
 
-- **iOS hardware buttons partial** (Xcode 26): only `lock` reliable; Face-ID `home` doesn't dispatch.
+- **iOS hardware buttons** (Xcode 26 Sim): `lock`, `unlock`, `home` work on Face ID devices. `unlock` simulates Face ID auth + transitions past the lock screen.
 - **`type` needs focus.** Pass `focus: <id>` to tap-and-type in one call.
 - **Scroll is content-relative.** `scroll down` moves content down (finger swipes up).
 - **`hittable=false`** — OS tap landed but Flutter hit-test routed elsewhere.
