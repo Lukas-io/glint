@@ -111,12 +111,12 @@ class AttachTool extends GlintTool {
           throw StateError(
               'could not find an addressable node in the scene to probe iOS viewport');
         }
-        final coord = await resolver.resolve(scene, probeId);
+        final viewport = await resolver.resolveViewport(scene, probeId);
         return IosSimulator(
           udid: udid,
-          logicalWidth: coord.logicalViewSize.w,
-          logicalHeight: coord.logicalViewSize.h,
-          devicePixelRatio: coord.devicePixelRatio,
+          logicalWidth: viewport.w,
+          logicalHeight: viewport.h,
+          devicePixelRatio: viewport.dpr,
           bridgePath: bridgePath,
         );
       } finally {
