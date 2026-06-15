@@ -119,7 +119,7 @@ class CoordinateResolver {
 
     final String? json;
     try {
-      json = await _runtime.evaluateString(_GeometryExpr.build());
+      json = await _runtime.evaluateString(GeometryExpr.build());
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
     }
@@ -158,11 +158,9 @@ class GeometryResolveError implements Exception {
   String toString() => 'GeometryResolveError: $message';
 }
 
-// Single-line Dart expression sent via `evaluate`. CFE rejects newlines
-// and statement-block lambdas, so we string-concat and rely on Dart's
-// left-to-right record evaluation to sequence the hitTest side effect
-// before reading r.path.
-class _GeometryExpr {
+// Single-line Dart expression sent via `evaluate`. CFE rejects newlines and
+// statement-block lambdas, so fields are string-concatenated into a JSON blob.
+class GeometryExpr {
   static const _ro = 'WidgetInspectorService.instance.selection.current!';
   static const _el =
       'WidgetInspectorService.instance.selection.currentElement!';
@@ -171,9 +169,15 @@ class _GeometryExpr {
       '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
   static const _ancVisible =
       '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
-  static const _hitTest =
-      '((WidgetsBinding.instance..hitTestInView(r, c, $_view.viewId)), '
-      'r.path.any((e) => identical(e.target, $_ro))).\$2';
+  // On Dart 3.12 the CFE rejects `HitTestResult` in synthetic eval scopes even
+  // though the type is re-exported via package:flutter/widgets.dart. Same root
+  // cause as the attach probe (fixed separately). We replace the full hit-test
+  // with a widget-tree ancestor walk: nearest AbsorbPointer / IgnorePointer.
+  // Trade-off: overlay-based coverings (e.g. opaque GestureDetector in a modal)
+  // are not detected, but the common cases are covered and no type is named.
+  static const _hittable =
+      '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
+      '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
 
   static String build() {
     final body = [
@@ -200,10 +204,10 @@ class _GeometryExpr {
       "',\"vis\":'",
       '$_ancVisible.toString()',
       "',\"hit\":'",
-      '$_hitTest.toString()',
+      '$_hittable.toString()',
       "'}'",
     ].join(' + ');
-    return '((Offset c, HitTestResult r) => $body)'
-        '($_ro.localToGlobal($_ro.paintBounds.center), HitTestResult())';
+    // HitTestResult r dropped — lambda only needs Offset c now.
+    return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
   }
 }
