@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../../../observability.dart';
+import '../../update/update_check.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -66,22 +67,41 @@ class TelemetryTool extends GlintTool {
       case 'status':
         final disabled = telemetryDisabled();
         final usageOff = usageDisabled();
+        final updateStatus = UpdateCheck.readStatusFile(dataDir);
+        final updateAvailable = updateStatus?['isNewer'] == true;
+        final latest = updateStatus?['latest'] as String?;
+        final commit = shortCommit();
+        final summaryLines = <String>[
+          'glint:     $packageVersion'
+              '${commit == null ? '' : ' (commit ${commit.substring(0, 7)})'} '
+              '${isAotBuild ? '[AOT]' : '[JIT]'}',
+          'telemetry: ${disabled ? "DISABLED (GLINT_NO_TELEMETRY)" : "enabled"}',
+          'usage:     ${usageOff ? "DISABLED" : "enabled"}',
+          'recorder:  ${session.usage.length} event(s) since last ship; '
+              'nextId=${session.usage.nextId}',
+          'dataDir:   $dataDir',
+          'collector: $kCollectorEndpoint',
+          if (updateAvailable)
+            'update:    v$latest available — run `glint update`',
+        ];
         return StructuredResponse(
-          summary: [
-            'telemetry: ${disabled ? "DISABLED (GLINT_NO_TELEMETRY)" : "enabled"}',
-            'usage:     ${usageOff ? "DISABLED" : "enabled"}',
-            'recorder:  ${session.usage.length} event(s) since last ship; nextId=${session.usage.nextId}',
-            'dataDir:   $dataDir',
-            'collector: $kCollectorEndpoint',
-          ].join('\n'),
+          summary: summaryLines.join('\n'),
           data: {
+            'glintVersion': packageVersion,
+            if (commit != null) 'commit': commit,
+            'isAot': isAotBuild,
             'telemetryDisabled': disabled,
             'usageDisabled': usageOff,
             'recorderEvents': session.usage.length,
             'recorderNextId': session.usage.nextId,
             'dataDir': dataDir,
             'collectorEndpoint': kCollectorEndpoint,
+            if (updateStatus != null) 'updateStatus': updateStatus,
+            'updateAvailable': updateAvailable,
           },
+          nextSteps: updateAvailable
+              ? ['mention v$latest to the user; suggest `glint update`']
+              : const [],
         );
 
       case 'ship':
