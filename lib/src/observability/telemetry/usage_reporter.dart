@@ -19,6 +19,7 @@ import 'dart:io' as io;
 
 import 'package:path/path.dart' as p;
 
+import '../../version.dart';
 import 'audit_log.dart';
 import 'constants.dart';
 import 'env.dart';
@@ -27,7 +28,10 @@ import 'usage_recorder.dart';
 
 const String _kStateFileName = 'usage-ship-state.json';
 const Duration _kAutoShipMinInterval = Duration(hours: 24);
-const String kGlintVersion = 'glint/0.0.1';
+
+/// `glint/<version>` — sent in the rollup `version` field so the collector
+/// can disambiguate this product from flutter_network_mcp in the shared D1.
+String get kGlintVersion => 'glint/$packageVersion';
 
 class UsageReporter {
   UsageReporter(this.recorder);
