@@ -19,3 +19,6 @@ fixtures/**/.dart_tool/
 fixtures/**/ios/Pods/
 fixtures/**/ios/.symlinks/
 fixtures/**/android/.gradle/
+
+# Dead-end standalone telemetry worker (replaced by FNM collector)
+cloudflare/telemetry-worker/
