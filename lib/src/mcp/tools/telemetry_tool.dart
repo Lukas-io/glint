@@ -10,28 +10,46 @@ import '../tool.dart';
 ///   status — current opt-out + recorder + watermark state
 ///   ship   — build + send a rollup now (also writes audit log)
 ///   dryRun — like ship but doesn't post or advance the watermark
+///   token_usage  — estimated agent-side token cost per tool
 ///   audit_show   — pretty-print recent audit entries
 ///   audit_verify — walk the hash chain
+///
+/// Telemetry is ON by default. Set GLINT_NO_TELEMETRY=true to disable.
 class TelemetryTool extends GlintTool {
   const TelemetryTool();
+
+  /// Rough chars-per-token used to estimate agent token spend from
+  /// the bytes we already record. ~4 is the standard heuristic for
+  /// JSON-ish English text (real model tokenization varies).
+  static const double _charsPerToken = 4.0;
+
+  static int _tokensFromBytes(int bytes) =>
+      bytes <= 0 ? 0 : (bytes / _charsPerToken).round();
 
   @override
   Tool get definition => Tool(
         name: 'telemetry',
         description:
             'Glint telemetry control + transparency. ops: status (default), '
-            'ship, dryRun, audit_show, audit_verify. Opt out via env: '
-            'GLINT_NO_TELEMETRY=true (everything) or GLINT_NO_USAGE=true '
-            '(usage only).',
+            'ship, dryRun, token_usage, audit_show, audit_verify. Telemetry '
+            'is ON by default; opt out via env: GLINT_NO_TELEMETRY=true '
+            '(everything) or GLINT_NO_USAGE=true (usage only).',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
               description:
-                  'status (default) | ship | dryRun | audit_show | audit_verify',
+                  'status (default) | ship | dryRun | token_usage | '
+                  'audit_show | audit_verify',
             ),
             'limit': Schema.int(
               description:
-                  'For audit_show: max entries to print (default 20).',
+                  'For audit_show / token_usage: max entries to return '
+                  '(default 20 / 10).',
+            ),
+            'sinceId': Schema.int(
+              description:
+                  'For token_usage: only count events with id > sinceId '
+                  '(default 0 = whole recorder window).',
             ),
           },
         ),
@@ -92,6 +110,85 @@ class TelemetryTool extends GlintTool {
           },
         );
 
+      case 'token_usage':
+        final sinceId = (args['sinceId'] as int?) ?? 0;
+        final topN = (args['limit'] as int?) ?? 10;
+        final rows = session.usage.eventsAfterId(sinceId);
+        if (rows.isEmpty) {
+          return StructuredResponse(
+            summary: session.usage.length == 0
+                ? 'no tool calls recorded yet'
+                : 'no events newer than id=$sinceId '
+                    '(recorder holds ${session.usage.length})',
+            data: {
+              'totalEvents': 0,
+              'totalEstimatedTokens': 0,
+              'sinceId': sinceId,
+              'charsPerToken': _charsPerToken,
+              'recorderEvents': session.usage.length,
+              'recorderNextId': session.usage.nextId,
+            },
+          );
+        }
+
+        final perTool = <String, _TokenAgg>{};
+        var totalTokens = 0;
+        final largest = <Map<String, Object?>>[];
+        for (final r in rows) {
+          final tool = (r['tool'] as String?) ?? '?';
+          final bytes = (r['result_bytes'] as int?) ?? 0;
+          final tokens = _tokensFromBytes(bytes);
+          totalTokens += tokens;
+          perTool
+              .putIfAbsent(tool, () => _TokenAgg(tool))
+              .add(tokens: tokens, bytes: bytes);
+          largest.add({
+            'id': r['id'],
+            'tool': tool,
+            'durationMs': r['duration_ms'],
+            'tokens': tokens,
+            'bytes': bytes,
+          });
+        }
+        largest.sort(
+          (a, b) => (b['tokens'] as int).compareTo(a['tokens'] as int),
+        );
+        final topList = largest.take(topN).toList();
+
+        final perToolList = perTool.values.map((a) => a.toJson()).toList()
+          ..sort(
+            (a, b) =>
+                (b['totalTokens'] as int).compareTo(a['totalTokens'] as int),
+          );
+
+        final topToolLines = perToolList.take(5).map((t) =>
+            '  ${(t['tool'] as String).padRight(18)} '
+            '${(t['count'] as int).toString().padLeft(4)}x  '
+            '${(t['totalTokens'] as int).toString().padLeft(7)} tok  '
+            '(avg ${t['avgTokens']}, max ${t['maxTokens']})');
+
+        return StructuredResponse(
+          summary: [
+            '~$totalTokens tokens across ${rows.length} call(s) '
+                '(est. resultBytes/${_charsPerToken.toInt()})',
+            'top tools:',
+            ...topToolLines,
+          ].join('\n'),
+          data: {
+            'totalEvents': rows.length,
+            'totalEstimatedTokens': totalTokens,
+            'sinceId': sinceId,
+            'charsPerToken': _charsPerToken,
+            'estimationNote':
+                'tokens estimated as resultBytes / $_charsPerToken; '
+                    'real model tokenization will differ.',
+            'perTool': perToolList,
+            'topResponses': topList,
+            'recorderEvents': session.usage.length,
+            'recorderNextId': session.usage.nextId,
+          },
+        );
+
       case 'audit_show':
         final limit = (args['limit'] as int?) ?? 20;
         final entries = AuditLog.readAll(dataDir).whereType<AuditEntry>().toList();
@@ -143,8 +240,36 @@ class TelemetryTool extends GlintTool {
         return StructuredResponse.error(
           summary: 'unknown op: $op',
           errorKind: GlintErrorKind.invalidArgument,
-          nextSteps: const ['use one of: status, ship, dryRun, audit_show, audit_verify'],
+          nextSteps: const [
+            'use one of: status, ship, dryRun, token_usage, audit_show, audit_verify'
+          ],
         );
     }
   }
+}
+
+class _TokenAgg {
+  _TokenAgg(this.tool);
+
+  final String tool;
+  int count = 0;
+  int totalTokens = 0;
+  int totalBytes = 0;
+  int maxTokens = 0;
+
+  void add({required int tokens, required int bytes}) {
+    count++;
+    totalTokens += tokens;
+    totalBytes += bytes;
+    if (tokens > maxTokens) maxTokens = tokens;
+  }
+
+  Map<String, Object?> toJson() => {
+        'tool': tool,
+        'count': count,
+        'totalTokens': totalTokens,
+        'avgTokens': count == 0 ? 0 : (totalTokens / count).round(),
+        'maxTokens': maxTokens,
+        'totalBytes': totalBytes,
+      };
 }
