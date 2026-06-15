@@ -105,6 +105,43 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
+  /// Returns viewport dimensions without performing a hit-test.
+  ///
+  /// Safe on Dart 3.12 / iOS 26 where [HitTestResult] is not accessible in
+  /// the CFE eval scope. Use this from [AttachTool] instead of [resolve].
+  Future<({double dpr, double w, double h})> resolveViewport(
+      Scene scene, String glintId) async {
+    final node = scene.findByGlintId(glintId);
+    if (node == null) {
+      throw GeometryResolveError('unknown glintId: $glintId');
+    }
+    try {
+      await _runtime.setInspectorSelection(
+        inspectorId: node.inspectorId,
+        groupName: scene.groupName,
+      );
+    } on Object catch (e) {
+      throw GeometryResolveError(
+        'setSelectionById(${node.inspectorId}) failed: $e',
+      );
+    }
+    final String? json;
+    try {
+      json = await _runtime.evaluateString(_GeometryExpr.buildViewProbe());
+    } on RuntimeEvalError catch (e) {
+      throw GeometryResolveError('evaluate(viewProbe) failed: ${e.message}');
+    }
+    if (json == null) {
+      throw GeometryResolveError('evaluate(viewProbe) returned non-string');
+    }
+    final decoded = jsonDecode(json) as Map<String, Object?>;
+    return (
+      dpr: (decoded['dpr'] as num).toDouble(),
+      w: (decoded['vw'] as num).toDouble(),
+      h: (decoded['vh'] as num).toDouble(),
+    );
+  }
+
   Future<ResolvedCoord> _resolveNode(Scene scene, SceneNode node) async {
     try {
       await _runtime.setInspectorSelection(
@@ -205,5 +242,24 @@ class _GeometryExpr {
     ].join(' + ');
     return '((Offset c, HitTestResult r) => $body)'
         '($_ro.localToGlobal($_ro.paintBounds.center), HitTestResult())';
+  }
+
+  /// Probe expression that returns only dpr/vw/vh — no [HitTestResult].
+  ///
+  /// On Dart 3.12+ the CFE rejects `HitTestResult` in synthetic eval scopes
+  /// even though the type is exported from `package:flutter/widgets.dart`.
+  /// [_probeIosTarget] only needs viewport dimensions so we skip the hit-test
+  /// half of [build] entirely.
+  static String buildViewProbe() {
+    final body = [
+      "'{\"dpr\":'",
+      '$_view.devicePixelRatio.toString()',
+      "',\"vw\":'",
+      '($_view.physicalSize.width / $_view.devicePixelRatio).toString()',
+      "',\"vh\":'",
+      '($_view.physicalSize.height / $_view.devicePixelRatio).toString()',
+      "'}'",
+    ].join(' + ');
+    return body;
   }
 }
