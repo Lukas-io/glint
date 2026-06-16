@@ -14,8 +14,14 @@ class ScrollTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll',
         description:
-            'Scroll the screen by direction. Anchors on viewport center; the swipe '
-            'covers 60% of the viewport by default. Use `amountFraction` to override.',
+            'Scroll the screen in a direction (up/down/left/right). '
+            'Direction is content-relative: "down" moves content down (finger swipes up). '
+            'Anchors the swipe at viewport center. amountFraction controls how far '
+            '(0.0–1.0, default 0.6 = 60% of viewport per scroll). '
+            'For finding off-screen items, prefer scroll_to_find which loops until '
+            'the target appears. '
+            'Returns ok:true when the swipe gesture completed; check changed to '
+            'know if content actually moved.',
         inputSchema: ObjectSchema(
           properties: {
             'direction': Schema.string(

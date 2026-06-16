@@ -59,6 +59,19 @@ class SceneNode {
   /// [StableIdGenerator.assignIds] runs over the tree.
   String? glintId;
 
+  /// True when this node and its subtree are inside an [Offstage] widget with
+  /// offstage=true — i.e. a non-active IndexedStack child or GoRouter shell
+  /// branch. Offstage nodes have NaN/zero geometry and are excluded from
+  /// addressable ids, scene rendering, and the [hoistPage] page selector.
+  bool isOffstage = false;
+
+  /// Screen-space bounding box for native (iOS AX) nodes.
+  /// Null for Flutter widget-tree nodes (those use VM geometry eval instead).
+  ({double x, double y, double w, double h})? axFrame;
+
+  /// Whether the native element is enabled/interactive (from AX `enabled`).
+  bool? isNativeEnabled;
+
   List<SceneNode> children;
 
   /// Best single-word label: widgetRuntimeType when present, else description.

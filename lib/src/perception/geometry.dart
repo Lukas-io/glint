@@ -105,6 +105,36 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
+  /// Lightweight probe that reads only DPR and logical viewport dimensions.
+  /// Used by the iOS attach probe — does NOT evaluate `localToGlobal`, so it
+  /// works on any addressable node including offscreen PageView children.
+  Future<({double dpr, double logicalW, double logicalH})> resolveViewport(
+    Scene scene,
+    String glintId,
+  ) async {
+    final node = scene.findByGlintId(glintId);
+    if (node == null) {
+      throw GeometryResolveError('unknown glintId: $glintId');
+    }
+    try {
+      await _runtime.setInspectorSelection(
+        inspectorId: node.inspectorId,
+        groupName: scene.groupName,
+      );
+    } on Object catch (e) {
+      throw GeometryResolveError('setSelectionById(${node.inspectorId}) failed: $e');
+    }
+    final raw = await _runtime.evaluateString(GeometryExpr.buildViewProbe());
+    if (raw == null) throw GeometryResolveError('viewport probe returned null');
+    final parts = raw.split('|');
+    if (parts.length < 3) throw GeometryResolveError('viewport probe malformed: $raw');
+    return (
+      dpr: double.parse(parts[0]),
+      logicalW: double.parse(parts[1]),
+      logicalH: double.parse(parts[2]),
+    );
+  }
+
   Future<ResolvedCoord> _resolveNode(Scene scene, SceneNode node) async {
     try {
       await _runtime.setInspectorSelection(
@@ -178,6 +208,14 @@ class GeometryExpr {
   static const _hittable =
       '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
+
+  /// Minimal eval returning `"dpr|logicalW|logicalH"`. Does NOT call
+  /// `localToGlobal`, so it works on any element including offscreen
+  /// PageView children and IndexedStack non-active pages.
+  static String buildViewProbe() =>
+      '$_view.devicePixelRatio.toString() + "|"'
+      ' + ($_view.physicalSize.width / $_view.devicePixelRatio).toString() + "|"'
+      ' + ($_view.physicalSize.height / $_view.devicePixelRatio).toString()';
 
   static String build() {
     final body = [

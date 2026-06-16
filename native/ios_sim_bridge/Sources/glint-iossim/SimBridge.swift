@@ -286,10 +286,10 @@ struct SimDeviceProxy {
     func tap(x: Double, y: Double, deviceLogicalSize: CGSize) throws {
         let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
         let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: .down)
+        try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
         // ~50ms dwell so the OS recognises a tap (idb's value).
         Thread.sleep(forTimeInterval: 0.05)
-        try sendTouch(client: client, ratio: ratio, direction: .up)
+        try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
     }
 
     func longPress(
@@ -300,9 +300,9 @@ struct SimDeviceProxy {
     ) throws {
         let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
         let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: .down)
+        try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
         Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
-        try sendTouch(client: client, ratio: ratio, direction: .up)
+        try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
     }
 
     func swipe(

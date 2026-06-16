@@ -20,6 +20,22 @@ class PlainTextSceneRenderer extends SceneRenderer {
   @override
   String render(SemanticScene scene) {
     final buf = StringBuffer();
+
+    // Overlay layers render FIRST — topmost = most interactive.
+    if (scene.overlayLayers.isNotEmpty) {
+      for (final layer in scene.overlayLayers) {
+        buf.writeln('--- ${layer.kind} ---');
+        for (final node in layer.nodes) {
+          _write(buf, node, depth: 0);
+        }
+      }
+      // Annotate base screen.
+      final blocked = scene.overlayLayers.any((l) => l.isBarriered);
+      buf.writeln(blocked
+          ? '--- screen (blocked by modal — not interactive) ---'
+          : '--- screen ---');
+    }
+
     _write(buf, scene.root, depth: 0);
     if (scene.routeStack.isNotEmpty) {
       buf.writeln('route stack:');
@@ -30,8 +46,15 @@ class PlainTextSceneRenderer extends SceneRenderer {
     return buf.toString();
   }
 
+  // Maximum nesting depth before content is suppressed (keeps scenes compact).
+  static const _maxDepth = 8;
+
   void _write(StringBuffer buf, SemanticNode node, {required int depth}) {
+    if (depth > _maxDepth) return;
     _writeNodeLine(buf, node, depth: depth);
+    // Nested pages (e.g. PageView tabs, shell route branches) are summarised
+    // rather than expanded — the agent can get_scene after navigating to them.
+    if (node is SemanticPage && depth > 0) return;
     _writeChildren(buf, node.children, depth: depth + 1);
   }
 
@@ -53,6 +76,9 @@ class PlainTextSceneRenderer extends SceneRenderer {
     }
   }
 
+  // Labels longer than this are truncated to keep scene text compact.
+  static const _maxLabelChars = 40;
+
   void _writeNodeLine(StringBuffer buf, SemanticNode node,
       {required int depth}) {
     buf
@@ -60,21 +86,24 @@ class PlainTextSceneRenderer extends SceneRenderer {
       ..write(_affordanceMarker(node.affordances))
       ..write(' ')
       ..write(node.role.name);
-    // Skip the glintId when it duplicates the role name (e.g. an only-Icon
-    // that stable_id named bare "icon" — renders cleaner as `- icon add`).
-    if (node.glintId != null && node.glintId != node.role.name) {
+    // Show glintId only when it adds information beyond the role name.
+    final id = node.glintId;
+    if (id != null && id != node.role.name) {
       buf
         ..write(' ')
-        ..write(node.glintId);
+        ..write(id);
     }
     final label = node.displayLabel;
     if (label.isNotEmpty && label != node.role.name) {
       buf
         ..write(' ')
-        ..write(label);
+        ..write(_truncate(label));
     }
     buf.writeln();
   }
+
+  static String _truncate(String s) =>
+      s.length <= _maxLabelChars ? s : '${s.substring(0, _maxLabelChars - 1)}…';
 
   void _writeRun(StringBuffer buf, List<SemanticNode> all, int start,
       _SiblingRun run,

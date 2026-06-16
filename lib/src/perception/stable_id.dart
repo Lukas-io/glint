@@ -14,7 +14,9 @@ class StableIdGenerator {
 
 class _IdPass {
   _IdPass(this.root) {
-    nodes = root.walk().toList();
+    // Skip offstage nodes entirely — they have NaN/zero geometry and must not
+    // be addressable by the agent.
+    nodes = root.walk().where((n) => !n.isOffstage).toList();
     _linkParents(root);
   }
 
