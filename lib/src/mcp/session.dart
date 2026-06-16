@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
+import '../perception/native_scene_reader.dart';
 import '../../semantic.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
@@ -9,6 +12,9 @@ import '../runtime/vm_service_runtime.dart';
 /// access these via the typed getters; accessing before [attach] throws
 /// [SessionNotAttachedError]. [actionLog] is always available — survives
 /// detach so cross-attach history stays queryable.
+/// Whether the session is reading the Flutter VM tree or the OS AX tree.
+enum SceneMode { flutter, native }
+
 class GlintSession {
   GlintSession({
     GlintConfig? config,
@@ -31,6 +37,17 @@ class GlintSession {
   late final UsageReporter usageReporter;
   final FlutterRuntime Function() _runtimeFactory;
 
+  // ── reconnect state ───────────────────────────────────────────────────────
+  Uri? _lastVmUri;
+  DeviceTarget? _lastDevice;
+  int reconnectCount = 0;
+  StreamSubscription<void>? _disconnectSub;
+
+  // ── scene mode (Flutter vs native) ───────────────────────────────────────
+  /// Current scene source. flutter = Flutter VM tree; native = OS AX tree.
+  SceneMode sceneMode = SceneMode.flutter;
+  Timer? _lifecyclePollTimer;
+
   FlutterRuntime? _runtime;
   DeviceTarget? _device;
   InteractionBackend? _backend;
@@ -39,11 +56,13 @@ class GlintSession {
   CoordinateResolver? _resolver;
   Interactor? _interactor;
   Semanticizer? _semanticizer;
+  OverlayEnricher? _overlayEnricher;
   InputEnricher? _inputEnricher;
   IconEnricher? _iconEnricher;
   NavigationEnricher? _navEnricher;
   ReadinessGate? _readinessGate;
   SettleDetector? _settleDetector;
+  NativeSceneReader? _nativeReader;
 
   bool get isAttached => _runtime != null;
 
@@ -55,6 +74,8 @@ class GlintSession {
   CoordinateResolver get resolver => _requireAttached(_resolver, 'resolver');
   Interactor get interactor => _requireAttached(_interactor, 'interactor');
   Semanticizer get semanticizer => _requireAttached(_semanticizer, 'semanticizer');
+  OverlayEnricher get overlayEnricher =>
+      _requireAttached(_overlayEnricher, 'overlay enricher');
   InputEnricher get inputEnricher =>
       _requireAttached(_inputEnricher, 'input enricher');
   IconEnricher get iconEnricher =>
@@ -65,6 +86,8 @@ class GlintSession {
       _requireAttached(_readinessGate, 'readiness gate');
   SettleDetector get settleDetector =>
       _requireAttached(_settleDetector, 'settle detector');
+  /// May be null when the device is not iOS simulator.
+  NativeSceneReader? get nativeReader => _nativeReader;
 
   /// Idempotent — re-attach replaces the previous connection.
   Future<void> attach({
@@ -77,11 +100,12 @@ class GlintSession {
     await runtime.attach(vmUri);
 
     final inspector = InspectorClient(runtime);
-    final reader = SceneReader(inspector);
+    final reader = SceneReader(inspector, runtime);
     final resolver = CoordinateResolver(runtime);
     final backend = device.createBackend();
     final interactor = Interactor(backend: backend, resolver: resolver);
     final semanticizer = Semanticizer();
+    final overlayEnricher = OverlayEnricher(semanticizer: semanticizer);
     final inputEnricher = InputEnricher(runtime: runtime, inspector: inspector);
     final iconEnricher = IconEnricher(runtime: runtime);
     final navEnricher = NavigationEnricher(runtime: runtime);
@@ -96,17 +120,67 @@ class GlintSession {
     _resolver = resolver;
     _interactor = interactor;
     _semanticizer = semanticizer;
+    _overlayEnricher = overlayEnricher;
     _inputEnricher = inputEnricher;
     _iconEnricher = iconEnricher;
     _navEnricher = navEnricher;
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
+
+    // N3: wire native scene reader (iOS simulator only).
+    if (device is IosSimulator) {
+      _nativeReader = NativeSceneReader(
+        udid: device.udid,
+        bridgePath: device.bridgePath,
+      );
+    } else {
+      _nativeReader = null;
+    }
+
+    // Store connection parameters for auto-reconnect (R1).
+    _lastVmUri = vmUri;
+    _lastDevice = device;
+
     // Hook app log buffer onto the new runtime's streams.
     try {
       await appLogs.subscribe(runtime);
     } on Object {
       // app logs stay empty; everything else works
     }
+
+    // Watch for WebSocket disconnect and auto-reconnect (R2 + R3).
+    _disconnectSub?.cancel();
+    _disconnectSub = runtime.onDisconnect.listen((_) => _handleDisconnect());
+
+    // N1: Start lifecycle poller (500ms) to detect native surfaces.
+    _lifecyclePollTimer?.cancel();
+    _lifecyclePollTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _pollLifecycle(),
+    );
+  }
+
+  /// Fires when the VM service WebSocket closes (hot restart, app kill, etc.).
+  /// Attempts up to 3 re-attaches with 1s gaps; succeeds silently or gives up.
+  void _handleDisconnect() {
+    final uri = _lastVmUri;
+    final dev = _lastDevice;
+    if (uri == null || dev == null) return;
+    _reconnectAsync(uri, dev);
+  }
+
+  Future<void> _reconnectAsync(Uri uri, DeviceTarget dev) async {
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        await attach(vmUri: uri, device: dev);
+        reconnectCount++;
+        return;
+      } on Object {
+        // keep retrying until exhausted
+      }
+    }
+    // All retries failed — next tool call will surface connectionLost.
   }
 
   /// Focused widget runtime type + keyboard inset + orientation +
@@ -188,7 +262,25 @@ class GlintSession {
     }
   }
 
+  Future<void> _pollLifecycle() async {
+    final rt = _runtime;
+    if (rt == null) return;
+    try {
+      final state = await rt.evaluateString(
+        'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
+      );
+      sceneMode = (state == 'resumed' || state == null)
+          ? SceneMode.flutter
+          : SceneMode.native;
+    } on Object {
+      // eval failure (isolate paused) → native surface active
+      sceneMode = SceneMode.native;
+    }
+  }
+
   Future<void> detach() async {
+    _lifecyclePollTimer?.cancel();
+    _lifecyclePollTimer = null;
     await appLogs.unsubscribe();
     final runtime = _runtime;
     _runtime = null;
@@ -202,6 +294,7 @@ class GlintSession {
     _inputEnricher = null;
     _iconEnricher = null;
     _navEnricher = null;
+    _overlayEnricher = null;
     _readinessGate = null;
     _settleDetector = null;
     if (runtime != null) await runtime.disconnect();

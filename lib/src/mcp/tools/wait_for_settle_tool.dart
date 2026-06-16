@@ -13,8 +13,16 @@ class WaitForSettleTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'wait_for_settle',
-        description: 'Block until the screen settles (no scheduled frames, '
-            'no loading affordances) or `ceilingMs` is reached.',
+        description:
+            'Block until the screen is visually stable: no scheduled frames '
+            'AND no loading spinners (CircularProgressIndicator, '
+            'LinearProgressIndicator, RefreshIndicator). '
+            'Use after an action that triggers async work (network call, '
+            'animation, route transition) before reading the scene again. '
+            'ceilingMs: hard timeout (default 5000). '
+            'Returns settled: true when stable, settled: false when ceiling hit '
+            '(the screen was still loading — check what is loading and wait more '
+            'or raise ceilingMs).',
         inputSchema: ObjectSchema(
           properties: {
             'ceilingMs': Schema.int(

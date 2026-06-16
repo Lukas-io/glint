@@ -15,8 +15,13 @@ class ResolveTool extends GlintTool {
   Tool get definition => Tool(
         name: 'resolve',
         description:
-            'Read-only geometry for a glintId. Returns physicalCenter, bounds, '
-            'painted, hittable, dpr. Use when you need a position without acting.',
+            'Drill-down geometry for a glintId. Returns: physicalCenter (px), '
+            'logicalBounds (logical px), logicalViewSize, devicePixelRatio, '
+            'painted (visible to human), hittable (would receive a tap), '
+            'and warnings (e.g. "target is not painted", "target is not hittable"). '
+            'Use this when an action fails or behaves unexpectedly — resolve the '
+            'target to understand its true position and hit-test state before retrying. '
+            'No side effects. Works on both base-screen and overlay glintIds.',
         inputSchema: ObjectSchema(
           properties: {
             'glintId': Schema.string(

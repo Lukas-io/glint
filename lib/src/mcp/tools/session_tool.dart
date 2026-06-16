@@ -93,6 +93,8 @@ class SessionTool extends GlintTool {
             'count': all.length,
             'active': mgr.active?.id,
             'sessions': all.map((s) => s.toJson()).toList(),
+            if (session.reconnectCount > 0)
+              'reconnectCount': session.reconnectCount,
           },
         );
 

@@ -38,7 +38,7 @@ Future<void> main(List<String> argv) async {
 
   final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
-  final reader = SceneReader(InspectorClient(vm));
+  final reader = SceneReader(InspectorClient(vm), vm);
   final resolver = CoordinateResolver(vm);
 
   // Probe the device's logical viewport once for the iOS backend.

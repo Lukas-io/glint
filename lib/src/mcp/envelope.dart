@@ -31,15 +31,28 @@ class StructuredResponse {
     );
   }
 
-  factory StructuredResponse.fromActionResult(ActionResult r) {
+  /// Builds a response from an [ActionResult]. When [detail] is false
+  /// (the default), verbose geometry fields (painted, hittable, physicalCenter)
+  /// are omitted — the agent only needs `ok` to continue. Use `detail:true`
+  /// on the tool call to get the full geometry.
+  factory StructuredResponse.fromActionResult(
+    ActionResult r, {
+    bool detail = false,
+  }) {
+    final json = r.toJson();
+    final data = detail
+        ? json
+        : {
+            for (final entry in json.entries)
+              if (!const {'painted', 'hittable', 'physicalCenter'}.contains(entry.key))
+                entry.key: entry.value,
+          };
     return StructuredResponse(
       summary: r.summary,
       warnings: r.warnings,
       nextSteps: r.nextSteps,
       isError: !r.ok,
-      data: {
-        ...r.toJson(),
-      },
+      data: data,
     );
   }
 

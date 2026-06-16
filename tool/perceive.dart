@@ -39,7 +39,7 @@ Future<void> main(List<String> args) async {
   stderr.writeln('attached to ${vm.attachedUri}');
   stderr.writeln('flutter isolate id: ${vm.flutterIsolateId}');
 
-  final reader = SceneReader(InspectorClient(vm));
+  final reader = SceneReader(InspectorClient(vm), vm);
   final scene = (opts['depth'] as String) == 'full'
       ? await reader.readFull()
       : await reader.readSummary();
