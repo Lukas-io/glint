@@ -37,8 +37,8 @@ class TypeTool extends GlintTool {
             'readyTimeoutMs': Schema.int(),
             'returnScene': Schema.bool(
               description:
-                  'When true: after typing, settle and return the new scene '
-                  'plus changed (bool) and changeCategory. Default false.',
+                  'After typing, settle and return the new scene plus changed '
+                  '(bool) and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
               description:
@@ -59,7 +59,7 @@ class TypeTool extends GlintTool {
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
     final detail = (args['detail'] as bool?) ?? false;
-    final returnScene = (args['returnScene'] as bool?) ?? false;
+    final returnScene = (args['returnScene'] as bool?) ?? true;
 
     final pre = returnScene ? await snapshotPreAction(session) : null;
 

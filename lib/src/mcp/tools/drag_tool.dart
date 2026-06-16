@@ -3,6 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../armed.dart';
 import '../envelope.dart';
+import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
 
@@ -15,15 +16,35 @@ class DragTool extends GlintTool {
   Tool get definition => Tool(
         name: 'drag',
         description:
-            'Drag from one glintId to another. `awaitReady` gates on the '
-            '`from` endpoint.',
+            'Drag from one glintId to another — same as swipe but with a '
+            'longer hold (800ms default) so the framework recognises it as '
+            'a drag gesture rather than a fling. '
+            '`awaitReady` gates on the `from` endpoint. '
+            'With returnScene: true (default), settles and returns the new scene '
+            'plus changed + changeCategory.',
         inputSchema: ObjectSchema(
           properties: {
-            'fromGlintId': Schema.string(),
-            'toGlintId': Schema.string(),
-            'durationMs': Schema.int(description: 'Hold time. Default 800.'),
-            'awaitReady': Schema.bool(),
-            'readyTimeoutMs': Schema.int(),
+            'fromGlintId': Schema.string(
+              description: 'Start point — stable id from get_scene.',
+            ),
+            'toGlintId': Schema.string(
+              description: 'End point — stable id from get_scene.',
+            ),
+            'durationMs': Schema.int(
+              description: 'Hold time in ms. Default 800.',
+            ),
+            'awaitReady': Schema.bool(
+              description:
+                  'Block until fromGlintId is in the scene and hittable, then fire.',
+            ),
+            'readyTimeoutMs': Schema.int(
+              description: 'Ceiling for awaitReady. Default 5000.',
+            ),
+            'returnScene': Schema.bool(
+              description:
+                  'After the drag, settle and return the new scene plus '
+                  'changed (bool) and changeCategory. Default true.',
+            ),
           },
           required: ['fromGlintId', 'toGlintId'],
         ),
@@ -39,6 +60,9 @@ class DragTool extends GlintTool {
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
+    final returnScene = (args['returnScene'] as bool?) ?? true;
+
+    final pre = returnScene ? await snapshotPreAction(session) : null;
 
     final arming = await maybeAwaitReady(
       session: session,
@@ -56,10 +80,21 @@ class DragTool extends GlintTool {
         Swipe(SymbolicTarget(from), SymbolicTarget(to),
             durationMs: durationMs),
       );
-      final response = StructuredResponse.fromActionResult(result);
-      return arming is ArmingReady
-          ? withArmedMetadata(response, arming)
-          : response;
+      var response = StructuredResponse.fromActionResult(result);
+      if (arming is ArmingReady) response = withArmedMetadata(response, arming);
+      if (returnScene && !response.isError) {
+        final post = await readPostActionState(session, pre);
+        if (post != null) {
+          response = StructuredResponse(
+            summary: response.summary,
+            warnings: response.warnings,
+            nextSteps: response.nextSteps,
+            isError: response.isError,
+            data: {...?response.data, ...post.toData()},
+          );
+        }
+      }
+      return response;
     } finally {
       await scene.dispose();
     }

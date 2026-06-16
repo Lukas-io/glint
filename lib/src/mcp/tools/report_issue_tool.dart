@@ -168,19 +168,6 @@ class ReportIssueTool extends GlintTool {
         ..writeln('```');
     }
 
-    final errors = session.appLogs.query(errorsOnly: true, limit: 10).toList();
-    if (errors.isNotEmpty) {
-      buf
-        ..writeln()
-        ..writeln('### Recent app errors')
-        ..writeln()
-        ..writeln('```');
-      for (final e in errors) {
-        buf.writeln('[${e.stream.name}] ${e.content}');
-      }
-      buf.writeln('```');
-    }
-
     return buf.toString();
   }
 

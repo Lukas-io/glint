@@ -43,10 +43,9 @@ class TapTool extends GlintTool {
             ),
             'returnScene': Schema.bool(
               description:
-                  'When true: after the tap, settle and return the new scene '
-                  'plus changed (bool) and changeCategory in structuredContent. '
-                  'Collapses the tap → wait_for_settle → get_scene dance into '
-                  'one call. Default false.',
+                  'After the tap, settle and return the new scene plus changed '
+                  '(bool) and changeCategory. Collapses tap → wait_for_settle '
+                  '→ get_scene into one call. Default true.',
             ),
             'detail': Schema.bool(
               description:
@@ -67,7 +66,7 @@ class TapTool extends GlintTool {
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? false;
+    final returnScene = (args['returnScene'] as bool?) ?? true;
     final detail = (args['detail'] as bool?) ?? false;
 
     // Pre-action snapshot (cheap) — only needed when returnScene is requested.
