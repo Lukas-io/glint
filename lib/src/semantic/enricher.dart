@@ -40,6 +40,10 @@ class OverlayEnricher implements SemanticEnricher {
       final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty)
           ? semantic.children
           : [semantic];
+      // Skip layers that are entirely unknown (e.g. MouseRegion / Focus
+      // plumbing overlays present in Flutter debug mode). These have no
+      // interactive or readable content and appear as `--- dialog ---` noise.
+      if (!_hasContent(nodes)) continue;
       layers.add(SemanticOverlayLayer(
         nodes: nodes,
         isBarriered: scene.sourceScene.hasBarrierOverlay,
@@ -47,6 +51,14 @@ class OverlayEnricher implements SemanticEnricher {
       ));
     }
     scene.overlayLayers = layers;
+  }
+
+  static bool _hasContent(List<SemanticNode> nodes) {
+    for (final n in nodes) {
+      if (n is! SemanticUnknown) return true;
+      if (_hasContent(n.children)) return true;
+    }
+    return false;
   }
 
   static String _inferKind(SceneNode root) {
