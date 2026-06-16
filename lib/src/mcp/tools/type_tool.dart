@@ -3,6 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../armed.dart';
 import '../envelope.dart';
+import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
 
@@ -13,9 +14,15 @@ class TypeTool extends GlintTool {
   Tool get definition => Tool(
         name: 'type',
         description:
-            'Type text into the focused input. Pass `focus: <glintId>` to '
-            'tap the field first; combine with `awaitReady` to wait for it '
-            'to appear before typing.',
+            'Type printable-ASCII text into the focused input field. '
+            'If no field is focused, pass focus: <glintId> (a `>` typeable node '
+            'from get_scene) to tap it first. '
+            'With awaitReady: true on the focus field, blocks until it is hittable '
+            'before tapping — use when the input may not be rendered yet. '
+            'Returns structuredContent with: ok (bool), changed (bool), '
+            'changeCategory. '
+            'errorKind: unresolvedTarget (focus glintId not found), '
+            'targetNeverReady (focus field never became hittable within ceilingMs).',
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(description: 'Printable-ASCII text to type.'),
@@ -28,6 +35,15 @@ class TypeTool extends GlintTool {
                   'Only meaningful with `focus`: block until the focus target is hittable.',
             ),
             'readyTimeoutMs': Schema.int(),
+            'returnScene': Schema.bool(
+              description:
+                  'When true: after typing, settle and return the new scene '
+                  'plus changed (bool) and changeCategory. Default false.',
+            ),
+            'detail': Schema.bool(
+              description:
+                  'When true: include full geometry in structuredContent. Default false.',
+            ),
           },
           required: ['text'],
         ),
@@ -42,6 +58,10 @@ class TypeTool extends GlintTool {
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
+    final detail = (args['detail'] as bool?) ?? false;
+    final returnScene = (args['returnScene'] as bool?) ?? false;
+
+    final pre = returnScene ? await snapshotPreAction(session) : null;
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -80,7 +100,7 @@ class TypeTool extends GlintTool {
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(scene, TypeText(text));
-      var response = StructuredResponse.fromActionResult(result);
+      var response = StructuredResponse.fromActionResult(result, detail: detail);
       if (warnings.isNotEmpty || focusArming != null) {
         response = StructuredResponse(
           summary: response.summary,
@@ -92,6 +112,18 @@ class TypeTool extends GlintTool {
           },
           isError: response.isError,
         );
+      }
+      if (returnScene && !response.isError) {
+        final post = await readPostActionState(session, pre);
+        if (post != null) {
+          response = StructuredResponse(
+            summary: response.summary,
+            warnings: response.warnings,
+            nextSteps: response.nextSteps,
+            isError: response.isError,
+            data: {...?response.data, ...post.toData()},
+          );
+        }
       }
       return response;
     } finally {

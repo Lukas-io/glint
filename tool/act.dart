@@ -52,7 +52,7 @@ Future<void> main(List<String> argv) async {
 
   final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
-  final reader = SceneReader(InspectorClient(vm));
+  final reader = SceneReader(InspectorClient(vm), vm);
   final scene = await reader.readSummary();
   final resolver = CoordinateResolver(vm);
 

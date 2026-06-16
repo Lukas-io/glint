@@ -1,8 +1,10 @@
+
 import '../../perception.dart';
 import '../runtime/flutter_runtime.dart';
 import 'icon_names.dart';
 import 'semantic_node.dart';
 import 'semantic_scene.dart';
+import 'semanticizer.dart';
 
 /// Post-classify pass that fills role-specific properties (hint,
 /// currentValue, icon name, route info, …) by talking to the live
@@ -11,6 +13,50 @@ import 'semantic_scene.dart';
 /// can't surface this data.
 abstract class SemanticEnricher {
   Future<void> enrich(SemanticScene scene);
+}
+
+/// Classifies overlay dialog content from [Scene.overlayRoots] (nodes from
+/// the full tree appended during [SceneReader.readSummary]) and populates
+/// [SemanticScene.overlayLayers].
+///
+/// Must run BEFORE [NavigationEnricher] so route info is available to the
+/// renderer, but the order relative to other enrichers doesn't matter.
+class OverlayEnricher implements SemanticEnricher {
+  OverlayEnricher({required this.semanticizer});
+
+  final Semanticizer semanticizer;
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final roots = scene.sourceScene.overlayRoots;
+    if (roots.isEmpty) return;
+
+    final layers = <SemanticOverlayLayer>[];
+    for (final root in roots) {
+      // Classify without hoistPage — overlay content has no Scaffold.
+      final semantic = semanticizer.classifyNode(root);
+      // Flatten: if the root itself is a noisy pass-through (Unknown with
+      // children), surface the children directly.
+      final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty)
+          ? semantic.children
+          : [semantic];
+      layers.add(SemanticOverlayLayer(
+        nodes: nodes,
+        isBarriered: scene.sourceScene.hasBarrierOverlay,
+        kind: _inferKind(root),
+      ));
+    }
+    scene.overlayLayers = layers;
+  }
+
+  static String _inferKind(SceneNode root) {
+    for (final n in root.walk()) {
+      final l = n.label;
+      if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
+      if (l.contains('Dialog') || l.contains('Alert')) return 'dialog';
+    }
+    return 'dialog';
+  }
 }
 
 /// Topmost ModalRoute's settings.name + whether it's first/dialog.
@@ -23,34 +69,38 @@ class NavigationEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    final probeId = scene.sourceScene.firstAddressableId();
-    if (probeId == null) return;
-    final source = scene.sourceScene.findByGlintId(probeId);
-    if (source == null) return;
+    // Try the first addressable node; if its eval context fails (e.g. a
+    // platform view leaf), fall back to any node with a different inspectorId.
+    final candidates = scene.sourceScene.addressableCandidates();
 
-    try {
-      await runtime.setInspectorSelection(
-        inspectorId: source.inspectorId,
-        groupName: scene.sourceScene.groupName,
-      );
-      final result = await runtime.evaluateString(
-        '((ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "")'
-            ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isFirst.toString() ?? "true")'
-            ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.runtimeType.toString() ?? ""))',
-      );
-      if (result == null) return;
-      final parts = result.split('|');
-      if (parts.length < 3) return;
-      final name = parts[0].isEmpty ? '/' : parts[0];
-      final isFirst = parts[1] != 'false';
-      final rtType = parts[2];
-      final isDialog = rtType.contains('Dialog');
+    for (final source in candidates) {
+      try {
+        await runtime.setInspectorSelection(
+          inspectorId: source.inspectorId,
+          groupName: scene.sourceScene.groupName,
+        );
+        final result = await runtime.evaluateString(
+          '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "")'
+              ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isFirst.toString() ?? "true")'
+              ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.runtimeType.toString() ?? "")',
+        );
+        if (result == null) continue;
+        final parts = result.split('|');
+        if (parts.length < 3) continue;
+        // Skip nodes above the navigator (no ModalRoute → empty name).
+        if (parts[0].isEmpty) continue;
+        final name = parts[0];
+        final isFirst = parts[1] != 'false';
+        final rtType = parts[2];
+        final isDialog = rtType.contains('Dialog');
 
-      scene.routeStack = [
-        RouteFrame(name: name, isModal: !isFirst || isDialog),
-      ];
-    } on Object {
-      // best-effort
+        scene.routeStack = [
+          RouteFrame(name: name, isModal: !isFirst || isDialog),
+        ];
+        return;
+      } on Object {
+        continue;
+      }
     }
   }
 }

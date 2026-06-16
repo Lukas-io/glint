@@ -15,9 +15,17 @@ class ScrollToFindTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'scroll_to_find',
-        description: 'Scroll until a target shows up hittable. Match by either '
-            '`targetGlintId` (exact id) or `targetTextContent` '
-            '(text node whose content contains the substring).',
+        description:
+            'Scroll a direction until a target appears and is hittable. '
+            'Match by targetGlintId (exact stable id from get_scene) OR '
+            'targetTextContent (substring match against any text node). '
+            'Returns ok:true and the found glintId when the target is hittable. '
+            'errorKind values: '
+            'targetNotFound — target was never seen during any scroll (not in list at all); '
+            'scrollLimitReached — target appeared in tree but scroll limit hit before it '
+            'became hittable (raise maxScrolls); '
+            'invalidArgument — both or neither of targetGlintId/targetTextContent provided. '
+            'direction default: down. maxScrolls default: 8. amountFraction default: 0.6.',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -80,6 +88,9 @@ class ScrollToFindTool extends GlintTool {
         ? 'glintId=$targetGlintId'
         : 'text~"$targetText"';
 
+    var seenInTree = false;   // target appeared in scene at least once
+    var seenInOverlay = false; // target found in overlay (not in scrollable content)
+
     for (var i = 0; i <= maxScrolls; i++) {
       final scene = await session.reader.readSummary();
       try {
@@ -87,6 +98,11 @@ class ScrollToFindTool extends GlintTool {
             ? scene.findByGlintId(targetGlintId)
             : _findTextNode(scene.root, targetText!);
         if (hit != null && hit.glintId != null) {
+          seenInTree = true;
+          // Check if it's in the overlay layer rather than the scrollable base.
+          if (targetGlintId != null && scene.isInOverlay(targetGlintId)) {
+            seenInOverlay = true;
+          }
           try {
             final coord = await session.resolver.resolve(scene, hit.glintId!);
             if (coord.hittable) {
@@ -121,13 +137,38 @@ class ScrollToFindTool extends GlintTool {
       }
     }
 
+    // Return a diagnostic failure message that distinguishes the root cause.
+    if (seenInOverlay) {
+      return StructuredResponse.error(
+        summary: '$criterion is inside a modal overlay, not in the scrollable '
+            'base screen — scrolling will not reach it',
+        errorKind: GlintErrorKind.unresolvedTarget,
+        nextSteps: const [
+          'the target is visible in the dialog layer — use get_scene to read the '
+              'overlay section and tap/type directly on the dialog element',
+        ],
+      );
+    }
+    if (seenInTree) {
+      return StructuredResponse.error(
+        summary: '$criterion appeared in the tree during scrolling but was never '
+            'hittable within $maxScrolls scroll(s) in $dirName — scroll limit hit',
+        errorKind: GlintErrorKind.unresolvedTarget,
+        nextSteps: [
+          'increase `maxScrolls` (currently $maxScrolls)',
+          'try the opposite direction in case content scrolled past the target',
+          'use `get_scene` to check if a barrier or overlay is covering it',
+        ],
+      );
+    }
     return StructuredResponse.error(
-      summary: '$criterion not found after $maxScrolls scroll(s) in $dirName',
+      summary: '$criterion was not found in any scene during $maxScrolls scroll(s) '
+          'in $dirName — target is not in this list',
       errorKind: GlintErrorKind.unresolvedTarget,
       nextSteps: const [
-        'try a different `direction`',
-        'increase `maxScrolls`',
-        'read the current scene with `get_scene` and pick a different target',
+        'try a different `direction` (the target may be above/beside the viewport)',
+        'use `get_scene` to confirm the correct glintId or text content',
+        'if the target is in a different list, navigate to it first',
       ],
     );
   }

@@ -22,6 +22,11 @@ enum InspectorGroupKind { read, resolve }
 typedef InspectorJson = Map<String, Object?>;
 
 abstract class FlutterRuntime {
+  /// Fires once when the VM service WebSocket closes (hot restart, app kill,
+  /// etc.). Use this to trigger auto-reconnect. Implementors broadcast one
+  /// event then close the stream.
+  Stream<void> get onDisconnect;
+
   /// Currently attached to a VM service.
   bool get isAttached;
 
@@ -114,4 +119,14 @@ class RuntimeEvalError implements Exception {
   final String message;
   @override
   String toString() => 'RuntimeEvalError($expression): $message';
+}
+
+/// Thrown when the VM service WebSocket connection drops — typically because
+/// the app performed a hot restart or was terminated. Tools catch this and
+/// return [GlintErrorKind.connectionLost] so the agent knows to re-attach.
+class RuntimeConnectionLostError implements Exception {
+  RuntimeConnectionLostError(this.cause);
+  final Object cause;
+  @override
+  String toString() => 'RuntimeConnectionLostError: $cause';
 }

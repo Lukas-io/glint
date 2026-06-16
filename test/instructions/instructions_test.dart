@@ -15,10 +15,17 @@ void main() {
 
     test('contains every required section header', () {
       const requiredSections = [
+        // Behavioural layer (B8 — human mindset + feedback + behaviours + anti-patterns)
+        '## Mindset',
+        '## Feedback loop',
+        '## Behaviors',
+        '## Anti-patterns',
+        // Mechanics
         '## Workflow',
         '## Addressing',
         '## Recovery',
         '## Gotchas',
+        '## Tool surface',
         '## Examples',
       ];
       for (final h in requiredSections) {
@@ -49,10 +56,22 @@ void main() {
       }
     });
 
-    test('is short — under 3500 chars (token-efficiency guardrail)', () {
-      // If you genuinely need more room, raise this ceiling AND justify the
-      // bump in the commit message. Every char is a system-prompt token cost.
-      expect(kGlintInstructions.length, lessThan(3500));
+    test('anti-patterns block explicitly forbids the Run-1 escape hatches', () {
+      // These are the specific anti-patterns documented in Finding 8 that
+      // caused the 12-minute thrash in Run 1. Must be present verbatim.
+      const forbidden = ['flutter driver', 'simctl', 'AppleScript'];
+      for (final f in forbidden) {
+        expect(kGlintInstructions, contains(f),
+            reason: '"$f" anti-pattern missing from instructions');
+      }
+    });
+
+    test('is short — under 5500 chars (token-efficiency guardrail)', () {
+      // Ceiling raised from 3500 → 5500 for the B8 behavioural layer.
+      // Finding 8: the instruction layer may move Run 2 results more than
+      // several code fixes combined. The increase is load-bearing.
+      // If you need more room, raise AND justify in the commit message.
+      expect(kGlintInstructions.length, lessThan(5500));
     });
   });
 }

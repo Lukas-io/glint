@@ -31,7 +31,7 @@ Future<void> main(List<String> args) async {
   final vm = VmServiceRuntime();
   await vm.attach(Uri.parse(opts['vm-uri'] as String));
   final inspector = InspectorClient(vm);
-  final reader = SceneReader(inspector);
+  final reader = SceneReader(inspector, vm);
   final resolver = CoordinateResolver(vm);
 
   var failed = 0;

@@ -196,6 +196,19 @@ do {
         try proxy.typeText(args[3])
         print("OK type \(args[2]) \(args[3].count) chars")
 
+    case "ax-snapshot":
+        // Read the iOS Simulator window's accessibility tree via macOS AXUIElement.
+        // Works because the Simulator renders as a standard macOS window whose
+        // AX hierarchy exposes native iOS elements (alerts, sheets, pickers, etc.).
+        // Requires the standard macOS accessibility permission.
+        guard args.count == 3 else { die("usage: glint-iossim ax-snapshot <UDID>") }
+        let targetUdid = args[2].uppercased()
+        guard let snapshot = AxBridge.snapshot(forSimulatorUdid: targetUdid) else {
+            die("ax-snapshot: Simulator window not found for UDID \(targetUdid). "
+                + "Is the device booted and is the Simulator app running?")
+        }
+        print(snapshot)
+
     default:
         die("unknown command: \(command)")
     }
