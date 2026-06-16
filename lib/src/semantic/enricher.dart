@@ -1,3 +1,4 @@
+import 'dart:math' show min;
 
 import '../../perception.dart';
 import '../runtime/flutter_runtime.dart';
@@ -18,9 +19,6 @@ abstract class SemanticEnricher {
 /// Classifies overlay dialog content from [Scene.overlayRoots] (nodes from
 /// the full tree appended during [SceneReader.readSummary]) and populates
 /// [SemanticScene.overlayLayers].
-///
-/// Must run BEFORE [NavigationEnricher] so route info is available to the
-/// renderer, but the order relative to other enrichers doesn't matter.
 class OverlayEnricher implements SemanticEnricher {
   OverlayEnricher({required this.semanticizer});
 
@@ -33,10 +31,8 @@ class OverlayEnricher implements SemanticEnricher {
 
     final layers = <SemanticOverlayLayer>[];
     for (final root in roots) {
-      // Classify without hoistPage — overlay content has no Scaffold.
       final semantic = semanticizer.classifyNode(root);
-      // Flatten: if the root itself is a noisy pass-through (Unknown with
-      // children), surface the children directly.
+      // Flatten pass-through Unknown roots: surface children directly.
       final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty)
           ? semantic.children
           : [semantic];
@@ -59,54 +55,42 @@ class OverlayEnricher implements SemanticEnricher {
   }
 }
 
-/// Topmost ModalRoute's settings.name + whether it's first/dialog.
-/// Full stack walking deferred; this covers "did a dialog or page push
-/// happen" cases.
+/// Reads the topmost ModalRoute's name + isFirst flag. Uses shallow probe
+/// nodes (above ShellRoute inner navigators) to guarantee the outer GoRouter
+/// path is returned rather than a nested route's null name.
 class NavigationEnricher implements SemanticEnricher {
   NavigationEnricher({required this.runtime});
 
   final FlutterRuntime runtime;
 
+  static const _routeExpr =
+      '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "")'
+      ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isFirst.toString() ?? "true")'
+      ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.runtimeType.toString() ?? "")';
+
   @override
   Future<void> enrich(SemanticScene scene) async {
-    // Try the first addressable node; if its eval context fails (e.g. a
-    // platform view leaf), fall back to any node with a different inspectorId.
-    final candidates = scene.sourceScene.addressableCandidates();
-
-    for (final source in candidates) {
-      try {
-        await runtime.setInspectorSelection(
-          inspectorId: source.inspectorId,
-          groupName: scene.sourceScene.groupName,
-        );
-        final result = await runtime.evaluateString(
-          '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "")'
-              ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isFirst.toString() ?? "true")'
-              ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.runtimeType.toString() ?? "")',
-        );
-        if (result == null) continue;
-        final parts = result.split('|');
-        if (parts.length < 3) continue;
-        // Skip nodes above the navigator (no ModalRoute → empty name).
-        if (parts[0].isEmpty) continue;
-        final name = parts[0];
-        final isFirst = parts[1] != 'false';
-        final rtType = parts[2];
-        final isDialog = rtType.contains('Dialog');
-
-        scene.routeStack = [
-          RouteFrame(name: name, isModal: !isFirst || isDialog),
-        ];
-        return;
-      } on Object {
-        continue;
-      }
+    for (final source in scene.sourceScene.addressableCandidates()) {
+      final result = await runtime.evaluateWithSelection(
+        expression: _routeExpr,
+        inspectorId: source.inspectorId,
+        groupName: scene.sourceScene.groupName,
+      );
+      if (result == null) continue;
+      final parts = result.split('|');
+      if (parts.length < 3 || parts[0].isEmpty) continue;
+      final isDialog = parts[2].contains('Dialog');
+      scene.routeStack = [
+        RouteFrame(name: parts[0], isModal: parts[1] == 'false' || isDialog),
+      ];
+      return;
     }
   }
 }
 
-/// IconData codepoint per [SemanticIcon]; populates [SemanticIcon.name]
-/// when the codepoint matches a known Material icon. Capped at [maxIcons].
+/// Reads [IconData.codePoint] for each [SemanticIcon] and resolves the
+/// codepoint to a Material icon name. Capped at [maxIcons] to bound
+/// eval cost.
 class IconEnricher implements SemanticEnricher {
   IconEnricher({required this.runtime, this.maxIcons = 20});
 
@@ -116,15 +100,14 @@ class IconEnricher implements SemanticEnricher {
   @override
   Future<void> enrich(SemanticScene scene) async {
     final icons = scene.root.walk().whereType<SemanticIcon>().toList();
-    final budget = icons.length > maxIcons ? maxIcons : icons.length;
+    final budget = min(icons.length, maxIcons);
     for (var i = 0; i < budget; i++) {
       final node = icons[i];
-      final glintId = node.glintId;
-      if (glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(glintId);
+      if (node.glintId == null) continue;
+      final source = scene.sourceScene.findByGlintId(node.glintId!);
       if (source == null) continue;
       try {
-        await _enrichOne(scene.sourceScene, source, node);
+        await _enrichOne(source, scene.sourceScene.groupName, node);
       } on Object {
         // best-effort
       }
@@ -132,14 +115,12 @@ class IconEnricher implements SemanticEnricher {
   }
 
   Future<void> _enrichOne(
-      Scene scene, SceneNode source, SemanticIcon target) async {
-    await runtime.setInspectorSelection(
+      SceneNode source, String groupName, SemanticIcon target) async {
+    final raw = await runtime.evaluateWithSelection(
+      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
+          ' as Icon).icon?.codePoint ?? -1',
       inspectorId: source.inspectorId,
-      groupName: scene.groupName,
-    );
-    final raw = await runtime.evaluateString(
-      '(WidgetInspectorService.instance.selection.currentElement!.widget '
-          'as Icon).icon?.codePoint ?? -1',
+      groupName: groupName,
     );
     if (raw == null) return;
     final codePoint = int.tryParse(raw);
@@ -149,9 +130,9 @@ class IconEnricher implements SemanticEnricher {
   }
 }
 
-/// `hint` (InputDecoration.labelText) + `currentValue` (live EditableText
-/// controller text) per [SemanticInput]. Bounded — each input costs
-/// ~2 VM evals.
+/// Reads `hint` (InputDecoration.labelText) and `currentValue` (live
+/// EditableText controller text) for each [SemanticInput]. Capped at
+/// [maxInputs] to bound eval cost.
 class InputEnricher implements SemanticEnricher {
   InputEnricher({
     required this.runtime,
@@ -166,65 +147,61 @@ class InputEnricher implements SemanticEnricher {
   @override
   Future<void> enrich(SemanticScene scene) async {
     final inputs = scene.root.walk().whereType<SemanticInput>().toList();
-    final budget = inputs.length > maxInputs ? maxInputs : inputs.length;
+    final budget = min(inputs.length, maxInputs);
     for (var i = 0; i < budget; i++) {
       final node = inputs[i];
-      final glintId = node.glintId;
-      if (glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(glintId);
+      if (node.glintId == null) continue;
+      final source = scene.sourceScene.findByGlintId(node.glintId!);
       if (source == null) continue;
-      await _enrichOne(scene.sourceScene, source, node);
+      await _enrichOne(source, scene.sourceScene, node);
     }
   }
 
   Future<void> _enrichOne(
-      Scene scene, SceneNode source, SemanticInput target) async {
+      SceneNode source, Scene scene, SemanticInput target) async {
     try {
-      target.hint = await _readLabelText(scene, source);
+      target.hint = await _readLabelText(source, scene.groupName);
     } on Object {
-      // best-effort; never bubble
+      // best-effort
     }
     try {
-      target.currentValue = await _readCurrentValue(scene, source);
+      target.currentValue = await _readCurrentValue(source, scene);
     } on Object {
-      // best-effort; never bubble
+      // best-effort
     }
   }
 
-  Future<String?> _readLabelText(Scene scene, SceneNode source) async {
-    await runtime.setInspectorSelection(
+  Future<String?> _readLabelText(SceneNode source, String groupName) async {
+    final v = await runtime.evaluateWithSelection(
+      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
+          ' as TextField).decoration?.labelText ?? ""',
       inspectorId: source.inspectorId,
-      groupName: scene.groupName,
-    );
-    final v = await runtime.evaluateString(
-      '(WidgetInspectorService.instance.selection.currentElement!.widget '
-          'as TextField).decoration?.labelText ?? ""',
+      groupName: groupName,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  Future<String?> _readCurrentValue(Scene scene, SceneNode source) async {
+  Future<String?> _readCurrentValue(SceneNode source, Scene scene) async {
     final subtree = await inspector.getDetailsSubtree(
       inspectorId: source.inspectorId,
       groupName: scene.groupName,
     );
-    final editableId = _findEditableTextValueId(subtree);
+    final editableId = _findEditableTextId(subtree);
     if (editableId == null) return null;
 
-    await runtime.setInspectorSelection(
+    final v = await runtime.evaluateWithSelection(
+      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
+          ' as EditableText).controller.text',
       inspectorId: editableId,
       groupName: scene.groupName,
-    );
-    final v = await runtime.evaluateString(
-      '(WidgetInspectorService.instance.selection.currentElement!.widget '
-          'as EditableText).controller.text',
     );
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  String? _findEditableTextValueId(Map<String, Object?> node) {
-    if ((node['description'] as String?) == 'EditableText' ||
-        (node['widgetRuntimeType'] as String?) == 'EditableText') {
+  String? _findEditableTextId(Map<String, Object?> node) {
+    final label = (node['description'] as String?) ?? '';
+    final type = (node['widgetRuntimeType'] as String?) ?? '';
+    if (label == 'EditableText' || type == 'EditableText') {
       final id = node['valueId'] as String?;
       if (id != null && id.isNotEmpty) return id;
     }
@@ -232,7 +209,7 @@ class InputEnricher implements SemanticEnricher {
     if (kids is List) {
       for (final c in kids) {
         if (c is Map) {
-          final found = _findEditableTextValueId(c.cast<String, Object?>());
+          final found = _findEditableTextId(c.cast<String, Object?>());
           if (found != null) return found;
         }
       }

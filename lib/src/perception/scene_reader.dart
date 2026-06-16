@@ -226,8 +226,6 @@ class _DialogExtraction {
   final bool hasBarrier;
 }
 
-enum TreeDepth { summary, full }
-
 /// One inspector group + its SceneNode tree. Dispose releases the VM-side id table.
 class Scene {
   Scene._({
@@ -313,8 +311,8 @@ class Scene {
 
   String? firstAddressableId() {
     // Two-pass: prefer a user-code leaf (createdByLocalProject=true) since
-    // platform-view plugin nodes (e.g. GoogleMap) may fail ModalRoute evals.
-    // Fall back to any leaf with a live inspector handle if no user node found.
+    // platform view plugin nodes (e.g. GoogleMap) fail geometry evals.
+    // Fall back to any leaf with a live inspector handle if none found.
     SceneNode? bestUserLeaf;
     SceneNode? bestAnyNode;
 
@@ -387,7 +385,7 @@ const _platformViewLabels = {
   'WebView',
   'WebViewWidget',
   'HtmlElementView',
-  'TexutureLayer',
+  'TextureLayer',
 };
 
 bool _isPlatformViewLeaf(SceneNode n) =>
@@ -441,6 +439,12 @@ class _NullRuntime implements FlutterRuntime {
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
   @override
   Future<String?> evaluateString(String expression) => throw UnimplementedError();
+  @override
+  Future<String?> evaluateWithSelection({
+    required String expression,
+    required String inspectorId,
+    required String groupName,
+  }) async => null;
   @override
   Stream<Event> get stderrEvents => const Stream.empty();
   @override

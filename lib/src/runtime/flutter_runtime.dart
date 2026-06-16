@@ -86,6 +86,18 @@ abstract class FlutterRuntime {
   /// non-string (different type, ErrorRef converted to null, etc.).
   Future<String?> evaluateString(String expression);
 
+  /// Sets the inspector selection to [inspectorId] in [groupName], then
+  /// evaluates [expression] against the root library. Returns null on any
+  /// eval failure (compilation error, ErrorRef, disconnected).
+  ///
+  /// Shorthand for the common enricher pattern:
+  ///   `setInspectorSelection(…)` → `evaluateString(…)`.
+  Future<String?> evaluateWithSelection({
+    required String expression,
+    required String inspectorId,
+    required String groupName,
+  });
+
   // ── streams ───────────────────────────────────────────────────────
 
   /// Broadcast stream of `WriteEvent`s from the Flutter app's stderr.
