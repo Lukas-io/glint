@@ -35,8 +35,13 @@ class ScrollTool extends GlintTool {
             ),
             'returnScene': Schema.bool(
               description:
-                  'After the scroll, settle and return the new scene plus '
-                  'changed (bool) and changeCategory. Default true.',
+                  'After the scroll, settle and return changed (bool) and '
+                  'changeCategory. Default true.',
+            ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: also include the full rendered scene text as '
+                  'postScene. Default false.',
             ),
           },
           required: ['direction'],
@@ -52,6 +57,7 @@ class ScrollTool extends GlintTool {
             session.config.scrollAmountFraction)
         .toDouble();
     final returnScene = (args['returnScene'] as bool?) ?? true;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     final dir = ScrollDirection.values
         .where((d) => d.name == dirName)
@@ -102,7 +108,8 @@ class ScrollTool extends GlintTool {
       );
       var response = StructuredResponse.fromActionResult(result);
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre);
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
         if (post != null) {
           response = StructuredResponse(
             summary: response.summary,

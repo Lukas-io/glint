@@ -52,6 +52,12 @@ class TapTool extends GlintTool {
                   'When true: include full geometry (painted, hittable, physicalCenter) '
                   'in structuredContent. Default false (ok-only — saves tokens).',
             ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: include the full rendered scene text as postScene '
+                  'in structuredContent. Collapses returnScene + get_scene into '
+                  'one call. Default false.',
+            ),
           },
           required: ['glintId'],
         ),
@@ -68,6 +74,7 @@ class TapTool extends GlintTool {
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
     final returnScene = (args['returnScene'] as bool?) ?? true;
     final detail = (args['detail'] as bool?) ?? false;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     // Pre-action snapshot (cheap) — only needed when returnScene is requested.
     final pre = returnScene ? await snapshotPreAction(session) : null;
@@ -126,7 +133,8 @@ class TapTool extends GlintTool {
 
       // Post-action scene + changed signal (only when requested).
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre);
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
         if (post != null) {
           response = StructuredResponse(
             summary: response.summary,
