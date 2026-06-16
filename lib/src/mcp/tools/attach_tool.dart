@@ -18,15 +18,22 @@ class AttachTool extends GlintTool {
         description:
             'Connect glint to a running Flutter debug app. Must be called once '
             'before any other tool. '
-            'vmUri: WebSocket VM service URI — format ws://127.0.0.1:<port>/<token>/ws. '
-            'Get it from: ps aux | grep development-service | grep -oE "vm-service-uri=http://[^ ]+" | sed s/vm-service-uri=// then replace http:// with ws:// and append /ws. '
+            'vmUri: VM service URI — both http:// and ws:// are accepted; glint '
+            'normalises internally. '
+            'Preferred discovery: call flutter-network__network_status first — '
+            'it finds running apps via DTD and returns knownApps[].uri which '
+            'feeds directly here, no manual ps/grep needed. '
+            'Manual fallback: ps aux | grep development-service | '
+            'grep -oE "vm-service-uri=http://[^ ]+" | sed s/vm-service-uri=// '
             'platform: "ios" or "android". '
-            'device: iOS simulator UDID (xcrun simctl list devices booted) or Android serial (adb devices). '
+            'device: iOS simulator UDID (xcrun simctl list devices booted) or '
+            'Android serial (adb devices). '
             'On success returns dpr, logicalWidth, logicalHeight of the viewport. '
             'errorKind: internal — VM URI unreachable or no Flutter isolate found. '
-            'Companion tools: after attaching, call flutter-network__network_attach '
-            'with the same vmUri to enable app logs (flutter-network__logs_tail) '
-            'and HTTP request monitoring.',
+            'Companion: flutter-network__network_attach accepts the same vmUri — '
+            'attach both tools to the same app for UI control (glint) + logs and '
+            'HTTP monitoring (flutter-network). The two servers use separate '
+            'WebSocket connections and do not interfere.',
         inputSchema: ObjectSchema(
           properties: {
             'vmUri': Schema.string(
@@ -87,8 +94,10 @@ class AttachTool extends GlintTool {
 
     return StructuredResponse(
       summary: 'attached to $platform device $deviceId at $vmUri',
-      nextSteps: const [
-        'call flutter-network__network_attach with the same vmUri for app logs + HTTP monitoring',
+      nextSteps: [
+        'call flutter-network__network_attach vmServiceUri:"$vmUri" to enable '
+            'app logs (flutter-network__logs_tail) and HTTP monitoring — '
+            'same URI, separate connection, no conflict',
         'call `get_scene` to read the current screen',
         'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
       ],
