@@ -152,6 +152,19 @@ class GlintSession {
     );
   }
 
+  /// Runs all semantic enrichers against [semantic] in the correct order.
+  ///
+  /// Order matters: overlay enrichment must complete before the renderer runs
+  /// so [SemanticScene.overlayLayers] is populated. The other enrichers are
+  /// order-independent relative to each other but run after overlay for
+  /// consistency.
+  Future<void> runEnrichers(SemanticScene semantic) async {
+    await overlayEnricher.enrich(semantic);
+    await inputEnricher.enrich(semantic);
+    await iconEnricher.enrich(semantic);
+    await navEnricher.enrich(semantic);
+  }
+
   Future<void> detach() async {
     _lifecyclePollTimer?.cancel();
     _lifecyclePollTimer = null;
@@ -167,12 +180,14 @@ class GlintSession {
     _resolver = null;
     _interactor = null;
     _semanticizer = null;
+    _overlayEnricher = null;
     _inputEnricher = null;
     _iconEnricher = null;
     _navEnricher = null;
-    _overlayEnricher = null;
     _readinessGate = null;
     _settleDetector = null;
+    _nativeReader = null;
+    reconnectCount = 0;
     if (runtime != null) await runtime.disconnect();
   }
 

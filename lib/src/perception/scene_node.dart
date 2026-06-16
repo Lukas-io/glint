@@ -80,6 +80,10 @@ class SceneNode {
           ? widgetRuntimeType!
           : description;
 
+  /// True when this node is a platform-view widget (GoogleMap, WebView, etc.)
+  /// whose element context rejects ModalRoute and geometry evals (RPCError 113).
+  bool get isPlatformView => _platformViewLabels.contains(label);
+
   /// Pre-order traversal of this subtree.
   Iterable<SceneNode> walk() sync* {
     yield this;
@@ -102,6 +106,28 @@ class SceneNode {
           'children': children.map((c) => c.toJson()).toList(),
       };
 }
+
+// ── platform view detection ────────────────────────────────────────────────
+
+/// Widget labels whose element context rejects VM evals (RPCError 113).
+/// Kept at file scope so both [SceneNode.isPlatformView] and any future
+/// callers share the same source of truth.
+const _platformViewLabels = {
+  'GoogleMap',
+  'AndroidView',
+  'UiKitView',
+  'PlatformViewLink',
+  'WebView',
+  'WebViewWidget',
+  'HtmlElementView',
+  'TextureLayer',
+};
+
+/// Maximum summary-tree depth at which [SceneNode.addressableCandidates]
+/// considers a node "shallow enough" to have an accurate outer ModalRoute
+/// name. Nodes beyond this threshold are typically inside a GoRouter
+/// ShellRoute inner navigator or an off-screen PageView page.
+const kShallowProbeMaxDepth = 12;
 
 class CreationLocation {
   CreationLocation({

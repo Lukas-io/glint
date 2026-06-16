@@ -18,7 +18,8 @@ abstract class SemanticEnricher {
 
 /// Classifies overlay dialog content from [Scene.overlayRoots] (nodes from
 /// the full tree appended during [SceneReader.readSummary]) and populates
-/// [SemanticScene.overlayLayers].
+/// [SemanticScene.overlayLayers]. Must run before the renderer so
+/// overlayLayers is populated; see [GlintSession.runEnrichers].
 class OverlayEnricher implements SemanticEnricher {
   OverlayEnricher({required this.semanticizer});
 
