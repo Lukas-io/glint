@@ -21,9 +21,9 @@ class ScrollToFindTool extends GlintTool {
             'targetTextContent (substring match against any text node). '
             'Returns ok:true and the found glintId when the target is hittable. '
             'errorKind values: '
-            'targetNotFound — target was never seen during any scroll (not in list at all); '
-            'scrollLimitReached — target appeared in tree but scroll limit hit before it '
-            'became hittable (raise maxScrolls); '
+            'targetNotFound — target never appeared in any scene during scrolling; '
+            'scrollLimitReached — target appeared but was never hittable within maxScrolls; '
+            'unresolvedTarget — target is inside a modal overlay, not in scrollable content; '
             'invalidArgument — both or neither of targetGlintId/targetTextContent provided. '
             'direction default: down. maxScrolls default: 8. amountFraction default: 0.6.',
         inputSchema: ObjectSchema(
@@ -153,7 +153,7 @@ class ScrollToFindTool extends GlintTool {
       return StructuredResponse.error(
         summary: '$criterion appeared in the tree during scrolling but was never '
             'hittable within $maxScrolls scroll(s) in $dirName — scroll limit hit',
-        errorKind: GlintErrorKind.unresolvedTarget,
+        errorKind: GlintErrorKind.scrollLimitReached,
         nextSteps: [
           'increase `maxScrolls` (currently $maxScrolls)',
           'try the opposite direction in case content scrolled past the target',
@@ -164,7 +164,7 @@ class ScrollToFindTool extends GlintTool {
     return StructuredResponse.error(
       summary: '$criterion was not found in any scene during $maxScrolls scroll(s) '
           'in $dirName — target is not in this list',
-      errorKind: GlintErrorKind.unresolvedTarget,
+      errorKind: GlintErrorKind.targetNotFound,
       nextSteps: const [
         'try a different `direction` (the target may be above/beside the viewport)',
         'use `get_scene` to confirm the correct glintId or text content',

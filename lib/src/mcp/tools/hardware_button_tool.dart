@@ -55,7 +55,23 @@ class HardwareButtonTool extends GlintTool {
         scene,
         PressHardwareButton(button),
       );
-      return StructuredResponse.fromActionResult(result);
+      final response = StructuredResponse.fromActionResult(result);
+      if (!response.isError) {
+        return StructuredResponse(
+          summary: response.summary,
+          warnings: response.warnings,
+          data: response.data,
+          nextSteps: [
+            if (button == HardwareButton.unlock)
+              'call get_scene to read the screen after unlock'
+            else if (button == HardwareButton.home)
+              'the app is now backgrounded — reopen it then call get_scene'
+            else if (button == HardwareButton.lock)
+              'device is locked — call hardware_button with unlock to resume',
+          ],
+        );
+      }
+      return response;
     } finally {
       await scene.dispose();
     }

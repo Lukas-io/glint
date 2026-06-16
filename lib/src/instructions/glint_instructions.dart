@@ -70,6 +70,8 @@ const _recovery = '''
 - `unresolvedTarget` — stale glintId; re-run `get_scene`.
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `targetNeverReady` — armed ceiling hit. Raise `readyTimeoutMs` or dismiss cover.
+- `targetNotFound` — target never appeared in scroll_to_find; try a different direction.
+- `scrollLimitReached` — target appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM connection dropped (hot restart?). Call `attach` again with same vmUri.
 - `unsupportedBackendAction` — not wired on this platform (see Gotchas).
 - `backendToolError` — native tool exited non-zero; read `detail`.

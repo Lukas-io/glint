@@ -23,7 +23,10 @@ class AttachTool extends GlintTool {
             'platform: "ios" or "android". '
             'device: iOS simulator UDID (xcrun simctl list devices booted) or Android serial (adb devices). '
             'On success returns dpr, logicalWidth, logicalHeight of the viewport. '
-            'errorKind: internal — VM URI unreachable or no Flutter isolate found.',
+            'errorKind: internal — VM URI unreachable or no Flutter isolate found. '
+            'Companion tools: after attaching, call flutter-network__network_attach '
+            'with the same vmUri to enable app logs (flutter-network__logs_tail) '
+            'and HTTP request monitoring.',
         inputSchema: ObjectSchema(
           properties: {
             'vmUri': Schema.string(
@@ -85,6 +88,7 @@ class AttachTool extends GlintTool {
     return StructuredResponse(
       summary: 'attached to $platform device $deviceId at $vmUri',
       nextSteps: const [
+        'call flutter-network__network_attach with the same vmUri for app logs + HTTP monitoring',
         'call `get_scene` to read the current screen',
         'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
       ],

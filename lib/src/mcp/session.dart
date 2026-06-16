@@ -22,7 +22,6 @@ class GlintSession {
     FlutterRuntime Function()? runtimeFactory,
   })  : config = config ?? GlintConfig(),
         actionLog = ActionLog(),
-        appLogs = AppLogBuffer(),
         sessions = SessionManager(),
         usage = usage ?? UsageRecorder.fromEnv(),
         _runtimeFactory = runtimeFactory ?? VmServiceRuntime.new {
@@ -31,7 +30,6 @@ class GlintSession {
 
   final GlintConfig config;
   final ActionLog actionLog;
-  final AppLogBuffer appLogs;
   final SessionManager sessions;
   final UsageRecorder usage;
   late final UsageReporter usageReporter;
@@ -140,13 +138,6 @@ class GlintSession {
     // Store connection parameters for auto-reconnect (R1).
     _lastVmUri = vmUri;
     _lastDevice = device;
-
-    // Hook app log buffer onto the new runtime's streams.
-    try {
-      await appLogs.subscribe(runtime);
-    } on Object {
-      // app logs stay empty; everything else works
-    }
 
     // Watch for WebSocket disconnect and auto-reconnect (R2 + R3).
     _disconnectSub?.cancel();
@@ -281,7 +272,10 @@ class GlintSession {
   Future<void> detach() async {
     _lifecyclePollTimer?.cancel();
     _lifecyclePollTimer = null;
-    await appLogs.unsubscribe();
+    _disconnectSub?.cancel();
+    _disconnectSub = null;
+    reconnectCount = 0;
+    _nativeReader = null;
     final runtime = _runtime;
     _runtime = null;
     _device = null;
