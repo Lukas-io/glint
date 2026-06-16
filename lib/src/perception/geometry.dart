@@ -105,13 +105,12 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
-  /// Lightweight probe that reads only DPR and logical viewport dimensions.
-  /// Used by the iOS attach probe — does NOT evaluate `localToGlobal`, so it
-  /// works on any addressable node including offscreen PageView children.
-  Future<({double dpr, double logicalW, double logicalH})> resolveViewport(
-    Scene scene,
-    String glintId,
-  ) async {
+  /// Returns viewport dimensions without performing a hit-test.
+  ///
+  /// Safe on Dart 3.12 / iOS 26 where [HitTestResult] is not accessible in
+  /// the CFE eval scope. Use this from [AttachTool] instead of [resolve].
+  Future<({double dpr, double w, double h})> resolveViewport(
+      Scene scene, String glintId) async {
     final node = scene.findByGlintId(glintId);
     if (node == null) {
       throw GeometryResolveError('unknown glintId: $glintId');
@@ -122,16 +121,24 @@ class CoordinateResolver {
         groupName: scene.groupName,
       );
     } on Object catch (e) {
-      throw GeometryResolveError('setSelectionById(${node.inspectorId}) failed: $e');
+      throw GeometryResolveError(
+        'setSelectionById(${node.inspectorId}) failed: $e',
+      );
     }
-    final raw = await _runtime.evaluateString(GeometryExpr.buildViewProbe());
-    if (raw == null) throw GeometryResolveError('viewport probe returned null');
-    final parts = raw.split('|');
-    if (parts.length < 3) throw GeometryResolveError('viewport probe malformed: $raw');
+    final String? json;
+    try {
+      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe());
+    } on RuntimeEvalError catch (e) {
+      throw GeometryResolveError('evaluate(viewProbe) failed: ${e.message}');
+    }
+    if (json == null) {
+      throw GeometryResolveError('evaluate(viewProbe) returned non-string');
+    }
+    final decoded = jsonDecode(json) as Map<String, Object?>;
     return (
-      dpr: double.parse(parts[0]),
-      logicalW: double.parse(parts[1]),
-      logicalH: double.parse(parts[2]),
+      dpr: (decoded['dpr'] as num).toDouble(),
+      w: (decoded['vw'] as num).toDouble(),
+      h: (decoded['vh'] as num).toDouble(),
     );
   }
 
@@ -209,14 +216,6 @@ class GeometryExpr {
       '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
 
-  /// Minimal eval returning `"dpr|logicalW|logicalH"`. Does NOT call
-  /// `localToGlobal`, so it works on any element including offscreen
-  /// PageView children and IndexedStack non-active pages.
-  static String buildViewProbe() =>
-      '$_view.devicePixelRatio.toString() + "|"'
-      ' + ($_view.physicalSize.width / $_view.devicePixelRatio).toString() + "|"'
-      ' + ($_view.physicalSize.height / $_view.devicePixelRatio).toString()';
-
   static String build() {
     final body = [
       "'{\"gx\":'",
@@ -247,5 +246,24 @@ class GeometryExpr {
     ].join(' + ');
     // HitTestResult r dropped — lambda only needs Offset c now.
     return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
+  }
+
+  /// Probe expression that returns only dpr/vw/vh — no [HitTestResult].
+  ///
+  /// On Dart 3.12+ the CFE rejects `HitTestResult` in synthetic eval scopes
+  /// even though the type is exported from `package:flutter/widgets.dart`.
+  /// [_probeIosTarget] only needs viewport dimensions so we skip the hit-test
+  /// half of [build] entirely.
+  static String buildViewProbe() {
+    final body = [
+      "'{\"dpr\":'",
+      '$_view.devicePixelRatio.toString()',
+      "',\"vw\":'",
+      '($_view.physicalSize.width / $_view.devicePixelRatio).toString()',
+      "',\"vh\":'",
+      '($_view.physicalSize.height / $_view.devicePixelRatio).toString()',
+      "'}'",
+    ].join(' + ');
+    return body;
   }
 }
