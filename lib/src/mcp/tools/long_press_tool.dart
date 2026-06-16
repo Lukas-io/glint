@@ -37,8 +37,13 @@ class LongPressTool extends GlintTool {
             ),
             'returnScene': Schema.bool(
               description:
-                  'After the press, settle and return the new scene plus '
-                  'changed (bool) and changeCategory. Default true.',
+                  'After the press, settle and return changed (bool) and '
+                  'changeCategory. Default true.',
+            ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: also include the full rendered scene text as '
+                  'postScene. Default false.',
             ),
           },
           required: ['glintId'],
@@ -55,6 +60,7 @@ class LongPressTool extends GlintTool {
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
     final returnScene = (args['returnScene'] as bool?) ?? true;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     final pre = returnScene ? await snapshotPreAction(session) : null;
 
@@ -76,7 +82,8 @@ class LongPressTool extends GlintTool {
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre);
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
         if (post != null) {
           response = StructuredResponse(
             summary: response.summary,

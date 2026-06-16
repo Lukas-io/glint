@@ -48,17 +48,19 @@ class PostActionState {
   PostActionState({
     required this.changed,
     required this.changeCategory,
-    required this.sceneText,
+    this.sceneText,
   });
 
   final bool changed;
   final String changeCategory;
-  final String sceneText;
+  /// Present only when the caller passed `includeSceneText: true` to
+  /// [readPostActionState]. Null otherwise to avoid token-heavy defaults.
+  final String? sceneText;
 
   Map<String, Object?> toData() => {
         'changed': changed,
         'changeCategory': changeCategory,
-        'postScene': sceneText,
+        if (sceneText != null) 'postScene': sceneText,
       };
 }
 
@@ -82,10 +84,15 @@ Future<_SceneSnapshot?> snapshotPreAction(GlintSession session) async {
 
 /// After an action fires, settle then read the post-action scene. Compares
 /// with [pre] to produce the changed signal. Returns null on error.
+///
+/// Set [includeSceneText] to include the rendered scene in [PostActionState.sceneText].
+/// Default false — the snapshot for change detection is cheap; rendering
+/// the full scene text is opt-in to avoid token-heavy defaults.
 Future<PostActionState?> readPostActionState(
   GlintSession session,
-  _SceneSnapshot? pre,
-) async {
+  _SceneSnapshot? pre, {
+  bool includeSceneText = false,
+}) async {
   try {
     // Settle first (best-effort, don't fail if it times out).
     try {
@@ -94,23 +101,25 @@ Future<PostActionState?> readPostActionState(
       // ignore settle errors — scene read follows regardless
     }
 
-    // Full get_scene equivalent.
     final scene = await session.reader.readSummary();
     try {
       final semantic = session.semanticizer.semanticize(scene);
       await session.overlayEnricher.enrich(semantic);
-      await session.inputEnricher.enrich(semantic);
-      await session.iconEnricher.enrich(semantic);
       await session.navEnricher.enrich(semantic);
+      if (includeSceneText) {
+        await session.inputEnricher.enrich(semantic);
+        await session.iconEnricher.enrich(semantic);
+      }
 
-      final sceneText = const PlainTextSceneRenderer().render(semantic);
       final post = _SceneSnapshot.from(semantic);
       final category = pre != null ? _changeCategory(pre, post) : 'unknown';
 
       return PostActionState(
         changed: category != 'nothing',
         changeCategory: category,
-        sceneText: sceneText,
+        sceneText: includeSceneText
+            ? const PlainTextSceneRenderer().render(semantic)
+            : null,
       );
     } finally {
       await scene.dispose();
