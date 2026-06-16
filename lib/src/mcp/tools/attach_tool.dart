@@ -117,14 +117,12 @@ class AttachTool extends GlintTool {
           throw StateError(
               'could not find an addressable node in the scene to probe iOS viewport');
         }
-        // resolveViewport only reads DPR + viewport size — no localToGlobal —
-        // so it works on any node including offscreen PageView children.
-        final vp = await resolver.resolveViewport(scene, probeId);
+        final viewport = await resolver.resolveViewport(scene, probeId);
         return IosSimulator(
           udid: udid,
-          logicalWidth: vp.logicalW,
-          logicalHeight: vp.logicalH,
-          devicePixelRatio: vp.dpr,
+          logicalWidth: viewport.w,
+          logicalHeight: viewport.h,
+          devicePixelRatio: viewport.dpr,
           bridgePath: bridgePath,
         );
       } finally {
