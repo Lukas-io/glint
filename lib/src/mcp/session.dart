@@ -3,18 +3,17 @@ import 'dart:async';
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
-import '../perception/native_scene_reader.dart';
 import '../../semantic.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
+
+/// Whether the session is reading the Flutter VM tree or the native OS AX tree.
+enum SceneMode { flutter, native }
 
 /// Per-connection state: runtime, device, readers, interactor. Tools
 /// access these via the typed getters; accessing before [attach] throws
 /// [SessionNotAttachedError]. [actionLog] is always available — survives
 /// detach so cross-attach history stays queryable.
-/// Whether the session is reading the Flutter VM tree or the OS AX tree.
-enum SceneMode { flutter, native }
-
 class GlintSession {
   GlintSession({
     GlintConfig? config,
@@ -37,17 +36,17 @@ class GlintSession {
   late final UsageReporter usageReporter;
   final FlutterRuntime Function() _runtimeFactory;
 
-  // ── reconnect state ───────────────────────────────────────────────────────
+  // ── reconnect ─────────────────────────────────────────────────────────────
   Uri? _lastVmUri;
   DeviceTarget? _lastDevice;
   int reconnectCount = 0;
   StreamSubscription<void>? _disconnectSub;
 
-  // ── scene mode (Flutter vs native) ───────────────────────────────────────
-  /// Current scene source. flutter = Flutter VM tree; native = OS AX tree.
+  // ── scene mode ────────────────────────────────────────────────────────────
   SceneMode sceneMode = SceneMode.flutter;
   Timer? _lifecyclePollTimer;
 
+  // ── per-attach instances ──────────────────────────────────────────────────
   FlutterRuntime? _runtime;
   DeviceTarget? _device;
   InteractionBackend? _backend;
@@ -86,8 +85,11 @@ class GlintSession {
       _requireAttached(_readinessGate, 'readiness gate');
   SettleDetector get settleDetector =>
       _requireAttached(_settleDetector, 'settle detector');
-  /// May be null when the device is not iOS simulator.
+
+  /// Null when the connected device is not an iOS simulator.
   NativeSceneReader? get nativeReader => _nativeReader;
+
+  // ── lifecycle ─────────────────────────────────────────────────────────────
 
   /// Idempotent — re-attach replaces the previous connection.
   Future<void> attach({
@@ -127,32 +129,22 @@ class GlintSession {
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
 
-    // N3: wire native scene reader (iOS simulator only).
-    if (device is IosSimulator) {
-      _nativeReader = NativeSceneReader(
-        udid: device.udid,
-        bridgePath: device.bridgePath,
-      );
-    } else {
-      _nativeReader = null;
-    }
+    _nativeReader = device is IosSimulator
+        ? NativeSceneReader(udid: device.udid, bridgePath: device.bridgePath)
+        : null;
 
-    // Store connection parameters for auto-reconnect (R1).
     _lastVmUri = vmUri;
     _lastDevice = device;
 
-    // Hook app log buffer onto the new runtime's streams.
     try {
       await appLogs.subscribe(runtime);
     } on Object {
-      // app logs stay empty; everything else works
+      // best-effort — app logs stay empty, everything else works
     }
 
-    // Watch for WebSocket disconnect and auto-reconnect (R2 + R3).
     _disconnectSub?.cancel();
     _disconnectSub = runtime.onDisconnect.listen((_) => _handleDisconnect());
 
-    // N1: Start lifecycle poller (500ms) to detect native surfaces.
     _lifecyclePollTimer?.cancel();
     _lifecyclePollTimer = Timer.periodic(
       const Duration(milliseconds: 500),
@@ -160,31 +152,48 @@ class GlintSession {
     );
   }
 
-  /// Fires when the VM service WebSocket closes (hot restart, app kill, etc.).
-  /// Attempts up to 3 re-attaches with 1s gaps; succeeds silently or gives up.
-  void _handleDisconnect() {
-    final uri = _lastVmUri;
-    final dev = _lastDevice;
-    if (uri == null || dev == null) return;
-    _reconnectAsync(uri, dev);
+  /// Runs all semantic enrichers against [semantic] in the correct order.
+  ///
+  /// Order matters: overlay enrichment must complete before the renderer runs
+  /// so [SemanticScene.overlayLayers] is populated. The other enrichers are
+  /// order-independent relative to each other but run after overlay for
+  /// consistency.
+  Future<void> runEnrichers(SemanticScene semantic) async {
+    await overlayEnricher.enrich(semantic);
+    await inputEnricher.enrich(semantic);
+    await iconEnricher.enrich(semantic);
+    await navEnricher.enrich(semantic);
   }
 
-  Future<void> _reconnectAsync(Uri uri, DeviceTarget dev) async {
-    for (var attempt = 1; attempt <= 3; attempt++) {
-      await Future<void>.delayed(const Duration(seconds: 1));
-      try {
-        await attach(vmUri: uri, device: dev);
-        reconnectCount++;
-        return;
-      } on Object {
-        // keep retrying until exhausted
-      }
-    }
-    // All retries failed — next tool call will surface connectionLost.
+  Future<void> detach() async {
+    _lifecyclePollTimer?.cancel();
+    _lifecyclePollTimer = null;
+    _disconnectSub?.cancel();
+    _disconnectSub = null;
+    await appLogs.unsubscribe();
+    final runtime = _runtime;
+    _runtime = null;
+    _device = null;
+    _backend = null;
+    _inspector = null;
+    _reader = null;
+    _resolver = null;
+    _interactor = null;
+    _semanticizer = null;
+    _overlayEnricher = null;
+    _inputEnricher = null;
+    _iconEnricher = null;
+    _navEnricher = null;
+    _readinessGate = null;
+    _settleDetector = null;
+    _nativeReader = null;
+    reconnectCount = 0;
+    if (runtime != null) await runtime.disconnect();
   }
 
-  /// Focused widget runtime type + keyboard inset + orientation +
-  /// brightness + locale in one VM eval. ~50ms.
+  // ── VM evals ──────────────────────────────────────────────────────────────
+
+  /// Focused widget type + keyboard inset + orientation + brightness + locale.
   Future<
       ({
         String? focusedType,
@@ -232,17 +241,15 @@ class GlintSession {
     );
   }
 
-  /// One of: resumed, inactive, paused, detached, hidden. Null when the
-  /// binding hasn't set a state yet.
+  /// One of: resumed, inactive, paused, detached, hidden. Null when unset.
   Future<String?> lifecycleState() async {
     final s = await runtime
         .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
     return (s == null || s.isEmpty) ? null : s;
   }
 
-  /// Logical viewport size + dpr in physical pixels, probed via the
-  /// geometry resolver on any addressable node. Used by direction-based
-  /// scroll tools that need a "scroll N% of viewport" delta.
+  /// Logical viewport size + DPR, probed via geometry resolver on any
+  /// addressable node. Used by direction-based scroll tools.
   Future<({double logicalW, double logicalH, double dpr})>
       probeViewport() async {
     final scene = await reader.readSummary();
@@ -262,6 +269,29 @@ class GlintSession {
     }
   }
 
+  // ── private ───────────────────────────────────────────────────────────────
+
+  void _handleDisconnect() {
+    final uri = _lastVmUri;
+    final dev = _lastDevice;
+    if (uri == null || dev == null) return;
+    _reconnectAsync(uri, dev);
+  }
+
+  Future<void> _reconnectAsync(Uri uri, DeviceTarget dev) async {
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        await attach(vmUri: uri, device: dev);
+        reconnectCount++;
+        return;
+      } on Object {
+        // keep retrying until exhausted
+      }
+    }
+    // All retries failed — next tool call will surface connectionLost.
+  }
+
   Future<void> _pollLifecycle() async {
     final rt = _runtime;
     if (rt == null) return;
@@ -269,35 +299,12 @@ class GlintSession {
       final state = await rt.evaluateString(
         'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
       );
-      sceneMode = (state == 'resumed' || state == null)
-          ? SceneMode.flutter
-          : SceneMode.native;
+      sceneMode =
+          (state == null || state == 'resumed') ? SceneMode.flutter : SceneMode.native;
     } on Object {
-      // eval failure (isolate paused) → native surface active
+      // Eval failure means the isolate is paused (native surface active).
       sceneMode = SceneMode.native;
     }
-  }
-
-  Future<void> detach() async {
-    _lifecyclePollTimer?.cancel();
-    _lifecyclePollTimer = null;
-    await appLogs.unsubscribe();
-    final runtime = _runtime;
-    _runtime = null;
-    _device = null;
-    _backend = null;
-    _inspector = null;
-    _reader = null;
-    _resolver = null;
-    _interactor = null;
-    _semanticizer = null;
-    _inputEnricher = null;
-    _iconEnricher = null;
-    _navEnricher = null;
-    _overlayEnricher = null;
-    _readinessGate = null;
-    _settleDetector = null;
-    if (runtime != null) await runtime.disconnect();
   }
 
   T _requireAttached<T>(T? value, String name) {

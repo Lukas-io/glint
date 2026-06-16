@@ -120,4 +120,27 @@ class NativeSceneReader {
       .replaceAll(RegExp(r'[^a-z0-9_]'), '_')
       .replaceAll(RegExp(r'_+'), '_')
       .replaceAll(RegExp(r'^_|_$'), '');
+
+  /// Compact text representation of the native scene for agent consumption.
+  /// Enabled elements are marked `*`, disabled elements are marked `-`.
+  static String renderAsText(Scene scene) {
+    final buf = StringBuffer();
+    _renderNode(buf, scene.root, depth: 0);
+    return buf.toString();
+  }
+
+  static void _renderNode(StringBuffer buf, SceneNode node, {required int depth}) {
+    if (depth > 6) return;
+    final id = node.glintId ?? '';
+    if (id.isNotEmpty && !id.startsWith('_native')) {
+      final label = node.textPreview ?? node.label;
+      final marker = (node.isNativeEnabled ?? false) ? '*' : '-';
+      buf
+        ..write('  ' * depth)
+        ..writeln('$marker native $id $label');
+    }
+    for (final child in node.children) {
+      _renderNode(buf, child, depth: depth + 1);
+    }
+  }
 }
