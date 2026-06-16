@@ -16,8 +16,14 @@ class AttachTool extends GlintTool {
   Tool get definition => Tool(
         name: 'attach',
         description:
-            'Attach glint to a running Flutter app. Required before any other tool. '
-            'Provide the VM service WebSocket URI plus the target platform and device id.',
+            'Connect glint to a running Flutter debug app. Must be called once '
+            'before any other tool. '
+            'vmUri: WebSocket VM service URI — format ws://127.0.0.1:<port>/<token>/ws. '
+            'Get it from: ps aux | grep development-service | grep -oE "vm-service-uri=http://[^ ]+" | sed s/vm-service-uri=// then replace http:// with ws:// and append /ws. '
+            'platform: "ios" or "android". '
+            'device: iOS simulator UDID (xcrun simctl list devices booted) or Android serial (adb devices). '
+            'On success returns dpr, logicalWidth, logicalHeight of the viewport. '
+            'errorKind: internal — VM URI unreachable or no Flutter isolate found.',
         inputSchema: ObjectSchema(
           properties: {
             'vmUri': Schema.string(
@@ -102,7 +108,7 @@ class AttachTool extends GlintTool {
     final probeRuntime = VmServiceRuntime();
     await probeRuntime.attach(vmUri);
     try {
-      final reader = SceneReader(InspectorClient(probeRuntime));
+      final reader = SceneReader(InspectorClient(probeRuntime), probeRuntime);
       final resolver = CoordinateResolver(probeRuntime);
       final scene = await reader.readSummary();
       try {

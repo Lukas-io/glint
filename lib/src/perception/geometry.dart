@@ -127,7 +127,7 @@ class CoordinateResolver {
     }
     final String? json;
     try {
-      json = await _runtime.evaluateString(_GeometryExpr.buildViewProbe());
+      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe());
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(viewProbe) failed: ${e.message}');
     }

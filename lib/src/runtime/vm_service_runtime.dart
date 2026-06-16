@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:vm_service/vm_service.dart';
 
 import '../vm/vm_client.dart';
 import 'flutter_runtime.dart';
+
+// RPCError code emitted by vm_service when the WebSocket connection drops.
+const _kConnectionClosedCode = 100;
 
 /// The default [FlutterRuntime] backed by `package:vm_service`. Owns one
 /// [VmClient] and centralises every `ext.flutter.inspector.*` and
@@ -26,10 +31,12 @@ class VmServiceRuntime implements FlutterRuntime {
   String? get _rootLibId => _vm.flutterIsolate.rootLib?.id;
 
   @override
+  Stream<void> get onDisconnect => _disconnectController.stream;
+  final _disconnectController = StreamController<void>.broadcast();
+
+  @override
   Future<void> attach(Uri vmServiceUri) async {
     await _vm.attach(vmServiceUri);
-    // Subscribe to event streams once; broadcast getters share the
-    // single subscription with all downstream consumers.
     for (final stream in const [
       EventStreams.kStderr,
       EventStreams.kStdout,
@@ -37,14 +44,48 @@ class VmServiceRuntime implements FlutterRuntime {
     ]) {
       try {
         await _vm.service.streamListen(stream);
-      } on Object {
-        // already listening — fine
-      }
+      } on Object {}
     }
+    // Wire disconnect signal: fires once when the WebSocket closes.
+    _vm.service.onDone.then((_) {
+      if (!_disconnectController.isClosed) {
+        _disconnectController.add(null);
+      }
+    }, onError: (_) {});
   }
 
   @override
-  Future<void> disconnect() => _vm.disconnect();
+  Future<void> disconnect() async {
+    await _vm.disconnect();
+    if (!_disconnectController.isClosed) {
+      await _disconnectController.close();
+    }
+  }
+
+  // ── connection-loss guard ─────────────────────────────────────────
+
+  /// Wraps a VM service call and converts disconnect-class errors to
+  /// [RuntimeConnectionLostError] so the tool layer can return a structured,
+  /// recoverable [GlintErrorKind.connectionLost] response.
+  Future<T> _guard<T>(Future<T> Function() fn) async {
+    try {
+      return await fn();
+    } on StateError catch (e) {
+      throw RuntimeConnectionLostError(e);
+    } on RPCError catch (e) {
+      if (e.code == _kConnectionClosedCode) throw RuntimeConnectionLostError(e);
+      rethrow;
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('closed') ||
+          msg.contains('socket') ||
+          msg.contains('connection refused') ||
+          msg.contains('connection reset')) {
+        throw RuntimeConnectionLostError(e);
+      }
+      rethrow;
+    }
+  }
 
   // ── inspector ─────────────────────────────────────────────────────
 
@@ -55,7 +96,7 @@ class VmServiceRuntime implements FlutterRuntime {
     bool withPreviews = true,
     bool fullDetails = false,
   }) async {
-    final resp = await _vm.service.callServiceExtension(
+    final resp = await _guard(() => _vm.service.callServiceExtension(
       'ext.flutter.inspector.getRootWidgetTree',
       isolateId: flutterIsolateId,
       args: {
@@ -64,7 +105,7 @@ class VmServiceRuntime implements FlutterRuntime {
         'withPreviews': withPreviews.toString(),
         'fullDetails': fullDetails.toString(),
       },
-    );
+    ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
       throw RuntimeEvalError(
@@ -133,8 +174,16 @@ class VmServiceRuntime implements FlutterRuntime {
     if (rootLib == null) {
       throw RuntimeEvalError(expression, 'flutter isolate has no rootLib');
     }
-    final raw =
-        await _vm.service.evaluate(flutterIsolateId, rootLib, expression);
+    final Object raw;
+    try {
+      raw = await _guard(
+        () => _vm.service.evaluate(flutterIsolateId, rootLib, expression),
+      );
+    } on RPCError catch (e) {
+      // Code 113 = expression compilation error (e.g. platform view context).
+      // Wrap as RuntimeEvalError so callers get a typed, structured failure.
+      throw RuntimeEvalError(expression, 'RPCError(${e.code}): ${e.message}');
+    }
     if (raw is InstanceRef) return raw;
     if (raw is ErrorRef) {
       throw RuntimeEvalError(expression, raw.message ?? 'ErrorRef');

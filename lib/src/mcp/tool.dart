@@ -4,6 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import '../../observability.dart';
+import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
 import 'tools/app_logs_tool.dart';
@@ -59,6 +60,16 @@ abstract class GlintTool {
         detail: e.toString(),
         nextSteps: const [
           'call the `attach` tool first with the running app\'s VM URI and device target',
+        ],
+      );
+    } on RuntimeConnectionLostError catch (e) {
+      response = StructuredResponse.error(
+        summary: 'VM service connection lost — the app may have hot-restarted '
+            'or been terminated',
+        errorKind: GlintErrorKind.connectionLost,
+        detail: e.toString(),
+        nextSteps: const [
+          'call `attach` again with the same vmUri to reconnect',
         ],
       );
     } catch (e, st) {

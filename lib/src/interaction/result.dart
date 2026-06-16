@@ -11,6 +11,8 @@ enum GlintErrorKind {
   // mcp-layer failures
   sessionNotAttached,
   invalidArgument,
+  // transport failures
+  connectionLost,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // bug bucket — should never happen; if it does, it's on us
