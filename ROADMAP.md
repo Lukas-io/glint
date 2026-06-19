@@ -4,22 +4,24 @@ Major capabilities not yet built. Simple, cheap reads land opportunistically
 inside existing tools (e.g. `attach` already returns device/app identity +
 screen context); the heavier control surface is tracked here.
 
-## 1. Device mode — drive a simulator without a Flutter app  *(IN PROGRESS)*
+## 1. Device mode — drive a simulator without a Flutter app  *(SHIPPED)*
 
-Today `attach` requires a Flutter debug isolate (`vm_client.dart` throws if no
-`ext.flutter.*`). The interaction backends are already OS-level and
-coordinate-native (`AdbBackend`, `IosSimBackend`), and `glint-iossim` already
-has `ax-snapshot` for the OS accessibility tree. What's left:
+`attach mode:device` (or auto, when no running app is found) binds a sim with
+no VM and drives it directly. Shipped + live-verified:
+- ✅ `attach` device-mode binding — iOS sized to the screenshot, dpr=1.
+- ✅ Coordinate `tap` / `swipe` (x,y) — device mode: screenshot pixels;
+  flutter mode: logical points. Backend-direct, bypasses glintId (also the
+  audit's #145/#147 "no coordinate fallback" fix).
+- ✅ Screenshot perception (`device op:screenshot`); `get_scene` redirects.
 
-- `attach` device-mode binding (no VM/scene; viewport from `simctl` / `wm size`).
-- Coordinate-targeting in `tap`/`swipe`/`scroll` (opt-in raw-pixel flag, default
-  logical points). This is the same work as the audit's "no coordinate fallback"
-  gap in #145/#147/#149.
-- Perception: **screenshot** (`simctl io screenshot`) — works headless, no
-  permission. Interaction needs no dpr: IndigoHID takes a 0–1 ratio, so
-  `tap = pixel / screenshotSize`.
+Why it was straightforward: the interaction backends were already OS-level and
+coordinate-native (`AdbBackend`, `IosSimBackend`); the Flutter coupling lived
+only in the tool layer. IndigoHID takes a 0–1 ratio, so taps need no dpr lookup
+(`tap = pixel / screenshotSize`).
 
-Build as one vertical slice so it's testable end-to-end, not orphaned plumbing.
+Follow-up (not yet done):
+- Coordinate `long_press` / `drag` / `scroll` (tap + swipe done; same pattern).
+- Android device-mode is wired (adb backend) but not live-tested.
 
 ### Deferred: OS AX-tree perception
 `glint-iossim ax-snapshot` reads the native accessibility tree (structured,
