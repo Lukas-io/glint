@@ -15,16 +15,18 @@ has `ax-snapshot` for the OS accessibility tree. What's left:
 - Coordinate-targeting in `tap`/`swipe`/`scroll` (opt-in raw-pixel flag, default
   logical points). This is the same work as the audit's "no coordinate fallback"
   gap in #145/#147/#149.
-- Dual perception:
-  - **Screenshot** (`simctl io screenshot`) — works headless, no permission;
-    the robust default. Interaction needs no dpr: IndigoHID takes a 0–1 ratio,
-    so `tap = pixel / screenshotSize`.
-  - **OS AX-tree** (`glint-iossim ax-snapshot`) — structured + token-efficient,
-    sees native system dialogs invisible to the widget tree, but needs
-    Simulator.app GUI open **and** macOS Accessibility permission granted to the
-    calling process. Enhancement layer, not the baseline.
+- Perception: **screenshot** (`simctl io screenshot`) — works headless, no
+  permission. Interaction needs no dpr: IndigoHID takes a 0–1 ratio, so
+  `tap = pixel / screenshotSize`.
 
 Build as one vertical slice so it's testable end-to-end, not orphaned plumbing.
+
+### Deferred: OS AX-tree perception
+`glint-iossim ax-snapshot` reads the native accessibility tree (structured,
+token-efficient, sees native system dialogs the widget tree can't). Deferred —
+it needs the Simulator.app GUI open **and** macOS Accessibility permission
+granted to the calling process, which is redundant and complex next to
+screenshots. Revisit only if a concrete need surfaces.
 
 ## 2. Device / sim status + control tool  *(SHIPPED — `device` tool)*
 
