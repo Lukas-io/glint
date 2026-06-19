@@ -35,6 +35,10 @@ class AttachTool extends GlintTool {
             'device: UDID / serial — omit to auto-correlate; if you pass one '
             'that does not host the app, attach refuses (taps would hit the '
             'wrong device). '
+            'mode: flutter | device | auto (default). device mode drives the '
+            'simulator with NO Flutter app — perception via device '
+            'op:screenshot, interaction via x,y coordinate taps. auto picks '
+            'device mode when no running app is found. '
             'returnScene: include the first get_scene render. dryRun: list '
             'attachable apps + devices without attaching. awaitSettle: wait for '
             'the UI to settle first. '
@@ -53,6 +57,11 @@ class AttachTool extends GlintTool {
             ),
             'platform': Schema.string(
               description: 'ios | android. Omit to derive from the VM.',
+            ),
+            'mode': Schema.string(
+              description:
+                  'flutter | device | auto (default). device = drive the sim '
+                  'with no Flutter app.',
             ),
             'device': Schema.string(
               description:
@@ -97,6 +106,16 @@ class AttachTool extends GlintTool {
       );
     }
 
+    final mode = args['mode'] as String?;
+    if (mode != null &&
+        !const {'flutter', 'device', 'auto'}.contains(mode)) {
+      return StructuredResponse.error(
+        summary: 'unknown mode: $mode',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['use one of: flutter, device, auto'],
+      );
+    }
+
     final adbPath = (args['adbPath'] as String?) ?? 'adb';
     final returnScene = (args['returnScene'] as bool?) ?? false;
     final dryRun = (args['dryRun'] as bool?) ?? false;
@@ -118,13 +137,23 @@ class AttachTool extends GlintTool {
       );
     }
 
-    // ── 1. Resolve the VM service URI (discover if absent) ──────────────────
+    // ── Device mode: explicit, or auto when no app is discovered ────────────
     final vmUriArg = args['vmUri'] as String?;
+    if (mode == 'device') {
+      return _attachDeviceMode(session, scan, args, platformArg, adbPath);
+    }
+
+    // ── 1. Resolve the VM service URI (discover if absent) ──────────────────
     final Uri vmUri;
     if (vmUriArg != null) {
       vmUri = Uri.parse(vmUriArg);
     } else {
       if (scan.vmUris.isEmpty) {
+        // No Flutter app found. Unless flutter mode was forced, fall back to
+        // driving the device directly.
+        if (mode != 'flutter') {
+          return _attachDeviceMode(session, scan, args, platformArg, adbPath);
+        }
         return StructuredResponse.error(
           summary: 'no running Flutter app found to attach to',
           errorKind: GlintErrorKind.targetNotFound,
@@ -133,7 +162,7 @@ class AttachTool extends GlintTool {
               : 'booted devices: ${scan.devices.map((d) => d.name).join(", ")}',
           nextSteps: const [
             'start a Flutter app in debug mode (flutter run), then call attach',
-            'or pass vmUri explicitly if you already have the VM service URI',
+            'or attach in device mode (mode:"device") to drive the sim directly',
           ],
         );
       }
@@ -355,6 +384,130 @@ class AttachTool extends GlintTool {
     } finally {
       await probe.disconnect();
     }
+  }
+
+  /// Bind a device with no Flutter app. Perception is via `device
+  /// op:screenshot`; interaction via x,y coordinate taps. For iOS the device is
+  /// sized to the screenshot pixels with dpr=1, so `tap = pixel / screenshotSize`.
+  Future<StructuredResponse> _attachDeviceMode(
+    GlintSession session,
+    DiscoveryResult scan,
+    Map<String, Object?> args,
+    String? platformArg,
+    String adbPath,
+  ) async {
+    // Resolve the target device.
+    final deviceArg = args['device'] as String?;
+    BootedDevice? target;
+    if (deviceArg != null) {
+      for (final d in scan.devices) {
+        if (d.id == deviceArg) {
+          target = d;
+          break;
+        }
+      }
+      if (target == null) {
+        final p = _platformFromArg(platformArg);
+        if (p == null) {
+          return StructuredResponse.error(
+            summary: 'device $deviceArg is not booted and platform is unknown',
+            errorKind: GlintErrorKind.invalidArgument,
+            nextSteps: const [
+              'boot the device, or pass platform: ios | android',
+            ],
+          );
+        }
+        target = BootedDevice(platform: p, id: deviceArg, name: deviceArg);
+      }
+    } else {
+      final platform = _platformFromArg(platformArg);
+      final candidates =
+          platform != null ? scan.devicesFor(platform) : scan.devices;
+      if (candidates.isEmpty) {
+        return StructuredResponse.error(
+          summary: 'no booted device to attach to',
+          errorKind: GlintErrorKind.targetNotFound,
+          nextSteps: const ['boot a simulator/emulator, then call attach'],
+        );
+      }
+      if (candidates.length > 1) {
+        return _selection(
+          'multiple booted devices — re-call attach with one device',
+          scan,
+        );
+      }
+      target = candidates.single;
+    }
+
+    // Build the device target; for iOS, size it to the screenshot pixels.
+    final warnings = <String>[];
+    final DeviceTarget device;
+    Map<String, Object?>? screen;
+    switch (target.platform) {
+      case DevicePlatform.ios:
+        final bridgePath =
+            (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
+        if (!File(bridgePath).existsSync()) {
+          warnings.add(
+            'glint-iossim bridge not found at $bridgePath — tap / swipe / '
+            'long_press / type will fail until it is built '
+            '(cd native/ios_sim_bridge && swift build), or pass iosBridgePath',
+          );
+        }
+        final shotPath =
+            '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
+        final shot = await const SimControl().screenshot(target.id, shotPath);
+        if (shot.width == null || shot.height == null) {
+          return StructuredResponse.error(
+            summary: 'could not capture the screen to size device ${target.id}',
+            errorKind: GlintErrorKind.backendToolError,
+            detail: shot.error,
+          );
+        }
+        device = IosSimulator(
+          udid: target.id,
+          logicalWidth: shot.width!.toDouble(),
+          logicalHeight: shot.height!.toDouble(),
+          devicePixelRatio: 1.0, // coords are screenshot pixels
+          bridgePath: bridgePath,
+        );
+        screen = {
+          'width': shot.width,
+          'height': shot.height,
+          'unit': 'screenshot-pixels',
+        };
+      case DevicePlatform.android:
+        device = AndroidDevice(serial: target.id, adbPath: adbPath);
+    }
+
+    await session.attachDevice(device: device);
+
+    final caps = session.backend.capabilities;
+    final simStatus = target.platform == DevicePlatform.ios
+        ? await const SimControl().status(target.id)
+        : null;
+
+    return StructuredResponse(
+      summary: 'attached (device mode) to ${simStatus?.name ?? target.name} '
+          '(${target.id}) — no Flutter app; drive via screenshot + coordinates',
+      warnings: warnings,
+      nextSteps: const [
+        'call `device op:screenshot` to see the screen',
+        'tap / swipe with x,y in screenshot pixels',
+      ],
+      data: {
+        'platform': target.platform.name,
+        'device': target.id,
+        'deviceName': simStatus?.name ?? target.name,
+        if (simStatus?.osVersion != null) 'osVersion': simStatus!.osVersion,
+        if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,
+        if (simStatus?.state != null) 'state': simStatus!.state,
+        if (simStatus?.appearance != null) 'appearance': simStatus!.appearance,
+        'mode': 'device',
+        'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
+        if (screen != null) 'screen': screen,
+      },
+    );
   }
 
   /// Probe the logical viewport, retrying past a blank first frame until

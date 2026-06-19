@@ -14,7 +14,9 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by its glintId from get_scene. '
+            'Tap a node by its glintId from get_scene, OR pass x,y to tap raw '
+            'coordinates (device mode: screenshot pixels; flutter mode: logical '
+            'points) — coordinates bypass glintId resolution and hit-testing. '
             'Returns structuredContent with: ok (bool), painted, hittable, '
             'physicalCenter, changed (bool), changeCategory (routeChanged/'
             'overlayAppeared/overlayDismissed/contentChanged/nothing). '
@@ -29,6 +31,14 @@ class TapTool extends GlintTool {
             'glintId': Schema.string(
               description:
                   'Stable id from `get_scene`, e.g. floating_action_button',
+            ),
+            'x': Schema.num(
+              description:
+                  'Raw x coordinate (with y). Device mode: screenshot pixels; '
+                  'flutter mode: logical points. Bypasses glintId.',
+            ),
+            'y': Schema.num(
+              description: 'Raw y coordinate (with x).',
             ),
             'refuseNotHittable': Schema.bool(
               description:
@@ -59,7 +69,6 @@ class TapTool extends GlintTool {
                   'one call. Default false.',
             ),
           },
-          required: ['glintId'],
         ),
       );
 
@@ -67,7 +76,22 @@ class TapTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final glintId = args['glintId']! as String;
+
+    // Coordinate tap — bypasses scene resolution; the only path in device mode.
+    final x = (args['x'] as num?)?.toDouble();
+    final y = (args['y'] as num?)?.toDouble();
+    if (x != null && y != null) return _coordinateTap(session, x, y);
+
+    final glintId = args['glintId'] as String?;
+    if (glintId == null) {
+      return StructuredResponse.error(
+        summary: 'tap needs either glintId or x + y',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'pass glintId from get_scene, or x,y coordinates',
+        ],
+      );
+    }
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
@@ -152,5 +176,36 @@ class TapTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// Backend-direct tap at raw coordinates. dpr scales the input to physical
+  /// pixels; the backend divides back out, so the net ratio is
+  /// coord / referenceSize (device mode: dpr=1 over screenshot pixels;
+  /// flutter mode: dpr over logical points).
+  Future<StructuredResponse> _coordinateTap(
+      GlintSession session, double x, double y) async {
+    final device = session.device;
+    final dpr = device is IosSimulator ? device.devicePixelRatio : 1.0;
+    try {
+      await session.backend.tap(
+        physicalX: (x * dpr).round(),
+        physicalY: (y * dpr).round(),
+      );
+    } on Object catch (e) {
+      return StructuredResponse.error(
+        summary: 'coordinate tap failed at ($x, $y)',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '$e',
+      );
+    }
+    return StructuredResponse(
+      summary: 'tapped ($x, $y)',
+      data: {
+        'ok': true,
+        'x': x,
+        'y': y,
+        if (session.isDeviceMode) 'mode': 'device',
+      },
+    );
   }
 }
