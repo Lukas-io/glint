@@ -5,6 +5,7 @@
 class GlintConfig {
   GlintConfig({
     this.readyTimeoutMs = 5000,
+    this.attachProbeTimeoutMs = 2000,
     this.settleCeilingMs = 5000,
     this.settleQuietFrames = 3,
     this.scrollMaxScrolls = 8,
@@ -17,6 +18,10 @@ class GlintConfig {
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
   int readyTimeoutMs;
+
+  /// Max time `attach` polls for the first rendered frame before giving up
+  /// on the iOS viewport probe (blank/loading first frame).
+  int attachProbeTimeoutMs;
 
   /// Default ceiling for the `wait_for_settle` tool.
   int settleCeilingMs;
@@ -48,6 +53,7 @@ class GlintConfig {
   /// a user disabled at the env level.
   Map<String, Object> toJson() => {
         'readyTimeoutMs': readyTimeoutMs,
+        'attachProbeTimeoutMs': attachProbeTimeoutMs,
         'settleCeilingMs': settleCeilingMs,
         'settleQuietFrames': settleQuietFrames,
         'scrollMaxScrolls': scrollMaxScrolls,
@@ -65,6 +71,10 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'readyTimeoutMs must be a positive int';
         readyTimeoutMs = v;
+      case 'attachProbeTimeoutMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'attachProbeTimeoutMs must be a positive int';
+        attachProbeTimeoutMs = v;
       case 'settleCeilingMs':
         final v = _asPositiveInt(value);
         if (v == null) return 'settleCeilingMs must be a positive int';
