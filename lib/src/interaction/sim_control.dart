@@ -62,6 +62,19 @@ class SimControl {
   Future<String?> openUrl(String udid, String url) =>
       _run(['openurl', udid, url]);
 
+  /// Capture a PNG screenshot to a temp file (works headless). Returns the
+  /// saved path + pixel size (the size doubles as the tap-ratio reference:
+  /// `ratio = pixel / size`), or an error string.
+  Future<({String? path, int? width, int? height, String? error})> screenshot(
+    String udid,
+    String path,
+  ) async {
+    final err = await _run(['io', udid, 'screenshot', path]);
+    if (err != null) return (path: null, width: null, height: null, error: err);
+    final size = _pngSize(path);
+    return (path: path, width: size?.$1, height: size?.$2, error: null);
+  }
+
   /// Grant / revoke / reset a privacy permission.
   /// [action] is grant | revoke | reset; [service] e.g. photos, camera,
   /// location, contacts; [bundleId] required for grant/revoke.
@@ -133,6 +146,20 @@ class SimControl {
     if (res.exitCode == 0) return null;
     final err = (res.stderr as String).trim();
     return err.isEmpty ? 'simctl ${args.first} exited ${res.exitCode}' : err;
+  }
+
+  /// Reads width/height from a PNG's IHDR chunk (big-endian, fixed offsets).
+  static (int, int)? _pngSize(String path) {
+    try {
+      final bytes = File(path).readAsBytesSync();
+      if (bytes.length < 24) return null;
+      int u32(int o) =>
+          (bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) |
+          bytes[o + 3];
+      return (u32(16), u32(20));
+    } on Object {
+      return null;
+    }
   }
 
   static String? _prettyDeviceType(String? id) {
