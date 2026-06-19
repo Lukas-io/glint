@@ -279,6 +279,11 @@ class AttachTool extends GlintTool {
       final caps = session.backend.capabilities;
       final ui = await session.uiState();
       final lifecycle = await session.lifecycleState();
+      final simStatus = platform == DevicePlatform.ios
+          ? await const SimControl().status(deviceId)
+          : null;
+      final deviceName = simStatus?.name ?? info?.name;
+      final osVersion = simStatus?.osVersion ?? info?.osVersion;
 
       Map<String, Object?>? settleData;
       if (awaitSettle) {
@@ -301,13 +306,17 @@ class AttachTool extends GlintTool {
           'devicePixelRatio': device.devicePixelRatio,
         },
         if (ui.orientation != null) 'orientation': ui.orientation,
-        if (ui.brightness != null) 'brightness': ui.brightness,
+        if (simStatus?.appearance != null)
+          'appearance': simStatus!.appearance
+        else if (ui.brightness != null)
+          'appearance': ui.brightness,
+        if (simStatus?.contentSize != null) 'textSize': simStatus!.contentSize,
         if (ui.locale != null) 'locale': ui.locale,
         if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
       };
 
       return StructuredResponse(
-        summary: 'attached to ${info?.name ?? platform.name} ($deviceId)'
+        summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
             '${link?.appName != null ? " running ${link!.appName}" : ""} '
             'at $vmUri',
         warnings: warnings,
@@ -321,8 +330,10 @@ class AttachTool extends GlintTool {
         data: {
           'platform': platform.name,
           'device': deviceId,
-          if (info?.name != null) 'deviceName': info!.name,
-          if (info?.osVersion != null) 'osVersion': info!.osVersion,
+          if (deviceName != null) 'deviceName': deviceName,
+          if (osVersion != null) 'osVersion': osVersion,
+          if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,
+          if (simStatus?.state != null) 'state': simStatus!.state,
           if (link?.appName != null) 'app': link!.appName,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
