@@ -41,6 +41,16 @@ class GetSceneTool extends GlintTool {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
 
+    // Device mode: no Flutter widget tree on this attachment.
+    if (session.isDeviceMode) {
+      return StructuredResponse(
+        summary: 'device mode: no Flutter widget tree.\n'
+            'Use `device op:screenshot` to see the screen, then tap / swipe '
+            'with x,y in screenshot pixels.',
+        data: {'mode': 'device', 'state': 'device'},
+      );
+    }
+
     // N4: branch on scene mode — native surface uses OS AX tree.
     final isNativeMode = session.sceneMode == SceneMode.native;
     if (isNativeMode) {

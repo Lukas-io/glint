@@ -62,7 +62,12 @@ class GlintSession {
   SettleDetector? _settleDetector;
   NativeSceneReader? _nativeReader;
 
-  bool get isAttached => _runtime != null;
+  // Device mode: bound to an OS-level device with no Flutter VM. Only
+  // [backend] + [device] are live; Flutter perception is unavailable.
+  bool _deviceMode = false;
+
+  bool get isAttached => _runtime != null || _deviceMode;
+  bool get isDeviceMode => _deviceMode;
 
   FlutterRuntime get runtime => _requireAttached(_runtime, 'runtime');
   DeviceTarget get device => _requireAttached(_device, 'device');
@@ -149,6 +154,17 @@ class GlintSession {
       const Duration(milliseconds: 500),
       (_) => _pollLifecycle(),
     );
+  }
+
+  /// Attach in device mode — bind an OS-level device with no Flutter VM.
+  /// Only [backend] + [device] are live; Flutter perception (scene reader,
+  /// resolver, interactor) is not. Drive via screenshots + coordinate taps.
+  Future<void> attachDevice({required DeviceTarget device}) async {
+    if (_runtime != null || _deviceMode) await detach();
+    _device = device;
+    _backend = device.createBackend();
+    _deviceMode = true;
+    sceneMode = SceneMode.native;
   }
 
   /// Fires when the VM service WebSocket closes (hot restart, app kill, etc.).
@@ -276,6 +292,8 @@ class GlintSession {
     _disconnectSub = null;
     reconnectCount = 0;
     _nativeReader = null;
+    _deviceMode = false;
+    sceneMode = SceneMode.flutter;
     final runtime = _runtime;
     _runtime = null;
     _device = null;

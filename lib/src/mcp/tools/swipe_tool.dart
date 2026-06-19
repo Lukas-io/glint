@@ -14,7 +14,9 @@ class SwipeTool extends GlintTool {
   Tool get definition => Tool(
         name: 'swipe',
         description:
-            'Swipe from one glintId to another. '
+            'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '
+            'between raw coordinates (device mode: screenshot pixels; flutter '
+            'mode: logical points) — coordinates bypass glintId resolution. '
             '`awaitReady` gates on the `from` endpoint — the `to` only needs '
             'to resolve, not be hittable. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -26,6 +28,13 @@ class SwipeTool extends GlintTool {
             ),
             'toGlintId': Schema.string(
               description: 'End point — stable id from get_scene.',
+            ),
+            'x1': Schema.num(description: 'Raw start x (with y1,x2,y2).'),
+            'y1': Schema.num(description: 'Raw start y.'),
+            'x2': Schema.num(description: 'Raw end x.'),
+            'y2': Schema.num(description: 'Raw end y.'),
+            'durationMs': Schema.int(
+              description: 'Coordinate swipe duration. Default 300.',
             ),
             'awaitReady': Schema.bool(
               description:
@@ -45,7 +54,6 @@ class SwipeTool extends GlintTool {
                   'postScene. Default false.',
             ),
           },
-          required: ['fromGlintId', 'toGlintId'],
         ),
       );
 
@@ -53,8 +61,25 @@ class SwipeTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final from = args['fromGlintId']! as String;
-    final to = args['toGlintId']! as String;
+
+    // Coordinate swipe — bypasses scene resolution; the only path in device mode.
+    final x1 = (args['x1'] as num?)?.toDouble();
+    final y1 = (args['y1'] as num?)?.toDouble();
+    final x2 = (args['x2'] as num?)?.toDouble();
+    final y2 = (args['y2'] as num?)?.toDouble();
+    if (x1 != null && y1 != null && x2 != null && y2 != null) {
+      final durationMs = (args['durationMs'] as int?) ?? 300;
+      return _coordinateSwipe(session, x1, y1, x2, y2, durationMs);
+    }
+
+    final from = args['fromGlintId'] as String?;
+    final to = args['toGlintId'] as String?;
+    if (from == null || to == null) {
+      return StructuredResponse.error(
+        summary: 'swipe needs either fromGlintId + toGlintId, or x1,y1,x2,y2',
+        errorKind: GlintErrorKind.invalidArgument,
+      );
+    }
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
@@ -97,5 +122,35 @@ class SwipeTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// Backend-direct swipe between raw coordinates (see TapTool._coordinateTap
+  /// for the dpr/ratio reasoning).
+  Future<StructuredResponse> _coordinateSwipe(GlintSession session, double x1,
+      double y1, double x2, double y2, int durationMs) async {
+    final device = session.device;
+    final dpr = device is IosSimulator ? device.devicePixelRatio : 1.0;
+    try {
+      await session.backend.swipe(
+        physicalX1: (x1 * dpr).round(),
+        physicalY1: (y1 * dpr).round(),
+        physicalX2: (x2 * dpr).round(),
+        physicalY2: (y2 * dpr).round(),
+        durationMs: durationMs,
+      );
+    } on Object catch (e) {
+      return StructuredResponse.error(
+        summary: 'coordinate swipe failed ($x1,$y1)->($x2,$y2)',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '$e',
+      );
+    }
+    return StructuredResponse(
+      summary: 'swiped ($x1,$y1) -> ($x2,$y2)',
+      data: {
+        'ok': true,
+        if (session.isDeviceMode) 'mode': 'device',
+      },
+    );
   }
 }
