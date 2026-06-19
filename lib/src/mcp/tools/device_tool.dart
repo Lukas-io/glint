@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
@@ -23,6 +25,8 @@ class DeviceTool extends GlintTool {
             'appearance (light/dark), content size. '
             'appearance — set value: light|dark. '
             'openurl — open value: <url/deeplink>. '
+            'screenshot — capture a PNG (works headless); returns the saved '
+            'path + pixel size. '
             'privacy — action: grant|revoke|reset, service: '
             'photos|camera|location|contacts|…, bundleId for grant/revoke. '
             'errorKind: invalidArgument (bad op/args, no udid), '
@@ -30,7 +34,9 @@ class DeviceTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
-              description: 'status (default) | appearance | openurl | privacy',
+              description:
+                  'status (default) | appearance | openurl | screenshot | '
+                  'privacy',
             ),
             'udid': Schema.string(
               description:
@@ -110,6 +116,30 @@ class DeviceTool extends GlintTool {
         final err = await sim.openUrl(udid, url);
         return _result(err, 'opened $url on $udid');
 
+      case 'screenshot':
+        final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
+            '${DateTime.now().millisecondsSinceEpoch}.png';
+        final shot = await sim.screenshot(udid, path);
+        if (shot.error != null || shot.path == null) {
+          return StructuredResponse.error(
+            summary: shot.error ?? 'screenshot failed',
+            errorKind: GlintErrorKind.backendToolError,
+          );
+        }
+        final dims = shot.width != null && shot.height != null
+            ? ' (${shot.width}x${shot.height} px)'
+            : '';
+        return StructuredResponse(
+          summary: 'screenshot saved: ${shot.path}$dims',
+          nextSteps: ['read the image at ${shot.path} to see the screen'],
+          data: {
+            'ok': true,
+            'path': shot.path,
+            if (shot.width != null) 'width': shot.width,
+            if (shot.height != null) 'height': shot.height,
+          },
+        );
+
       case 'privacy':
         final action = args['action'] as String?;
         final service = args['service'] as String?;
@@ -129,7 +159,7 @@ class DeviceTool extends GlintTool {
 
       default:
         return _bad('unknown op: $op '
-            '(use status | appearance | openurl | privacy)');
+            '(use status | appearance | openurl | screenshot | privacy)');
     }
   }
 
