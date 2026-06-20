@@ -19,9 +19,12 @@ coordinate-native (`AdbBackend`, `IosSimBackend`); the Flutter coupling lived
 only in the tool layer. IndigoHID takes a 0–1 ratio, so taps need no dpr lookup
 (`tap = pixel / screenshotSize`).
 
+Also shipped:
+- ✅ Coordinate `long_press` / `drag` / `scroll` (shared `coordinate.dart`).
+- ✅ `hardware_button` works in device mode (backend-direct).
+
 Follow-up (not yet done):
-- Coordinate `long_press` / `drag` / `scroll` (tap + swipe done; same pattern).
-- Android device-mode is wired (adb backend) but not live-tested.
+- Android device-mode is wired (adb backend) but not live-tested (no device).
 
 ### Deferred: OS AX-tree perception
 `glint-iossim ax-snapshot` reads the native accessibility tree (structured,
