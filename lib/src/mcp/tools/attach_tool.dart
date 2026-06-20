@@ -313,6 +313,9 @@ class AttachTool extends GlintTool {
           : null;
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
+      // Prefer the Dart package name (distinguishes apps) over the iOS bundle
+      // name, which is almost always the generic "Runner".
+      final appName = _packageName(probe.rootLibraryUri) ?? link?.appName;
 
       Map<String, Object?>? settleData;
       if (awaitSettle) {
@@ -346,7 +349,7 @@ class AttachTool extends GlintTool {
 
       return StructuredResponse(
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
-            '${link?.appName != null ? " running ${link!.appName}" : ""} '
+            '${appName != null ? " running $appName" : ""} '
             'at $vmUri',
         warnings: warnings,
         nextSteps: [
@@ -363,7 +366,7 @@ class AttachTool extends GlintTool {
           if (osVersion != null) 'osVersion': osVersion,
           if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,
           if (simStatus?.state != null) 'state': simStatus!.state,
-          if (link?.appName != null) 'app': link!.appName,
+          if (appName != null) 'app': appName,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
           if (dartVersion != null && dartVersion.isNotEmpty)
@@ -607,6 +610,14 @@ class AttachTool extends GlintTool {
         'devices': [for (final dev in d.devices) dev.toJson()],
       },
     );
+  }
+
+  /// `package:aetrust/main.dart` → `aetrust`. Null for non-package URIs.
+  String? _packageName(String? rootLibUri) {
+    final u = rootLibUri == null ? null : Uri.tryParse(rootLibUri);
+    return (u?.scheme == 'package' && u!.pathSegments.isNotEmpty)
+        ? u.pathSegments.first
+        : null;
   }
 
   DevicePlatform? _platformFromArg(String? arg) => switch (arg) {
