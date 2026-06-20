@@ -14,9 +14,8 @@ enum InspectorGroup {
   final String prefix;
 }
 
-/// Parses inspector trees into typed [SceneNode]s. Talks to the running
-/// app via [FlutterRuntime] only — no direct RPC calls. Walks happen
-/// server-side.
+/// Parses inspector trees into typed [SceneNode]s, reaching the app through
+/// [FlutterRuntime] only — no direct RPC calls.
 class InspectorClient {
   InspectorClient(this._runtime);
 

@@ -105,10 +105,8 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
-  /// Returns viewport dimensions without performing a hit-test.
-  ///
-  /// Safe on Dart 3.12 / iOS 26 where [HitTestResult] is not accessible in
-  /// the CFE eval scope. Use this from [AttachTool] instead of [resolve].
+  /// Viewport dimensions without a hit-test. Safe on Dart 3.12 / iOS 26 where
+  /// [HitTestResult] is inaccessible in the CFE eval scope; use over [resolve].
   Future<({double dpr, double w, double h})> resolveViewport(
       Scene scene, String glintId) async {
     final node = scene.findByGlintId(glintId);
@@ -249,16 +247,11 @@ class GeometryExpr {
       '$_hittable.toString()',
       "'}'",
     ].join(' + ');
-    // HitTestResult r dropped — lambda only needs Offset c now.
     return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
   }
 
-  /// Probe expression that returns only dpr/vw/vh — no [HitTestResult].
-  ///
-  /// On Dart 3.12+ the CFE rejects `HitTestResult` in synthetic eval scopes
-  /// even though the type is exported from `package:flutter/widgets.dart`.
-  /// [_probeIosTarget] only needs viewport dimensions so we skip the hit-test
-  /// half of [build] entirely.
+  /// Returns only dpr/vw/vh — skips the hit-test half of [build] because the
+  /// CFE rejects `HitTestResult` in synthetic eval scopes on Dart 3.12+.
   static String buildViewProbe() {
     final body = [
       "'{\"dpr\":'",

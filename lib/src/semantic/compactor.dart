@@ -1,8 +1,7 @@
 import 'semantic_node.dart';
 
-/// Strips framework noise. [expandChild] spills nameless pass-throughs
-/// into the parent's child list; [hoistPage] surfaces a [SemanticPage]
-/// past app-shell wrappers.
+/// Strips framework noise: [expandChild] spills nameless pass-throughs into the
+/// parent's child list; [hoistPage] surfaces a [SemanticPage] past app-shell wrappers.
 class SceneCompactor {
   const SceneCompactor();
 
@@ -16,9 +15,8 @@ class SceneCompactor {
     return page ?? root;
   }
 
-  /// glintId presence means "addressable" — not "worth surfacing".
-  /// Stable-id names every node, so we fold on shape: hintless containers
-  /// and child-bearing unknowns.
+  /// glintId means "addressable", not "worth surfacing" — stable-id names every
+  /// node, so we fold on shape: hintless containers and child-bearing unknowns.
   bool _isNoisyPassThrough(SemanticNode node) {
     if (node is SemanticContainer && node.hint == null) return true;
     if (node is SemanticUnknown && node.children.isNotEmpty) return true;

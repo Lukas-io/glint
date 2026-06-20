@@ -56,8 +56,8 @@ sealed class SemanticNode {
   Map<String, Object?> _extraJson();
 }
 
-/// Top of the tree: a screen / route. Holds the optional [appBar] and a
-/// flat [body]. The page itself isn't tappable.
+/// Top of the tree: a screen / route. Holds the optional [appBar] and a flat
+/// [body]; not tappable itself.
 class SemanticPage extends SemanticNode {
   SemanticPage({
     super.glintId,
@@ -113,8 +113,8 @@ class SemanticButton extends SemanticNode {
     super.children = const [],
   }) : super(affordances: const {Affordance.tappable});
 
-  /// Best-effort human label — contained text or tooltip. Icons stay as
-  /// children so [IconEnricher] can populate their name post-classify.
+  /// Best-effort human label — contained text or tooltip. Icons stay as children
+  /// so [IconEnricher] can populate their name post-classify.
   final String? label;
 
   @override
@@ -139,8 +139,8 @@ class SemanticInput extends SemanticNode {
           affordances: const {Affordance.typeable},
         );
 
-  /// Placeholder / labelText. Populated by [InputEnricher] post-classify;
-  /// stays null when the input doesn't expose one.
+  /// Placeholder / labelText, populated by [InputEnricher]; null when the input
+  /// exposes none.
   String? hint;
 
   /// Live text in the field. Populated by [InputEnricher].
@@ -194,8 +194,8 @@ class SemanticIcon extends SemanticNode {
   /// Set by [IconEnricher] when the codepoint matches a known table entry.
   String? name;
 
-  /// Raw IconData codepoint, populated by [IconEnricher]. Hex-rendered
-  /// in [displayLabel] as the fallback when [name] is unknown.
+  /// Raw IconData codepoint, populated by [IconEnricher]. Hex-rendered in
+  /// [displayLabel] as the fallback when [name] is unknown.
   int? codePoint;
 
   @override
@@ -246,9 +246,8 @@ class SemanticList extends SemanticNode {
   @override
   SemanticRole get role => SemanticRole.list;
 
-  // direct-children count is misleading (a ListView often has 1 sliver
-  // child wrapping N visible items). The renderer's indented body shows
-  // the real shape.
+  // No child count: it's misleading (a ListView often has 1 sliver child
+  // wrapping N visible items). The renderer's indented body shows the real shape.
   @override
   String get displayLabel => 'list';
 
@@ -280,9 +279,8 @@ class SemanticContainer extends SemanticNode {
       };
 }
 
-/// Floor classifier output — a node we know about but can't classify.
-/// Keeps [label] for debugging and the original [glintId] so the agent
-/// can still target it if it has to.
+/// Floor classifier output — a node we know about but can't classify. Keeps
+/// [label] for debugging and [glintId] so the agent can still target it.
 class SemanticUnknown extends SemanticNode {
   SemanticUnknown({
     super.glintId,

@@ -13,10 +13,9 @@ class SceneReader {
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
 
-  /// User-code-only tree — the agent's reading surface.
-  /// When a modal overlay is detected via `canPop()`, the full tree is read
-  /// to extract dialog content; those nodes are appended to the summary root
-  /// so [Scene.findByGlintId] can address them for geometry/interaction.
+  /// User-code tree — the agent's reading surface. The full tree is also read
+  /// to extract overlay/dialog content, appended to the summary root so
+  /// [Scene.findByGlintId] can address those nodes too.
   Future<Scene> readSummary() async {
     final groupName = _inspector.nextReadGroup();
     final root = await _inspector.readSummaryTree(groupName: groupName);
@@ -25,9 +24,8 @@ class SceneReader {
     // generation skips them and firstAddressableId()/hoistPage are unaffected.
     await _markOffstageSubtrees(root, groupName);
 
-    // Overlay detection: attempt before id assignment so overlay nodes get
-    // stable ids in the same pass as the rest of the tree.
-    final overlay = await _tryReadOverlay(root, groupName);
+    // Before id assignment so overlay nodes get stable ids in the same pass.
+    final overlay = await _tryReadOverlay(root);
 
     StableIdGenerator().assignIds(root);
     return Scene._(
@@ -50,14 +48,10 @@ class SceneReader {
 
   // ── offstage pruning (IndexedStack / GoRouter shell routes) ──────────────
 
-  /// Finds all Scaffold nodes in the tree and evaluates whether each is inside
-  /// an Offstage ancestor (offstage=true). Offstage Scaffolds and their entire
-  /// subtree are marked [SceneNode.isOffstage] = true so [firstAddressableId],
-  /// [hoistPage], and the classifier skip them.
-  ///
-  /// Offstage content appears in the summary tree alongside active content —
-  /// [Offstage] is a framework widget and filtered out of the summary tree, so
-  /// we cannot detect it structurally and must evaluate per-Scaffold.
+  /// Marks Scaffolds under an `offstage=true` [Offstage] (and their subtree)
+  /// [SceneNode.isOffstage] so id assignment, [firstAddressableId], [hoistPage]
+  /// and the classifier skip them. [Offstage] is filtered from the summary
+  /// tree, so we probe per-Scaffold rather than detect it structurally.
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
     final scaffolds = root.walk().where((n) => n.label == 'Scaffold').toList();
     if (scaffolds.isEmpty) return;
@@ -80,18 +74,12 @@ class SceneReader {
 
   // ── overlay ───────────────────────────────────────────────────────────────
 
-  Future<_OverlayResult?> _tryReadOverlay(
-      SceneNode summaryRoot, String summaryGroup) async {
-    // We skip the canPop() heuristic entirely. WidgetInspectorService.instance
-    // .selection.currentElement is unreliable (can be null when the inspector
-    // root node is selected, or when the element context is above the Navigator)
-    // causing canPop() to throw and silently suppress overlay detection.
-    //
-    // Instead we always read the full tree. _extractDialogEntries already
-    // handles the no-overlay case by returning empty contentRoots. The extra
-    // tree read (~50-100 ms) is acceptable: readSummary is only called at the
-    // start of a tool call, never in a hot loop.
-
+  Future<_OverlayResult?> _tryReadOverlay(SceneNode summaryRoot) async {
+    // Always read the full tree rather than gating on canPop() — selection
+    // .currentElement is unreliable (null above the Navigator), making canPop()
+    // throw and silently suppress overlay detection. _extractDialogEntries
+    // returns empty for the no-overlay case; the extra read (~50-100ms) is fine
+    // since readSummary runs once per tool call, not in a hot loop.
     final fullGroup = _inspector.nextReadGroup();
     final SceneNode fullRoot;
     try {
@@ -261,12 +249,9 @@ class Scene {
     return null;
   }
 
-  /// Pick a node that's safe to probe geometry against. Skips the root
-  /// (often a StatelessWidget with no RenderObject) and prefers a leaf —
-  /// leaves are guaranteed to have a RenderObject hit-test can resolve.
   /// True when [glintId] belongs to an overlay entry (dialog/sheet) rather
-  /// than the base screen. Used by the tap tool to warn when a barrier
-  /// may intercept the tap.
+  /// than the base screen. The tap tool uses this to warn when a barrier may
+  /// intercept the tap.
   bool isInOverlay(String glintId) {
     for (final root in overlayRoots) {
       for (final n in root.walk()) {

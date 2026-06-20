@@ -24,9 +24,8 @@ class SceneNode {
   /// locationId.
   final int indexInParent;
 
-  /// Usually the widget runtime type. Falls back to a framework-internal
-  /// type name when the inspector emits one (e.g.
-  /// `_ElementDiagnosticableTreeNode`).
+  /// Usually the widget runtime type; falls back to a framework-internal type
+  /// name (e.g. `_ElementDiagnosticableTreeNode`) when the inspector emits one.
   final String description;
 
   /// DiagnosticsNode `type` field — typically
@@ -37,9 +36,8 @@ class SceneNode {
   /// inspector group; NOT stable across reads.
   final String inspectorId;
 
-  /// Inspector source-location id — same widget at same source location
-  /// produces the same value every read. Bedrock for stable-id generation
-  /// but not unique on its own.
+  /// Inspector source-location id — stable per source location across reads.
+  /// Bedrock for stable-id generation but not unique on its own.
   final int? locationId;
 
   final CreationLocation? creationLocation;
@@ -59,10 +57,9 @@ class SceneNode {
   /// [StableIdGenerator.assignIds] runs over the tree.
   String? glintId;
 
-  /// True when this node and its subtree are inside an [Offstage] widget with
-  /// offstage=true — i.e. a non-active IndexedStack child or GoRouter shell
-  /// branch. Offstage nodes have NaN/zero geometry and are excluded from
-  /// addressable ids, scene rendering, and the [hoistPage] page selector.
+  /// True inside an offstage [Offstage] (non-active IndexedStack child or
+  /// GoRouter shell branch). NaN/zero geometry, so excluded from addressable
+  /// ids, scene rendering, and the [hoistPage] page selector.
   bool isOffstage = false;
 
   /// Screen-space bounding box for native (iOS AX) nodes.
@@ -110,8 +107,6 @@ class SceneNode {
 // ── platform view detection ────────────────────────────────────────────────
 
 /// Widget labels whose element context rejects VM evals (RPCError 113).
-/// Kept at file scope so both [SceneNode.isPlatformView] and any future
-/// callers share the same source of truth.
 const _platformViewLabels = {
   'GoogleMap',
   'AndroidView',
@@ -123,10 +118,9 @@ const _platformViewLabels = {
   'TextureLayer',
 };
 
-/// Maximum summary-tree depth at which [SceneNode.addressableCandidates]
-/// considers a node "shallow enough" to have an accurate outer ModalRoute
-/// name. Nodes beyond this threshold are typically inside a GoRouter
-/// ShellRoute inner navigator or an off-screen PageView page.
+/// Max summary-tree depth at which a node is "shallow enough" for an accurate
+/// outer ModalRoute name. Deeper nodes are usually inside a GoRouter ShellRoute
+/// inner navigator or an off-screen PageView page.
 const kShallowProbeMaxDepth = 12;
 
 class CreationLocation {

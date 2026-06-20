@@ -11,13 +11,10 @@ import '../tool.dart';
 const String _kRepo = 'Lukas-io/glint';
 const String _kIssueNewBase = 'https://github.com/Lukas-io/glint/issues/new';
 
-/// File a bug / UX / feature note into glint's GitHub repo via the local
-/// `gh` CLI. Falls back to a pre-filled GitHub deep link when `gh` is
-/// missing or fails, so the user always has a one-click filing path.
-///
-/// Titles, bodies, and the auto-attached context are path-redacted before
-/// they leave the machine — `/Users/<name>/...` becomes `<home>/...` or
-/// `<project:foo>/...`.
+/// File a bug / UX / feature note into glint's GitHub repo via the local `gh`
+/// CLI, falling back to a pre-filled GitHub deep link when `gh` is missing or
+/// fails. Titles, bodies, and auto-attached context are path-redacted before
+/// they leave the machine (`/Users/<name>/...` → `<home>/...` or `<project:foo>/...`).
 class ReportIssueTool extends GlintTool {
   const ReportIssueTool();
 

@@ -90,13 +90,12 @@ class _IdPass {
 }
 
 class _Snake {
-  // PascalCase → snake_case. Strips leading `_`, splits at upper-to-lower
-  // boundaries and (run-of-uppers) → next-is-lower transitions.
-  //
-  // FloatingActionButton → floating_action_button
-  // _ElementTreeNode     → element_tree_node
-  // HTTPSConnection      → https_connection
-  // Sliver2DPanel        → sliver2_d_panel (acceptable v1 quirk)
+  // PascalCase → snake_case. Strips leading `_`, splits at upper→lower and
+  // (run-of-uppers)→next-is-lower boundaries. Examples:
+  //   FloatingActionButton → floating_action_button
+  //   _ElementTreeNode     → element_tree_node
+  //   HTTPSConnection      → https_connection
+  //   Sliver2DPanel        → sliver2_d_panel (acceptable v1 quirk)
   static String case_(String input) {
     if (input.isEmpty) return '_unknown';
     var s = input;

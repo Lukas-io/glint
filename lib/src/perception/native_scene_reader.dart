@@ -4,11 +4,9 @@ import 'dart:io';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
-/// Reads native surface content via the glint-iossim `ax-snapshot` command.
-/// When the Simulator exposes an AX tree (requires macOS accessibility
-/// permission), returns a parsed scene. When AX is disabled (modern Simulator
-/// with SimRenderServer rendering), returns a sentinel scene that tells the
-/// agent a native surface is active but unreadable via the Flutter tree.
+/// Reads native surface content via glint-iossim `ax-snapshot`. Returns a
+/// parsed scene when the Simulator exposes an AX tree (needs macOS a11y
+/// permission), else a sentinel scene flagging an unreadable native surface.
 class NativeSceneReader {
   NativeSceneReader({required this.udid, required this.bridgePath});
 
@@ -35,11 +33,8 @@ class NativeSceneReader {
   // ── internals ─────────────────────────────────────────────────────────────
 
   Scene _nativeSentinel() {
-    // Returns a placeholder scene that tells the agent a native surface is up.
-    // The agent can read this, understand the situation, and decide to:
-    //   - wait (wait_for_settle or poll get_scene)
-    //   - dismiss (hardware_button home/back)
-    //   - use tap with physical coordinates if known
+    // Placeholder scene signalling a native surface is up so the agent can
+    // wait, dismiss it, or tap by physical coordinates.
     final root = SceneNode(
       depth: 0,
       indexInParent: -1,
@@ -94,7 +89,7 @@ class NativeSceneReader {
     );
     node.glintId = baseId;
 
-    // Store AX frame as creation location for geometry resolution.
+    // Stash the AX frame for geometry resolution.
     if (frame != null) {
       node.axFrame = (
         x: (frame['x'] as num?)?.toDouble() ?? 0,

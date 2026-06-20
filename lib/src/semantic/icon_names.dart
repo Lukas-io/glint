@@ -1,12 +1,6 @@
-// Small lookup table for the most common Material icons. Codepoints
-// taken directly from flutter/lib/src/material/icons.dart in the SDK
-// in use — they're stable enough across SDKs that a hand-maintained
-// table works for the agent-facing common cases.
-//
-// Bigger picture: IconData.toString() only exposes the codepoint at
-// runtime, and there's no name registry; this is the only path to a
-// memorable label. Unknown codepoints render as U+XXXX so the agent
-// still has something to grep against.
+// Codepoint→name table for common Material icons (from material/icons.dart),
+// hand-maintained because IconData exposes only the codepoint at runtime with no
+// name registry. Unknown codepoints render as U+XXXX so the agent can still grep.
 
 const Map<int, String> kKnownIconNames = {
   0xe047: 'add',
