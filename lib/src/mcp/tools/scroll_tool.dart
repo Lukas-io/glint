@@ -74,38 +74,32 @@ class ScrollTool extends GlintTool {
     }
 
     // Device mode: no Flutter viewport probe — swipe from center using the
-    // device's screenshot-pixel dims (coordinateSwipe handles the dpr=1 ratio).
+    // device's screen size (coordinateSwipe applies the dpr=1 ratio).
     if (session.isDeviceMode) {
-      final device = session.device;
-      final w = switch (device) {
-        IosSimulator() => device.logicalWidth,
-        AndroidDevice() => device.screenWidth,
-      };
-      final h = switch (device) {
-        IosSimulator() => device.logicalHeight,
-        AndroidDevice() => device.screenHeight,
-      };
-      if (w == null || h == null) {
+      final size = session.device.screenSize;
+      if (size == null) {
         return StructuredResponse.error(
-          summary: 'device-mode scroll needs known screen size; none available',
+          summary: 'device-mode scroll needs a known screen size; none available',
           errorKind: GlintErrorKind.unsupportedBackendAction,
-          nextSteps: const ['take a `device op:screenshot` and use swipe x1,y1,x2,y2'],
+          nextSteps: const [
+            'take a `device op:screenshot` and use swipe x1,y1,x2,y2',
+          ],
         );
       }
       final dx = (dir == ScrollDirection.left
-              ? -w
+              ? -size.w
               : dir == ScrollDirection.right
-                  ? w
+                  ? size.w
                   : 0) *
           amount;
       final dy = (dir == ScrollDirection.up
-              ? -h
+              ? -size.h
               : dir == ScrollDirection.down
-                  ? h
+                  ? size.h
                   : 0) *
           amount;
-      return coordinateSwipe(
-          session, w / 2, h / 2, w / 2 - dx, h / 2 - dy, 300,
+      return coordinateSwipe(session, size.w / 2, size.h / 2,
+          size.w / 2 - dx, size.h / 2 - dy, 300,
           verb: 'scrolled');
     }
 

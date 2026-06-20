@@ -2,14 +2,23 @@ import 'backend.dart';
 import 'backends/adb_backend.dart';
 import 'backends/ios_sim_backend.dart';
 
-/// One device glint can drive. Use [createBackend] to get an
-/// [InteractionBackend] without choosing between [AdbBackend] /
-/// [IosSimBackend] yourself.
+/// One device glint can drive. [createBackend] hides the [AdbBackend] /
+/// [IosSimBackend] choice; [devicePixelRatio] and [screenSize] give tools the
+/// coordinate math without switching on the concrete type.
 sealed class DeviceTarget {
   const DeviceTarget();
 
-  /// Platform tag — used in logs / MCP responses.
   DevicePlatform get platform;
+
+  /// iOS UDID or Android serial.
+  String get id;
+
+  /// Scale from input coordinates to physical pixels. iOS uses the real DPR;
+  /// Android backends take raw pixels, so 1.0.
+  double get devicePixelRatio;
+
+  /// Screen size for device-mode center anchoring, or null if unknown.
+  ({double w, double h})? get screenSize;
 
   InteractionBackend createBackend();
 }
@@ -24,19 +33,28 @@ class AndroidDevice extends DeviceTarget {
     this.screenHeight,
   });
 
-  /// adb `-s` serial. e.g. `emulator-5554` or a real-device id.
+  /// adb `-s` serial, e.g. `emulator-5554`.
   final String serial;
-
-  /// Path to the `adb` binary. Defaults to whatever's on PATH.
   final String adbPath;
 
-  /// Screen pixel size, populated in device mode (from a screenshot) so
-  /// coordinate scroll can anchor at center. Null in Flutter mode.
+  /// Screen pixels, set in device mode (from a screenshot); null in Flutter mode.
   final double? screenWidth;
   final double? screenHeight;
 
   @override
   DevicePlatform get platform => DevicePlatform.android;
+
+  @override
+  String get id => serial;
+
+  @override
+  double get devicePixelRatio => 1.0;
+
+  @override
+  ({double w, double h})? get screenSize =>
+      (screenWidth != null && screenHeight != null)
+          ? (w: screenWidth!, h: screenHeight!)
+          : null;
 
   @override
   InteractionBackend createBackend() =>
@@ -52,12 +70,13 @@ class IosSimulator extends DeviceTarget {
     required this.bridgePath,
   });
 
-  /// Booted simulator UDID.
   final String udid;
 
-  /// Logical device size in points (e.g. iPhone 17 Pro = 402×874).
+  /// Logical size in points (Flutter mode) or screenshot pixels (device mode).
   final double logicalWidth;
   final double logicalHeight;
+
+  @override
   final double devicePixelRatio;
 
   /// Path to the compiled `glint-iossim` Swift binary.
@@ -65,6 +84,12 @@ class IosSimulator extends DeviceTarget {
 
   @override
   DevicePlatform get platform => DevicePlatform.ios;
+
+  @override
+  String get id => udid;
+
+  @override
+  ({double w, double h})? get screenSize => (w: logicalWidth, h: logicalHeight);
 
   @override
   InteractionBackend createBackend() => IosSimBackend(
