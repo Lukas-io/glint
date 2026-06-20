@@ -2,44 +2,33 @@ import '../../interaction.dart';
 import 'envelope.dart';
 import 'session.dart';
 
-/// Backend-direct coordinate actions, shared by tap / long_press / swipe / drag.
-///
-/// The net ratio handed to the platform backend is `coord / referenceSize`
-/// because the backend divides physical pixels by dpr before injecting:
-///   • device mode  → dpr = 1 over screenshot pixels  → ratio = pixel / shot
-///   • flutter mode → dpr over logical points         → ratio = logical / view
-/// So the agent passes screenshot pixels in device mode and logical points in
-/// flutter mode, and the same code is correct for both.
-double _scale(GlintSession session) {
-  final device = session.device;
-  return device is IosSimulator ? device.devicePixelRatio : 1.0;
-}
+// Backend-direct coordinate actions, shared by tap / long_press / swipe / drag.
+//
+// The net injected ratio is coord / referenceSize: the backend divides physical
+// pixels by dpr, so passing coord * dpr cancels out. Device mode uses dpr=1 over
+// screenshot pixels; Flutter mode uses the real dpr over logical points.
 
-Map<String, Object?> _okData(GlintSession session, Map<String, Object?> extra) =>
+Map<String, Object?> _ok(GlintSession session, Map<String, Object?> extra) =>
     {'ok': true, ...extra, if (session.isDeviceMode) 'mode': 'device'};
 
 Future<StructuredResponse> coordinateTap(
     GlintSession session, double x, double y) async {
-  final dpr = _scale(session);
+  final dpr = session.device.devicePixelRatio;
   try {
     await session.backend
         .tap(physicalX: (x * dpr).round(), physicalY: (y * dpr).round());
   } on Object catch (e) {
-    return StructuredResponse.error(
-      summary: 'coordinate tap failed at ($x, $y)',
-      errorKind: GlintErrorKind.backendToolError,
-      detail: '$e',
-    );
+    return _failed('coordinate tap', '($x, $y)', e);
   }
   return StructuredResponse(
     summary: 'tapped ($x, $y)',
-    data: _okData(session, {'x': x, 'y': y}),
+    data: _ok(session, {'x': x, 'y': y}),
   );
 }
 
 Future<StructuredResponse> coordinateLongPress(
     GlintSession session, double x, double y, int durationMs) async {
-  final dpr = _scale(session);
+  final dpr = session.device.devicePixelRatio;
   try {
     await session.backend.longPress(
       physicalX: (x * dpr).round(),
@@ -47,15 +36,11 @@ Future<StructuredResponse> coordinateLongPress(
       durationMs: durationMs,
     );
   } on Object catch (e) {
-    return StructuredResponse.error(
-      summary: 'coordinate long-press failed at ($x, $y)',
-      errorKind: GlintErrorKind.backendToolError,
-      detail: '$e',
-    );
+    return _failed('coordinate long-press', '($x, $y)', e);
   }
   return StructuredResponse(
     summary: 'long-pressed ($x, $y) for ${durationMs}ms',
-    data: _okData(session, {'x': x, 'y': y}),
+    data: _ok(session, {'x': x, 'y': y}),
   );
 }
 
@@ -68,7 +53,7 @@ Future<StructuredResponse> coordinateSwipe(
   int durationMs, {
   String verb = 'swiped',
 }) async {
-  final dpr = _scale(session);
+  final dpr = session.device.devicePixelRatio;
   try {
     await session.backend.swipe(
       physicalX1: (x1 * dpr).round(),
@@ -78,14 +63,17 @@ Future<StructuredResponse> coordinateSwipe(
       durationMs: durationMs,
     );
   } on Object catch (e) {
-    return StructuredResponse.error(
-      summary: '$verb (coordinate) failed ($x1,$y1)->($x2,$y2)',
-      errorKind: GlintErrorKind.backendToolError,
-      detail: '$e',
-    );
+    return _failed(verb, '($x1,$y1)->($x2,$y2)', e);
   }
   return StructuredResponse(
     summary: '$verb ($x1,$y1) -> ($x2,$y2)',
-    data: _okData(session, const {}),
+    data: _ok(session, const {}),
   );
 }
+
+StructuredResponse _failed(String what, String where, Object e) =>
+    StructuredResponse.error(
+      summary: '$what failed at $where',
+      errorKind: GlintErrorKind.backendToolError,
+      detail: '$e',
+    );

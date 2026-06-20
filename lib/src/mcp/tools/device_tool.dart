@@ -169,12 +169,7 @@ class DeviceTool extends GlintTool {
 
   String? _resolveUdid(GlintSession session, String? arg) {
     if (arg != null && arg.isNotEmpty) return arg;
-    if (session.isAttached) {
-      final device = session.device;
-      if (device is IosSimulator) return device.udid;
-      if (device is AndroidDevice) return device.serial;
-    }
-    return null;
+    return session.isAttached ? session.device.id : null;
   }
 
   StructuredResponse _result(String? err, String okSummary) {

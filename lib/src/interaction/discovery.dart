@@ -39,11 +39,8 @@ class AppDeviceLink {
   final String? appName;
 }
 
-/// What [DeviceDiscovery.scan] found: running Flutter VM service URIs and
-/// booted devices. The two lists are deliberately uncorrelated — a VM URI
-/// on 127.0.0.1 carries no device identity, so `attach` resolves the pairing
-/// later (one app + one device of the right platform = unambiguous; otherwise
-/// the agent picks).
+/// Running Flutter VM URIs + booted devices. Uncorrelated by design — a URI on
+/// 127.0.0.1 carries no device identity; `attach` pairs them later.
 class DiscoveryResult {
   const DiscoveryResult({required this.vmUris, required this.devices});
 

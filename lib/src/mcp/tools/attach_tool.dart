@@ -439,10 +439,16 @@ class AttachTool extends GlintTool {
       target = candidates.single;
     }
 
-    // Build the device target; for iOS, size it to the screenshot pixels.
+    // Size the device from a screenshot — also the coordinate reference.
+    final shotPath =
+        '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
+    final shot = await _probeScreenSize(target, adbPath, shotPath);
+    final screen = (shot.width != null && shot.height != null)
+        ? {'width': shot.width, 'height': shot.height, 'unit': 'screenshot-pixels'}
+        : null;
+
     final warnings = <String>[];
     final DeviceTarget device;
-    Map<String, Object?>? screen;
     switch (target.platform) {
       case DevicePlatform.ios:
         final bridgePath =
@@ -454,10 +460,8 @@ class AttachTool extends GlintTool {
             '(cd native/ios_sim_bridge && swift build), or pass iosBridgePath',
           );
         }
-        final shotPath =
-            '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
-        final shot = await const SimControl().screenshot(target.id, shotPath);
-        if (shot.width == null || shot.height == null) {
+        // iOS taps inject a ratio of the size, so the size is required.
+        if (screen == null) {
           return StructuredResponse.error(
             summary: 'could not capture the screen to size device ${target.id}',
             errorKind: GlintErrorKind.backendToolError,
@@ -468,35 +472,20 @@ class AttachTool extends GlintTool {
           udid: target.id,
           logicalWidth: shot.width!.toDouble(),
           logicalHeight: shot.height!.toDouble(),
-          devicePixelRatio: 1.0, // coords are screenshot pixels
+          devicePixelRatio: 1.0,
           bridgePath: bridgePath,
         );
-        screen = {
-          'width': shot.width,
-          'height': shot.height,
-          'unit': 'screenshot-pixels',
-        };
       case DevicePlatform.android:
-        final shotPath =
-            '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
-        final shot = await AndroidDevice(serial: target.id, adbPath: adbPath)
-            .createBackend()
-            .screenshot(shotPath);
+        // Android taps take raw pixels; the size only enables center scroll.
+        if (screen == null && shot.error != null) {
+          warnings.add('could not size the screen: ${shot.error}');
+        }
         device = AndroidDevice(
           serial: target.id,
           adbPath: adbPath,
           screenWidth: shot.width?.toDouble(),
           screenHeight: shot.height?.toDouble(),
         );
-        if (shot.width != null && shot.height != null) {
-          screen = {
-            'width': shot.width,
-            'height': shot.height,
-            'unit': 'screenshot-pixels',
-          };
-        } else if (shot.error != null) {
-          warnings.add('could not size the screen: ${shot.error}');
-        }
     }
 
     await session.attachDevice(device: device);
@@ -527,6 +516,18 @@ class AttachTool extends GlintTool {
         if (screen != null) 'screen': screen,
       },
     );
+  }
+
+  /// Screenshot just to read the screen size. iOS goes through simctl (the
+  /// IosSimulator can't be built before its size is known); Android through the
+  /// adb backend.
+  Future<ScreenshotResult> _probeScreenSize(
+      BootedDevice target, String adbPath, String path) {
+    return target.platform == DevicePlatform.ios
+        ? const SimControl().screenshot(target.id, path)
+        : AndroidDevice(serial: target.id, adbPath: adbPath)
+            .createBackend()
+            .screenshot(path);
   }
 
   /// Probe the logical viewport, retrying past a blank first frame until
