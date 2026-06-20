@@ -22,9 +22,8 @@ only in the tool layer. IndigoHID takes a 0–1 ratio, so taps need no dpr looku
 Also shipped:
 - ✅ Coordinate `long_press` / `drag` / `scroll` (shared `coordinate.dart`).
 - ✅ `hardware_button` works in device mode (backend-direct).
-
-Follow-up (not yet done):
-- Android device-mode is wired (adb backend) but not live-tested (no device).
+- ✅ Android device mode — `adb screencap` perception + coordinate gestures,
+  live-verified on a Pixel_8_API_35 emulator.
 
 ### Deferred: OS AX-tree perception
 `glint-iossim ax-snapshot` reads the native accessibility tree (structured,
