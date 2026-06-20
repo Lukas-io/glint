@@ -9,18 +9,12 @@ import 'dart:io' as io;
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-/// One line per entry, format:
-///
-///   <ts>|<prev_hash>|<payload_b64>|<this_hash>
-///
-/// - `ts` — ISO-8601 UTC at append time
-/// - `prev_hash` — SHA-256 hex of the previous line's `this_hash`
-/// - `payload_b64` — base64 of the EXACT JSON bytes that hit (or would
-///   have hit) the wire
-/// - `this_hash` — SHA-256 hex of `<ts>|<prev_hash>|<payload_b64>`
-///
-/// Tamper-EVIDENT, not tamper-PROOF. Same trust model as `git log`.
-/// File at `<dataDir>/telemetry-audit.log`.
+/// One line per entry: `<ts>|<prev_hash>|<payload_b64>|<this_hash>` — `ts`
+/// ISO-8601 UTC at append; `prev_hash` SHA-256 of the previous line's
+/// `this_hash`; `payload_b64` base64 of the exact JSON that hit (or would have
+/// hit) the wire; `this_hash` SHA-256 of `<ts>|<prev_hash>|<payload_b64>`.
+/// Tamper-EVIDENT, not -PROOF — same trust model as `git log`. File at
+/// `<dataDir>/telemetry-audit.log`.
 class AuditLog {
   static const String fileName = 'telemetry-audit.log';
   static const String _zeroHash =

@@ -1,8 +1,8 @@
 import '../../perception.dart';
 import 'semantic_node.dart';
 
-/// One widget-recognition rule. Lower priority runs first; first match
-/// wins. [UnknownClassifier] is the floor.
+/// One widget-recognition rule. Lower priority runs first, first match wins;
+/// [UnknownClassifier] is the floor.
 abstract class WidgetClassifier {
   const WidgetClassifier();
 
@@ -59,9 +59,8 @@ String? _firstTextIn(List<SemanticNode> nodes) {
 // Concrete classifiers, top of priority list first.
 // ---------------------------------------------------------------------------
 
-/// Material's [Scaffold] is the canonical page root. The semanticizer's
-/// compactor lifts a [SemanticPage] up through ancestor containers so it
-/// ends up at the tree root.
+/// Material's [Scaffold] is the canonical page root; the compactor later
+/// hoists the [SemanticPage] up through ancestor containers to the tree root.
 class PageClassifier extends WidgetClassifier {
   const PageClassifier();
 
@@ -74,8 +73,8 @@ class PageClassifier extends WidgetClassifier {
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
     // Offstage Scaffolds (non-active IndexedStack children, GoRouter shell
-    // branches) have NaN geometry and must not be treated as the active page.
-    // Return SemanticUnknown so hoistPage (which selects SemanticPage) skips it.
+    // branches) have NaN geometry — return SemanticUnknown so hoistPage, which
+    // selects SemanticPage, skips them.
     if (node.isOffstage) {
       return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
     }
@@ -132,8 +131,7 @@ class InputClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // hint + currentValue need a property read against InputDecoration
-    // / TextEditingController — Module C v2.
+    // hint + currentValue are filled later by InputEnricher via property reads.
     return SemanticInput(glintId: node.glintId);
   }
 }
@@ -166,9 +164,9 @@ class ButtonClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    final label = _firstTextIn(children);
     // Absorb Text into the label; keep Icon / Image as children so the
     // IconEnricher can populate them post-classify.
+    final label = _firstTextIn(children);
     final kept = children
         .where((c) => c is SemanticIcon || c is SemanticImage)
         .toList(growable: false);
@@ -231,7 +229,7 @@ class IconClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // IconData name needs a property read — deferred.
+    // IconData name needs a property read — deferred to IconEnricher.
     return SemanticIcon(glintId: node.glintId);
   }
 }

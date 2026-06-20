@@ -169,12 +169,9 @@ class GlintSession {
     sceneMode = SceneMode.native;
   }
 
-  /// Runs all semantic enrichers against [semantic] in the correct order.
-  ///
-  /// Order matters: overlay enrichment must complete before the renderer runs
-  /// so [SemanticScene.overlayLayers] is populated. The other enrichers are
-  /// order-independent relative to each other but run after overlay for
-  /// consistency.
+  /// Runs all semantic enrichers against [semantic]. Overlay must run first so
+  /// [SemanticScene.overlayLayers] is populated before the renderer; the rest
+  /// are order-independent.
   Future<void> runEnrichers(SemanticScene semantic) async {
     await overlayEnricher.enrich(semantic);
     await inputEnricher.enrich(semantic);

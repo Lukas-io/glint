@@ -12,8 +12,7 @@ class Interactor {
   final InteractionBackend backend;
   final CoordinateResolver resolver;
 
-  /// When true, non-hittable targets cause [GlintErrorKind.notHittable]
-  /// instead of a warning. §3 keeps the default permissive: agent decides.
+  /// When true, non-hittable targets fail with [GlintErrorKind.notHittable] instead of warning. Default permissive (§3): agent decides.
   bool refuseNotHittable = false;
 
   Future<ActionResult> run(Scene scene, Action action) async {

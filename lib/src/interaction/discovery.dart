@@ -28,8 +28,7 @@ class BootedDevice {
       };
 }
 
-/// The device an app is actually running on, recovered from a VM service port,
-/// plus iOS bundle identity read from the app's Info.plist.
+/// The device an app runs on, recovered from a VM service port, plus iOS bundle identity from Info.plist.
 class AppDeviceLink {
   const AppDeviceLink({
     required this.deviceId,
@@ -51,8 +50,7 @@ class AppDeviceLink {
   final String? displayName;
 }
 
-/// Running Flutter VM URIs + booted devices. Uncorrelated by design — a URI on
-/// 127.0.0.1 carries no device identity; `attach` pairs them later.
+/// Running Flutter VM URIs + booted devices. Uncorrelated by design — a 127.0.0.1 URI carries no device identity; `attach` pairs them later.
 class DiscoveryResult {
   const DiscoveryResult({required this.vmUris, required this.devices});
 
@@ -63,9 +61,8 @@ class DiscoveryResult {
       devices.where((d) => d.platform == p).toList();
 }
 
-/// Finds running Flutter apps + booted devices so `attach` can auto-fill what
-/// the agent didn't pass. Pure host inspection, no extra dependency: `ps` for
-/// VM URIs, `xcrun simctl` for iOS sims, `adb devices` for Android.
+/// Finds running Flutter apps + booted devices so `attach` can auto-fill omitted args.
+/// Pure host inspection: `ps` for VM URIs, `xcrun simctl` for iOS sims, `adb devices` for Android.
 class DeviceDiscovery {
   const DeviceDiscovery({this.adbPath = 'adb'});
 
@@ -79,9 +76,8 @@ class DeviceDiscovery {
   }
 
   // ── running Flutter VM service URIs ──────────────────────────────────────
-  // The canonical Dart VM service URI: http://127.0.0.1:PORT/TOKEN=/ . We scan
-  // the full (untruncated) process args and keep only localhost matches found
-  // on Dart/Flutter lines, so unrelated localhost URLs don't leak in.
+  // Matches the canonical Dart VM service URI http://127.0.0.1:PORT/TOKEN=/ ;
+  // restricted to Dart/Flutter process lines so unrelated localhost URLs don't leak in.
   static final _vmUriPattern = RegExp(
     r'http://(?:127\.0\.0\.1|localhost):\d+/[A-Za-z0-9_=+\-/]*',
   );
@@ -167,9 +163,8 @@ class DeviceDiscovery {
   }
 
   // ── app → device correlation ─────────────────────────────────────────────
-  /// Recover the device an app is actually running on from its VM service URI.
-  /// Critical when several simulators are booted: they share 127.0.0.1, so the
-  /// port alone is ambiguous, but the listening process reveals its sim.
+  /// Recover the device an app runs on from its VM service URI — when several sims share 127.0.0.1
+  /// the port is ambiguous, but the listening process reveals its sim.
   Future<AppDeviceLink?> correlate(Uri vmUri, DevicePlatform platform) async {
     final port = vmUri.port;
     if (port == 0) return null;

@@ -13,8 +13,7 @@ import '../tool.dart';
 ///   token_usage  — estimated agent-side token cost per tool
 ///   audit_show   — pretty-print recent audit entries
 ///   audit_verify — walk the hash chain
-///
-/// Telemetry is ON by default. Set GLINT_NO_TELEMETRY=true to disable.
+/// Telemetry is ON by default; set GLINT_NO_TELEMETRY=true to disable.
 class TelemetryTool extends GlintTool {
   const TelemetryTool();
 

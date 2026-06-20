@@ -1,12 +1,7 @@
-/// Transport abstraction over the running Flutter app's VM service.
-///
-/// **Every glint primitive that talks to the live app goes through this
-/// interface.** No other code reaches `vm.service.callServiceExtension`
-/// or `vm.service.evaluate` directly. When Flutter's VM service shape
-/// drifts (it has — `getRootWidgetTree`'s `fullDetails` flag, the
-/// `valueAsStringIsTruncated` refetch, the `ext.flutter.inspector.*`
-/// argument map — and it will keep drifting), there is ONE adapter to
-/// patch instead of a scattered hunt across modules.
+/// Transport abstraction over the running Flutter app's VM service — the
+/// single adapter for `callServiceExtension` / `evaluate`. Every glint
+/// primitive that talks to the live app goes through here, so when Flutter's
+/// VM service shape drifts (it does, and will), there is ONE place to patch.
 library;
 
 import 'package:vm_service/vm_service.dart';
@@ -87,11 +82,9 @@ abstract class FlutterRuntime {
   Future<String?> evaluateString(String expression);
 
   /// Sets the inspector selection to [inspectorId] in [groupName], then
-  /// evaluates [expression] against the root library. Returns null on any
-  /// eval failure (compilation error, ErrorRef, disconnected).
-  ///
-  /// Shorthand for the common enricher pattern:
-  ///   `setInspectorSelection(…)` → `evaluateString(…)`.
+  /// evaluates [expression] against the root library. Returns null on any eval
+  /// failure. Shorthand for the enricher pattern `setInspectorSelection` →
+  /// `evaluateString`.
   Future<String?> evaluateWithSelection({
     required String expression,
     required String inspectorId,

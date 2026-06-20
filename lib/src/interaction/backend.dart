@@ -26,13 +26,11 @@ abstract class InteractionBackend {
 
   Future<void> pressHardwareButton(HardwareButton button);
 
-  /// Capture a PNG screenshot of the device to [path]. Used by device mode
-  /// for perception (and as the coordinate reference: ratio = pixel / size).
+  /// Capture a PNG to [path] for device-mode perception; also the coordinate reference (ratio = pixel / size).
   Future<ScreenshotResult> screenshot(String path);
 }
 
-/// Outcome of [InteractionBackend.screenshot]: the saved path + pixel size,
-/// or an [error] line on failure.
+/// Outcome of [InteractionBackend.screenshot]: saved path + pixel size, or [error] on failure.
 class ScreenshotResult {
   const ScreenshotResult({this.path, this.width, this.height, this.error});
   final String? path;

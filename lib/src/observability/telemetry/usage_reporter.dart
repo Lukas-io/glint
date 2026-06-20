@@ -1,17 +1,9 @@
-/// Ships privacy-safe usage rollups to the shared collector.
-///
-/// Same contract as flutter_network_mcp: per-tool counts, outcome +
-/// latency stats, and the tool→next-tool transition graph. Raw events
-/// never leave the machine; only the aggregate does.
-///
-/// Trust model:
-/// 1. Audit log first (always, when not opted out) — the exact rollup
-///    JSON is appended to the hash-chained `telemetry-audit.log` BEFORE
-///    any network attempt.
-/// 2. HTTPS POST when [kCollectorEndpoint] is non-empty.
-///
-/// Idempotent via a high-watermark: `usage-ship-state.json` in the data
-/// dir records the last `id` shipped. Re-running never double-counts.
+/// Ships privacy-safe usage rollups to the shared collector: per-tool counts,
+/// outcome + latency stats, the tool→next-tool transition graph. Raw events
+/// never leave the machine; only the aggregate does. The rollup is appended to
+/// the hash-chained `telemetry-audit.log` BEFORE any network attempt, then
+/// HTTPS-POSTed when [kCollectorEndpoint] is set. Idempotent via a
+/// high-watermark (`usage-ship-state.json`) — re-running never double-counts.
 library;
 
 import 'dart:convert';
@@ -192,9 +184,8 @@ class UsageReporter {
 }
 
 /// Builds the rollup payload. Visible for testing.
-///
-/// IN: package version, host OS + Dart version, the HMAC machineHash,
-/// the event-id + timestamp window, and the [summarizeUsage] aggregate.
+/// IN: package version, host OS + Dart version, the HMAC machineHash, the
+/// event-id + timestamp window, and the [summarizeUsage] aggregate.
 /// NOT IN: arg values, glintIds, app names, paths, or any per-event row.
 Map<String, Object?> buildUsagePayload({
   required List<Map<String, Object?>> rows,

@@ -1,23 +1,9 @@
-/// Strips filesystem identity from arbitrary text — typically Dart stack
-/// frames or action-log dumps — so it's safe to ship off the user's
-/// machine (telemetry payloads, GitHub issue bodies, etc.).
-///
-/// Two threats to handle:
-/// 1. **POSIX `$HOME` paths**: `/Users/lukasio/StudioProjects/sanga_mobile/lib/main.dart`
-///    leaks the username, project name, and parent dir layout.
-/// 2. **Windows `%USERPROFILE%` paths**: `C:\Users\lukasio\code\app\lib\main.dart`
-///    same problem.
-///
-/// The redactor replaces:
-/// - `/Users/<name>/StudioProjects/<project>/...` → `<project>/...`
-/// - `/Users/<name>/...` → `<home>/...`
-/// - `C:\Users\<name>\<project>\...` → `<project>\...`
-/// - `C:\Users\<name>\...` → `<home>\...`
-///
-/// `package:` URIs in stack frames are left untouched — they're already
-/// package-relative and contain no filesystem identity.
-///
-/// Idempotent: running the redactor twice produces the same output.
+/// Strips filesystem identity (username, project, dir layout) from arbitrary
+/// text — Dart stack frames, action-log dumps — so it's safe to ship off the
+/// user's machine (telemetry, GitHub issue bodies). Handles POSIX `$HOME` and
+/// Windows `%USERPROFILE%` paths, preserves the project name as a
+/// non-identifying `<project:…>` label, and leaves `package:` URIs alone.
+/// Idempotent.
 String redactPath(String input) {
   if (input.isEmpty) return input;
   var s = input;

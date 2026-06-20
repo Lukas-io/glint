@@ -1,10 +1,8 @@
 import 'geometry.dart';
 import 'scene_reader.dart';
 
-/// §7.2 readiness primitive. Polls fresh scenes until [glintId] both
-/// exists in the tree AND passes a hit test at its centre, OR the
-/// ceiling is reached. The agent declares intent; this is the loop
-/// the server runs while the agent does nothing.
+/// §7.2 readiness primitive. Polls fresh scenes until [glintId] both exists in
+/// the tree AND passes a hit test at its centre, or the ceiling is reached.
 class ReadinessGate {
   ReadinessGate({
     required this.reader,
