@@ -106,5 +106,30 @@ void main() {
       final j = layer.toJson();
       expect(j.containsKey('isBarriered'), isFalse);
     });
+
+    test('SemanticScene.toJson carries overlayLayers so json mode is not '
+        'blind to dialogs', () {
+      final scene = fakeSemanticScene(
+        overlayLayers: [
+          SemanticOverlayLayer(
+            nodes: [SemanticButton(glintId: 'ok_button', label: 'OK')],
+            isBarriered: true,
+            kind: 'dialog',
+          ),
+        ],
+      );
+      final j = scene.toJson();
+      final layers = j['overlayLayers'] as List;
+      expect(layers, hasLength(1));
+      final layer = layers.first as Map;
+      expect(layer['kind'], 'dialog');
+      final nodes = layer['nodes'] as List;
+      expect((nodes.first as Map)['glintId'], 'ok_button');
+    });
+
+    test('SemanticScene.toJson omits overlayLayers when none are present', () {
+      final scene = fakeSemanticScene(overlayLayers: []);
+      expect(scene.toJson().containsKey('overlayLayers'), isFalse);
+    });
   });
 }
