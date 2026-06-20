@@ -49,6 +49,30 @@ class HardwareButtonTool extends GlintTool {
       );
     }
 
+    // Device mode: hardware buttons are OS-level — go straight to the backend
+    // (no Flutter scene / interactor available).
+    if (session.isDeviceMode) {
+      try {
+        await session.backend.pressHardwareButton(button);
+      } on UnsupportedBackendAction catch (e) {
+        return StructuredResponse.error(
+          summary: '${session.backend.label}: ${button.name} not supported',
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+          detail: e.detail,
+        );
+      } on Object catch (e) {
+        return StructuredResponse.error(
+          summary: 'hardware button ${button.name} failed',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '$e',
+        );
+      }
+      return StructuredResponse(
+        summary: 'pressed ${button.name}',
+        data: {'ok': true, 'mode': 'device'},
+      );
+    }
+
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(

@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -70,6 +71,35 @@ class ScrollTool extends GlintTool {
           'use one of: ${ScrollDirection.values.map((d) => d.name).join(', ')}'
         ],
       );
+    }
+
+    // Device mode: no Flutter viewport probe — swipe from center using the
+    // device's screenshot-pixel dims (coordinateSwipe handles the dpr=1 ratio).
+    if (session.isDeviceMode) {
+      final device = session.device;
+      if (device is! IosSimulator) {
+        return StructuredResponse.error(
+          summary: 'device-mode scroll is only supported on iOS simulators',
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+        );
+      }
+      final w = device.logicalWidth;
+      final h = device.logicalHeight;
+      final dx = (dir == ScrollDirection.left
+              ? -w
+              : dir == ScrollDirection.right
+                  ? w
+                  : 0) *
+          amount;
+      final dy = (dir == ScrollDirection.up
+              ? -h
+              : dir == ScrollDirection.down
+                  ? h
+                  : 0) *
+          amount;
+      return coordinateSwipe(
+          session, w / 2, h / 2, w / 2 - dx, h / 2 - dy, 300,
+          verb: 'scrolled');
     }
 
     final pre = returnScene ? await snapshotPreAction(session) : null;

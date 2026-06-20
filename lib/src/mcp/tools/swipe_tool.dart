@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -69,7 +70,7 @@ class SwipeTool extends GlintTool {
     final y2 = (args['y2'] as num?)?.toDouble();
     if (x1 != null && y1 != null && x2 != null && y2 != null) {
       final durationMs = (args['durationMs'] as int?) ?? 300;
-      return _coordinateSwipe(session, x1, y1, x2, y2, durationMs);
+      return coordinateSwipe(session, x1, y1, x2, y2, durationMs);
     }
 
     final from = args['fromGlintId'] as String?;
@@ -122,35 +123,5 @@ class SwipeTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
-  }
-
-  /// Backend-direct swipe between raw coordinates (see TapTool._coordinateTap
-  /// for the dpr/ratio reasoning).
-  Future<StructuredResponse> _coordinateSwipe(GlintSession session, double x1,
-      double y1, double x2, double y2, int durationMs) async {
-    final device = session.device;
-    final dpr = device is IosSimulator ? device.devicePixelRatio : 1.0;
-    try {
-      await session.backend.swipe(
-        physicalX1: (x1 * dpr).round(),
-        physicalY1: (y1 * dpr).round(),
-        physicalX2: (x2 * dpr).round(),
-        physicalY2: (y2 * dpr).round(),
-        durationMs: durationMs,
-      );
-    } on Object catch (e) {
-      return StructuredResponse.error(
-        summary: 'coordinate swipe failed ($x1,$y1)->($x2,$y2)',
-        errorKind: GlintErrorKind.backendToolError,
-        detail: '$e',
-      );
-    }
-    return StructuredResponse(
-      summary: 'swiped ($x1,$y1) -> ($x2,$y2)',
-      data: {
-        'ok': true,
-        if (session.isDeviceMode) 'mode': 'device',
-      },
-    );
   }
 }

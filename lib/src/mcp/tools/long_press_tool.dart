@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -14,7 +15,9 @@ class LongPressTool extends GlintTool {
   Tool get definition => Tool(
         name: 'long_press',
         description:
-            'Long-press a node by glintId. Default duration 500ms. '
+            'Long-press a node by glintId, OR pass x,y for raw coordinates '
+            '(device mode: screenshot pixels; flutter mode: logical points). '
+            'Default duration 500ms. '
             'Supports awaitReady / readyTimeoutMs to gate on the target '
             'becoming hittable before firing. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -25,6 +28,8 @@ class LongPressTool extends GlintTool {
             'glintId': Schema.string(
               description: 'Stable id from get_scene.',
             ),
+            'x': Schema.num(description: 'Raw x (with y). Bypasses glintId.'),
+            'y': Schema.num(description: 'Raw y (with x).'),
             'durationMs': Schema.int(
               description: 'Hold time in ms. Default 500.',
             ),
@@ -46,7 +51,6 @@ class LongPressTool extends GlintTool {
                   'postScene. Default false.',
             ),
           },
-          required: ['glintId'],
         ),
       );
 
@@ -54,8 +58,21 @@ class LongPressTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final glintId = args['glintId']! as String;
     final durationMs = (args['durationMs'] as int?) ?? 500;
+
+    final x = (args['x'] as num?)?.toDouble();
+    final y = (args['y'] as num?)?.toDouble();
+    if (x != null && y != null) {
+      return coordinateLongPress(session, x, y, durationMs);
+    }
+
+    final glintId = args['glintId'] as String?;
+    if (glintId == null) {
+      return StructuredResponse.error(
+        summary: 'long_press needs either glintId or x + y',
+        errorKind: GlintErrorKind.invalidArgument,
+      );
+    }
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
