@@ -477,7 +477,26 @@ class AttachTool extends GlintTool {
           'unit': 'screenshot-pixels',
         };
       case DevicePlatform.android:
-        device = AndroidDevice(serial: target.id, adbPath: adbPath);
+        final shotPath =
+            '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
+        final shot = await AndroidDevice(serial: target.id, adbPath: adbPath)
+            .createBackend()
+            .screenshot(shotPath);
+        device = AndroidDevice(
+          serial: target.id,
+          adbPath: adbPath,
+          screenWidth: shot.width?.toDouble(),
+          screenHeight: shot.height?.toDouble(),
+        );
+        if (shot.width != null && shot.height != null) {
+          screen = {
+            'width': shot.width,
+            'height': shot.height,
+            'unit': 'screenshot-pixels',
+          };
+        } else if (shot.error != null) {
+          warnings.add('could not size the screen: ${shot.error}');
+        }
     }
 
     await session.attachDevice(device: device);

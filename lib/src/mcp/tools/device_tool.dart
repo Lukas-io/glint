@@ -119,7 +119,11 @@ class DeviceTool extends GlintTool {
       case 'screenshot':
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
             '${DateTime.now().millisecondsSinceEpoch}.png';
-        final shot = await sim.screenshot(udid, path);
+        // Use the attached backend (works iOS + Android) when targeting the
+        // attached device; otherwise screenshot a specific iOS sim by udid.
+        final shot = (session.isAttached && (args['udid'] as String?) == null)
+            ? await session.backend.screenshot(path)
+            : await sim.screenshot(udid, path);
         if (shot.error != null || shot.path == null) {
           return StructuredResponse.error(
             summary: shot.error ?? 'screenshot failed',
@@ -168,6 +172,7 @@ class DeviceTool extends GlintTool {
     if (session.isAttached) {
       final device = session.device;
       if (device is IosSimulator) return device.udid;
+      if (device is AndroidDevice) return device.serial;
     }
     return null;
   }
