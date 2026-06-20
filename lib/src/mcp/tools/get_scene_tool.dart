@@ -51,43 +51,14 @@ class GetSceneTool extends GlintTool {
       );
     }
 
-    // N4: branch on scene mode — native surface uses OS AX tree.
-    final isNativeMode = session.sceneMode == SceneMode.native;
-    if (isNativeMode) {
-      final nativeReader = session.nativeReader;
-      if (nativeReader == null) {
-        return StructuredResponse.error(
-          summary: 'native scene mode is not available on this platform',
-          errorKind: GlintErrorKind.unsupportedBackendAction,
-        );
-      }
-      final nativeScene = await nativeReader.readSnapshot();
-      final isSentinel = nativeScene.root.glintId == '_native_surface';
-      return StructuredResponse(
-        summary: isSentinel
-            ? '--- native surface active ---\n'
-                'A native iOS surface is blocking the Flutter UI. No widget tree available.\n'
-                'Options: use `hardware_button home` to return to the app, or wait for the '
-                'app to return to the foreground.'
-            : '--- native surface ---\n'
-                + _renderNativeScene(nativeScene),
-        data: {
-          'format': format,
-          'state': 'native',
-          'nativeScene': true,
-          'sceneMode': 'native',
-        },
-      );
+    if (session.sceneMode == SceneMode.native) {
+      return _handleNativeMode(session, format);
     }
 
     final scene = await session.reader.readSummary();
     try {
       final semantic = session.semanticizer.semanticize(scene);
-      // Overlay enrichment first — populates overlayLayers before rendering.
-      await session.overlayEnricher.enrich(semantic);
-      await session.inputEnricher.enrich(semantic);
-      await session.iconEnricher.enrich(semantic);
-      await session.navEnricher.enrich(semantic);
+      await session.runEnrichers(semantic);
 
       final String rendered;
       switch (format) {
@@ -111,8 +82,6 @@ class GetSceneTool extends GlintTool {
         data: {
           'format': format,
           'state': state.name,
-          // Only include non-default / non-falsy values to keep structuredContent
-          // compact — every key is a token cost.
           if (lifecycle != null && lifecycle != 'resumed') 'lifecycle': lifecycle,
           if (ui.focusedType != null) 'focusedType': ui.focusedType,
           if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
@@ -133,26 +102,30 @@ class GetSceneTool extends GlintTool {
     }
   }
 
-  /// Compact text render of a native (AX) scene for agent consumption.
-  String _renderNativeScene(Scene scene) {
-    final buf = StringBuffer();
-    _renderNativeNode(buf, scene.root, depth: 0);
-    return buf.toString();
-  }
-
-  void _renderNativeNode(StringBuffer buf, SceneNode node, {required int depth}) {
-    if (depth > 6) return;
-    final label = node.textPreview ?? node.label;
-    final marker = (node.isNativeEnabled ?? false) ? '*' : '-';
-    final id = node.glintId ?? '';
-    if (id.isNotEmpty && !id.startsWith('_native')) {
-      buf
-        ..write('  ' * depth)
-        ..write('$marker native $id $label')
-        ..writeln();
+  Future<StructuredResponse> _handleNativeMode(
+      GlintSession session, String format) async {
+    final nativeReader = session.nativeReader;
+    if (nativeReader == null) {
+      return StructuredResponse.error(
+        summary: 'native scene mode is not available on this platform',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+      );
     }
-    for (final child in node.children) {
-      _renderNativeNode(buf, child, depth: depth + 1);
-    }
+    final nativeScene = await nativeReader.readSnapshot();
+    final isSentinel = nativeScene.root.glintId == '_native_surface';
+    return StructuredResponse(
+      summary: isSentinel
+          ? '--- native surface active ---\n'
+              'A native iOS surface is blocking the Flutter UI. No widget tree available.\n'
+              'Options: use `hardware_button home` to return to the app, or wait for the '
+              'app to return to the foreground.'
+          : '--- native surface ---\n${NativeSceneReader.renderAsText(nativeScene)}',
+      data: {
+        'format': format,
+        'state': 'native',
+        'nativeScene': true,
+        'sceneMode': 'native',
+      },
+    );
   }
 }

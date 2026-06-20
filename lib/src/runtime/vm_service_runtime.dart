@@ -126,7 +126,7 @@ class VmServiceRuntime implements FlutterRuntime {
     required String groupName,
     int subtreeDepth = 5,
   }) async {
-    final resp = await _vm.service.callServiceExtension(
+    final resp = await _guard(() => _vm.service.callServiceExtension(
       'ext.flutter.inspector.getDetailsSubtree',
       isolateId: flutterIsolateId,
       args: {
@@ -134,7 +134,7 @@ class VmServiceRuntime implements FlutterRuntime {
         'objectGroup': groupName,
         'subtreeDepth': subtreeDepth.toString(),
       },
-    );
+    ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
       throw RuntimeEvalError(
@@ -196,6 +196,21 @@ class VmServiceRuntime implements FlutterRuntime {
       expression,
       'unexpected eval return ${raw.runtimeType}',
     );
+  }
+
+  @override
+  Future<String?> evaluateWithSelection({
+    required String expression,
+    required String inspectorId,
+    required String groupName,
+  }) async {
+    try {
+      await setInspectorSelection(
+          inspectorId: inspectorId, groupName: groupName);
+      return await evaluateString(expression);
+    } on Object {
+      return null;
+    }
   }
 
   @override
