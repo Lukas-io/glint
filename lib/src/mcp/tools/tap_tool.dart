@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -80,7 +81,7 @@ class TapTool extends GlintTool {
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
     final x = (args['x'] as num?)?.toDouble();
     final y = (args['y'] as num?)?.toDouble();
-    if (x != null && y != null) return _coordinateTap(session, x, y);
+    if (x != null && y != null) return coordinateTap(session, x, y);
 
     final glintId = args['glintId'] as String?;
     if (glintId == null) {
@@ -176,36 +177,5 @@ class TapTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
-  }
-
-  /// Backend-direct tap at raw coordinates. dpr scales the input to physical
-  /// pixels; the backend divides back out, so the net ratio is
-  /// coord / referenceSize (device mode: dpr=1 over screenshot pixels;
-  /// flutter mode: dpr over logical points).
-  Future<StructuredResponse> _coordinateTap(
-      GlintSession session, double x, double y) async {
-    final device = session.device;
-    final dpr = device is IosSimulator ? device.devicePixelRatio : 1.0;
-    try {
-      await session.backend.tap(
-        physicalX: (x * dpr).round(),
-        physicalY: (y * dpr).round(),
-      );
-    } on Object catch (e) {
-      return StructuredResponse.error(
-        summary: 'coordinate tap failed at ($x, $y)',
-        errorKind: GlintErrorKind.backendToolError,
-        detail: '$e',
-      );
-    }
-    return StructuredResponse(
-      summary: 'tapped ($x, $y)',
-      data: {
-        'ok': true,
-        'x': x,
-        'y': y,
-        if (session.isDeviceMode) 'mode': 'device',
-      },
-    );
   }
 }

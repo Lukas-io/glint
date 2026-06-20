@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -16,9 +17,10 @@ class DragTool extends GlintTool {
   Tool get definition => Tool(
         name: 'drag',
         description:
-            'Drag from one glintId to another — same as swipe but with a '
-            'longer hold (800ms default) so the framework recognises it as '
-            'a drag gesture rather than a fling. '
+            'Drag from one glintId to another, OR pass x1,y1,x2,y2 for raw '
+            'coordinates (device mode: screenshot pixels; flutter mode: logical '
+            'points). Same as swipe but with a longer hold (800ms default) so '
+            'the framework recognises it as a drag gesture rather than a fling. '
             '`awaitReady` gates on the `from` endpoint. '
             'With returnScene: true (default), settles and returns the new scene '
             'plus changed + changeCategory.',
@@ -30,6 +32,10 @@ class DragTool extends GlintTool {
             'toGlintId': Schema.string(
               description: 'End point — stable id from get_scene.',
             ),
+            'x1': Schema.num(description: 'Raw start x (with y1,x2,y2).'),
+            'y1': Schema.num(description: 'Raw start y.'),
+            'x2': Schema.num(description: 'Raw end x.'),
+            'y2': Schema.num(description: 'Raw end y.'),
             'durationMs': Schema.int(
               description: 'Hold time in ms. Default 800.',
             ),
@@ -51,7 +57,6 @@ class DragTool extends GlintTool {
                   'postScene. Default false.',
             ),
           },
-          required: ['fromGlintId', 'toGlintId'],
         ),
       );
 
@@ -59,9 +64,25 @@ class DragTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final from = args['fromGlintId']! as String;
-    final to = args['toGlintId']! as String;
     final durationMs = (args['durationMs'] as int?) ?? 800;
+
+    final x1 = (args['x1'] as num?)?.toDouble();
+    final y1 = (args['y1'] as num?)?.toDouble();
+    final x2 = (args['x2'] as num?)?.toDouble();
+    final y2 = (args['y2'] as num?)?.toDouble();
+    if (x1 != null && y1 != null && x2 != null && y2 != null) {
+      return coordinateSwipe(session, x1, y1, x2, y2, durationMs,
+          verb: 'dragged');
+    }
+
+    final from = args['fromGlintId'] as String?;
+    final to = args['toGlintId'] as String?;
+    if (from == null || to == null) {
+      return StructuredResponse.error(
+        summary: 'drag needs either fromGlintId + toGlintId, or x1,y1,x2,y2',
+        errorKind: GlintErrorKind.invalidArgument,
+      );
+    }
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
