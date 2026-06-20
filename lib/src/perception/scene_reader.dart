@@ -12,7 +12,6 @@ class SceneReader {
 
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
-  final StableIdGenerator _ids = StableIdGenerator();
 
   /// User-code-only tree — the agent's reading surface.
   /// When a modal overlay is detected via `canPop()`, the full tree is read
@@ -30,7 +29,7 @@ class SceneReader {
     // stable ids in the same pass as the rest of the tree.
     final overlay = await _tryReadOverlay(root, groupName);
 
-    _ids.assignIds(root);
+    StableIdGenerator().assignIds(root);
     return Scene._(
       root: root,
       groupName: groupName,
@@ -45,7 +44,7 @@ class SceneReader {
   Future<Scene> readFull() async {
     final groupName = _inspector.nextReadGroup();
     final root = await _inspector.readFullTree(groupName: groupName);
-    _ids.assignIds(root);
+    StableIdGenerator().assignIds(root);
     return Scene._(root: root, groupName: groupName, inspector: _inspector);
   }
 
@@ -65,22 +64,16 @@ class SceneReader {
     // Pick any addressable node for the selection, then check each Scaffold.
     for (final scaffold in scaffolds) {
       if (scaffold.inspectorId.isEmpty) continue;
-      try {
-        await _runtime.setInspectorSelection(
-          inspectorId: scaffold.inspectorId,
-          groupName: groupName,
-        );
-        final result = await _runtime.evaluateString(
-          '(WidgetInspectorService.instance.selection.currentElement!'
-          '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()',
-        );
-        if (result == 'true') {
-          for (final n in scaffold.walk()) {
-            n.isOffstage = true;
-          }
+      final result = await _runtime.evaluateWithSelection(
+        expression: '(WidgetInspectorService.instance.selection.currentElement!'
+            '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()',
+        inspectorId: scaffold.inspectorId,
+        groupName: groupName,
+      );
+      if (result == 'true') {
+        for (final n in scaffold.walk()) {
+          n.isOffstage = true;
         }
-      } on Object {
-        // best-effort — a scaffold that can't be evaluated stays as-is
       }
     }
   }
@@ -226,8 +219,6 @@ class _DialogExtraction {
   final bool hasBarrier;
 }
 
-enum TreeDepth { summary, full }
-
 /// One inspector group + its SceneNode tree. Dispose releases the VM-side id table.
 class Scene {
   Scene._({
@@ -300,8 +291,8 @@ class Scene {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;
-      if (_isPlatformViewLeaf(n)) continue;
-      if (n.depth > 12) continue;
+      if (n.isPlatformView) continue;
+      if (n.depth > kShallowProbeMaxDepth) continue;
       if (!seen.add(n.inspectorId)) continue;
       if (n.createdByLocalProject) result.add(n);
     }
@@ -310,7 +301,7 @@ class Scene {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;
-      if (_isPlatformViewLeaf(n)) continue;
+      if (n.isPlatformView) continue;
       if (!seen.add(n.inspectorId)) continue;
       result.add(n);
     }
@@ -319,8 +310,8 @@ class Scene {
 
   String? firstAddressableId() {
     // Two-pass: prefer a user-code leaf (createdByLocalProject=true) since
-    // platform-view plugin nodes (e.g. GoogleMap) may fail ModalRoute evals.
-    // Fall back to any leaf with a live inspector handle if no user node found.
+    // platform view plugin nodes (e.g. GoogleMap) fail geometry evals.
+    // Fall back to any leaf with a live inspector handle if none found.
     SceneNode? bestUserLeaf;
     SceneNode? bestAnyNode;
 
@@ -331,9 +322,7 @@ class Scene {
       if (n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;
 
-      // Skip platform view leaf nodes (GoogleMap, WebView, etc.) — their
-      // element context fails ModalRoute and geometry evals with RPCError 113.
-      if (n.children.isEmpty && _isPlatformViewLeaf(n)) continue;
+      if (n.children.isEmpty && n.isPlatformView) continue;
 
       if (n.children.isEmpty) {
         if (n.createdByLocalProject) {
@@ -383,23 +372,6 @@ class Scene {
   bool get isNative => groupName == 'native';
 }
 
-/// Labels that indicate a platform view leaf — elements whose eval context
-/// is outside the Flutter framework and will fail ModalRoute/geometry evals.
-const _platformViewLabels = {
-  'GoogleMap',
-  'AndroidView',
-  'UiKitView',
-  'PlatformViewLink',
-  'WebView',
-  'WebViewWidget',
-  'HtmlElementView',
-  'TexutureLayer',
-};
-
-bool _isPlatformViewLeaf(SceneNode n) =>
-    _platformViewLabels.contains(n.label) ||
-    _platformViewLabels.contains(n.widgetRuntimeType);
-
 /// No-op inspector used exclusively by [Scene.forTesting].
 class _NullInspectorClient extends InspectorClient {
   _NullInspectorClient() : super(_NullRuntime());
@@ -446,7 +418,13 @@ class _NullRuntime implements FlutterRuntime {
   @override
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
   @override
-  Future<String?> evaluateString(String expression) => throw UnimplementedError();
+  Future<String?> evaluateString(String expression) async => null;
+  @override
+  Future<String?> evaluateWithSelection({
+    required String expression,
+    required String inspectorId,
+    required String groupName,
+  }) async => null;
   @override
   Stream<Event> get stderrEvents => const Stream.empty();
   @override

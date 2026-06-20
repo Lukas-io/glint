@@ -7,6 +7,7 @@ import '../../observability.dart';
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
+import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
@@ -172,6 +173,7 @@ const List<GlintTool> kDefaultGlintTools = [
   HardwareButtonTool(),
   WaitForSettleTool(),
   LogsTool(),
+  AppLogsTool(),
   SessionTool(),
   ConfigTool(),
   ReportIssueTool(),
