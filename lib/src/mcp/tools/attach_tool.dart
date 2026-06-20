@@ -313,9 +313,15 @@ class AttachTool extends GlintTool {
           : null;
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
-      // Prefer the Dart package name (distinguishes apps) over the iOS bundle
-      // name, which is almost always the generic "Runner".
-      final appName = _packageName(probe.rootLibraryUri) ?? link?.appName;
+      // App identity: package (from the VM, distinguishes apps cross-platform)
+      // + display name / bundle id (iOS, from the bundle Info.plist).
+      final package = _packageName(probe.rootLibraryUri);
+      final appLabel = link?.displayName ?? package ?? link?.appName;
+      final app = <String, Object?>{
+        if (package != null) 'package': package,
+        if (link?.displayName != null) 'name': link!.displayName,
+        if (link?.bundleId != null) 'bundleId': link!.bundleId,
+      };
 
       Map<String, Object?>? settleData;
       if (awaitSettle) {
@@ -349,7 +355,7 @@ class AttachTool extends GlintTool {
 
       return StructuredResponse(
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
-            '${appName != null ? " running $appName" : ""} '
+            '${appLabel != null ? " running $appLabel" : ""} '
             'at $vmUri',
         warnings: warnings,
         nextSteps: [
@@ -366,7 +372,7 @@ class AttachTool extends GlintTool {
           if (osVersion != null) 'osVersion': osVersion,
           if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,
           if (simStatus?.state != null) 'state': simStatus!.state,
-          if (appName != null) 'app': appName,
+          if (app.isNotEmpty) 'app': app,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
           if (dartVersion != null && dartVersion.isNotEmpty)
