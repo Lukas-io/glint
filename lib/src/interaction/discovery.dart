@@ -28,15 +28,27 @@ class BootedDevice {
       };
 }
 
-/// The device an app is actually running on, recovered from a VM service port.
+/// The device an app is actually running on, recovered from a VM service port,
+/// plus iOS bundle identity read from the app's Info.plist.
 class AppDeviceLink {
-  const AppDeviceLink({required this.deviceId, this.appName});
+  const AppDeviceLink({
+    required this.deviceId,
+    this.appName,
+    this.bundleId,
+    this.displayName,
+  });
 
   /// iOS simulator UDID or Android serial that hosts the app on this port.
   final String deviceId;
 
-  /// App display name (iOS: from the `.app` bundle path). Null if unknown.
+  /// `.app` bundle folder name (iOS) — usually the generic "Runner".
   final String? appName;
+
+  /// CFBundleIdentifier, e.g. `com.app.aetrust`.
+  final String? bundleId;
+
+  /// CFBundleDisplayName / CFBundleName, e.g. `Aetrust`.
+  final String? displayName;
 }
 
 /// Running Flutter VM URIs + booted devices. Uncorrelated by design — a URI on
@@ -182,10 +194,35 @@ class DeviceDiscovery {
         .firstMatch(cmd)
         ?.group(1);
     if (udid == null) return null;
-    final appName = RegExp(r'Bundle/Application/[^/]+/([^/]+)\.app')
-        .firstMatch(cmd)
-        ?.group(1);
-    return AppDeviceLink(deviceId: udid, appName: appName);
+    final appMatch = RegExp(r'(\S*/([^/]+)\.app)').firstMatch(cmd);
+    final info =
+        appMatch != null ? await _readBundleInfo(appMatch.group(1)!) : null;
+    return AppDeviceLink(
+      deviceId: udid,
+      appName: appMatch?.group(2),
+      bundleId: info?.$1,
+      displayName: info?.$2,
+    );
+  }
+
+  /// (CFBundleIdentifier, CFBundleDisplayName ?? CFBundleName) from an app's
+  /// Info.plist, via `plutil`. Null if unreadable.
+  Future<(String?, String?)?> _readBundleInfo(String appPath) async {
+    try {
+      final r = await Process.run(
+        'plutil',
+        ['-convert', 'json', '-o', '-', '$appPath/Info.plist'],
+      );
+      if (r.exitCode != 0) return null;
+      final j = jsonDecode(r.stdout as String);
+      if (j is! Map) return null;
+      return (
+        j['CFBundleIdentifier'] as String?,
+        (j['CFBundleDisplayName'] ?? j['CFBundleName']) as String?,
+      );
+    } on Object {
+      return null;
+    }
   }
 
   Future<AppDeviceLink?> _correlateAndroid(int port) async {
