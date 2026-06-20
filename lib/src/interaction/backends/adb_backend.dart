@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../action.dart';
 import '../backend.dart';
+import '../image_size.dart';
 
 /// Android KEYCODE_* values that map to glint's [HardwareButton] enum.
 /// `unlock` is intentionally absent — Android has no stock biometric-match
@@ -103,6 +104,35 @@ class AdbBackend implements InteractionBackend {
       );
     }
     return _shell(['input', 'keyevent', '$code']);
+  }
+
+  @override
+  Future<ScreenshotResult> screenshot(String path) async {
+    // `exec-out screencap -p` streams raw PNG bytes to stdout.
+    final ProcessResult res;
+    try {
+      res = await Process.run(
+        adbPath,
+        ['-s', deviceSerial, 'exec-out', 'screencap', '-p'],
+        stdoutEncoding: null, // keep stdout as raw bytes
+      );
+    } on Object catch (e) {
+      return ScreenshotResult(error: 'adb screencap failed: $e');
+    }
+    if (res.exitCode != 0) {
+      return ScreenshotResult(
+        error: (res.stderr as String?)?.trim().isNotEmpty == true
+            ? (res.stderr as String).trim()
+            : 'adb screencap exited ${res.exitCode}',
+      );
+    }
+    try {
+      File(path).writeAsBytesSync(res.stdout as List<int>);
+    } on Object catch (e) {
+      return ScreenshotResult(error: 'could not write screenshot: $e');
+    }
+    final size = pngSize(path);
+    return ScreenshotResult(path: path, width: size?.$1, height: size?.$2);
   }
 
   Future<void> _shell(List<String> shellArgs) async {

@@ -25,6 +25,20 @@ abstract class InteractionBackend {
   Future<void> typeText(String text);
 
   Future<void> pressHardwareButton(HardwareButton button);
+
+  /// Capture a PNG screenshot of the device to [path]. Used by device mode
+  /// for perception (and as the coordinate reference: ratio = pixel / size).
+  Future<ScreenshotResult> screenshot(String path);
+}
+
+/// Outcome of [InteractionBackend.screenshot]: the saved path + pixel size,
+/// or an [error] line on failure.
+class ScreenshotResult {
+  const ScreenshotResult({this.path, this.width, this.height, this.error});
+  final String? path;
+  final int? width;
+  final int? height;
+  final String? error;
 }
 
 class BackendCapabilities {

@@ -77,14 +77,21 @@ class ScrollTool extends GlintTool {
     // device's screenshot-pixel dims (coordinateSwipe handles the dpr=1 ratio).
     if (session.isDeviceMode) {
       final device = session.device;
-      if (device is! IosSimulator) {
+      final w = switch (device) {
+        IosSimulator() => device.logicalWidth,
+        AndroidDevice() => device.screenWidth,
+      };
+      final h = switch (device) {
+        IosSimulator() => device.logicalHeight,
+        AndroidDevice() => device.screenHeight,
+      };
+      if (w == null || h == null) {
         return StructuredResponse.error(
-          summary: 'device-mode scroll is only supported on iOS simulators',
+          summary: 'device-mode scroll needs known screen size; none available',
           errorKind: GlintErrorKind.unsupportedBackendAction,
+          nextSteps: const ['take a `device op:screenshot` and use swipe x1,y1,x2,y2'],
         );
       }
-      final w = device.logicalWidth;
-      final h = device.logicalHeight;
       final dx = (dir == ScrollDirection.left
               ? -w
               : dir == ScrollDirection.right

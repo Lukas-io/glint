@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../action.dart';
 import '../backend.dart';
+import '../image_size.dart';
 
 /// iOS Simulator backend. Shells out to the `glint-iossim` Swift helper
 /// (`native/ios_sim_bridge/`) which speaks LOGICAL device points, so we
@@ -96,6 +97,23 @@ class IosSimBackend implements InteractionBackend {
   @override
   Future<void> typeText(String text) =>
       _run(_BridgeCommand.type, [udid, text]);
+
+  @override
+  Future<ScreenshotResult> screenshot(String path) async {
+    final res = await Process.run(
+      'xcrun',
+      ['simctl', 'io', udid, 'screenshot', path],
+    );
+    if (res.exitCode != 0) {
+      return ScreenshotResult(
+        error: ((res.stderr as String?) ?? '').trim().isEmpty
+            ? 'simctl screenshot exited ${res.exitCode}'
+            : (res.stderr as String).trim(),
+      );
+    }
+    final size = pngSize(path);
+    return ScreenshotResult(path: path, width: size?.$1, height: size?.$2);
+  }
 
   @override
   Future<void> pressHardwareButton(HardwareButton button) {

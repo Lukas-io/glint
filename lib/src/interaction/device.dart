@@ -17,13 +17,23 @@ sealed class DeviceTarget {
 enum DevicePlatform { android, ios }
 
 class AndroidDevice extends DeviceTarget {
-  const AndroidDevice({required this.serial, this.adbPath = 'adb'});
+  const AndroidDevice({
+    required this.serial,
+    this.adbPath = 'adb',
+    this.screenWidth,
+    this.screenHeight,
+  });
 
   /// adb `-s` serial. e.g. `emulator-5554` or a real-device id.
   final String serial;
 
   /// Path to the `adb` binary. Defaults to whatever's on PATH.
   final String adbPath;
+
+  /// Screen pixel size, populated in device mode (from a screenshot) so
+  /// coordinate scroll can anchor at center. Null in Flutter mode.
+  final double? screenWidth;
+  final double? screenHeight;
 
   @override
   DevicePlatform get platform => DevicePlatform.android;
