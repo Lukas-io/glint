@@ -7,7 +7,7 @@ class SymbolicTarget extends Target {
   final String glintId;
 
   @override
-  String toString() => 'SymbolicTarget($glintId)';
+  String toString() => glintId;
 }
 
 /// Physical-pixel point on the device. Escape hatch when the target
@@ -19,5 +19,5 @@ class CoordinateTarget extends Target {
   final double y;
 
   @override
-  String toString() => 'CoordinateTarget($x, $y)';
+  String toString() => '($x, $y)';
 }

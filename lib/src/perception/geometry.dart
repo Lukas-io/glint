@@ -143,10 +143,15 @@ class CoordinateResolver {
   }
 
   Future<ResolvedCoord> _resolveNode(Scene scene, SceneNode node) async {
+    // Overlay nodes have inspectorIds from the full-tree group (not summary).
+    // Use fullGroupName for those so the inspector can resolve the reference.
+    final groupName = (node.glintId != null && scene.isInOverlay(node.glintId!))
+        ? (scene.fullGroupName ?? scene.groupName)
+        : scene.groupName;
     try {
       await _runtime.setInspectorSelection(
         inspectorId: node.inspectorId,
-        groupName: scene.groupName,
+        groupName: groupName,
       );
     } on Object catch (e) {
       throw GeometryResolveError(

@@ -15,6 +15,9 @@ enum GlintErrorKind {
   connectionLost,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
+  // scroll_to_find specific failures
+  targetNotFound,
+  scrollLimitReached,
   // bug bucket — should never happen; if it does, it's on us
   internal,
 }

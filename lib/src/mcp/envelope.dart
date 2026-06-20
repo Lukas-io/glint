@@ -64,6 +64,18 @@ class StructuredResponse {
 
   String renderText() {
     final buf = StringBuffer(summary);
+    // Surface the first line of detail on errors so agents see the real reason
+    // without having to parse structuredContent.
+    if (isError) {
+      final detail = data?['detail'] as String?;
+      if (detail != null) {
+        final firstLine = detail.split('\n').first.trim();
+        if (firstLine.isNotEmpty && firstLine != summary) {
+          buf.writeln();
+          buf.writeln('detail: $firstLine');
+        }
+      }
+    }
     if (warnings.isNotEmpty) {
       buf.writeln();
       buf.writeln();

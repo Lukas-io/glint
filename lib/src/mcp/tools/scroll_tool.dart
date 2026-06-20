@@ -1,7 +1,9 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
+import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
 
@@ -20,8 +22,8 @@ class ScrollTool extends GlintTool {
             '(0.0–1.0, default 0.6 = 60% of viewport per scroll). '
             'For finding off-screen items, prefer scroll_to_find which loops until '
             'the target appears. '
-            'Returns ok:true when the swipe gesture completed; check changed to '
-            'know if content actually moved.',
+            'With returnScene: true (default), settles and returns the new scene '
+            'plus changed + changeCategory so you know if content actually moved.',
         inputSchema: ObjectSchema(
           properties: {
             'direction': Schema.string(
@@ -31,6 +33,16 @@ class ScrollTool extends GlintTool {
             'amountFraction': Schema.num(
               description:
                   'Fraction of viewport to travel (0.0–1.0). Default 0.6.',
+            ),
+            'returnScene': Schema.bool(
+              description:
+                  'After the scroll, settle and return changed (bool) and '
+                  'changeCategory. Default true.',
+            ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: also include the full rendered scene text as '
+                  'postScene. Default false.',
             ),
           },
           required: ['direction'],
@@ -45,6 +57,8 @@ class ScrollTool extends GlintTool {
     final amount = ((args['amountFraction'] as num?) ??
             session.config.scrollAmountFraction)
         .toDouble();
+    final returnScene = (args['returnScene'] as bool?) ?? true;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     final dir = ScrollDirection.values
         .where((d) => d.name == dirName)
@@ -58,6 +72,38 @@ class ScrollTool extends GlintTool {
         ],
       );
     }
+
+    // Device mode: no Flutter viewport probe — swipe from center using the
+    // device's screen size (coordinateSwipe applies the dpr=1 ratio).
+    if (session.isDeviceMode) {
+      final size = session.device.screenSize;
+      if (size == null) {
+        return StructuredResponse.error(
+          summary: 'device-mode scroll needs a known screen size; none available',
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+          nextSteps: const [
+            'take a `device op:screenshot` and use swipe x1,y1,x2,y2',
+          ],
+        );
+      }
+      final dx = (dir == ScrollDirection.left
+              ? -size.w
+              : dir == ScrollDirection.right
+                  ? size.w
+                  : 0) *
+          amount;
+      final dy = (dir == ScrollDirection.up
+              ? -size.h
+              : dir == ScrollDirection.down
+                  ? size.h
+                  : 0) *
+          amount;
+      return coordinateSwipe(session, size.w / 2, size.h / 2,
+          size.w / 2 - dx, size.h / 2 - dy, 300,
+          verb: 'scrolled');
+    }
+
+    final pre = returnScene ? await snapshotPreAction(session) : null;
 
     final vp = await session.probeViewport();
     final centerXLogical = vp.logicalW / 2;
@@ -75,13 +121,12 @@ class ScrollTool extends GlintTool {
                 : 0) *
         amount;
 
-    // Backend speaks physical pixels.
+    // Backend speaks physical pixels. Note the sign flip: scroll DOWN means
+    // "move content down" = swipe finger UP.
     final fromX = centerXLogical * vp.dpr;
     final fromY = centerYLogical * vp.dpr;
     final toX = (centerXLogical - deltaXLogical) * vp.dpr;
     final toY = (centerYLogical - deltaYLogical) * vp.dpr;
-
-    // Note the sign flip: scroll DOWN means "move content down" = swipe finger UP.
 
     final scene = await session.reader.readSummary();
     try {
@@ -92,7 +137,21 @@ class ScrollTool extends GlintTool {
           CoordinateTarget(x: toX, y: toY),
         ),
       );
-      return StructuredResponse.fromActionResult(result);
+      var response = StructuredResponse.fromActionResult(result);
+      if (returnScene && !response.isError) {
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
+        if (post != null) {
+          response = StructuredResponse(
+            summary: response.summary,
+            warnings: response.warnings,
+            nextSteps: response.nextSteps,
+            isError: response.isError,
+            data: {...?response.data, ...post.toData()},
+          );
+        }
+      }
+      return response;
     } finally {
       await scene.dispose();
     }

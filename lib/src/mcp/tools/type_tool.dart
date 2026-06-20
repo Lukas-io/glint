@@ -37,12 +37,16 @@ class TypeTool extends GlintTool {
             'readyTimeoutMs': Schema.int(),
             'returnScene': Schema.bool(
               description:
-                  'When true: after typing, settle and return the new scene '
-                  'plus changed (bool) and changeCategory. Default false.',
+                  'After typing, settle and return the new scene plus changed '
+                  '(bool) and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
               description:
                   'When true: include full geometry in structuredContent. Default false.',
+            ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: include the full rendered scene text as postScene. Default false.',
             ),
           },
           required: ['text'],
@@ -59,7 +63,8 @@ class TypeTool extends GlintTool {
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
     final detail = (args['detail'] as bool?) ?? false;
-    final returnScene = (args['returnScene'] as bool?) ?? false;
+    final returnScene = (args['returnScene'] as bool?) ?? true;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     final pre = returnScene ? await snapshotPreAction(session) : null;
 
@@ -114,7 +119,8 @@ class TypeTool extends GlintTool {
         );
       }
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre);
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
         if (post != null) {
           response = StructuredResponse(
             summary: response.summary,
