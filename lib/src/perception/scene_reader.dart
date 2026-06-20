@@ -82,20 +82,16 @@ class SceneReader {
 
   Future<_OverlayResult?> _tryReadOverlay(
       SceneNode summaryRoot, String summaryGroup) async {
-    // 1. Pick any addressable node to set the inspector selection.
-    final probeId = _firstInspectorId(summaryRoot);
-    if (probeId == null) return null;
+    // We skip the canPop() heuristic entirely. WidgetInspectorService.instance
+    // .selection.currentElement is unreliable (can be null when the inspector
+    // root node is selected, or when the element context is above the Navigator)
+    // causing canPop() to throw and silently suppress overlay detection.
+    //
+    // Instead we always read the full tree. _extractDialogEntries already
+    // handles the no-overlay case by returning empty contentRoots. The extra
+    // tree read (~50-100 ms) is acceptable: readSummary is only called at the
+    // start of a tool call, never in a hot loop.
 
-    // 2. Cheaply detect overlay via canPop().
-    final canPop = await _runtime.evaluateWithSelection(
-      expression: 'Navigator.of(WidgetInspectorService.instance.selection.currentElement!,'
-          ' rootNavigator: false).canPop().toString()',
-      inspectorId: probeId,
-      groupName: summaryGroup,
-    );
-    if (canPop != 'true') return null;
-
-    // 3. Read the full tree (only on overlay-present paths).
     final fullGroup = _inspector.nextReadGroup();
     final SceneNode fullRoot;
     try {
@@ -104,7 +100,6 @@ class SceneReader {
       return null;
     }
 
-    // 4. Extract dialog-content nodes from Overlay's entry widgets.
     final extraction = _extractDialogEntries(fullRoot);
 
     if (extraction.contentRoots.isEmpty) {
@@ -112,7 +107,7 @@ class SceneReader {
       return null;
     }
 
-    // 5. Append dialog nodes to summary root so findByGlintId reaches them.
+    // Append dialog nodes to summary root so findByGlintId reaches them.
     summaryRoot.children.addAll(extraction.contentRoots);
 
     return _OverlayResult(
@@ -133,10 +128,18 @@ class SceneReader {
       return const _DialogExtraction(contentRoots: [], hasBarrier: false);
     }
 
+    // Flutter 3.x introduced _Theater as an intermediate child of Overlay
+    // that groups the overlay entries. Walk into it when present so we reach
+    // the actual _OverlayEntryWidget children.
+    final entriesParent =
+        (overlay.children.firstOrNull?.label == '_Theater')
+            ? overlay.children.first
+            : overlay;
+
     final contentRoots = <SceneNode>[];
     var hasBarrier = false;
 
-    for (final entry in overlay.children) {
+    for (final entry in entriesParent.children) {
       if (!_isEntryWidget(entry)) continue;
       if (_hasScaffoldDescendant(entry)) continue; // base route
       if (_isBarrierOnlyEntry(entry)) {
@@ -169,6 +172,11 @@ class SceneReader {
   /// True when every descendant is a known barrier/gesture-plumbing widget
   /// with no user-meaningful content.
   static bool _isBarrierOnlyEntry(SceneNode n) {
+    // Widgets that are pass-through / pointer-routing plumbing with no
+    // user-visible content. MouseRegion appears as an overlay entry in
+    // Flutter 3.x for drag/hover tracking — filter it out so it doesn't
+    // show up as a spurious `--- dialog ---` section on screens that have
+    // no real dialog open.
     const barrierSet = {
       'ModalBarrier',
       'AnimatedModalBarrier',
@@ -179,16 +187,14 @@ class SceneReader {
       'Semantics',
       'ExcludeSemantics',
       '_OverlayEntryWidget',
+      'MouseRegion',
+      'Focus',
+      'FocusScope',
+      'TickerMode',
     };
     return n.walk().skip(1).every((d) => barrierSet.contains(d.label));
   }
 
-  static String? _firstInspectorId(SceneNode root) {
-    for (final n in root.walk().skip(1)) {
-      if (n.inspectorId.isNotEmpty) return n.inspectorId;
-    }
-    return null;
-  }
 }
 
 // ── internal result types ──────────────────────────────────────────────────
@@ -239,6 +245,12 @@ class Scene {
   final bool hasBarrierOverlay;
 
   final String? _fullGroupName;
+
+  /// Group name to use when resolving overlay nodes. Overlay nodes' inspectorIds
+  /// are allocated in the full-tree group — using the summary group would fail
+  /// the Flutter inspector's cross-group object lookup.
+  String? get fullGroupName => _fullGroupName;
+
   bool _disposed = false;
 
   SceneNode? findByGlintId(String glintId) {

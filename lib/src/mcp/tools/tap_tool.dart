@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -14,7 +15,9 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by its glintId from get_scene. '
+            'Tap a node by its glintId from get_scene, OR pass x,y to tap raw '
+            'coordinates (device mode: screenshot pixels; flutter mode: logical '
+            'points) — coordinates bypass glintId resolution and hit-testing. '
             'Returns structuredContent with: ok (bool), painted, hittable, '
             'physicalCenter, changed (bool), changeCategory (routeChanged/'
             'overlayAppeared/overlayDismissed/contentChanged/nothing). '
@@ -30,6 +33,14 @@ class TapTool extends GlintTool {
               description:
                   'Stable id from `get_scene`, e.g. floating_action_button',
             ),
+            'x': Schema.num(
+              description:
+                  'Raw x coordinate (with y). Device mode: screenshot pixels; '
+                  'flutter mode: logical points. Bypasses glintId.',
+            ),
+            'y': Schema.num(
+              description: 'Raw y coordinate (with x).',
+            ),
             'refuseNotHittable': Schema.bool(
               description:
                   'When true, a non-hittable target produces an error (errorKind=notHittable) instead of a warning. Default false.',
@@ -43,18 +54,22 @@ class TapTool extends GlintTool {
             ),
             'returnScene': Schema.bool(
               description:
-                  'When true: after the tap, settle and return the new scene '
-                  'plus changed (bool) and changeCategory in structuredContent. '
-                  'Collapses the tap → wait_for_settle → get_scene dance into '
-                  'one call. Default false.',
+                  'After the tap, settle and return the new scene plus changed '
+                  '(bool) and changeCategory. Collapses tap → wait_for_settle '
+                  '→ get_scene into one call. Default true.',
             ),
             'detail': Schema.bool(
               description:
                   'When true: include full geometry (painted, hittable, physicalCenter) '
                   'in structuredContent. Default false (ok-only — saves tokens).',
             ),
+            'fetchScene': Schema.bool(
+              description:
+                  'When true: include the full rendered scene text as postScene '
+                  'in structuredContent. Collapses returnScene + get_scene into '
+                  'one call. Default false.',
+            ),
           },
-          required: ['glintId'],
         ),
       );
 
@@ -62,13 +77,29 @@ class TapTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final glintId = args['glintId']! as String;
+
+    // Coordinate tap — bypasses scene resolution; the only path in device mode.
+    final x = (args['x'] as num?)?.toDouble();
+    final y = (args['y'] as num?)?.toDouble();
+    if (x != null && y != null) return coordinateTap(session, x, y);
+
+    final glintId = args['glintId'] as String?;
+    if (glintId == null) {
+      return StructuredResponse.error(
+        summary: 'tap needs either glintId or x + y',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'pass glintId from get_scene, or x,y coordinates',
+        ],
+      );
+    }
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
     final armed = (args['awaitReady'] as bool?) ?? false;
     final ceilingMs =
         (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? false;
+    final returnScene = (args['returnScene'] as bool?) ?? true;
     final detail = (args['detail'] as bool?) ?? false;
+    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     // Pre-action snapshot (cheap) — only needed when returnScene is requested.
     final pre = returnScene ? await snapshotPreAction(session) : null;
@@ -127,7 +158,8 @@ class TapTool extends GlintTool {
 
       // Post-action scene + changed signal (only when requested).
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre);
+        final post = await readPostActionState(session, pre,
+            includeSceneText: fetchScene);
         if (post != null) {
           response = StructuredResponse(
             summary: response.summary,

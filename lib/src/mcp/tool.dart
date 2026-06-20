@@ -10,6 +10,7 @@ import 'session.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/config_tool.dart';
+import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
@@ -159,6 +160,7 @@ abstract class GlintTool {
 /// keeping the same envelope + session contract.
 const List<GlintTool> kDefaultGlintTools = [
   AttachTool(),
+  DeviceTool(),
   GetSceneTool(),
   ResolveTool(),
   TapTool(),
