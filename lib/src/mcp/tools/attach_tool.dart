@@ -314,7 +314,7 @@ class AttachTool extends GlintTool {
           final timeoutMs = launchedDeviceId != null && baseMs < 30000
               ? 30000
               : baseMs;
-          final vp = await _probeViewportWithRetry(probe, timeoutMs);
+          final vp = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
           if (vp == null) {
             return StructuredResponse.error(
               summary: 'attached to the VM but could not probe the iOS viewport',
@@ -349,16 +349,23 @@ class AttachTool extends GlintTool {
           : null;
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
-      // App identity: package (from the VM, distinguishes apps cross-platform)
-      // + display name / bundle id (iOS, from the bundle Info.plist).
+      // App identity: package from the VM, plus display name / bundle id. The
+      // bundle id comes from correlation, else the running app's bundle on the
+      // (already-known) device — needed for kill_app's terminate.
       final package = _packageName(probe.rootLibraryUri);
-      final appLabel = link?.displayName ?? package ?? link?.appName;
+      final iosInfo = platform == DevicePlatform.ios &&
+              (link?.bundleId == null || link?.displayName == null)
+          ? await discovery.appInfoForDevice(deviceId)
+          : null;
+      final bundleId = link?.bundleId ?? iosInfo?.$1;
+      final displayName = link?.displayName ?? iosInfo?.$2;
+      final appLabel = displayName ?? package ?? link?.appName;
       final app = <String, Object?>{
         if (package != null) 'package': package,
-        if (link?.displayName != null) 'name': link!.displayName,
-        if (link?.bundleId != null) 'bundleId': link!.bundleId,
+        if (displayName != null) 'name': displayName,
+        if (bundleId != null) 'bundleId': bundleId,
       };
-      session.attachedBundleId = link?.bundleId; // for kill_app
+      session.attachedBundleId = bundleId; // for kill_app
 
       // Remember this attach so a future cold start can relaunch it.
       final projectDir = await discovery.projectDirForVm(vmUri);
@@ -367,8 +374,8 @@ class AttachTool extends GlintTool {
         final now = DateTime.now();
         session.attachHistory.record(AttachRecord(
           appKey: appKey,
-          displayName: link?.displayName ?? package,
-          bundleId: link?.bundleId,
+          displayName: displayName ?? package,
+          bundleId: bundleId,
           deviceId: deviceId,
           platform: platform.name,
           deviceName: deviceName,
@@ -606,17 +613,18 @@ class AttachTool extends GlintTool {
             .screenshot(path);
   }
 
-  /// Probe the logical viewport, retrying past a blank first frame until
-  /// [timeoutMs] elapses. Returns null if no addressable node ever appears —
-  /// the caller turns that into a structured, recoverable response.
+  /// Probe the logical viewport, retrying past a blank first frame until [timeoutMs]; null if none ever appears.
   Future<({double w, double h, double dpr})?> _probeViewportWithRetry(
     VmServiceRuntime probe,
-    int timeoutMs, {
+    int timeoutMs,
+    void Function(int, String?)? onProgress, {
     Duration delay = const Duration(milliseconds: 250),
   }) async {
     final reader = SceneReader(InspectorClient(probe), probe);
     final resolver = CoordinateResolver(probe);
-    final deadline = DateTime.now().add(Duration(milliseconds: timeoutMs));
+    final start = DateTime.now();
+    final deadline = start.add(Duration(milliseconds: timeoutMs));
+    var nextUpdate = start.add(const Duration(seconds: 15));
     var first = true;
     while (first || DateTime.now().isBefore(deadline)) {
       first = false;
@@ -635,7 +643,12 @@ class AttachTool extends GlintTool {
         // Inspector not ready yet — common in the first frames after a fresh
         // launch (getRootWidgetTree returns null). Keep retrying until deadline.
       }
-      if (DateTime.now().add(delay).isBefore(deadline)) {
+      final now = DateTime.now();
+      if (onProgress != null && now.isAfter(nextUpdate)) {
+        onProgress(now.difference(start).inSeconds, 'waiting for first frame');
+        nextUpdate = now.add(const Duration(seconds: 15));
+      }
+      if (now.add(delay).isBefore(deadline)) {
         await Future<void>.delayed(delay);
       } else {
         break;
