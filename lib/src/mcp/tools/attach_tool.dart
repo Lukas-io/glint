@@ -39,13 +39,19 @@ class AttachTool extends GlintTool {
             'simulator with NO Flutter app — perception via device '
             'op:screenshot, interaction via x,y coordinate taps. auto picks '
             'device mode when no running app is found. '
+            'launch: start an app from history instead of attaching to a '
+            'running one — true (most recent), "<package>", or "<projectPath>". '
+            'glint remembers every app+device+project it attaches to, so when '
+            'nothing is running it offers those instead of erroring (re-call '
+            'with launch). launch boots the simulator if needed, runs the app, '
+            'and attaches. '
             'returnScene: include the first get_scene render. dryRun: list '
-            'attachable apps + devices without attaching. awaitSettle: wait for '
-            'the UI to settle first. '
+            'attachable apps + devices + launch history without attaching. '
+            'awaitSettle: wait for the UI to settle first. '
             'Returns platform, device + app identity, hardwareButtons available, '
             'and screen (viewport, dpr, orientation, brightness, locale). '
-            'errorKind: targetNotFound (no app / no device), invalidArgument '
-            '(device/app mismatch), internal (VM unreachable). '
+            'errorKind: targetNotFound (no app / no device / nothing to launch), '
+            'invalidArgument (device/app mismatch), internal (VM unreachable). '
             'Companion: flutter-network__network_attach takes the same vmUri for '
             'logs + HTTP monitoring (separate connection, no conflict).',
         inputSchema: ObjectSchema(
@@ -67,6 +73,12 @@ class AttachTool extends GlintTool {
               description:
                   'iOS simulator UDID or Android serial. Omit to auto-correlate '
                   'to the app\'s real device.',
+            ),
+            'launch': Schema.string(
+              description:
+                  'Start an app from history rather than attaching to a running '
+                  'one: "true"/"last" (most recent), a package name, or a '
+                  'project path. Boots the device if needed, runs it, attaches.',
             ),
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
@@ -125,54 +137,56 @@ class AttachTool extends GlintTool {
     // One scan powers discovery + identity + the correlation fallback.
     final scan = await discovery.scan();
 
-    // ── dryRun: list what's attachable and stop ─────────────────────────────
+    // ── dryRun: list what's attachable + launch history and stop ────────────
     if (dryRun) {
       return StructuredResponse(
-        summary: _dryRunSummary(scan),
+        summary: _dryRunSummary(scan, session.attachHistory.load()),
         data: {
           'dryRun': true,
           'apps': [for (final u in scan.vmUris) u.toString()],
           'devices': [for (final d in scan.devices) d.toJson()],
+          'history': [for (final r in session.attachHistory.load()) r.toJson()],
         },
       );
     }
 
-    // ── Device mode: explicit, or auto when no app is discovered ────────────
     final vmUriArg = args['vmUri'] as String?;
+    final launchArg = args['launch'];
+    final wantsLaunch = launchArg != null && launchArg != false && launchArg != '';
+
+    // ── Device mode: explicit ───────────────────────────────────────────────
     if (mode == 'device') {
       return _attachDeviceMode(session, scan, args, platformArg, adbPath);
     }
 
-    // ── 1. Resolve the VM service URI (discover if absent) ──────────────────
+    // ── 1. Resolve the VM service URI: explicit launch, arg, discovery, or —
+    //       when nothing is running — offer the launch history (not an error).
     final Uri vmUri;
-    if (vmUriArg != null) {
+    // Set when we launched: the device is freshly booted (so the pre-launch
+    // scan can't see it) — pins device resolution to the one we ran on.
+    String? launchedDeviceId;
+    if (wantsLaunch) {
+      final launched =
+          await _launchToVmUri(session, scan, launchArg, args, platformArg);
+      if (launched.error != null) return launched.error!;
+      vmUri = launched.vmUri!;
+      launchedDeviceId = launched.deviceId;
+    } else if (vmUriArg != null) {
       vmUri = Uri.parse(vmUriArg);
-    } else {
-      if (scan.vmUris.isEmpty) {
-        // No Flutter app found. Unless flutter mode was forced, fall back to
-        // driving the device directly.
-        if (mode != 'flutter') {
-          return _attachDeviceMode(session, scan, args, platformArg, adbPath);
-        }
-        return StructuredResponse.error(
-          summary: 'no running Flutter app found to attach to',
-          errorKind: GlintErrorKind.targetNotFound,
-          detail: scan.devices.isEmpty
-              ? 'no booted simulators/emulators detected either'
-              : 'booted devices: ${scan.devices.map((d) => d.name).join(", ")}',
-          nextSteps: const [
-            'start a Flutter app in debug mode (flutter run), then call attach',
-            'or attach in device mode (mode:"device") to drive the sim directly',
-          ],
-        );
-      }
-      if (scan.vmUris.length > 1) {
-        return _selection(
-          'multiple running Flutter apps found — re-call attach with one vmUri',
-          scan,
-        );
-      }
+    } else if (scan.vmUris.length == 1) {
       vmUri = scan.vmUris.single;
+    } else if (scan.vmUris.length > 1) {
+      return _selection(
+        'multiple running Flutter apps found — re-call attach with one vmUri',
+        scan,
+      );
+    } else {
+      // Nothing running. Force-flutter still errors; otherwise offer history /
+      // device mode rather than dead-ending.
+      if (mode == 'flutter') {
+        return _offerLaunch(session, scan, forceFlutter: true);
+      }
+      return _offerLaunch(session, scan);
     }
 
     // ── 2. Connect a probe runtime to read platform + viewport ──────────────
@@ -210,7 +224,8 @@ class AttachTool extends GlintTool {
       final link = await discovery.correlate(vmUri, platform);
 
       // ── 5. Resolve the device id ──────────────────────────────────────────
-      final deviceArg = args['device'] as String?;
+      // A just-launched device is treated like an explicit choice.
+      final deviceArg = launchedDeviceId ?? (args['device'] as String?);
       final String deviceId;
       if (deviceArg != null) {
         if (link != null && link.deviceId != deviceArg) {
@@ -277,7 +292,13 @@ class AttachTool extends GlintTool {
               '(cd native/ios_sim_bridge && swift build), or pass iosBridgePath',
             );
           }
-          final timeoutMs = session.config.attachProbeTimeoutMs;
+          // A freshly launched app needs longer — its inspector comes up a few
+          // seconds after the VM URI. An already-running app probes on the
+          // first try, so the ceiling only costs time when actually retrying.
+          final baseMs = session.config.attachProbeTimeoutMs;
+          final timeoutMs = launchedDeviceId != null && baseMs < 30000
+              ? 30000
+              : baseMs;
           final vp = await _probeViewportWithRetry(probe, timeoutMs);
           if (vp == null) {
             return StructuredResponse.error(
@@ -322,6 +343,25 @@ class AttachTool extends GlintTool {
         if (link?.displayName != null) 'name': link!.displayName,
         if (link?.bundleId != null) 'bundleId': link!.bundleId,
       };
+
+      // Remember this attach so a future cold start can relaunch it.
+      final projectDir = await discovery.projectDirForVm(vmUri);
+      final appKey = package ?? _basename(projectDir) ?? link?.appName;
+      if (appKey != null) {
+        final now = DateTime.now();
+        session.attachHistory.record(AttachRecord(
+          appKey: appKey,
+          displayName: link?.displayName ?? package,
+          bundleId: link?.bundleId,
+          deviceId: deviceId,
+          platform: platform.name,
+          deviceName: deviceName,
+          osVersion: osVersion,
+          projectDir: projectDir,
+          firstSeen: now,
+          lastSeen: now,
+        ));
+      }
 
       Map<String, Object?>? settleData;
       if (awaitSettle) {
@@ -425,6 +465,17 @@ class AttachTool extends GlintTool {
               'boot the device, or pass platform: ios | android',
             ],
           );
+        }
+        // Not booted — bring it up so we can drive it ("open the simulator").
+        if (p == DevicePlatform.ios) {
+          final bootErr = await const AppLauncher().ensureBooted(p, deviceArg);
+          if (bootErr != null) {
+            return StructuredResponse.error(
+              summary: 'could not boot device $deviceArg',
+              errorKind: GlintErrorKind.backendToolError,
+              detail: bootErr,
+            );
+          }
         }
         target = BootedDevice(platform: p, id: deviceArg, name: deviceArg);
       }
@@ -553,15 +604,20 @@ class AttachTool extends GlintTool {
     var first = true;
     while (first || DateTime.now().isBefore(deadline)) {
       first = false;
-      final scene = await reader.readSummary();
       try {
-        final probeId = scene.firstAddressableId();
-        if (probeId != null) {
-          final vp = await resolver.resolveViewport(scene, probeId);
-          return (w: vp.w, h: vp.h, dpr: vp.dpr);
+        final scene = await reader.readSummary();
+        try {
+          final probeId = scene.firstAddressableId();
+          if (probeId != null) {
+            final vp = await resolver.resolveViewport(scene, probeId);
+            return (w: vp.w, h: vp.h, dpr: vp.dpr);
+          }
+        } finally {
+          await scene.dispose();
         }
-      } finally {
-        await scene.dispose();
+      } on Object {
+        // Inspector not ready yet — common in the first frames after a fresh
+        // launch (getRootWidgetTree returns null). Keep retrying until deadline.
       }
       if (DateTime.now().add(delay).isBefore(deadline)) {
         await Future<void>.delayed(delay);
@@ -586,7 +642,7 @@ class AttachTool extends GlintTool {
     }
   }
 
-  String _dryRunSummary(DiscoveryResult scan) {
+  String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history) {
     return [
       'apps (${scan.vmUris.length}):',
       for (final u in scan.vmUris) '  $u',
@@ -597,7 +653,215 @@ class AttachTool extends GlintTool {
           if (d.osVersion != null) d.osVersion!,
           d.platform.name,
         ].join(", ")})',
+      'history (${history.length}):',
+      for (final r in history)
+        '  ${r.label}  (${[
+          r.deviceName ?? r.deviceId,
+          if (r.launchable) 'launchable' else 'no projectDir',
+          _ago(r.lastSeen),
+        ].join(", ")})',
     ].join('\n');
+  }
+
+  /// Launch an app (from history or an explicit project path) and return its
+  /// fresh VM URI, booting the device first. On any failure returns a ready
+  /// error envelope instead.
+  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error})>
+      _launchToVmUri(
+    GlintSession session,
+    DiscoveryResult scan,
+    Object? launchArg,
+    Map<String, Object?> args,
+    String? platformArg,
+  ) async {
+    final launchStr = launchArg is String ? launchArg.trim() : null;
+
+    String? projectDir;
+    AttachRecord? rec;
+    if (launchStr != null && (launchStr.contains('/') || launchStr.contains('\\'))) {
+      if (!File('$launchStr/pubspec.yaml').existsSync()) {
+        return (
+          vmUri: null,
+          deviceId: null,
+          error: StructuredResponse.error(
+            summary: 'no Flutter project at "$launchStr"',
+            errorKind: GlintErrorKind.invalidArgument,
+            detail: 'expected a pubspec.yaml in that directory',
+            nextSteps: const [
+              'pass a Flutter project root path, or launch:"<package>" from history',
+            ],
+          ),
+        );
+      }
+      projectDir = launchStr;
+    } else {
+      rec = session.attachHistory.find(launchStr);
+      if (rec == null) {
+        return (
+          vmUri: null,
+          deviceId: null,
+          error: _offerLaunch(session, scan,
+              prefix: launchStr == null
+                  ? null
+                  : 'no history entry matches "$launchStr"'),
+        );
+      }
+      projectDir = rec.projectDir;
+    }
+
+    if (projectDir == null) {
+      return (
+        vmUri: null,
+        deviceId: null,
+        error: StructuredResponse.error(
+          summary: 'cannot launch ${rec?.label ?? "app"}: project dir unknown',
+          errorKind: GlintErrorKind.targetNotFound,
+          detail: 'this app was remembered before glint tracked project dirs',
+          nextSteps: const [
+            'launch:"<projectPath>" pointing at the Flutter project root',
+          ],
+        ),
+      );
+    }
+
+    final platform = _platformFromArg(platformArg) ??
+        (rec != null ? _platformFromName(rec.platform) : null) ??
+        DevicePlatform.ios;
+    final deviceId = (args['device'] as String?) ??
+        rec?.deviceId ??
+        _firstBootedId(scan, platform);
+    if (deviceId == null) {
+      return (
+        vmUri: null,
+        deviceId: null,
+        error: StructuredResponse.error(
+          summary: 'no device to launch ${rec?.label ?? "the app"} on',
+          errorKind: GlintErrorKind.targetNotFound,
+          nextSteps: const [
+            'boot a simulator/emulator, or pass device:"<udid/serial>"',
+          ],
+        ),
+      );
+    }
+
+    const launcher = AppLauncher();
+    final bootErr = await launcher.ensureBooted(platform, deviceId);
+    if (bootErr != null) {
+      return (
+        vmUri: null,
+        deviceId: null,
+        error: StructuredResponse.error(
+          summary: 'could not boot device $deviceId',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: bootErr,
+        ),
+      );
+    }
+
+    try {
+      final uri = await launcher.launchApp(
+        projectDir: projectDir,
+        deviceId: deviceId,
+        timeout: Duration(milliseconds: session.config.launchTimeoutMs),
+      );
+      return (vmUri: uri, deviceId: deviceId, error: null);
+    } on LaunchError catch (e) {
+      return (
+        vmUri: null,
+        deviceId: null,
+        error: StructuredResponse.error(
+          summary: 'failed to launch ${rec?.label ?? projectDir}',
+          errorKind: GlintErrorKind.targetNotFound,
+          detail: [e.message, if (e.logTail != null) '\n${e.logTail}'].join(),
+          nextSteps: const [
+            'check the build output in detail',
+            'raise the wait for slow builds: config set launchTimeoutMs <ms>',
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Nothing was running: offer the launch history + booted devices instead of
+  /// dead-ending. Only a true error when there's nothing to offer at all.
+  StructuredResponse _offerLaunch(
+    GlintSession session,
+    DiscoveryResult scan, {
+    bool forceFlutter = false,
+    String? prefix,
+  }) {
+    final history = session.attachHistory.load();
+    final launchable = history.where((r) => r.launchable).toList();
+    final canDeviceMode = scan.devices.isNotEmpty && !forceFlutter;
+
+    if (launchable.isEmpty && !canDeviceMode) {
+      return StructuredResponse.error(
+        summary: '${prefix ?? "no running Flutter app found"} — '
+            'nothing in launch history to start',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: history.isEmpty
+            ? 'attach to a running app once and glint will remember it'
+            : 'remembered apps have no tracked project dir',
+        nextSteps: const [
+          'start a Flutter app (flutter run), then call attach',
+          'or attach in device mode (mode:"device") to drive a sim directly',
+        ],
+      );
+    }
+
+    final top = launchable.isNotEmpty ? launchable.first : null;
+    return StructuredResponse(
+      summary: prefix != null
+          ? '$prefix — re-call attach with launch'
+          : (launchable.isEmpty
+              ? 'nothing running; no launchable history, but '
+                  '${scan.devices.length} booted device(s)'
+              : 'nothing running — ${launchable.length} app(s) remembered; '
+                  're-call attach with launch'),
+      nextSteps: [
+        if (top != null)
+          'launch: true   → ${top.label} on ${top.deviceName ?? top.deviceId}',
+        for (final r in launchable.take(5))
+          'launch: "${r.appKey}"  (${r.deviceName ?? r.platform}, ${_ago(r.lastSeen)})',
+        for (final d in scan.devices)
+          'mode: "device" device: "${d.id}"  (${d.name}) — drive the sim, no app',
+      ],
+      data: {
+        'nothingRunning': true,
+        if (top != null) 'suggestedLaunch': top.toJson(),
+        'history': [for (final r in history.take(10)) r.toJson()],
+        'devices': [for (final d in scan.devices) d.toJson()],
+      },
+    );
+  }
+
+  String? _basename(String? path) {
+    if (path == null || path.isEmpty) return null;
+    final parts = path
+        .replaceAll('\\', '/')
+        .split('/')
+        .where((p) => p.isNotEmpty)
+        .toList();
+    return parts.isEmpty ? null : parts.last;
+  }
+
+  DevicePlatform? _platformFromName(String name) => switch (name) {
+        'ios' => DevicePlatform.ios,
+        'android' => DevicePlatform.android,
+        _ => null,
+      };
+
+  String? _firstBootedId(DiscoveryResult scan, DevicePlatform platform) {
+    final candidates = scan.devicesFor(platform);
+    return candidates.isEmpty ? null : candidates.first.id;
+  }
+
+  static String _ago(DateTime t) {
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
   }
 
   /// A "needs selection" reply: not an error, but glint can't pick for the

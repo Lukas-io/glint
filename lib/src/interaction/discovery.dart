@@ -238,24 +238,54 @@ class DeviceDiscovery {
     return null;
   }
 
-  Future<int?> _listeningPid(int port) async {
+  Future<int?> _listeningPid(int port) async =>
+      (await _listeningPids(port)).firstOrNull;
+
+  Future<List<int>> _listeningPids(int port) async {
     final ProcessResult res;
     try {
-      res = await Process.run(
-        'lsof',
-        ['-nP', '-iTCP:$port', '-sTCP:LISTEN'],
-      );
+      res = await Process.run('lsof', ['-nP', '-iTCP:$port', '-sTCP:LISTEN']);
     } on Object {
-      return null;
+      return const [];
     }
-    if (res.exitCode != 0) return null;
+    if (res.exitCode != 0) return const [];
+    final pids = <int>[];
     for (final line in (res.stdout as String).split('\n')) {
       if (line.startsWith('COMMAND')) continue;
       final parts = line.split(RegExp(r'\s+'));
       if (parts.length >= 2) {
         final pid = int.tryParse(parts[1]);
-        if (pid != null) return pid;
+        if (pid != null && !pids.contains(pid)) pids.add(pid);
       }
+    }
+    return pids;
+  }
+
+  // ── project dir (for relaunch) ───────────────────────────────────────────
+  /// Flutter project root behind a running app, recovered from the VM port:
+  /// the host process listening on it (the `dart development-service`) has the
+  /// `flutter run` cwd. Validated by a `pubspec.yaml` check. Null when nothing
+  /// matches — the app is still attachable, just not auto-relaunchable.
+  Future<String?> projectDirForVm(Uri vmUri) async {
+    final port = vmUri.port;
+    if (port == 0) return null;
+    for (final pid in await _listeningPids(port)) {
+      final cwd = await _cwdOf(pid);
+      if (cwd != null && File('$cwd/pubspec.yaml').existsSync()) return cwd;
+    }
+    return null;
+  }
+
+  Future<String?> _cwdOf(int pid) async {
+    final ProcessResult res;
+    try {
+      res = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
+    } on Object {
+      return null;
+    }
+    if (res.exitCode != 0) return null;
+    for (final line in (res.stdout as String).split('\n')) {
+      if (line.startsWith('n')) return line.substring(1);
     }
     return null;
   }
