@@ -1,14 +1,9 @@
 import '../runtime/flutter_runtime.dart';
 import 'scene_reader.dart';
 
-/// §8.4 settle detection. Layered poll:
-///   - Cheap VM eval on SchedulerBinding.instance.hasScheduledFrame at
-///     [pollIntervalMs] cadence.
-///   - When [quietFramesNeeded] consecutive polls return false (no
-///     scheduled frames), read the latest scene once and look for
-///     loading affordances. If any present, keep polling — a spinner
-///     is "frame-stable" while loading.
-///   - Hard ceiling on total time.
+/// §8.4 settle detection. Polls the scheduler phase; once [quietFramesNeeded]
+/// quiet polls land it checks for loading affordances (a spinner is "frame-
+/// stable" while loading) and keeps waiting up to the ceiling if any remain.
 class SettleDetector {
   SettleDetector({
     required this.runtime,
@@ -70,10 +65,9 @@ class SettleDetector {
     }
   }
 
-  /// `schedulerPhase==idle` means no frame production is mid-flight.
-  /// We deliberately don't gate on `hasScheduledFrame`: debug-mode apps
-  /// connected to the VM service keep a frame perpetually scheduled
-  /// (hot reload / devtools observation), so that flag never goes false.
+  /// `schedulerPhase==idle` means no frame is mid-flight. We avoid
+  /// `hasScheduledFrame`: VM-connected debug apps keep a frame perpetually
+  /// scheduled (hot reload / devtools), so that flag never goes false.
   Future<bool> _isIdle() async {
     final s = await runtime
         .evaluateString('WidgetsBinding.instance.schedulerPhase.toString()');

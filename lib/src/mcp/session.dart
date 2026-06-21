@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Process;
+
+import 'package:dart_mcp/server.dart' show ProgressNotification;
 
 import '../../interaction.dart';
 import '../../observability.dart';
@@ -18,12 +21,15 @@ class GlintSession {
   GlintSession({
     GlintConfig? config,
     UsageRecorder? usage,
+    AttachHistory? attachHistory,
     FlutterRuntime Function()? runtimeFactory,
   })  : config = config ?? GlintConfig(),
         actionLog = ActionLog(),
         appLogs = AppLogBuffer(),
         sessions = SessionManager(),
         usage = usage ?? UsageRecorder.fromEnv(),
+        attachHistory =
+            attachHistory ?? AttachHistory(dataDir: resolveDataDir()),
         _runtimeFactory = runtimeFactory ?? VmServiceRuntime.new {
     usageReporter = UsageReporter(this.usage);
   }
@@ -32,6 +38,9 @@ class GlintSession {
   final ActionLog actionLog;
   final AppLogBuffer appLogs;
   final SessionManager sessions;
+
+  /// Persistent app↔device↔project history so `attach` can relaunch from cold.
+  final AttachHistory attachHistory;
   final UsageRecorder usage;
   late final UsageReporter usageReporter;
   final FlutterRuntime Function() _runtimeFactory;
@@ -66,6 +75,22 @@ class GlintSession {
   // Device mode: bound to an OS-level device with no Flutter VM. Only
   // [backend] + [device] are live; Flutter perception is unavailable.
   bool _deviceMode = false;
+
+  /// Bundle id / package of the attached app, when known — used by `kill_app`.
+  String? attachedBundleId;
+
+  /// Forwards [ProgressNotification]s to the client; wired by the server.
+  void Function(ProgressNotification)? progressNotifier;
+
+  /// `flutter run` processes glint started, keyed by device id, for `kill_app`.
+  final Map<String, Process> _launchedApps = {};
+
+  void registerLaunchedApp(String deviceId, Process process) =>
+      _launchedApps[deviceId] = process;
+
+  Process? launchedAppFor(String deviceId) => _launchedApps[deviceId];
+
+  void clearLaunchedApp(String deviceId) => _launchedApps.remove(deviceId);
 
   bool get isAttached => _runtime != null || _deviceMode;
   bool get isDeviceMode => _deviceMode;
@@ -169,12 +194,9 @@ class GlintSession {
     sceneMode = SceneMode.native;
   }
 
-  /// Runs all semantic enrichers against [semantic] in the correct order.
-  ///
-  /// Order matters: overlay enrichment must complete before the renderer runs
-  /// so [SemanticScene.overlayLayers] is populated. The other enrichers are
-  /// order-independent relative to each other but run after overlay for
-  /// consistency.
+  /// Runs all semantic enrichers against [semantic]. Overlay must run first so
+  /// [SemanticScene.overlayLayers] is populated before the renderer; the rest
+  /// are order-independent.
   Future<void> runEnrichers(SemanticScene semantic) async {
     await overlayEnricher.enrich(semantic);
     await inputEnricher.enrich(semantic);
@@ -189,6 +211,7 @@ class GlintSession {
     _disconnectSub = null;
     _deviceMode = false;
     sceneMode = SceneMode.flutter;
+    attachedBundleId = null;
     await appLogs.unsubscribe();
     final runtime = _runtime;
     _runtime = null;

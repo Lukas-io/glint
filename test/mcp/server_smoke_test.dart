@@ -100,6 +100,8 @@ void main() {
           'config',
           'report_issue',
           'telemetry',
+          'kill_app',
+          'shutdown_sim',
         ]),
       );
     });

@@ -4,10 +4,8 @@ import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
 
-/// Android KEYCODE_* values that map to glint's [HardwareButton] enum.
-/// `unlock` is intentionally absent — Android has no stock biometric-match
-/// equivalent and lock-screen behaviour varies per OEM. AdbBackend
-/// surfaces it as [UnsupportedBackendAction] until v1.
+/// Android KEYCODE_* values for glint's [HardwareButton]. `unlock` is null —
+/// no stock biometric-match equivalent and per-OEM lock-screen behaviour; surfaced as [UnsupportedBackendAction] until v1.
 extension AndroidKeyCode on HardwareButton {
   int? get androidKeyCode => switch (this) {
         HardwareButton.home => 3,

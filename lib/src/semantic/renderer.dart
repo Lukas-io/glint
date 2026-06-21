@@ -8,9 +8,9 @@ abstract class SceneRenderer {
   String render(SemanticScene scene);
 }
 
-/// Compact indented form for agent prompts. Marker is `*` tappable,
-/// `>` typeable, `<>` scrollable, `-` static. Runs of 5+ siblings with
-/// the same role and glintId prefix collapse into one summary line.
+/// Compact indented form for agent prompts. Markers: `*` tappable, `>` typeable,
+/// `<>` scrollable, `-` static. Runs of [groupThreshold]+ siblings sharing role
+/// and glintId prefix collapse into one summary line.
 class PlainTextSceneRenderer extends SceneRenderer {
   const PlainTextSceneRenderer({this.indent = 2, this.groupThreshold = 5});
 
@@ -52,8 +52,8 @@ class PlainTextSceneRenderer extends SceneRenderer {
   void _write(StringBuffer buf, SemanticNode node, {required int depth}) {
     if (depth > _maxDepth) return;
     _writeNodeLine(buf, node, depth: depth);
-    // Nested pages (e.g. PageView tabs, shell route branches) are summarised
-    // rather than expanded — the agent can get_scene after navigating to them.
+    // Nested pages (PageView tabs, shell route branches) are summarised, not
+    // expanded — the agent can get_scene after navigating to them.
     if (node is SemanticPage && depth > 0) return;
     _writeChildren(buf, node.children, depth: depth + 1);
   }

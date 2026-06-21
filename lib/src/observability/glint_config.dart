@@ -6,6 +6,7 @@ class GlintConfig {
   GlintConfig({
     this.readyTimeoutMs = 5000,
     this.attachProbeTimeoutMs = 2000,
+    this.launchTimeoutMs = 180000,
     this.settleCeilingMs = 5000,
     this.settleQuietFrames = 3,
     this.scrollMaxScrolls = 8,
@@ -22,6 +23,10 @@ class GlintConfig {
   /// Max time `attach` polls for the first rendered frame before giving up
   /// on the iOS viewport probe (blank/loading first frame).
   int attachProbeTimeoutMs;
+
+  /// Max time `attach launch:…` waits for `flutter run` to print its VM URI.
+  /// Cold builds are slow, so this defaults high.
+  int launchTimeoutMs;
 
   /// Default ceiling for the `wait_for_settle` tool.
   int settleCeilingMs;
@@ -54,6 +59,7 @@ class GlintConfig {
   Map<String, Object> toJson() => {
         'readyTimeoutMs': readyTimeoutMs,
         'attachProbeTimeoutMs': attachProbeTimeoutMs,
+        'launchTimeoutMs': launchTimeoutMs,
         'settleCeilingMs': settleCeilingMs,
         'settleQuietFrames': settleQuietFrames,
         'scrollMaxScrolls': scrollMaxScrolls,
@@ -75,6 +81,10 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'attachProbeTimeoutMs must be a positive int';
         attachProbeTimeoutMs = v;
+      case 'launchTimeoutMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'launchTimeoutMs must be a positive int';
+        launchTimeoutMs = v;
       case 'settleCeilingMs':
         final v = _asPositiveInt(value);
         if (v == null) return 'settleCeilingMs must be a positive int';

@@ -1,9 +1,6 @@
 /// Aggregates raw tool-call rows into per-tool stats + the consecutive
-/// tool→next-tool transition graph. Ported from flutter_network_mcp so
-/// both products emit the same shape for the collector.
-///
-/// Row contract: `correlation_id`, `tool`, `outcome`, `duration_ms`
-/// (int?), `result_bytes` (int?). Rows should already be ordered by
+/// tool→next-tool transition graph. Row contract: `correlation_id`, `tool`,
+/// `outcome`, `duration_ms` (int?), `result_bytes` (int?), pre-ordered by
 /// `(correlation_id, id)`.
 library;
 

@@ -7,19 +7,15 @@ import 'semantic_node.dart';
 import 'semantic_scene.dart';
 import 'semanticizer.dart';
 
-/// Post-classify pass that fills role-specific properties (hint,
-/// currentValue, icon name, route info, …) by talking to the live
-/// runtime. Stays in Module C because it operates on [SemanticNode]s,
-/// but takes a [FlutterRuntime] dependency since pure SceneNode parsing
-/// can't surface this data.
+/// Post-classify pass that fills role-specific properties (hint, currentValue,
+/// icon name, route info, …) by talking to the live runtime — data pure
+/// SceneNode parsing can't surface.
 abstract class SemanticEnricher {
   Future<void> enrich(SemanticScene scene);
 }
 
-/// Classifies overlay dialog content from [Scene.overlayRoots] (nodes from
-/// the full tree appended during [SceneReader.readSummary]) and populates
-/// [SemanticScene.overlayLayers]. Must run before the renderer so
-/// overlayLayers is populated; see [GlintSession.runEnrichers].
+/// Classifies overlay dialog content from [Scene.overlayRoots] into
+/// [SemanticScene.overlayLayers]. Must run before the renderer.
 class OverlayEnricher implements SemanticEnricher {
   OverlayEnricher({required this.semanticizer});
 
@@ -37,9 +33,8 @@ class OverlayEnricher implements SemanticEnricher {
       final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty)
           ? semantic.children
           : [semantic];
-      // Skip layers that are entirely unknown (e.g. MouseRegion / Focus
-      // plumbing overlays present in Flutter debug mode). These have no
-      // interactive or readable content and appear as `--- dialog ---` noise.
+      // Skip entirely-unknown layers (e.g. MouseRegion / Focus plumbing
+      // overlays in debug mode) — no content, just `--- dialog ---` noise.
       if (!_hasContent(nodes)) continue;
       layers.add(SemanticOverlayLayer(
         nodes: nodes,
@@ -68,9 +63,9 @@ class OverlayEnricher implements SemanticEnricher {
   }
 }
 
-/// Reads the topmost ModalRoute's name + isFirst flag. Uses shallow probe
-/// nodes (above ShellRoute inner navigators) to guarantee the outer GoRouter
-/// path is returned rather than a nested route's null name.
+/// Reads the topmost ModalRoute's name + isFirst flag. Uses shallow probe nodes
+/// (above ShellRoute inner navigators) so the outer GoRouter path is returned,
+/// not a nested route's null name.
 class NavigationEnricher implements SemanticEnricher {
   NavigationEnricher({required this.runtime});
 
@@ -101,9 +96,8 @@ class NavigationEnricher implements SemanticEnricher {
   }
 }
 
-/// Reads [IconData.codePoint] for each [SemanticIcon] and resolves the
-/// codepoint to a Material icon name. Capped at [maxIcons] to bound
-/// eval cost.
+/// Reads [IconData.codePoint] for each [SemanticIcon] and resolves it to a
+/// Material icon name. Capped at [maxIcons] to bound eval cost.
 class IconEnricher implements SemanticEnricher {
   IconEnricher({required this.runtime, this.maxIcons = 20});
 
@@ -144,8 +138,7 @@ class IconEnricher implements SemanticEnricher {
 }
 
 /// Reads `hint` (InputDecoration.labelText) and `currentValue` (live
-/// EditableText controller text) for each [SemanticInput]. Capped at
-/// [maxInputs] to bound eval cost.
+/// EditableText controller text) for each [SemanticInput]. Capped at [maxInputs].
 class InputEnricher implements SemanticEnricher {
   InputEnricher({
     required this.runtime,

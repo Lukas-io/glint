@@ -1,18 +1,13 @@
-/// Compile-time constants for the telemetry layer.
-///
-/// These are intentionally NOT read from environment / config — they're
-/// baked into the binary so users can audit what their install will do
-/// just by inspecting this file (or running `glint telemetry audit show`
-/// to see the payloads themselves).
+/// Compile-time constants for the telemetry layer — intentionally NOT read from
+/// env/config but baked into the binary, so users can audit what their install
+/// does by inspecting this file (or `glint telemetry audit show`).
 library;
 
-/// Public HMAC salt. Every glint install uses this same value to compute
-/// its `machineHash`, so the collector can dedupe machines without
-/// learning anything identifying. Shares the salt with flutter_network_mcp
-/// so the collector sees both products via one identity scheme.
-///
-/// Generated once via `openssl rand -hex 32`. DO NOT change without a
-/// coordinated collector update.
+/// Public HMAC salt — every glint install uses this same value to compute its
+/// `machineHash`, so the collector dedupes machines without learning anything
+/// identifying. Shared with flutter_network_mcp (one identity scheme for both).
+/// Generated via `openssl rand -hex 32`; DO NOT change without a coordinated
+/// collector update.
 const String kPublicSalt =
     '761d2c3db2b2719c04ad002499704b7e094048c57046457c545105be31de8d11';
 
