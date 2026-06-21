@@ -18,12 +18,15 @@ class GlintSession {
   GlintSession({
     GlintConfig? config,
     UsageRecorder? usage,
+    AttachHistory? attachHistory,
     FlutterRuntime Function()? runtimeFactory,
   })  : config = config ?? GlintConfig(),
         actionLog = ActionLog(),
         appLogs = AppLogBuffer(),
         sessions = SessionManager(),
         usage = usage ?? UsageRecorder.fromEnv(),
+        attachHistory =
+            attachHistory ?? AttachHistory(dataDir: resolveDataDir()),
         _runtimeFactory = runtimeFactory ?? VmServiceRuntime.new {
     usageReporter = UsageReporter(this.usage);
   }
@@ -32,6 +35,9 @@ class GlintSession {
   final ActionLog actionLog;
   final AppLogBuffer appLogs;
   final SessionManager sessions;
+
+  /// Persistent app↔device↔project history so `attach` can relaunch from cold.
+  final AttachHistory attachHistory;
   final UsageRecorder usage;
   late final UsageReporter usageReporter;
   final FlutterRuntime Function() _runtimeFactory;
