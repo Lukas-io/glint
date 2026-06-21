@@ -4,8 +4,7 @@ import 'dart:io';
 
 import 'device.dart';
 
-/// Raised when a launch can't complete. [logTail] carries the last lines of
-/// `flutter run` output so the caller can surface the real reason.
+/// Raised when a launch can't complete; [logTail] holds the last `flutter run` lines.
 class LaunchError implements Exception {
   LaunchError(this.message, {this.logTail});
   final String message;
@@ -14,21 +13,15 @@ class LaunchError implements Exception {
   String toString() => 'LaunchError: $message';
 }
 
-/// Boots devices and starts Flutter apps so `attach` can recover from a cold
-/// machine. Process work is best-effort; failures surface as [LaunchError]
-/// with the build log.
+/// Boots devices and starts/stops Flutter apps so `attach` can recover from cold.
 class AppLauncher {
   const AppLauncher({this.flutterPath = 'flutter'});
 
   final String flutterPath;
 
-  /// Ensure the simulator/emulator is up. iOS boots via `simctl` (idempotent —
-  /// already-booted is success) and opens the Simulator UI. Returns null on
-  /// success, or an error string. Android emulator boot needs the AVD name
-  /// (a serial only exists once running), so it's deferred — an absent device
-  /// surfaces later as a clear `flutter run` failure.
+  /// Boot the iOS sim (idempotent) and open Simulator; returns null on success else an error.
   Future<String?> ensureBooted(DevicePlatform platform, String deviceId) async {
-    if (platform != DevicePlatform.ios) return null;
+    if (platform != DevicePlatform.ios) return null; // android boot deferred
     final ProcessResult boot;
     try {
       boot = await Process.run('xcrun', ['simctl', 'boot', deviceId]);
@@ -40,21 +33,17 @@ class AppLauncher {
     if (boot.exitCode != 0 && !alreadyBooted) {
       return 'simctl boot failed: ${stderr.trim()}';
     }
-    // Surface the Simulator window and block until the device is fully booted.
     await Process.run('open', ['-a', 'Simulator']);
     try {
       await Process.run('xcrun', ['simctl', 'bootstatus', deviceId, '-b']);
     } on Object {
-      // bootstatus is a convenience wait; proceed even if it's unavailable.
+      // bootstatus just waits; proceed if unavailable.
     }
     return null;
   }
 
-  /// `flutter run -d [deviceId]` in [projectDir], polling its output for the VM
-  /// service URI up to [timeout]. The process is detached so the app outlives
-  /// the tool call. Returns the URI, or throws [LaunchError] on build failure
-  /// or timeout.
-  Future<Uri> launchApp({
+  /// `flutter run` [projectDir] on [deviceId], returning the VM URI + live process; throws [LaunchError] on failure/timeout.
+  Future<({Uri uri, Process process})> launchApp({
     required String projectDir,
     required String deviceId,
     Duration timeout = const Duration(seconds: 180),
@@ -66,7 +55,6 @@ class AppLauncher {
         flutterPath,
         ['run', '-d', deviceId],
         workingDirectory: projectDir,
-        mode: ProcessStartMode.detachedWithStdio,
       );
     } on Object catch (e) {
       throw LaunchError('could not start `$flutterPath run`: $e');
@@ -83,16 +71,55 @@ class AppLauncher {
       final uri = _vmUriPattern.firstMatch(text)?.group(0);
       if (uri != null) {
         final parsed = Uri.tryParse(uri);
-        if (parsed != null) return parsed;
+        if (parsed != null) return (uri: parsed, process: proc);
       }
       if (_looksFailed(text)) {
+        proc.kill();
         throw LaunchError('flutter run failed', logTail: _tail(text));
       }
     }
+    proc.kill();
     throw LaunchError(
       'timed out after ${timeout.inSeconds}s waiting for the VM service',
       logTail: _tail(out.toString()),
     );
+  }
+
+  /// Terminate an app: `simctl terminate` (iOS) / `am force-stop` (Android); null on success.
+  Future<String?> terminateApp(
+      DevicePlatform platform, String deviceId, String appId,
+      {String adbPath = 'adb'}) async {
+    try {
+      final r = platform == DevicePlatform.ios
+          ? await Process.run('xcrun', ['simctl', 'terminate', deviceId, appId])
+          : await Process.run(
+              adbPath, ['-s', deviceId, 'shell', 'am', 'force-stop', appId]);
+      if (r.exitCode != 0) {
+        final err = ((r.stderr as String?) ?? '').trim();
+        return err.isEmpty ? 'exit ${r.exitCode}' : err;
+      }
+      return null;
+    } on Object catch (e) {
+      return '$e';
+    }
+  }
+
+  /// Shut down a device: `simctl shutdown` (iOS) / `adb emu kill` (Android); null on success.
+  Future<String?> shutdown(DevicePlatform platform, String deviceId,
+      {String adbPath = 'adb'}) async {
+    try {
+      final r = platform == DevicePlatform.ios
+          ? await Process.run('xcrun', ['simctl', 'shutdown', deviceId])
+          : await Process.run(adbPath, ['-s', deviceId, 'emu', 'kill']);
+      if (r.exitCode != 0) {
+        final err = ((r.stderr as String?) ?? '').trim();
+        if (err.contains('current state: Shutdown')) return null; // already off
+        return err.isEmpty ? 'exit ${r.exitCode}' : err;
+      }
+      return null;
+    } on Object catch (e) {
+      return '$e';
+    }
   }
 
   static final _vmUriPattern = RegExp(

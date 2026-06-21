@@ -262,10 +262,7 @@ class DeviceDiscovery {
   }
 
   // ── project dir (for relaunch) ───────────────────────────────────────────
-  /// Flutter project root behind a running app, recovered from the VM port:
-  /// the host process listening on it (the `dart development-service`) has the
-  /// `flutter run` cwd. Validated by a `pubspec.yaml` check. Null when nothing
-  /// matches — the app is still attachable, just not auto-relaunchable.
+  /// Flutter project root behind a running app — the VM port's listening process (DDS) cwd, validated by pubspec.yaml.
   Future<String?> projectDirForVm(Uri vmUri) async {
     final port = vmUri.port;
     if (port == 0) return null;

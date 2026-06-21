@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Process;
 
 import '../../interaction.dart';
 import '../../observability.dart';
@@ -72,6 +73,19 @@ class GlintSession {
   // Device mode: bound to an OS-level device with no Flutter VM. Only
   // [backend] + [device] are live; Flutter perception is unavailable.
   bool _deviceMode = false;
+
+  /// Bundle id / package of the attached app, when known — used by `kill_app`.
+  String? attachedBundleId;
+
+  /// `flutter run` processes glint started, keyed by device id, for `kill_app`.
+  final Map<String, Process> _launchedApps = {};
+
+  void registerLaunchedApp(String deviceId, Process process) =>
+      _launchedApps[deviceId] = process;
+
+  Process? launchedAppFor(String deviceId) => _launchedApps[deviceId];
+
+  void clearLaunchedApp(String deviceId) => _launchedApps.remove(deviceId);
 
   bool get isAttached => _runtime != null || _deviceMode;
   bool get isDeviceMode => _deviceMode;
@@ -192,6 +206,7 @@ class GlintSession {
     _disconnectSub = null;
     _deviceMode = false;
     sceneMode = SceneMode.flutter;
+    attachedBundleId = null;
     await appLogs.unsubscribe();
     final runtime = _runtime;
     _runtime = null;
