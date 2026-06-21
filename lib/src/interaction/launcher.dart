@@ -62,16 +62,18 @@ class AppLauncher {
       throw LaunchError('could not start `$flutterPath run`: $e');
     }
 
-    final out = StringBuffer();
-    proc.stdout.transform(utf8.decoder).listen(out.write);
-    proc.stderr.transform(utf8.decoder).listen(out.write);
+    // Bounded — the listeners keep draining for the app's whole life (the
+    // process outlives this call for kill_app), so accumulate only the tail.
+    final out = _BoundedLog();
+    proc.stdout.transform(utf8.decoder).listen(out.add);
+    proc.stderr.transform(utf8.decoder).listen(out.add);
 
     final start = DateTime.now();
     final deadline = start.add(timeout);
     var nextUpdate = start.add(progressEvery);
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(poll);
-      final text = out.toString();
+      final text = out.text;
       final uri = _vmUriPattern.firstMatch(text)?.group(0);
       if (uri != null) {
         final parsed = Uri.tryParse(uri);
@@ -88,11 +90,11 @@ class AppLauncher {
       }
     }
     proc.kill();
-    final phase = _phase(out.toString());
+    final phase = _phase(out.text);
     throw LaunchError(
       'timed out after ${timeout.inSeconds}s waiting for the VM service'
       '${phase == null ? "" : " (last: $phase)"}',
-      logTail: _tail(out.toString()),
+      logTail: _tail(out.text),
     );
   }
 
@@ -167,5 +169,16 @@ class AppLauncher {
   static String _tail(String text, {int lines = 12}) {
     final all = text.trimRight().split('\n');
     return all.length <= lines ? all.join('\n') : all.sublist(all.length - lines).join('\n');
+  }
+}
+
+/// Append-only log that keeps only the last [_cap] chars, so draining a
+/// long-lived process's output never grows unbounded.
+class _BoundedLog {
+  static const _cap = 16384;
+  String text = '';
+  void add(String s) {
+    text += s;
+    if (text.length > _cap) text = text.substring(text.length - _cap);
   }
 }
