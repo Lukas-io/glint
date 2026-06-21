@@ -13,6 +13,10 @@ import '../runtime/vm_service_runtime.dart';
 /// Whether the session is reading the Flutter VM tree or the native OS AX tree.
 enum SceneMode { flutter, native }
 
+/// How far to enrich a scene: [structural] = overlays + route (cheap, for
+/// change-detection); [full] = also input values + icon names (for rendering).
+enum SceneDetail { structural, full }
+
 /// Per-connection state: runtime, device, readers, interactor. Tools
 /// access these via the typed getters; accessing before [attach] throws
 /// [SessionNotAttachedError]. [actionLog] is always available — survives
@@ -194,14 +198,28 @@ class GlintSession {
     sceneMode = SceneMode.native;
   }
 
-  /// Runs all semantic enrichers against [semantic]. Overlay must run first so
-  /// [SemanticScene.overlayLayers] is populated before the renderer; the rest
-  /// are order-independent.
-  Future<void> runEnrichers(SemanticScene semantic) async {
-    await overlayEnricher.enrich(semantic);
-    await inputEnricher.enrich(semantic);
-    await iconEnricher.enrich(semantic);
-    await navEnricher.enrich(semantic);
+  /// The single perceive entry: read the scene, semanticize, enrich to
+  /// [detail], hand it to [use], then dispose. Callers never re-assemble the
+  /// pipeline themselves.
+  Future<T> withScene<T>(
+    Future<T> Function(SemanticScene scene) use, {
+    SceneDetail detail = SceneDetail.full,
+  }) async {
+    final scene = await reader.readSummary();
+    try {
+      final semantic = semanticizer.semanticize(scene);
+      // Overlay first so overlayLayers is populated before anything renders;
+      // the rest are order-independent.
+      await overlayEnricher.enrich(semantic);
+      await navEnricher.enrich(semantic);
+      if (detail == SceneDetail.full) {
+        await inputEnricher.enrich(semantic);
+        await iconEnricher.enrich(semantic);
+      }
+      return await use(semantic);
+    } finally {
+      await scene.dispose();
+    }
   }
 
   Future<void> detach() async {

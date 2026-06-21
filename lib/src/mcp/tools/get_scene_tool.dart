@@ -67,11 +67,7 @@ class GetSceneTool extends GlintTool {
       return _handleNativeMode(session, format);
     }
 
-    final scene = await session.reader.readSummary();
-    try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.runEnrichers(semantic);
-
+    return session.withScene((semantic) async {
       final rendered = format == 'json'
           ? const JsonSceneRenderer().render(semantic)
           : const PlainTextSceneRenderer().render(semantic);
@@ -99,9 +95,7 @@ class GetSceneTool extends GlintTool {
           },
         },
       );
-    } finally {
-      await scene.dispose();
-    }
+    });
   }
 
   Future<StructuredResponse> _handleNativeMode(
