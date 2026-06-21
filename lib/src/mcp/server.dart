@@ -18,7 +18,9 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
         super.fromStreamChannel(
           implementation: Implementation(name: 'glint', version: _version),
           instructions: kGlintInstructions,
-        );
+        ) {
+    this.session.progressNotifier = notifyProgress;
+  }
 
   static const _version = '0.0.1';
 

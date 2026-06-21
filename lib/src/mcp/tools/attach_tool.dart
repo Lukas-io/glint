@@ -151,9 +151,13 @@ class AttachTool extends GlintTool {
     final launchPath = (args['launch'] as String?)?.trim();
     final deviceArg = args['device'] as String?;
 
+    // Progress sink for slow work (boot, flutter run) — emits a phase every 15s
+    // when the client supplied a progress token.
+    final onProgress = _progressSink(session, request);
+
     // ── Device mode: explicit ───────────────────────────────────────────────
     if (mode == 'device') {
-      return _attachDeviceMode(session, scan, args, platformArg, adbPath);
+      return _attachDeviceMode(session, scan, args, platformArg, adbPath, onProgress);
     }
 
     // ── 1. Resolve the VM service URI: explicit project path, arg, discovery,
@@ -162,7 +166,8 @@ class AttachTool extends GlintTool {
     // Set when we launched — pins device resolution past the stale pre-launch scan.
     String? launchedDeviceId;
     if (launchPath != null && launchPath.isNotEmpty) {
-      final r = await _launchPath(session, scan, launchPath, deviceArg, platformArg);
+      final r = await _launchPath(
+          session, scan, launchPath, deviceArg, platformArg, onProgress);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
       launchedDeviceId = r.deviceId;
@@ -187,8 +192,11 @@ class AttachTool extends GlintTool {
       final platform = _platformFromName(rec!.platform) ??
           _platformFromArg(platformArg) ??
           DevicePlatform.ios;
-      final r = await _launchProject(
-          session, projectDir: rec.projectDir!, deviceId: deviceArg, platform: platform);
+      final r = await _launchProject(session,
+          projectDir: rec.projectDir!,
+          deviceId: deviceArg,
+          platform: platform,
+          onProgress: onProgress);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
       launchedDeviceId = deviceArg;
@@ -443,15 +451,14 @@ class AttachTool extends GlintTool {
     }
   }
 
-  /// Bind a device with no Flutter app. Perception is via `device
-  /// op:screenshot`; interaction via x,y coordinate taps. For iOS the device is
-  /// sized to the screenshot pixels with dpr=1, so `tap = pixel / screenshotSize`.
+  /// Bind a device with no Flutter app — perception via screenshots, interaction via x,y (iOS sized to screenshot pixels, dpr=1).
   Future<StructuredResponse> _attachDeviceMode(
     GlintSession session,
     DiscoveryResult scan,
     Map<String, Object?> args,
     String? platformArg,
     String adbPath,
+    void Function(int, String?)? onProgress,
   ) async {
     // Resolve the target device.
     final deviceArg = args['device'] as String?;
@@ -476,6 +483,7 @@ class AttachTool extends GlintTool {
         }
         // Not booted — bring it up so we can drive it ("open the simulator").
         if (p == DevicePlatform.ios) {
+          onProgress?.call(0, 'booting $deviceArg');
           final bootErr = await const AppLauncher().ensureBooted(p, deviceArg);
           if (bootErr != null) {
             return StructuredResponse.error(
@@ -678,8 +686,10 @@ class AttachTool extends GlintTool {
     required String projectDir,
     required String deviceId,
     required DevicePlatform platform,
+    void Function(int, String?)? onProgress,
   }) async {
     const launcher = AppLauncher();
+    onProgress?.call(0, 'booting $deviceId');
     final bootErr = await launcher.ensureBooted(platform, deviceId);
     if (bootErr != null) {
       return (
@@ -692,11 +702,13 @@ class AttachTool extends GlintTool {
         ),
       );
     }
+    onProgress?.call(0, 'running flutter run');
     try {
       final r = await launcher.launchApp(
         projectDir: projectDir,
         deviceId: deviceId,
         timeout: Duration(milliseconds: session.config.launchTimeoutMs),
+        onProgress: onProgress,
       );
       session.registerLaunchedApp(deviceId, r.process);
       return (vmUri: r.uri, deviceId: deviceId, error: null);
@@ -724,6 +736,7 @@ class AttachTool extends GlintTool {
     String path,
     String? deviceArg,
     String? platformArg,
+    void Function(int, String?)? onProgress,
   ) async {
     if (!File('$path/pubspec.yaml').existsSync()) {
       return (
@@ -751,7 +764,27 @@ class AttachTool extends GlintTool {
       );
     }
     return _launchProject(session,
-        projectDir: path, deviceId: deviceId, platform: platform);
+        projectDir: path,
+        deviceId: deviceId,
+        platform: platform,
+        onProgress: onProgress);
+  }
+
+  /// Builds a 15s-cadence progress sink from the request's progress token, or null.
+  void Function(int, String?)? _progressSink(
+      GlintSession session, CallToolRequest request) {
+    final token = request.meta?.progressToken;
+    final notifier = session.progressNotifier;
+    if (token == null || notifier == null) return null;
+    final totalSec = session.config.launchTimeoutMs / 1000;
+    return (elapsedSec, phase) => notifier(ProgressNotification(
+          progressToken: token,
+          progress: elapsedSec,
+          total: totalSec,
+          message: phase == null
+              ? 'launching… (${elapsedSec}s)'
+              : '$phase (${elapsedSec}s)',
+        ));
   }
 
   /// Most-recent launchable history record for [deviceId].

@@ -3,6 +3,10 @@
 
 **Every comment is a `///` dart doc, a single line, direct and clear.** Prefer a one-line `///` on the declaration over an inline `//`; keep any in-body `//` rare and one line. No multi-line `///` blocks, no blank-`///` separators, no paragraphs. Comment only the non-obvious — never restate the signature.
 
+## Tool feedback rule (glint)
+
+**MCP tools are synchronous — there is no async tool, so feedback IS the UX.** Whenever you create, modify, or update a tool, design its feedback structure deliberately: (1) success — say what happened, return the data the agent needs next; (2) failure — a branchable `errorKind`, a real `detail`, and actionable `nextSteps`; (3) slow/long work (boot, build, install, anything multi-second) — emit `notifications/progress` on a ~15s cadence with the current phase, so the agent is never left blind during a blocking call. Never let a tool block silently or fail without a reason the agent can act on.
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
@@ -146,3 +150,7 @@ Overall average: **60-90% token reduction** on common development operations.
 ## Code comment rule (glint)
 
 **Every comment is a `///` dart doc, a single line, direct and clear.** Prefer a one-line `///` on the declaration over an inline `//`; keep any in-body `//` rare and one line. No multi-line `///` blocks, no blank-`///` separators, no paragraphs. Comment only the non-obvious — never restate the signature.
+
+## Tool feedback rule (glint)
+
+**MCP tools are synchronous — there is no async tool, so feedback IS the UX.** Creating/modifying/updating any tool: design its feedback — success (what happened + next data), failure (branchable `errorKind` + real `detail` + actionable `nextSteps`), and slow work (boot/build/install) emitting `notifications/progress` ~every 15s with the current phase. Never block silently or fail without an actionable reason.
