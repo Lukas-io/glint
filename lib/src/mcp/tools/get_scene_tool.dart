@@ -24,8 +24,10 @@ class GetSceneTool extends GlintTool {
             'When a dialog or modal is open, an `--- dialog ---` section appears first '
             'followed by `--- screen (blocked by modal) ---` for the base screen. '
             'structuredContent includes: hasOverlay (bool), overlayKind (string), '
-            'keyboardVisible (bool), route.name, state (loading/loaded/error). '
-            'format param: "text" (default) or "json".',
+            'keyboardVisible (bool), route.name, state '
+            '(loaded/loading/error, or device/native when no Flutter tree). '
+            'format param: "text" (default) or "json"; json also carries an '
+            'overlayLayers array when a dialog is open.',
         inputSchema: ObjectSchema(
           properties: {
             'format': Schema.string(
@@ -40,6 +42,16 @@ class GetSceneTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
+
+    // Validate format up front — before the scene read + VM-eval enrichers,
+    // so a bad arg fails cheaply instead of after the round-trips.
+    if (format != 'text' && format != 'json') {
+      return StructuredResponse.error(
+        summary: 'unknown scene format: $format',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['use one of: text, json'],
+      );
+    }
 
     // Device mode: no Flutter widget tree on this attachment.
     if (session.isDeviceMode) {
@@ -60,19 +72,9 @@ class GetSceneTool extends GlintTool {
       final semantic = session.semanticizer.semanticize(scene);
       await session.runEnrichers(semantic);
 
-      final String rendered;
-      switch (format) {
-        case 'json':
-          rendered = const JsonSceneRenderer().render(semantic);
-        case 'text':
-          rendered = const PlainTextSceneRenderer().render(semantic);
-        default:
-          return StructuredResponse.error(
-            summary: 'unknown scene format: $format',
-            errorKind: GlintErrorKind.invalidArgument,
-            nextSteps: const ['use one of: text, json'],
-          );
-      }
+      final rendered = format == 'json'
+          ? const JsonSceneRenderer().render(semantic)
+          : const PlainTextSceneRenderer().render(semantic);
 
       final state = const StateObserver().observe(semantic);
       final lifecycle = await session.lifecycleState();

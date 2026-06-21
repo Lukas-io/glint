@@ -2,9 +2,7 @@ import 'backend.dart';
 import 'backends/adb_backend.dart';
 import 'backends/ios_sim_backend.dart';
 
-/// One device glint can drive. [createBackend] hides the [AdbBackend] /
-/// [IosSimBackend] choice; [devicePixelRatio] and [screenSize] give tools the
-/// coordinate math without switching on the concrete type.
+/// One device glint can drive; hides the [AdbBackend] / [IosSimBackend] choice and the per-platform coordinate math.
 sealed class DeviceTarget {
   const DeviceTarget();
 
@@ -13,8 +11,7 @@ sealed class DeviceTarget {
   /// iOS UDID or Android serial.
   String get id;
 
-  /// Scale from input coordinates to physical pixels. iOS uses the real DPR;
-  /// Android backends take raw pixels, so 1.0.
+  /// Input-coords-to-physical-pixels scale: iOS uses the real DPR, Android takes raw pixels so 1.0.
   double get devicePixelRatio;
 
   /// Screen size for device-mode center anchoring, or null if unknown.

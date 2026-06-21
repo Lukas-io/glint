@@ -1,8 +1,6 @@
 import 'dart:io';
 
-/// Reads width/height from a PNG's IHDR chunk (big-endian, at fixed offsets
-/// 16 and 20 after the 8-byte signature + chunk header). Returns null if the
-/// file is missing or not a readable PNG.
+/// Reads (width, height) from a PNG's IHDR chunk (big-endian u32 at offsets 16, 20); null if missing or unreadable.
 (int, int)? pngSize(String path) {
   try {
     final bytes = File(path).readAsBytesSync();

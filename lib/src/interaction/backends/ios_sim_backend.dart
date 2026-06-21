@@ -4,9 +4,8 @@ import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
 
-/// iOS Simulator backend. Shells out to the `glint-iossim` Swift helper
-/// (`native/ios_sim_bridge/`) which speaks LOGICAL device points, so we
-/// undo the [Interactor]'s physical→logical conversion here.
+/// iOS Simulator backend over the `glint-iossim` Swift helper (`native/ios_sim_bridge/`),
+/// which speaks LOGICAL device points — so we undo the physical→logical conversion here.
 class IosSimBackend implements InteractionBackend {
   IosSimBackend({
     required this.udid,
@@ -26,15 +25,9 @@ class IosSimBackend implements InteractionBackend {
   String get label => 'ios-sim(${_shortPath(udid)})';
 
   // Lock:   IndigoHIDMessageForButton code 1 (verified Xcode 26).
-  // Home:   Face ID gesture — bottom-edge swipe up; the simulator
-  //         interprets any swipe starting within the home-indicator strip
-  //         as a home press.
-  // Unlock: post Darwin notification `com.apple.BiometricKit_Sim.pearl.match`
-  //         (Face ID auth) then a bottom-edge swipe to transition past
-  //         the "authenticated lock screen" state. Verified by inspecting
-  //         the Simulator.app binary — Pearl = Apple codename for Face ID,
-  //         Oyster = Touch ID; we default to Pearl since iPhone 17 Pro and
-  //         every modern test target is Face ID.
+  // Home:   bottom-edge swipe up; the sim reads any swipe starting in the home-indicator strip as a home press.
+  // Unlock: Darwin notification `com.apple.BiometricKit_Sim.pearl.match` (Face ID auth) then a bottom-edge swipe past the authenticated-lock-screen state.
+  //         From the Simulator.app binary: Pearl = Face ID, Oyster = Touch ID; default Pearl since modern test targets are Face ID.
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
@@ -119,15 +112,10 @@ class IosSimBackend implements InteractionBackend {
   Future<void> pressHardwareButton(HardwareButton button) {
     switch (button) {
       case HardwareButton.lock:
-        // The Swift bridge's SimButton.home enum case happens to map to
-        // raw code 1, which on Face ID devices actually fires Lock /
-        // Apple Pay overlay (the bridge's enum naming pre-dates the
-        // §13 reverse engineering). probe-button takes the raw int and
-        // dodges the misleading name.
+        // Raw IndigoHID code 1 fires Lock on Face ID devices (the bridge's SimButton.home naming
+        // pre-dates §13 RE); probe-button takes the raw int and dodges the misleading name.
         return _run(_BridgeCommand.probeButton, [udid, '1']);
       case HardwareButton.home:
-        // Face ID gesture: bottom-edge swipe up. Start within the
-        // home-indicator strip and travel ~half the viewport.
         return _bottomEdgeSwipeUp();
       case HardwareButton.unlock:
         return _unlockFaceID();
@@ -155,9 +143,7 @@ class IosSimBackend implements InteractionBackend {
     ]);
   }
 
-  /// Post the Face ID match Darwin notification + swipe up. The match
-  /// authenticates; the swipe transitions past the "authenticated lock
-  /// screen" to home.
+  /// Face ID match Darwin notification authenticates; the swipe then transitions past the authenticated lock screen to home.
   Future<void> _unlockFaceID() async {
     final result = await Process.run(
       'notifyutil',

@@ -53,8 +53,8 @@ class PostActionState {
 
   final bool changed;
   final String changeCategory;
-  /// Present only when the caller passed `includeSceneText: true` to
-  /// [readPostActionState]. Null otherwise to avoid token-heavy defaults.
+  /// Set only when the caller passed `includeSceneText: true`; null otherwise
+  /// to avoid token-heavy defaults.
   final String? sceneText;
 
   Map<String, Object?> toData() => {
@@ -82,12 +82,9 @@ Future<_SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   }
 }
 
-/// After an action fires, settle then read the post-action scene. Compares
-/// with [pre] to produce the changed signal. Returns null on error.
-///
-/// Set [includeSceneText] to include the rendered scene in [PostActionState.sceneText].
-/// Default false — the snapshot for change detection is cheap; rendering
-/// the full scene text is opt-in to avoid token-heavy defaults.
+/// After an action fires, settle then read the post-action scene and compare
+/// with [pre] for the changed signal. Returns null on error. [includeSceneText]
+/// (default false) opts into rendering the full scene text, which is token-heavy.
 Future<PostActionState?> readPostActionState(
   GlintSession session,
   _SceneSnapshot? pre, {

@@ -7,11 +7,10 @@ import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
 
-/// `device` — inspect or configure an iOS simulator. Defaults to the device
-/// glint is attached to; pass `udid` to target another booted sim.
-///
-/// ops: status (default) | appearance | openurl | privacy. Heavier control
-/// (location, biometrics, push, status-bar) is roadmapped.
+/// `device` — inspect or configure an iOS simulator. Defaults to the attached
+/// device; pass `udid` to target another booted sim. ops: status (default) |
+/// appearance | openurl | screenshot | privacy. Heavier control (location,
+/// biometrics, push, status-bar) is roadmapped.
 class DeviceTool extends GlintTool {
   const DeviceTool();
 

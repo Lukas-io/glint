@@ -65,9 +65,7 @@ class SimControl {
   Future<String?> openUrl(String udid, String url) =>
       _run(['openurl', udid, url]);
 
-  /// Capture a PNG screenshot to a temp file (works headless). Returns the
-  /// saved path + pixel size (the size doubles as the tap-ratio reference:
-  /// `ratio = pixel / size`), or an error string.
+  /// Capture a PNG to [path] (works headless); returns saved path + pixel size (also the tap-ratio reference: `ratio = pixel / size`) or an error.
   Future<ScreenshotResult> screenshot(String udid, String path) async {
     final err = await _run(['io', udid, 'screenshot', path]);
     if (err != null) return ScreenshotResult(error: err);
@@ -75,9 +73,7 @@ class SimControl {
     return ScreenshotResult(path: path, width: size?.$1, height: size?.$2);
   }
 
-  /// Grant / revoke / reset a privacy permission.
-  /// [action] is grant | revoke | reset; [service] e.g. photos, camera,
-  /// location, contacts; [bundleId] required for grant/revoke.
+  /// Grant / revoke / reset a privacy permission. [action] grant|revoke|reset; [service] e.g. photos; [bundleId] required for grant/revoke.
   Future<String?> privacy(
     String udid,
     String action,

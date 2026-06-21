@@ -28,8 +28,7 @@ class BootedDevice {
       };
 }
 
-/// The device an app is actually running on, recovered from a VM service port,
-/// plus iOS bundle identity read from the app's Info.plist.
+/// The device an app runs on, recovered from a VM service port, plus iOS bundle identity from Info.plist.
 class AppDeviceLink {
   const AppDeviceLink({
     required this.deviceId,
@@ -51,8 +50,7 @@ class AppDeviceLink {
   final String? displayName;
 }
 
-/// Running Flutter VM URIs + booted devices. Uncorrelated by design — a URI on
-/// 127.0.0.1 carries no device identity; `attach` pairs them later.
+/// Running Flutter VM URIs + booted devices. Uncorrelated by design — a 127.0.0.1 URI carries no device identity; `attach` pairs them later.
 class DiscoveryResult {
   const DiscoveryResult({required this.vmUris, required this.devices});
 
@@ -63,9 +61,8 @@ class DiscoveryResult {
       devices.where((d) => d.platform == p).toList();
 }
 
-/// Finds running Flutter apps + booted devices so `attach` can auto-fill what
-/// the agent didn't pass. Pure host inspection, no extra dependency: `ps` for
-/// VM URIs, `xcrun simctl` for iOS sims, `adb devices` for Android.
+/// Finds running Flutter apps + booted devices so `attach` can auto-fill omitted args.
+/// Pure host inspection: `ps` for VM URIs, `xcrun simctl` for iOS sims, `adb devices` for Android.
 class DeviceDiscovery {
   const DeviceDiscovery({this.adbPath = 'adb'});
 
@@ -79,9 +76,8 @@ class DeviceDiscovery {
   }
 
   // ── running Flutter VM service URIs ──────────────────────────────────────
-  // The canonical Dart VM service URI: http://127.0.0.1:PORT/TOKEN=/ . We scan
-  // the full (untruncated) process args and keep only localhost matches found
-  // on Dart/Flutter lines, so unrelated localhost URLs don't leak in.
+  // Matches the canonical Dart VM service URI http://127.0.0.1:PORT/TOKEN=/ ;
+  // restricted to Dart/Flutter process lines so unrelated localhost URLs don't leak in.
   static final _vmUriPattern = RegExp(
     r'http://(?:127\.0\.0\.1|localhost):\d+/[A-Za-z0-9_=+\-/]*',
   );
@@ -167,9 +163,8 @@ class DeviceDiscovery {
   }
 
   // ── app → device correlation ─────────────────────────────────────────────
-  /// Recover the device an app is actually running on from its VM service URI.
-  /// Critical when several simulators are booted: they share 127.0.0.1, so the
-  /// port alone is ambiguous, but the listening process reveals its sim.
+  /// Recover the device an app runs on from its VM service URI — when several sims share 127.0.0.1
+  /// the port is ambiguous, but the listening process reveals its sim.
   Future<AppDeviceLink?> correlate(Uri vmUri, DevicePlatform platform) async {
     final port = vmUri.port;
     if (port == 0) return null;
@@ -243,24 +238,75 @@ class DeviceDiscovery {
     return null;
   }
 
-  Future<int?> _listeningPid(int port) async {
+  Future<int?> _listeningPid(int port) async =>
+      (await _listeningPids(port)).firstOrNull;
+
+  Future<List<int>> _listeningPids(int port) async {
     final ProcessResult res;
     try {
-      res = await Process.run(
-        'lsof',
-        ['-nP', '-iTCP:$port', '-sTCP:LISTEN'],
-      );
+      res = await Process.run('lsof', ['-nP', '-iTCP:$port', '-sTCP:LISTEN']);
     } on Object {
-      return null;
+      return const [];
     }
-    if (res.exitCode != 0) return null;
+    if (res.exitCode != 0) return const [];
+    final pids = <int>[];
     for (final line in (res.stdout as String).split('\n')) {
       if (line.startsWith('COMMAND')) continue;
       final parts = line.split(RegExp(r'\s+'));
       if (parts.length >= 2) {
         final pid = int.tryParse(parts[1]);
-        if (pid != null) return pid;
+        if (pid != null && !pids.contains(pid)) pids.add(pid);
       }
+    }
+    return pids;
+  }
+
+  // ── project dir (for relaunch) ───────────────────────────────────────────
+  /// Flutter project root behind a running app — the VM port's listening process (DDS) cwd, validated by pubspec.yaml.
+  Future<String?> projectDirForVm(Uri vmUri) async {
+    final port = vmUri.port;
+    if (port == 0) return null;
+    for (final pid in await _listeningPids(port)) {
+      final cwd = await _cwdOf(pid);
+      if (cwd != null && File('$cwd/pubspec.yaml').existsSync()) return cwd;
+    }
+    return null;
+  }
+
+  Future<String?> _cwdOf(int pid) async {
+    final ProcessResult res;
+    try {
+      res = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
+    } on Object {
+      return null;
+    }
+    if (res.exitCode != 0) return null;
+    for (final line in (res.stdout as String).split('\n')) {
+      if (line.startsWith('n')) return line.substring(1);
+    }
+    return null;
+  }
+
+  // ── app identity for a known device (bundle id, for kill/identity) ────────
+  /// (CFBundleIdentifier, display name) of the user app running on iOS [udid],
+  /// found by its `Containers/Bundle/Application/…app` process — independent of
+  /// the flaky VM-port correlation, since the device id is already known.
+  Future<(String?, String?)?> appInfoForDevice(String udid) async {
+    final ProcessResult ps;
+    try {
+      ps = await Process.run('ps', ['-Axww', '-o', 'command=']);
+    } on Object {
+      return null;
+    }
+    if (ps.exitCode != 0) return null;
+    final re = RegExp(
+      '(/\\S*/CoreSimulator/Devices/$udid/data/Containers/'
+      'Bundle/Application/[^/]+/[^/]+\\.app)',
+    );
+    for (final line in (ps.stdout as String).split('\n')) {
+      final appPath = re.firstMatch(line)?.group(1);
+      if (appPath == null) continue;
+      return await _readBundleInfo(appPath);
     }
     return null;
   }

@@ -30,6 +30,10 @@ class SemanticScene {
   }
 
   Map<String, Object?> toJson() => {
+        // Overlays first — mirrors the text renderer (topmost = most
+        // interactive) and keeps dialog ids addressable in JSON mode.
+        if (overlayLayers.isNotEmpty)
+          'overlayLayers': overlayLayers.map((l) => l.toJson()).toList(),
         'root': root.toJson(),
         if (routeStack.isNotEmpty)
           'routeStack': routeStack.map((r) => r.toJson()).toList(),
