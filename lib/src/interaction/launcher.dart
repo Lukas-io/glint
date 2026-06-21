@@ -48,6 +48,8 @@ class AppLauncher {
     required String deviceId,
     Duration timeout = const Duration(seconds: 180),
     Duration poll = const Duration(seconds: 2),
+    Duration progressEvery = const Duration(seconds: 15),
+    void Function(int elapsedSec, String? phase)? onProgress,
   }) async {
     final Process proc;
     try {
@@ -64,7 +66,9 @@ class AppLauncher {
     proc.stdout.transform(utf8.decoder).listen(out.write);
     proc.stderr.transform(utf8.decoder).listen(out.write);
 
-    final deadline = DateTime.now().add(timeout);
+    final start = DateTime.now();
+    final deadline = start.add(timeout);
+    var nextUpdate = start.add(progressEvery);
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(poll);
       final text = out.toString();
@@ -77,13 +81,39 @@ class AppLauncher {
         proc.kill();
         throw LaunchError('flutter run failed', logTail: _tail(text));
       }
+      final now = DateTime.now();
+      if (onProgress != null && now.isAfter(nextUpdate)) {
+        onProgress(now.difference(start).inSeconds, _phase(text));
+        nextUpdate = now.add(progressEvery);
+      }
     }
     proc.kill();
+    final phase = _phase(out.toString());
     throw LaunchError(
-      'timed out after ${timeout.inSeconds}s waiting for the VM service',
+      'timed out after ${timeout.inSeconds}s waiting for the VM service'
+      '${phase == null ? "" : " (last: $phase)"}',
       logTail: _tail(out.toString()),
     );
   }
+
+  /// Current `flutter run` phase — the last build/launch-phase line, else the last line.
+  static String? _phase(String text) {
+    final lines = text
+        .split(RegExp(r'[\r\n]'))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) return null;
+    for (final l in lines.reversed) {
+      if (_phaseHints.any(l.contains)) return l;
+    }
+    return lines.last;
+  }
+
+  static const _phaseHints = [
+    'Launching', 'Running Xcode', 'Xcode build', 'Building', 'Syncing',
+    'Installing', 'Compiling', 'Resolving', 'Waiting for',
+  ];
 
   /// Terminate an app: `simctl terminate` (iOS) / `am force-stop` (Android); null on success.
   Future<String?> terminateApp(

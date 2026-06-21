@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io' show Process;
 
+import 'package:dart_mcp/server.dart' show ProgressNotification;
+
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
@@ -76,6 +78,9 @@ class GlintSession {
 
   /// Bundle id / package of the attached app, when known — used by `kill_app`.
   String? attachedBundleId;
+
+  /// Forwards [ProgressNotification]s to the client; wired by the server.
+  void Function(ProgressNotification)? progressNotifier;
 
   /// `flutter run` processes glint started, keyed by device id, for `kill_app`.
   final Map<String, Process> _launchedApps = {};
