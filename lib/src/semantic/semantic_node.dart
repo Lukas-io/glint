@@ -22,10 +22,13 @@ sealed class SemanticNode {
     required this.glintId,
     required this.children,
     Set<Affordance>? affordances,
-  }) : affordances = affordances ?? const <Affordance>{};
+  }) : affordances = {...?affordances};
 
   /// Null when the node is purely structural.
   final String? glintId;
+
+  /// Intrinsic role affordances are seeded at construction; mutable so a later
+  /// behavior pass can add ones the role alone can't know (e.g. onTap-wrapped).
   final Set<Affordance> affordances;
   final List<SemanticNode> children;
 

@@ -64,19 +64,13 @@ class PostActionState {
       };
 }
 
-/// Snapshot the scene BEFORE an action fires. Returns an opaque snapshot
-/// used by [readPostActionState].
+/// Snapshot the scene BEFORE an action fires, for [readPostActionState].
 Future<_SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
-    final scene = await session.reader.readSummary();
-    try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.overlayEnricher.enrich(semantic);
-      await session.navEnricher.enrich(semantic);
-      return _SceneSnapshot.from(semantic);
-    } finally {
-      await scene.dispose();
-    }
+    return await session.withScene(
+      (semantic) async => _SceneSnapshot.from(semantic),
+      detail: SceneDetail.structural,
+    );
   } on Object {
     return null;
   }
@@ -97,30 +91,20 @@ Future<PostActionState?> readPostActionState(
     } on Object {
       // ignore settle errors — scene read follows regardless
     }
-
-    final scene = await session.reader.readSummary();
-    try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.overlayEnricher.enrich(semantic);
-      await session.navEnricher.enrich(semantic);
-      if (includeSceneText) {
-        await session.inputEnricher.enrich(semantic);
-        await session.iconEnricher.enrich(semantic);
-      }
-
-      final post = _SceneSnapshot.from(semantic);
-      final category = pre != null ? _changeCategory(pre, post) : 'unknown';
-
-      return PostActionState(
-        changed: category != 'nothing',
-        changeCategory: category,
-        sceneText: includeSceneText
-            ? const PlainTextSceneRenderer().render(semantic)
-            : null,
-      );
-    } finally {
-      await scene.dispose();
-    }
+    return await session.withScene(
+      (semantic) async {
+        final post = _SceneSnapshot.from(semantic);
+        final category = pre != null ? _changeCategory(pre, post) : 'unknown';
+        return PostActionState(
+          changed: category != 'nothing',
+          changeCategory: category,
+          sceneText: includeSceneText
+              ? const PlainTextSceneRenderer().render(semantic)
+              : null,
+        );
+      },
+      detail: includeSceneText ? SceneDetail.full : SceneDetail.structural,
+    );
   } on Object {
     return null;
   }

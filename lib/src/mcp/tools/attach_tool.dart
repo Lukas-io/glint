@@ -657,19 +657,8 @@ class AttachTool extends GlintTool {
     return null;
   }
 
-  Future<String> _renderScene(GlintSession session) async {
-    final scene = await session.reader.readSummary();
-    try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.overlayEnricher.enrich(semantic);
-      await session.inputEnricher.enrich(semantic);
-      await session.iconEnricher.enrich(semantic);
-      await session.navEnricher.enrich(semantic);
-      return const PlainTextSceneRenderer().render(semantic);
-    } finally {
-      await scene.dispose();
-    }
-  }
+  Future<String> _renderScene(GlintSession session) =>
+      session.withScene((s) async => const PlainTextSceneRenderer().render(s));
 
   String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history) {
     return [

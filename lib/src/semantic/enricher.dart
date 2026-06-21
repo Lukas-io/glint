@@ -111,7 +111,7 @@ class IconEnricher implements SemanticEnricher {
     for (var i = 0; i < budget; i++) {
       final node = icons[i];
       if (node.glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(node.glintId!);
+      final source = scene.sourceFor(node.glintId!);
       if (source == null) continue;
       try {
         await _enrichOne(source, scene.sourceScene.groupName, node);
@@ -157,7 +157,7 @@ class InputEnricher implements SemanticEnricher {
     for (var i = 0; i < budget; i++) {
       final node = inputs[i];
       if (node.glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(node.glintId!);
+      final source = scene.sourceFor(node.glintId!);
       if (source == null) continue;
       await _enrichOne(source, scene.sourceScene, node);
     }
