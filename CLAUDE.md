@@ -1,3 +1,8 @@
+<!-- comment-style: top -->
+## Code comment rule (glint)
+
+**Every comment is a `///` dart doc, a single line, direct and clear.** Prefer a one-line `///` on the declaration over an inline `//`; keep any in-body `//` rare and one line. No multi-line `///` blocks, no blank-`///` separators, no paragraphs. Comment only the non-obvious — never restate the signature.
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
@@ -136,3 +141,8 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
+
+<!-- comment-style: bottom -->
+## Code comment rule (glint)
+
+**Every comment is a `///` dart doc, a single line, direct and clear.** Prefer a one-line `///` on the declaration over an inline `//`; keep any in-body `//` rare and one line. No multi-line `///` blocks, no blank-`///` separators, no paragraphs. Comment only the non-obvious — never restate the signature.

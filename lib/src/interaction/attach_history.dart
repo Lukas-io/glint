@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-/// One remembered attach: an app ↔ device ↔ project triple, persisted so
-/// `attach` can relaunch from a cold machine instead of dead-ending. Local
-/// only (`~/.glint/attach-history.json`) — never shipped off the machine.
+/// A remembered app↔device↔project attach, persisted locally so `attach` can relaunch from cold.
 class AttachRecord {
   AttachRecord({
     required this.appKey,
@@ -19,30 +17,28 @@ class AttachRecord {
     this.attachCount = 1,
   });
 
-  /// App identity — the pubspec package name when known, else a project-dir
-  /// basename or bundle id. Half of the dedup key.
+  /// App identity — pubspec package name, else project-dir basename or bundle id.
   final String appKey;
   final String? displayName;
   final String? bundleId;
 
-  /// iOS UDID or Android serial. The other half of the dedup key.
+  /// iOS UDID or Android serial.
   final String deviceId;
   final String platform; // 'ios' | 'android'
   final String? deviceName;
   final String? osVersion;
 
-  /// Flutter project root, for relaunch. Null when it couldn't be recovered —
-  /// the record still identifies the app/device but can't be auto-launched.
+  /// Flutter project root for relaunch; null when it couldn't be recovered.
   final String? projectDir;
 
   final DateTime firstSeen;
   DateTime lastSeen;
   int attachCount;
 
-  /// One record per (app, device); re-attaching the pair updates in place.
+  /// Dedup key — one record per (app, device).
   String get key => '$appKey@$deviceId';
 
-  /// Relaunchable unattended only when we know where to run from.
+  /// Relaunchable unattended only when the project dir is known.
   bool get launchable => projectDir != null;
 
   String get label => displayName ?? appKey;
@@ -84,8 +80,7 @@ class AttachRecord {
   }
 }
 
-/// Persistent, most-recent-first store of [AttachRecord]s. All disk access is
-/// best-effort — a missing or corrupt file reads as empty, writes never throw.
+/// Persistent, most-recent-first [AttachRecord] store; all disk access is best-effort.
 class AttachHistory {
   AttachHistory({required this.dataDir, this.maxRecords = 20});
 
@@ -111,9 +106,7 @@ class AttachHistory {
     }
   }
 
-  /// Insert or update the record for [incoming.key]: an existing entry keeps
-  /// its `firstSeen` and bumps `attachCount`. Re-sorts most-recent-first,
-  /// caps at [maxRecords], and writes.
+  /// Upsert by key (keeps `firstSeen`, bumps `attachCount`), re-sort, cap, write.
   void record(AttachRecord incoming) {
     try {
       final list = load();
@@ -142,8 +135,7 @@ class AttachHistory {
     }
   }
 
-  /// Best match for [query]: null / `true` / `last` → most recent; otherwise an
-  /// exact appKey or projectDir, then a projectDir basename match.
+  /// Best match for [query]: null/`true`/`last` → most recent; else appKey, projectDir, or its basename.
   AttachRecord? find(String? query) {
     final list = load();
     if (list.isEmpty) return null;

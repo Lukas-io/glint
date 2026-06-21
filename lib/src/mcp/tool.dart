@@ -14,6 +14,7 @@ import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
+import 'tools/kill_app_tool.dart';
 import 'tools/logs_tool.dart';
 import 'tools/long_press_tool.dart';
 import 'tools/report_issue_tool.dart';
@@ -21,6 +22,7 @@ import 'tools/resolve_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
 import 'tools/scroll_tool.dart';
 import 'tools/session_tool.dart';
+import 'tools/shutdown_sim_tool.dart';
 import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
 import 'tools/telemetry_tool.dart';
@@ -161,6 +163,8 @@ abstract class GlintTool {
 const List<GlintTool> kDefaultGlintTools = [
   AttachTool(),
   DeviceTool(),
+  KillAppTool(),
+  ShutdownSimTool(),
   GetSceneTool(),
   ResolveTool(),
   TapTool(),
