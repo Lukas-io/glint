@@ -287,6 +287,30 @@ class DeviceDiscovery {
     return null;
   }
 
+  // ── app identity for a known device (bundle id, for kill/identity) ────────
+  /// (CFBundleIdentifier, display name) of the user app running on iOS [udid],
+  /// found by its `Containers/Bundle/Application/…app` process — independent of
+  /// the flaky VM-port correlation, since the device id is already known.
+  Future<(String?, String?)?> appInfoForDevice(String udid) async {
+    final ProcessResult ps;
+    try {
+      ps = await Process.run('ps', ['-Axww', '-o', 'command=']);
+    } on Object {
+      return null;
+    }
+    if (ps.exitCode != 0) return null;
+    final re = RegExp(
+      '(/\\S*/CoreSimulator/Devices/$udid/data/Containers/'
+      'Bundle/Application/[^/]+/[^/]+\\.app)',
+    );
+    for (final line in (ps.stdout as String).split('\n')) {
+      final appPath = re.firstMatch(line)?.group(1);
+      if (appPath == null) continue;
+      return await _readBundleInfo(appPath);
+    }
+    return null;
+  }
+
   // ── connected Android devices / emulators ────────────────────────────────
   Future<List<BootedDevice>> _adbDevices() async {
     final ProcessResult res;
