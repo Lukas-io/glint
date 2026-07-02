@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:vm_service/vm_service.dart' show Event, InstanceRef, VmService;
 
 import '../runtime/flutter_runtime.dart';
@@ -122,7 +123,17 @@ class SceneReader {
   /// - Entries with a Scaffold descendant → base route, skip.
   /// - Entries with only barrier widgets → modal barrier, skip (sets hasBarrier).
   /// - Everything else → dialog content, include.
-  _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
+  /// First meaningful glintId inside each surfaced dialog entry — the test
+  /// seam for overlay classification. Each entry is an [_OverlayEntryWidget]
+  /// wrapper, so we dig to the first descendant carrying a glintId.
+  @visibleForTesting
+  static List<String?> debugOverlayContentIds(SceneNode fullRoot) =>
+      _extractDialogEntries(fullRoot).contentRoots
+          .map((n) => n.walk().firstWhere((d) => d.glintId != null,
+              orElse: () => n).glintId)
+          .toList();
+
+  static _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
     final overlay = _findNode(fullRoot, 'Overlay');
     if (overlay == null) {
       return const _DialogExtraction(contentRoots: [], hasBarrier: false);
@@ -142,6 +153,7 @@ class SceneReader {
     for (final entry in entriesParent.children) {
       if (!_isEntryWidget(entry)) continue;
       if (_hasScaffoldDescendant(entry)) continue; // base route
+      if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
       if (_isBarrierOnlyEntry(entry)) {
         hasBarrier = true;
         continue;
@@ -167,7 +179,21 @@ class SceneReader {
   }
 
   static bool _hasScaffoldDescendant(SceneNode n) =>
-      n.walk().any((d) => d.label == 'Scaffold');
+      n.walk().any((d) => d.baseLabel == 'Scaffold');
+
+  /// Text-editing overlays — cursor drag handles + the copy/paste toolbar —
+  /// ride in their own [OverlayEntry] whenever a field is focused. They are
+  /// transient affordances, not modal content: surfacing them as `--- dialog
+  /// ---` makes the agent think a modal is open and try to dismiss it.
+  static bool _isTextEditingOverlay(SceneNode n) => n.walk().any((d) =>
+      const {
+        '_SelectionHandleOverlay',
+        '_SelectionToolbarWrapper',
+        'TextSelectionToolbar',
+        'CupertinoTextSelectionToolbar',
+        'SelectionContainer',
+        'ContextMenu',
+      }.contains(d.baseLabel));
 
   /// True when every descendant is a known barrier/gesture-plumbing widget
   /// with no user-meaningful content.
