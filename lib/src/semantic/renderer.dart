@@ -49,19 +49,25 @@ class PlainTextSceneRenderer extends SceneRenderer {
   // Maximum nesting depth before content is suppressed (keeps scenes compact).
   static const _maxDepth = 8;
 
-  void _write(StringBuffer buf, SemanticNode node, {required int depth}) {
+  void _write(StringBuffer buf, SemanticNode node,
+      {required int depth, bool inList = false}) {
     if (depth > _maxDepth) return;
     _writeNodeLine(buf, node, depth: depth);
-    // Nested pages (PageView tabs, shell route branches) are summarised, not
-    // expanded — the agent can get_scene after navigating to them.
-    if (node is SemanticPage && depth > 0) return;
-    _writeChildren(buf, node.children, depth: depth + 1);
+    // A nested page inside a PageView/IndexedStack (SemanticList) is an
+    // alternate tab/route — summarise it; the agent navigates to it and
+    // re-reads. But an app-shell that nests the real content Scaffold (a
+    // page directly under a container) IS the current screen — expand it, or
+    // its whole form stays invisible in text mode.
+    if (node is SemanticPage && depth > 0 && inList) return;
+    _writeChildren(buf, node.children,
+        depth: depth + 1, inList: node is SemanticList);
   }
 
   void _writeChildren(
     StringBuffer buf,
     List<SemanticNode> children, {
     required int depth,
+    bool inList = false,
   }) {
     var i = 0;
     while (i < children.length) {
@@ -70,7 +76,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
         _writeRun(buf, children, i, run, depth: depth);
         i += run.length;
       } else {
-        _write(buf, children[i], depth: depth);
+        _write(buf, children[i], depth: depth, inList: inList);
         i += 1;
       }
     }
