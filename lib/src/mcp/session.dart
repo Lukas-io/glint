@@ -376,6 +376,9 @@ class GlintSession {
   Future<void> _pollLifecycle() async {
     final rt = _runtime;
     if (rt == null) return;
+    // Native fallback needs a native reader (iOS only) — without one the
+    // Flutter tree stays the best available truth even when not resumed.
+    if (_nativeReader == null) return;
     try {
       final state = await rt.evaluateString(
         'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',

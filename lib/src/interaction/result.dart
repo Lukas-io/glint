@@ -12,6 +12,8 @@ enum GlintErrorKind {
   // mcp-layer failures
   sessionNotAttached,
   invalidArgument,
+  // perception unavailable — app backgrounded / no frame to inspect
+  appNotResumed,
   // transport failures
   connectionLost,
   // armed-intent failures (§7.3 try/catch)
