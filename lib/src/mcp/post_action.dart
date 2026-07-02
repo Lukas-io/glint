@@ -112,6 +112,12 @@ Future<PostActionState?> readPostActionState(
   try {
     // Settle first (best-effort, don't fail if it times out).
     try {
+      // Let the action's effect begin before polling for idle. A route
+      // push/pop animation starts a frame or two AFTER the tap; without this
+      // pause settle can catch the brief idle gap before the animation and
+      // read a mid-transition scene — reporting a real navigation as
+      // changed:false.
+      await Future<void>.delayed(const Duration(milliseconds: 120));
       await session.settleDetector.awaitSettle();
     } on Object {
       // ignore settle errors — scene read follows regardless
