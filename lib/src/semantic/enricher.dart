@@ -137,6 +137,58 @@ class IconEnricher implements SemanticEnricher {
   }
 }
 
+/// Reads the live `value` of Checkbox / Switch-shaped toggles into
+/// [SemanticButton.toggleState] ('on'/'off'). Radio is excluded — its `value`
+/// is the option, not the checked state. Capped at [maxToggles].
+class ToggleEnricher implements SemanticEnricher {
+  ToggleEnricher({required this.runtime, this.maxToggles = 10});
+
+  final FlutterRuntime runtime;
+  final int maxToggles;
+
+  static const _valueToggles = {
+    'Checkbox',
+    'Switch',
+    'CupertinoSwitch',
+    'CupertinoCheckbox',
+    'CheckboxListTile',
+    'SwitchListTile',
+  };
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final toggles = scene.root
+        .walk()
+        .whereType<SemanticButton>()
+        .where((b) => b.isToggle)
+        .toList();
+    final budget = min(toggles.length, maxToggles);
+    for (var i = 0; i < budget; i++) {
+      final node = toggles[i];
+      if (node.glintId == null) continue;
+      final source = scene.sourceFor(node.glintId!);
+      if (source == null) continue;
+      if (!_valueToggles.contains(source.baseLabel)) continue;
+      try {
+        final raw = await runtime.evaluateWithSelection(
+          expression:
+              '((WidgetInspectorService.instance.selection.currentElement!.widget'
+              ' as dynamic).value).toString()',
+          inspectorId: source.inspectorId,
+          groupName: scene.sourceScene.groupName,
+        );
+        node.toggleState = switch (raw) {
+          'true' => 'on',
+          'false' => 'off',
+          _ => null,
+        };
+      } on Object {
+        // best-effort
+      }
+    }
+  }
+}
+
 /// Reads `hint` (InputDecoration.labelText) and `currentValue` (live
 /// EditableText controller text) for each [SemanticInput]. Capped at [maxInputs].
 class InputEnricher implements SemanticEnricher {

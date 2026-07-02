@@ -13,9 +13,10 @@ import '../runtime/vm_service_runtime.dart';
 /// Whether the session is reading the Flutter VM tree or the native OS AX tree.
 enum SceneMode { flutter, native }
 
-/// How far to enrich a scene: [structural] = overlays + route (cheap, for
-/// change-detection); [full] = also input values + icon names (for rendering).
-enum SceneDetail { structural, full }
+/// How far to enrich a scene: [structural] = overlays + route (cheap);
+/// [interactive] = also input values + toggle states (change-detection);
+/// [full] = also icon names (for rendering).
+enum SceneDetail { structural, interactive, full }
 
 /// Per-connection state: runtime, device, readers, interactor. Tools
 /// access these via the typed getters; accessing before [attach] throws
@@ -70,6 +71,7 @@ class GlintSession {
   Semanticizer? _semanticizer;
   OverlayEnricher? _overlayEnricher;
   InputEnricher? _inputEnricher;
+  ToggleEnricher? _toggleEnricher;
   IconEnricher? _iconEnricher;
   NavigationEnricher? _navEnricher;
   ReadinessGate? _readinessGate;
@@ -122,6 +124,8 @@ class GlintSession {
       _requireAttached(_overlayEnricher, 'overlay enricher');
   InputEnricher get inputEnricher =>
       _requireAttached(_inputEnricher, 'input enricher');
+  ToggleEnricher get toggleEnricher =>
+      _requireAttached(_toggleEnricher, 'toggle enricher');
   IconEnricher get iconEnricher =>
       _requireAttached(_iconEnricher, 'icon enricher');
   NavigationEnricher get navEnricher =>
@@ -154,6 +158,7 @@ class GlintSession {
     final semanticizer = Semanticizer();
     final overlayEnricher = OverlayEnricher(semanticizer: semanticizer);
     final inputEnricher = InputEnricher(runtime: runtime, inspector: inspector);
+    final toggleEnricher = ToggleEnricher(runtime: runtime);
     final iconEnricher = IconEnricher(runtime: runtime);
     final navEnricher = NavigationEnricher(runtime: runtime);
     final readinessGate = ReadinessGate(reader: reader, resolver: resolver);
@@ -169,6 +174,7 @@ class GlintSession {
     _semanticizer = semanticizer;
     _overlayEnricher = overlayEnricher;
     _inputEnricher = inputEnricher;
+    _toggleEnricher = toggleEnricher;
     _iconEnricher = iconEnricher;
     _navEnricher = navEnricher;
     _readinessGate = readinessGate;
@@ -223,8 +229,11 @@ class GlintSession {
       // the rest are order-independent.
       await overlayEnricher.enrich(semantic);
       await navEnricher.enrich(semantic);
-      if (detail == SceneDetail.full) {
+      if (detail != SceneDetail.structural) {
         await inputEnricher.enrich(semantic);
+        await toggleEnricher.enrich(semantic);
+      }
+      if (detail == SceneDetail.full) {
         await iconEnricher.enrich(semantic);
       }
       return await use(semantic);
@@ -253,6 +262,7 @@ class GlintSession {
     _semanticizer = null;
     _overlayEnricher = null;
     _inputEnricher = null;
+    _toggleEnricher = null;
     _iconEnricher = null;
     _navEnricher = null;
     _readinessGate = null;

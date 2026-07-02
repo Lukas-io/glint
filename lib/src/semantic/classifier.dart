@@ -161,7 +161,11 @@ class ToggleClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    return SemanticButton(glintId: node.glintId, label: _firstTextIn(children));
+    return SemanticButton(
+      glintId: node.glintId,
+      label: _firstTextIn(children),
+      isToggle: true,
+    );
   }
 }
 
