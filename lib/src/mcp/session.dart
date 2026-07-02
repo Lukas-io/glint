@@ -96,6 +96,17 @@ class GlintSession {
 
   void clearLaunchedApp(String deviceId) => _launchedApps.remove(deviceId);
 
+  /// Kills every `flutter run` process glint started. Called from the server
+  /// shutdown path so a dying glint never orphans its children.
+  void killLaunchedApps() {
+    for (final process in _launchedApps.values) {
+      try {
+        process.kill();
+      } catch (_) {/* already dead */}
+    }
+    _launchedApps.clear();
+  }
+
   bool get isAttached => _runtime != null || _deviceMode;
   bool get isDeviceMode => _deviceMode;
 
