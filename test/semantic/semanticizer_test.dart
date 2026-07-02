@@ -443,6 +443,40 @@ void main() {
       expect(out, isNot(contains('the\nGreat')));
     });
 
+    test('app-shell nested page is expanded, not summarised', () {
+      // Outer shell Scaffold wraps the real content Scaffold (Edgo pattern):
+      // the inner page holds the login form and MUST render.
+      final inner = SemanticPage(glintId: 'scaffold#content', body: [
+        SemanticInput(glintId: 'email')..hint = 'Email',
+        SemanticButton(glintId: 'login', label: 'Login'),
+      ]);
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(glintId: 'scaffold#shell', body: [
+          SemanticContainer(hint: 'stack', children: [inner]),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('email'), reason: 'nested login field must render');
+      expect(out, contains('login Login'));
+    });
+
+    test('pages nested inside a list (PageView tabs) stay summarised', () {
+      final tab = SemanticPage(glintId: 'scaffold#tab', body: [
+        SemanticText(glintId: 'tab_body', content: 'tab content'),
+      ]);
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(glintId: 'scaffold#route', body: [
+          SemanticList(glintId: 'page_view', children: [tab]),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('page scaffold#tab'), reason: 'tab page line shown');
+      expect(out, isNot(contains('tab content')),
+          reason: 'tab body summarised away');
+    });
+
     test('collapses runs of identical-role siblings sharing an id prefix', () {
       final rows = [
         for (var i = 0; i < 30; i++)
