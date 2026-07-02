@@ -111,6 +111,21 @@ void main() {
     test('AppBar becomes a SemanticAppBar', () {
       expect(classify(_n('AppBar')), isA<SemanticAppBar>());
     });
+    test('AppBar keeps its back button + actions, title skips button text', () {
+      final tree = _rooted(_n('AppBar', children: [
+        _n('BackButton', children: [_n('Icon')]),
+        _n('Text', textPreview: 'Daily News'),
+        _n('IconButton', children: [_n('Icon')]),
+      ]));
+      StableIdGenerator().assignIds(tree);
+      final reg = ClassifierRegistry.defaults();
+      SemanticNode rec(SceneNode n) => reg.classifierFor(n).build(
+          n, n.children.map(rec).toList());
+      final bar = rec(tree) as SemanticAppBar;
+      expect(bar.title, 'Daily News');
+      expect(bar.actions.whereType<SemanticButton>(), hasLength(2),
+          reason: 'back button + action button preserved');
+    });
     test('FloatingActionButton becomes a SemanticButton with tappable', () {
       final n = classify(_n('FloatingActionButton'));
       expect(n, isA<SemanticButton>());
