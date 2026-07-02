@@ -67,6 +67,33 @@ class GetSceneTool extends GlintTool {
       return _handleNativeMode(session, format);
     }
 
+    try {
+      return await _readFlutterScene(session, format);
+    } on InspectorReadError catch (e) {
+      // A null widget tree usually means no frame to inspect — the app is
+      // backgrounded or paused behind a native surface (permission dialog,
+      // another app). Translate the raw stack trace into an actionable state.
+      final lifecycle = await _safeLifecycle(session);
+      if (lifecycle != null && lifecycle != 'resumed') {
+        return StructuredResponse.error(
+          summary: 'the app is "$lifecycle", not resumed — no Flutter frame to '
+              'read. A native dialog or another app is likely in front.',
+          errorKind: GlintErrorKind.appNotResumed,
+          detail: e.toString(),
+          nextSteps: const [
+            'take a `device op:screenshot` to see what is on top',
+            'dismiss the native surface (e.g. tap its button via raw x,y), '
+                'then retry get_scene',
+            'or `hardware_button home` then reopen the app',
+          ],
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<StructuredResponse> _readFlutterScene(
+      GlintSession session, String format) async {
     return session.withScene((semantic) async {
       final rendered = format == 'json'
           ? const JsonSceneRenderer().render(semantic)
@@ -96,6 +123,14 @@ class GetSceneTool extends GlintTool {
         },
       );
     });
+  }
+
+  Future<String?> _safeLifecycle(GlintSession session) async {
+    try {
+      return await session.lifecycleState();
+    } on Object {
+      return null;
+    }
   }
 
   Future<StructuredResponse> _handleNativeMode(

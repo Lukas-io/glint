@@ -21,7 +21,7 @@ Every action must answer "what did that do?" before you choose the next move.
 
 1. **After each action:** check `changed` and `changeCategory` in the response. `changed:false` means the screen did not react — do not guess, observe.
 2. **"Nothing happened" is critical feedback.** `ok:true` + `changed:false` = action was delivered but target didn't respond. Re-read the scene to understand why.
-3. **Failures explain.** `unresolvedTarget` = stale id, re-run `get_scene`. `notHittable` = something covers the target, dismiss it. Read the detail field.
+3. **Failures explain.** `unresolvedTarget` = stale id, re-`get_scene`. `notHittable` = something covers the target, dismiss it. Read the detail.
 4. **When in doubt: `get_scene`.** The framework is truth, not your prediction.
 ''';
 
@@ -73,12 +73,13 @@ const _recovery = '''
 - `targetNeverReady` — ceiling hit. Raise `readyTimeoutMs` or dismiss cover.
 - `targetNotFound` — never appeared in scroll_to_find; try another direction.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
-- `connectionLost` — VM dropped (hot restart?). Re-`attach` with same vmUri.
+- `connectionLost` — VM dropped (hot restart?). Re-`attach`, same vmUri.
 - `unsupportedBackendAction` — not wired on this platform (see Gotchas).
 - `backendToolError` — native tool exited non-zero; read `detail`.
 - `geometryResolveError` — inspector eval failed. Retry; else re-`attach`.
 - `sessionNotAttached` — call `attach`.
 - `invalidArgument` — fix per tool description.
+- `appNotResumed` — app behind a native dialog. Dismiss it, retry.
 - `internal` — glint bug. Surface `detail`.
 
 `hittable=false` warns by default; `refuseNotHittable: true` fails loud.
@@ -92,7 +93,7 @@ const _gotchas = '''
 - **`type` needs focus.** Pass `focus: <id>` to tap-and-type in one call.
 - **Scroll is content-relative.** `scroll down` moves content down (finger swipes up).
 - **`scroll_to_find`** caps at 8 scrolls; raise `maxScrolls` if needed.
-- **`resolve`** is the drill-down tool — use it when a tap fails or behaves unexpectedly to see exact bounds, painted, and hittable before retrying.
+- **`resolve`** — when a tap fails, drill down to exact bounds/painted/hittable.
 ''';
 
 const _toolSurface = '''
