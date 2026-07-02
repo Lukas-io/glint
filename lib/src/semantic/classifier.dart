@@ -103,11 +103,37 @@ class AppBarClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
+    // Keep the buttons — the leading back button and the action buttons
+    // (search, menu, …) live in the AppBar's subtree. Dropping them (the old
+    // `actions: const []`) made back-navigation and app-bar actions invisible.
+    final buttons = <SemanticNode>[];
+    void collect(List<SemanticNode> ns) {
+      for (final n in ns) {
+        if (n is SemanticButton) {
+          buttons.add(n);
+        } else {
+          collect(n.children);
+        }
+      }
+    }
+
+    collect(children);
     return SemanticAppBar(
       glintId: node.glintId,
-      title: _firstTextIn(children),
-      actions: const [],
+      title: _titleIn(children),
+      actions: buttons,
     );
+  }
+
+  /// First text NOT inside a button — the title, not a button's caption.
+  String? _titleIn(List<SemanticNode> nodes) {
+    for (final n in nodes) {
+      if (n is SemanticButton) continue;
+      if (n is SemanticText) return n.content;
+      final inner = _titleIn(n.children);
+      if (inner != null) return inner;
+    }
+    return null;
   }
 }
 
