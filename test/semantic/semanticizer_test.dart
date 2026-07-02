@@ -419,6 +419,18 @@ void main() {
       expect(out, contains('> input email_field (email)'));
     });
 
+    test('input renders its validation error', () {
+      final input = SemanticInput(glintId: 'email_field')
+        ..hint = 'email'
+        ..error = 'Enter your email address';
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [input]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('⚠ Enter your email address'));
+    });
+
     test('input renders both hint and currentValue when both set', () {
       final input = SemanticInput(glintId: 'email_field')
         ..hint = 'email'

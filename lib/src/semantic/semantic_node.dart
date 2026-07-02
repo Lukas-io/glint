@@ -160,6 +160,10 @@ class SemanticInput extends SemanticNode {
   /// Live text in the field. Populated by [InputEnricher].
   String? currentValue;
 
+  /// Current validation error (InputDecoration.errorText), populated by
+  /// [InputEnricher]; null when the field is valid or shows no error.
+  String? error;
+
   @override
   SemanticRole get role => SemanticRole.input;
 
@@ -170,6 +174,7 @@ class SemanticInput extends SemanticNode {
     if (currentValue != null && currentValue!.isNotEmpty) {
       parts.add('"$currentValue"');
     }
+    if (error != null && error!.isNotEmpty) parts.add('⚠ $error');
     return parts.isEmpty ? 'input' : parts.join(' ');
   }
 
@@ -177,6 +182,7 @@ class SemanticInput extends SemanticNode {
   Map<String, Object?> _extraJson() => {
         if (hint != null) 'hint': hint,
         if (currentValue != null) 'value': currentValue,
+        if (error != null) 'error': error,
       };
 }
 
