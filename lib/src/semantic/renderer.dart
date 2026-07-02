@@ -102,8 +102,14 @@ class PlainTextSceneRenderer extends SceneRenderer {
     buf.writeln();
   }
 
-  static String _truncate(String s) =>
-      s.length <= _maxLabelChars ? s : '${s.substring(0, _maxLabelChars - 1)}…';
+  /// Multiline labels would break the line-per-node contract — collapse all
+  /// whitespace runs to a single space before truncating.
+  static String _truncate(String s) {
+    final flat = s.replaceAll(RegExp(r'\s+'), ' ');
+    return flat.length <= _maxLabelChars
+        ? flat
+        : '${flat.substring(0, _maxLabelChars - 1)}…';
+  }
 
   void _writeRun(StringBuffer buf, List<SemanticNode> all, int start,
       _SiblingRun run,
@@ -131,7 +137,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
   String _lastLabelSuffix(SemanticNode last) {
     final label = last.displayLabel;
     if (label.isEmpty || label == last.role.name) return '';
-    return ' $label';
+    return ' ${_truncate(label)}';
   }
 
   /// Null when shorter than [groupThreshold] or no shared prefix.
