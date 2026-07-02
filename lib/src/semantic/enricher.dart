@@ -78,7 +78,12 @@ class NavigationEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    for (final source in scene.sourceScene.addressableCandidates()) {
+    // Probe only within the ACTIVE page — a covered sibling route would
+    // answer with its own (wrong) name. No name beats a wrong name.
+    final pageId = scene.root.glintId;
+    final pageSource = pageId != null ? scene.sourceFor(pageId) : null;
+    for (final source
+        in scene.sourceScene.addressableCandidates(within: pageSource)) {
       final result = await runtime.evaluateWithSelection(
         expression: _routeExpr,
         inspectorId: source.inspectorId,

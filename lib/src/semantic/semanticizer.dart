@@ -17,44 +17,29 @@ class Semanticizer {
 
   SemanticScene semanticize(Scene scene) {
     final classified = _classify(scene.root);
-    final root = _selectActivePage(classified, scene);
+    final root = selectActivePage(classified);
     return SemanticScene(root: root, sourceScene: scene);
   }
 
-  /// Picks the active page among multiple [SemanticPage]s (GoRouter / IndexedStack):
-  /// the one whose subtree holds the first addressable node. Since that probe skips
-  /// offstage nodes, walking UP to its outermost [SemanticPage] ancestor gives the
-  /// active route. Falls back to [SceneCompactor.hoistPage] when no probe exists.
-  SemanticNode _selectActivePage(SemanticNode classified, Scene source) {
-    final probeId = source.firstAddressableId();
-    if (probeId == null) return _compactor.hoistPage(classified);
-
-    final parents = <SemanticNode, SemanticNode>{};
-    void link(SemanticNode n) {
-      for (final c in n.children) {
-        parents[c] = n;
-        link(c);
+  /// Picks the active page among multiple [SemanticPage]s. Candidates are the
+  /// MAXIMAL onstage pages — a page nested inside another (PageView tab, shell
+  /// branch) is never a route. Offstage scaffolds already classified as
+  /// [SemanticUnknown], so siblings that remain are stacked navigator routes
+  /// in overlay order: the LAST is the top of the stack, the screen the user
+  /// sees. Falls back to [SceneCompactor.hoistPage] when no page exists.
+  SemanticNode selectActivePage(SemanticNode classified) {
+    final candidates = <SemanticPage>[];
+    void collect(SemanticNode n) {
+      if (n is SemanticPage) {
+        candidates.add(n);
+        return;
       }
+      n.children.forEach(collect);
     }
-    link(classified);
 
-    SemanticNode? probe;
-    for (final n in classified.walk()) {
-      if (n.glintId == probeId) { probe = n; break; }
-    }
-    if (probe == null) return _compactor.hoistPage(classified);
-
-    // Take the OUTERMOST SemanticPage ancestor, not the nearest: in GoRouter +
-    // PageView apps the probe leaf sits in an inner tab page while the active
-    // route page is higher up — the outermost is the route, not the tab.
-    SemanticNode? outermost;
-    var cur = probe;
-    while (parents.containsKey(cur)) {
-      cur = parents[cur]!;
-      if (cur is SemanticPage) outermost = cur;
-    }
-    if (outermost != null) return outermost;
-    return _compactor.hoistPage(classified); // no SemanticPage ancestor
+    collect(classified);
+    if (candidates.isNotEmpty) return candidates.last;
+    return _compactor.hoistPage(classified);
   }
 
   /// Classify a subtree without hoisting to a page root. Used by
