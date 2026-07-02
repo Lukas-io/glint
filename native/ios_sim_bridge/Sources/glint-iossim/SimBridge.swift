@@ -338,9 +338,18 @@ struct SimDeviceProxy {
 
     /// Sends literal ASCII text via per-character HID key down/up. Shifted
     /// characters bracket the key with shift-down / shift-up.
+    // Key-press dwell (down→up) and the gap between consecutive characters.
+    // The inter-key gap matters: a field with a synchronous TextInputFormatter
+    // rebuilds on every keystroke, and back-to-back HID events outrun that
+    // rebuild — keys get dropped (e.g. a phone field turning "8012345678" into
+    // "801238"). ~18ms lets the framework commit each edit before the next key.
+    private static let keyDwell = 0.006
+    private static let interKeyGap = 0.018
+
     func typeText(_ text: String) throws {
         let client = try makeHidClient()
-        for scalar in text.unicodeScalars {
+        let scalars = Array(text.unicodeScalars)
+        for (i, scalar) in scalars.enumerated() {
             guard let m = HidKeymap.map(scalar) else {
                 throw SimError(message:
                     "no HID mapping for U+\(String(scalar.value, radix: 16, uppercase: true))" +
@@ -350,12 +359,14 @@ struct SimDeviceProxy {
                 try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .down)
             }
             try sendKey(client: client, usage: m.usage, direction: .down)
-            // ~5ms dwell — modern simulators register on the down edge but
-            // some IMEs need the up to commit.
-            Thread.sleep(forTimeInterval: 0.005)
+            Thread.sleep(forTimeInterval: Self.keyDwell)
             try sendKey(client: client, usage: m.usage, direction: .up)
             if m.shift {
                 try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .up)
+            }
+            // Let a formatter-driven rebuild settle before the next key.
+            if i < scalars.count - 1 {
+                Thread.sleep(forTimeInterval: Self.interKeyGap)
             }
         }
     }
