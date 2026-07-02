@@ -2,43 +2,67 @@ import '../../semantic.dart';
 import 'session.dart';
 
 /// Lightweight snapshot of observable scene state for change detection.
-class _SceneSnapshot {
-  _SceneSnapshot({
+class SceneSnapshot {
+  SceneSnapshot({
     required this.routeName,
     required this.hasOverlay,
-    required this.topLevelIdHash,
+    required this.contentHash,
   });
 
   final String routeName;
   final bool hasOverlay;
-  final int topLevelIdHash;
+  final int contentHash;
 
-  factory _SceneSnapshot.from(SemanticScene scene) {
+  /// Hashes the WHOLE tree (id, role, text, input value, button label/toggle)
+  /// plus overlay content — a deep change (tab swap, text edit, toggle flip)
+  /// must register, not just top-level structure.
+  factory SceneSnapshot.from(SemanticScene scene) {
     final route =
         scene.routeStack.isEmpty ? '' : scene.routeStack.first.name;
     final hasOverlay = scene.overlayLayers.isNotEmpty;
-    // Hash the set of top-level child glintIds so structural changes register.
     var hash = 0;
-    for (final n in scene.root.children) {
-      final id = n.glintId ?? n.role.name;
-      for (final c in id.codeUnits) {
+    void mix(String s) {
+      for (final c in s.codeUnits) {
         hash = (hash * 31 + c) & 0x7fffffff;
       }
     }
-    return _SceneSnapshot(
+
+    // Icon names are deliberately excluded: they only resolve at full detail,
+    // so hashing them would fake a change between detail levels.
+    void mixTree(SemanticNode root) {
+      for (final n in root.walk()) {
+        mix(n.glintId ?? '');
+        mix(n.role.name);
+        if (n is SemanticText) mix(n.content);
+        if (n is SemanticInput) {
+          mix(n.currentValue ?? '');
+          mix(n.hint ?? '');
+        }
+        if (n is SemanticButton) {
+          mix(n.label ?? '');
+          mix(n.toggleState ?? '');
+        }
+      }
+    }
+
+    mixTree(scene.root);
+    for (final layer in scene.overlayLayers) {
+      layer.nodes.forEach(mixTree);
+    }
+    return SceneSnapshot(
       routeName: route,
       hasOverlay: hasOverlay,
-      topLevelIdHash: hash,
+      contentHash: hash,
     );
   }
 }
 
 /// Detect what category of change occurred between [before] and [after].
-String _changeCategory(_SceneSnapshot before, _SceneSnapshot after) {
+String changeCategory(SceneSnapshot before, SceneSnapshot after) {
   if (before.routeName != after.routeName) return 'routeChanged';
   if (!before.hasOverlay && after.hasOverlay) return 'overlayAppeared';
   if (before.hasOverlay && !after.hasOverlay) return 'overlayDismissed';
-  if (before.topLevelIdHash != after.topLevelIdHash) return 'contentChanged';
+  if (before.contentHash != after.contentHash) return 'contentChanged';
   return 'nothing';
 }
 
@@ -65,11 +89,11 @@ class PostActionState {
 }
 
 /// Snapshot the scene BEFORE an action fires, for [readPostActionState].
-Future<_SceneSnapshot?> snapshotPreAction(GlintSession session) async {
+Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
     return await session.withScene(
-      (semantic) async => _SceneSnapshot.from(semantic),
-      detail: SceneDetail.structural,
+      (semantic) async => SceneSnapshot.from(semantic),
+      detail: SceneDetail.interactive,
     );
   } on Object {
     return null;
@@ -81,7 +105,7 @@ Future<_SceneSnapshot?> snapshotPreAction(GlintSession session) async {
 /// (default false) opts into rendering the full scene text, which is token-heavy.
 Future<PostActionState?> readPostActionState(
   GlintSession session,
-  _SceneSnapshot? pre, {
+  SceneSnapshot? pre, {
   bool includeSceneText = false,
 }) async {
   try {
@@ -93,8 +117,8 @@ Future<PostActionState?> readPostActionState(
     }
     return await session.withScene(
       (semantic) async {
-        final post = _SceneSnapshot.from(semantic);
-        final category = pre != null ? _changeCategory(pre, post) : 'unknown';
+        final post = SceneSnapshot.from(semantic);
+        final category = pre != null ? changeCategory(pre, post) : 'unknown';
         return PostActionState(
           changed: category != 'nothing',
           changeCategory: category,
@@ -103,7 +127,7 @@ Future<PostActionState?> readPostActionState(
               : null,
         );
       },
-      detail: includeSceneText ? SceneDetail.full : SceneDetail.structural,
+      detail: includeSceneText ? SceneDetail.full : SceneDetail.interactive,
     );
   } on Object {
     return null;

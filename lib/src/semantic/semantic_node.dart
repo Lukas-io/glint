@@ -113,6 +113,7 @@ class SemanticButton extends SemanticNode {
   SemanticButton({
     super.glintId,
     this.label,
+    this.isToggle = false,
     super.children = const [],
   }) : super(affordances: const {Affordance.tappable});
 
@@ -120,15 +121,25 @@ class SemanticButton extends SemanticNode {
   /// so [IconEnricher] can populate their name post-classify.
   final String? label;
 
+  /// True for Checkbox / Switch / Radio-shaped widgets ([ToggleClassifier]).
+  final bool isToggle;
+
+  /// 'on' / 'off', populated by [ToggleEnricher]; null when unknown.
+  String? toggleState;
+
   @override
   SemanticRole get role => SemanticRole.button;
 
   @override
-  String get displayLabel => label ?? '';
+  String get displayLabel {
+    final state = toggleState != null ? '[$toggleState]' : null;
+    return [label, state].nonNulls.join(' ');
+  }
 
   @override
   Map<String, Object?> _extraJson() => {
         if (label != null) 'label': label,
+        if (toggleState != null) 'toggleState': toggleState,
       };
 }
 
