@@ -151,6 +151,16 @@ void main() {
       expect(n, isA<SemanticContainer>());
       expect((n as SemanticContainer).hint, 'column');
     });
+    test('SnackBar → container hinted as transient', () {
+      final n = classify(_n('SnackBar'));
+      expect(n, isA<SemanticContainer>());
+      expect((n as SemanticContainer).hint, contains('transient'));
+    });
+    test('MaterialBanner → container hinted as transient', () {
+      final n = classify(_n('MaterialBanner'));
+      expect((n as SemanticContainer).hint, contains('transient'));
+    });
+
     test('Unknown widget falls through to SemanticUnknown', () {
       final n = classify(_n('SomeCustomWidget'));
       expect(n, isA<SemanticUnknown>());
