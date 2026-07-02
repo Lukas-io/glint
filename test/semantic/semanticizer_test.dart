@@ -308,6 +308,12 @@ void main() {
       final leaf = SemanticUnknown(glintId: 'x', label: 'MyWidget');
       expect(c.expandChild(leaf), [leaf]);
     });
+    test('expandChild drops leaf framework plumbing (gaps, semantics)', () {
+      for (final label in ['_RawGap', 'Semantics', 'SizedBox.expand']) {
+        final leaf = SemanticUnknown(glintId: 'x', label: label);
+        expect(c.expandChild(leaf), isEmpty, reason: label);
+      }
+    });
     test('hoistPage surfaces a page nested under wrappers', () {
       final page = SemanticPage(body: const []);
       final outer = SemanticUnknown(
@@ -363,6 +369,18 @@ void main() {
       );
       final out = const PlainTextSceneRenderer().render(scene);
       expect(out, contains('> input email_field (email) "a@b"'));
+    });
+
+    test('multiline label renders on one line', () {
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [
+          SemanticText(glintId: 'title', content: 'the\nGreat Wall'),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('"the Great Wall"'));
+      expect(out, isNot(contains('the\nGreat')));
     });
 
     test('collapses runs of identical-role siblings sharing an id prefix', () {
