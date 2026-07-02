@@ -37,6 +37,7 @@ class SceneSnapshot {
         if (n is SemanticInput) {
           mix(n.currentValue ?? '');
           mix(n.hint ?? '');
+          mix(n.error ?? '');
         }
         if (n is SemanticButton) {
           mix(n.label ?? '');

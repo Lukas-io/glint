@@ -227,6 +227,13 @@ class InputEnricher implements SemanticEnricher {
       'w.decoration?.hintText ?? "") : "")'
       '(WidgetInspectorService.instance.selection.currentElement!.widget)';
 
+  // Current validation error. TextFormField copies the FormField's errorText
+  // into the inner TextField's decoration, so reading it here surfaces live
+  // validation feedback (why a submit was rejected).
+  static const _errorExpr =
+      '((w) => w is TextField ? (w.decoration?.errorText ?? "") : "")'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget)';
+
   Future<void> _enrichOne(
       SceneNode source, Scene scene, SemanticInput target) async {
     // One subtree read serves both label and value lookups.
@@ -239,8 +246,19 @@ class InputEnricher implements SemanticEnricher {
     } on Object {
       // best-effort — fall back to the source node below
     }
+    // The inner TextField carries decoration (label + errorText); resolve it
+    // once and reuse for both reads.
+    final fieldId = subtree == null
+        ? source.inspectorId
+        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
+            source.inspectorId);
     try {
-      target.hint = await _readLabelText(source, scene, subtree);
+      target.hint = await _readDecoration(scene, fieldId, _labelExpr);
+    } on Object {
+      // best-effort
+    }
+    try {
+      target.error = await _readDecoration(scene, fieldId, _errorExpr);
     } on Object {
       // best-effort
     }
@@ -251,17 +269,13 @@ class InputEnricher implements SemanticEnricher {
     }
   }
 
-  /// Reads the field label. A [TextFormField] builds an inner [TextField], so
-  /// casting the source widget to TextField misses the label — we locate the
-  /// inner TextField in the subtree and read ITS decoration.
-  Future<String?> _readLabelText(
-      SceneNode source, Scene scene, Map<String, Object?>? subtree) async {
-    final fieldId = subtree == null
-        ? source.inspectorId
-        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
-            source.inspectorId);
+  /// Evaluates a decoration [expr] against the inner [fieldId] TextField. A
+  /// [TextFormField] builds an inner TextField, so [fieldId] is resolved from
+  /// the subtree rather than the source (which would be the FormField).
+  Future<String?> _readDecoration(
+      Scene scene, String fieldId, String expr) async {
     final v = await runtime.evaluateWithSelection(
-      expression: _labelExpr,
+      expression: expr,
       inspectorId: fieldId,
       groupName: scene.groupName,
     );
