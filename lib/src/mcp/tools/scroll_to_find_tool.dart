@@ -105,7 +105,9 @@ class ScrollToFindTool extends GlintTool {
           }
           try {
             final coord = await session.resolver.resolve(scene, hit.glintId!);
-            if (coord.hittable) {
+            // On-viewport is required: a hittable-but-scrolled-out target
+            // would send the agent straight back into an offViewport refusal.
+            if (coord.hittable && coord.centerOnViewport) {
               return StructuredResponse(
                 summary: 'found $criterion after $i scroll(s)',
                 data: {
@@ -152,7 +154,8 @@ class ScrollToFindTool extends GlintTool {
     if (seenInTree) {
       return StructuredResponse.error(
         summary: '$criterion appeared in the tree during scrolling but was never '
-            'hittable within $maxScrolls scroll(s) in $dirName — scroll limit hit',
+            'on-screen and hittable within $maxScrolls scroll(s) in $dirName — '
+            'scroll limit hit',
         errorKind: GlintErrorKind.scrollLimitReached,
         nextSteps: [
           'increase `maxScrolls` (currently $maxScrolls)',

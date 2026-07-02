@@ -54,6 +54,16 @@ class ResolvedCoord {
       nearestAncestorOpacity > 0 &&
       nearestAncestorVisible;
 
+  /// True when the resolved center lies inside the viewport — a gesture can
+  /// land there. Center goes through localToGlobal, so this is transform-safe.
+  bool get centerOnViewport =>
+      logicalViewSize.w > 0 &&
+      logicalViewSize.h > 0 &&
+      logicalCenter.x >= 0 &&
+      logicalCenter.y >= 0 &&
+      logicalCenter.x < logicalViewSize.w &&
+      logicalCenter.y < logicalViewSize.h;
+
   /// Non-fatal observations for [ActionResult.warnings].
   List<String> get warnings {
     final out = <String>[];
