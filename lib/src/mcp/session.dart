@@ -350,6 +350,50 @@ class GlintSession {
     }
   }
 
+  /// Reference point inside the primary scrollable, for scroll-displacement
+  /// detection: (glintId, logicalCenter). A fully-realized scrollable
+  /// (SingleChildScrollView) has an identical tree at every offset, so we
+  /// measure a descendant's physical shift instead. Null when there's no
+  /// scrollable or no resolvable descendant.
+  Future<({String glintId, double x, double y})?> probeScrollAnchor() async {
+    final scene = await reader.readSummary();
+    try {
+      final semantic = semanticizer.semanticize(scene);
+      final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
+      if (list == null) return null;
+      for (final n in list.walk()) {
+        final id = n.glintId;
+        if (id == null) continue;
+        try {
+          final c = await resolver.resolve(scene, id);
+          if (c.hasNonZeroBounds) {
+            return (glintId: id, x: c.logicalCenter.x, y: c.logicalCenter.y);
+          }
+        } on Object {
+          // unresolvable node — try the next descendant
+        }
+      }
+      return null;
+    } finally {
+      await scene.dispose();
+    }
+  }
+
+  /// Logical center of [glintId] now, or null if it's gone/unresolvable.
+  /// Paired with [probeScrollAnchor] to measure how far a scroll moved.
+  Future<({double x, double y})?> probeNodeCenter(String glintId) async {
+    final scene = await reader.readSummary();
+    try {
+      if (scene.findByGlintId(glintId) == null) return null;
+      final c = await resolver.resolve(scene, glintId);
+      return (x: c.logicalCenter.x, y: c.logicalCenter.y);
+    } on Object {
+      return null;
+    } finally {
+      await scene.dispose();
+    }
+  }
+
   // ── private ───────────────────────────────────────────────────────────────
 
   void _handleDisconnect() {

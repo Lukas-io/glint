@@ -92,6 +92,7 @@ class ScrollTool extends GlintTool {
     }
 
     final pre = returnScene ? await snapshotPreAction(session) : null;
+    final anchor = returnScene ? await session.probeScrollAnchor() : null;
 
     final vp = await session.probeViewport();
     final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
@@ -101,17 +102,54 @@ class ScrollTool extends GlintTool {
     if (returnScene && !response.isError) {
       final post = await readPostActionState(session, pre,
           includeSceneText: fetchScene);
+      final movedPx = await _anchorDisplacement(session, anchor, dir);
       if (post != null) {
+        final merged = mergeScrollSignal(post.changeCategory, movedPx);
         response = StructuredResponse(
           summary: response.summary,
           warnings: response.warnings,
           nextSteps: response.nextSteps,
           isError: response.isError,
-          data: {...?response.data, ...post.toData()},
+          data: {
+            ...?response.data,
+            ...post.toData(),
+            'changed': merged.changed,
+            'changeCategory': merged.category,
+            if (movedPx != null) 'scrolledPx': movedPx.round(),
+          },
         );
       }
     }
     return response;
+  }
+
+  /// How far the pre-scroll [anchor] moved along the scroll axis, or null when
+  /// there's no anchor or it's no longer resolvable (e.g. scrolled off a lazy
+  /// list — the tree-hash detector catches that case instead).
+  Future<double?> _anchorDisplacement(GlintSession session,
+      ({String glintId, double x, double y})? anchor, ScrollDirection dir) async {
+    if (anchor == null) return null;
+    final after = await session.probeNodeCenter(anchor.glintId);
+    if (after == null) return null;
+    final horizontal =
+        dir == ScrollDirection.left || dir == ScrollDirection.right;
+    return horizontal ? (after.x - anchor.x).abs() : (after.y - anchor.y).abs();
+  }
+
+  /// Below this a scroll didn't meaningfully move — treat as no scroll.
+  static const _movedThresholdPx = 2.0;
+
+  /// Merge the tree-hash change category with physical anchor movement. A
+  /// fully-realized scrollable's tree is identical at every offset, so the
+  /// hash reports 'nothing' even when content moved — promote that to
+  /// 'scrolled' when the anchor physically shifted.
+  static ({bool changed, String category}) mergeScrollSignal(
+      String treeCategory, double? movedPx) {
+    final moved = movedPx != null && movedPx > _movedThresholdPx;
+    if (treeCategory == 'nothing' && moved) {
+      return (changed: true, category: 'scrolled');
+    }
+    return (changed: treeCategory != 'nothing', category: treeCategory);
   }
 
   /// Keeps the whole gesture this far inside each screen edge — off-screen
