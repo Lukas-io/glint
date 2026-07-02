@@ -220,36 +220,58 @@ class InputEnricher implements SemanticEnricher {
     }
   }
 
+  // Arrow-only (the CFE eval rejects statement-block lambdas): read a
+  // TextField's labelText, falling back to hintText (placeholder).
+  static const _labelExpr =
+      '((w) => w is TextField ? (w.decoration?.labelText ?? '
+      'w.decoration?.hintText ?? "") : "")'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget)';
+
   Future<void> _enrichOne(
       SceneNode source, Scene scene, SemanticInput target) async {
+    // One subtree read serves both label and value lookups.
+    Map<String, Object?>? subtree;
     try {
-      target.hint = await _readLabelText(source, scene.groupName);
+      subtree = await inspector.getDetailsSubtree(
+        inspectorId: source.inspectorId,
+        groupName: scene.groupName,
+      );
+    } on Object {
+      // best-effort — fall back to the source node below
+    }
+    try {
+      target.hint = await _readLabelText(source, scene, subtree);
     } on Object {
       // best-effort
     }
     try {
-      target.currentValue = await _readCurrentValue(source, scene);
+      target.currentValue = await _readCurrentValue(scene, subtree);
     } on Object {
       // best-effort
     }
   }
 
-  Future<String?> _readLabelText(SceneNode source, String groupName) async {
+  /// Reads the field label. A [TextFormField] builds an inner [TextField], so
+  /// casting the source widget to TextField misses the label — we locate the
+  /// inner TextField in the subtree and read ITS decoration.
+  Future<String?> _readLabelText(
+      SceneNode source, Scene scene, Map<String, Object?>? subtree) async {
+    final fieldId = subtree == null
+        ? source.inspectorId
+        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
+            source.inspectorId);
     final v = await runtime.evaluateWithSelection(
-      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
-          ' as TextField).decoration?.labelText ?? ""',
-      inspectorId: source.inspectorId,
-      groupName: groupName,
+      expression: _labelExpr,
+      inspectorId: fieldId,
+      groupName: scene.groupName,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  Future<String?> _readCurrentValue(SceneNode source, Scene scene) async {
-    final subtree = await inspector.getDetailsSubtree(
-      inspectorId: source.inspectorId,
-      groupName: scene.groupName,
-    );
-    final editableId = _findEditableTextId(subtree);
+  Future<String?> _readCurrentValue(
+      Scene scene, Map<String, Object?>? subtree) async {
+    if (subtree == null) return null;
+    final editableId = _findWidgetId(subtree, const {'EditableText'});
     if (editableId == null) return null;
 
     final v = await runtime.evaluateWithSelection(
@@ -261,10 +283,11 @@ class InputEnricher implements SemanticEnricher {
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  String? _findEditableTextId(Map<String, Object?> node) {
+  /// First subtree node whose widget type is in [types], returning its valueId.
+  String? _findWidgetId(Map<String, Object?> node, Set<String> types) {
     final label = (node['description'] as String?) ?? '';
     final type = (node['widgetRuntimeType'] as String?) ?? '';
-    if (label == 'EditableText' || type == 'EditableText') {
+    if (types.contains(label) || types.contains(type)) {
       final id = node['valueId'] as String?;
       if (id != null && id.isNotEmpty) return id;
     }
@@ -272,7 +295,7 @@ class InputEnricher implements SemanticEnricher {
     if (kids is List) {
       for (final c in kids) {
         if (c is Map) {
-          final found = _findEditableTextId(c.cast<String, Object?>());
+          final found = _findWidgetId(c.cast<String, Object?>(), types);
           if (found != null) return found;
         }
       }
