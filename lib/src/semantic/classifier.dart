@@ -20,6 +20,7 @@ class ClassifierRegistry {
         PageClassifier(),
         AppBarClassifier(),
         InputClassifier(),
+        ToggleClassifier(),
         ButtonClassifier(),
         ListClassifier(),
         TextClassifier(),
@@ -44,7 +45,7 @@ class ClassifierRegistry {
 // Helpers shared by the classifiers below.
 // ---------------------------------------------------------------------------
 
-bool _labelOneOf(SceneNode n, Set<String> names) => names.contains(n.label);
+bool _labelOneOf(SceneNode n, Set<String> names) => names.contains(n.baseLabel);
 
 String? _firstTextIn(List<SemanticNode> nodes) {
   for (final n in nodes) {
@@ -136,6 +137,34 @@ class InputClassifier extends WidgetClassifier {
   }
 }
 
+/// Checkbox / Switch / Radio and their ListTile forms — tappable one-liners;
+/// a ListTile's inner toggle widget is absorbed, the tile is the tap target.
+class ToggleClassifier extends WidgetClassifier {
+  const ToggleClassifier();
+
+  @override
+  int get priority => 35;
+
+  static const _toggleLabels = {
+    'Checkbox',
+    'Switch',
+    'Radio',
+    'CupertinoSwitch',
+    'CupertinoCheckbox',
+    'CheckboxListTile',
+    'SwitchListTile',
+    'RadioListTile',
+  };
+
+  @override
+  bool matches(SceneNode node) => _labelOneOf(node, _toggleLabels);
+
+  @override
+  SemanticNode build(SceneNode node, List<SemanticNode> children) {
+    return SemanticButton(glintId: node.glintId, label: _firstTextIn(children));
+  }
+}
+
 class ButtonClassifier extends WidgetClassifier {
   const ButtonClassifier();
 
@@ -160,13 +189,18 @@ class ButtonClassifier extends WidgetClassifier {
   };
 
   @override
-  bool matches(SceneNode node) => _buttonLabels.contains(node.label);
+  bool matches(SceneNode node) => _labelOneOf(node, _buttonLabels);
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // Absorb Text into the label; keep Icon / Image as children so the
-    // IconEnricher can populate them post-classify.
-    final label = _firstTextIn(children);
+    // A tap-wrapper around rich content (keyboard-dismiss GestureDetector,
+    // tappable card) must keep its subtree — absorbing it blinds the agent.
+    if (_wrapsRichContent(children)) {
+      return SemanticButton(glintId: node.glintId, children: children);
+    }
+    // Leaf button: absorb caption text into the label; keep Icon / Image as
+    // children so the IconEnricher can populate them post-classify.
+    final label = _captionIn(children);
     final kept = children
         .where((c) => c is SemanticIcon || c is SemanticImage)
         .toList(growable: false);
@@ -175,6 +209,40 @@ class ButtonClassifier extends WidgetClassifier {
       label: label,
       children: kept,
     );
+  }
+
+  /// True when the subtree holds interactive/structural nodes or 3+ texts —
+  /// content, not a caption.
+  bool _wrapsRichContent(List<SemanticNode> children) {
+    var texts = 0;
+    for (final c in children) {
+      for (final n in c.walk()) {
+        if (n is SemanticInput ||
+            n is SemanticButton ||
+            n is SemanticList ||
+            n is SemanticPage ||
+            n is SemanticAppBar) {
+          return true;
+        }
+        if (n is SemanticText && ++texts > 2) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Caption label: up to two texts joined with ' · ' so a subtitle survives.
+  String? _captionIn(List<SemanticNode> nodes) {
+    final texts = <String>[];
+    void visit(List<SemanticNode> ns) {
+      for (final n in ns) {
+        if (texts.length >= 2) return;
+        if (n is SemanticText) texts.add(n.content);
+        visit(n.children);
+      }
+    }
+
+    visit(nodes);
+    return texts.isEmpty ? null : texts.join(' · ');
   }
 }
 
@@ -305,7 +373,7 @@ class ContainerClassifier extends WidgetClassifier {
   };
 
   @override
-  bool matches(SceneNode node) => _containerLabels.contains(node.label);
+  bool matches(SceneNode node) => _labelOneOf(node, _containerLabels);
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
