@@ -268,11 +268,14 @@ class Scene {
   /// accurate ModalRoute.settings.name. Deep nodes (inside ShellRoute inner
   /// navigators or PageView pages) sit inside nested routes whose settings.name
   /// is null or different from the outer GoRouter path.
-  List<SceneNode> addressableCandidates({int max = 5}) {
+  /// [within] restricts the walk to that subtree (e.g. the active page), so
+  /// probes can't land on a covered sibling route.
+  List<SceneNode> addressableCandidates({int max = 5, SceneNode? within}) {
+    final walkRoot = within ?? root;
     final seen = <String>{};
     final result = <SceneNode>[];
     // First pass: shallow (depth ≤ 12) user-code nodes, skipping platform views.
-    for (final n in root.walk().skip(1)) {
+    for (final n in walkRoot.walk().skip(1)) {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;
@@ -282,7 +285,7 @@ class Scene {
       if (n.createdByLocalProject) result.add(n);
     }
     // Second pass: any addressable node (deeper fallbacks).
-    for (final n in root.walk().skip(1)) {
+    for (final n in walkRoot.walk().skip(1)) {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;

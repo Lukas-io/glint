@@ -246,6 +246,44 @@ void main() {
     });
   });
 
+  group('selectActivePage', () {
+    final s = Semanticizer();
+
+    test('stacked navigator routes: last onstage page wins', () {
+      final home = SemanticPage(glintId: 'scaffold#home', body: const []);
+      final details = SemanticPage(glintId: 'scaffold#details', body: const []);
+      final tree = SemanticUnknown(
+        label: 'Navigator',
+        children: [home, details],
+      );
+      expect(s.selectActivePage(tree), same(details));
+    });
+
+    test('a page nested inside a page is never the route', () {
+      final tab = SemanticPage(glintId: 'scaffold#tab', body: const []);
+      final route = SemanticPage(glintId: 'scaffold#route', body: [
+        SemanticList(glintId: 'page_view', children: [tab]),
+      ]);
+      expect(s.selectActivePage(route), same(route));
+    });
+
+    test('offstage scaffolds (classified unknown) are not candidates', () {
+      final active = SemanticPage(glintId: 'scaffold#active', body: const []);
+      final tree = SemanticUnknown(label: 'IndexedStack', children: [
+        active,
+        SemanticUnknown(glintId: null, label: 'offstage'),
+      ]);
+      expect(s.selectActivePage(tree), same(active));
+    });
+
+    test('no page falls back to the given root', () {
+      final tree = SemanticUnknown(label: 'CustomApp', children: [
+        SemanticText(glintId: 't', content: 'x'),
+      ]);
+      expect(s.selectActivePage(tree), same(tree));
+    });
+  });
+
   group('ToggleClassifier', () {
     final reg = ClassifierRegistry.defaults();
 
