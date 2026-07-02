@@ -57,6 +57,10 @@ class OverlayEnricher implements SemanticEnricher {
     for (final n in root.walk()) {
       final l = n.label;
       if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
+      // Transient messages ride in an OverlayEntry too — flag them as such so
+      // the agent reads the message but doesn't treat it as a blocking modal.
+      if (l.contains('SnackBar')) return 'snackbar';
+      if (l.contains('Toast')) return 'toast';
       if (l.contains('Dialog') || l.contains('Alert')) return 'dialog';
     }
     return 'dialog';
