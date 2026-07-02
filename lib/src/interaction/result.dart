@@ -7,6 +7,7 @@ enum GlintErrorKind {
   backendToolError,
   unresolvedTarget,
   notHittable,
+  offViewport,
   geometryResolveError,
   // mcp-layer failures
   sessionNotAttached,

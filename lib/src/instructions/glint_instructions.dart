@@ -69,10 +69,11 @@ const _recovery = '''
 
 - `unresolvedTarget` — stale glintId; re-run `get_scene`.
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
-- `targetNeverReady` — armed ceiling hit. Raise `readyTimeoutMs` or dismiss cover.
-- `targetNotFound` — target never appeared in scroll_to_find; try a different direction.
-- `scrollLimitReached` — target appeared but stayed unhittable; raise `maxScrolls`.
-- `connectionLost` — VM connection dropped (hot restart?). Call `attach` again with same vmUri.
+- `offViewport` — scrolled off-screen; `scroll_to_find` it first.
+- `targetNeverReady` — ceiling hit. Raise `readyTimeoutMs` or dismiss cover.
+- `targetNotFound` — never appeared in scroll_to_find; try another direction.
+- `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
+- `connectionLost` — VM dropped (hot restart?). Re-`attach` with same vmUri.
 - `unsupportedBackendAction` — not wired on this platform (see Gotchas).
 - `backendToolError` — native tool exited non-zero; read `detail`.
 - `geometryResolveError` — inspector eval failed. Retry; else re-`attach`.
@@ -80,7 +81,7 @@ const _recovery = '''
 - `invalidArgument` — fix per tool description.
 - `internal` — glint bug. Surface `detail`.
 
-`hittable=false` is a warning by default. Pass `refuseNotHittable: true` on `tap` to fail loud.
+`hittable=false` warns by default; `refuseNotHittable: true` fails loud.
 ''';
 
 const _gotchas = '''

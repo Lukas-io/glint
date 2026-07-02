@@ -23,7 +23,9 @@ class TapTool extends GlintTool {
             'overlayAppeared/overlayDismissed/contentChanged/nothing). '
             'errorKind values: unresolvedTarget (glintId not found — re-run '
             'get_scene to get current ids), notHittable (covered by overlay/'
-            'absorber — dismiss it first), backendToolError (native tap failed). '
+            'absorber — dismiss it first), offViewport (target scrolled '
+            'off-screen — scroll_to_find it first), backendToolError '
+            '(native tap failed). '
             'With awaitReady: true: blocks until the target exists AND passes '
             'hit-test, then fires — use when targeting across screen transitions. '
             'ceilingMs controls the armed-intent timeout (default 5000).',
