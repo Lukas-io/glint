@@ -28,6 +28,7 @@ class SceneCompactor {
 
   /// Leaf framework plumbing — spacing, semantics, focus — pure noise to agents.
   static const _plumbingLabels = {
+    'offstage',
     'Gap',
     'SliverGap',
     '_RawGap',

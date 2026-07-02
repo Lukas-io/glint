@@ -50,6 +50,11 @@ class Semanticizer {
   }
 
   SemanticNode _classify(SceneNode node) {
+    // Offstage subtrees (hidden IndexedStack children, shell branches) must
+    // not surface content — the user cannot see or touch them.
+    if (node.isOffstage) {
+      return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
+    }
     final children = node.children
         .map(_classify)
         .expand(_compactor.expandChild)

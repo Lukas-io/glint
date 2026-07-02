@@ -73,12 +73,7 @@ class PageClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // Offstage Scaffolds (non-active IndexedStack children, GoRouter shell
-    // branches) have NaN geometry — return SemanticUnknown so hoistPage, which
-    // selects SemanticPage, skips them.
-    if (node.isOffstage) {
-      return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
-    }
+    // Offstage Scaffolds never reach here — Semanticizer short-circuits them.
     SemanticAppBar? appBar;
     final body = <SemanticNode>[];
     for (final c in children) {

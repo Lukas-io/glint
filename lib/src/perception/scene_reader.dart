@@ -48,24 +48,36 @@ class SceneReader {
 
   // ── offstage pruning (IndexedStack / GoRouter shell routes) ──────────────
 
-  /// Marks Scaffolds under an `offstage=true` [Offstage] (and their subtree)
-  /// [SceneNode.isOffstage] so id assignment, [firstAddressableId], [hoistPage]
-  /// and the classifier skip them. [Offstage] is filtered from the summary
-  /// tree, so we probe per-Scaffold rather than detect it structurally.
+  /// Probes hidden-subtree candidates and marks them [SceneNode.isOffstage] so
+  /// id assignment, [firstAddressableId], page selection and the classifier
+  /// skip them. Candidates: Scaffolds (GoRouter shell branches sit under
+  /// `Offstage`) and IndexedStack children (hidden via
+  /// `Visibility.maintain(visible:false)` since Flutter 3.7 — never Offstage).
+  /// Both wrappers are framework-created and filtered from the summary tree,
+  /// so we probe ancestors per candidate rather than detect structurally.
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
-    final scaffolds = root.walk().where((n) => n.label == 'Scaffold').toList();
-    if (scaffolds.isEmpty) return;
-    // Pick any addressable node for the selection, then check each Scaffold.
-    for (final scaffold in scaffolds) {
-      if (scaffold.inspectorId.isEmpty) continue;
+    final candidates = <SceneNode>{
+      ...root.walk().where((n) => n.baseLabel == 'Scaffold'),
+      ...root
+          .walk()
+          .where((n) => n.baseLabel == 'IndexedStack')
+          .expand((n) => n.children),
+    };
+    for (final candidate in candidates) {
+      if (candidate.inspectorId.isEmpty) continue;
+      if (candidate.isOffstage) continue;
       final result = await _runtime.evaluateWithSelection(
-        expression: '(WidgetInspectorService.instance.selection.currentElement!'
-            '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()',
-        inspectorId: scaffold.inspectorId,
+        expression:
+            '((WidgetInspectorService.instance.selection.currentElement!'
+            '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
+            ' || !(WidgetInspectorService.instance.selection.currentElement!'
+            '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true))'
+            '.toString()',
+        inspectorId: candidate.inspectorId,
         groupName: groupName,
       );
       if (result == 'true') {
-        for (final n in scaffold.walk()) {
+        for (final n in candidate.walk()) {
           n.isOffstage = true;
         }
       }
