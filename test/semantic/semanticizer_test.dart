@@ -434,6 +434,19 @@ void main() {
       expect(out, contains('> input email_field (email)'));
     });
 
+    test('a text with the tappable affordance renders with * (inline link)', () {
+      final link = SemanticText(glintId: 'signin', content: 'Sign in to account')
+        ..affordances.add(Affordance.tappable);
+      final plain = SemanticText(glintId: 'plain', content: 'Welcome');
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [link, plain]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('* text signin "Sign in to account"'));
+      expect(out, contains('- text plain "Welcome"'));
+    });
+
     test('input renders its validation error', () {
       final input = SemanticInput(glintId: 'email_field')
         ..hint = 'email'

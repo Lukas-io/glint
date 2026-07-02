@@ -194,6 +194,51 @@ class ToggleEnricher implements SemanticEnricher {
   }
 }
 
+/// Marks a [SemanticText] tappable when its RichText carries a
+/// [GestureRecognizer] on a span — inline links ("Sign in", Terms & Conditions,
+/// "Resend") that render as plain text but navigate on tap. Without this they
+/// show as static `-` and an agent can't discover them. Capped at [maxTexts]
+/// (one eval each); runs at full detail only.
+class LinkEnricher implements SemanticEnricher {
+  LinkEnricher({required this.runtime, this.maxTexts = 30});
+
+  final FlutterRuntime runtime;
+  final int maxTexts;
+
+  // Single-line (the CFE eval rejects newlines, not block bodies): true when
+  // any span in the RichText's InlineSpan tree has a recognizer.
+  static const _hasRecognizerExpr =
+      '((r) { if (r is! RichText) return false; var f = false; '
+      'r.text.visitChildren((s) { if (s is TextSpan && s.recognizer != null) f = true; return true; }); '
+      'return f; })'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget).toString()';
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final texts = scene.root
+        .walk()
+        .whereType<SemanticText>()
+        .where((t) => t.glintId != null && t.affordances.isEmpty)
+        .toList();
+    final budget = min(texts.length, maxTexts);
+    for (var i = 0; i < budget; i++) {
+      final node = texts[i];
+      final source = scene.sourceFor(node.glintId!);
+      if (source == null) continue;
+      try {
+        final r = await runtime.evaluateWithSelection(
+          expression: _hasRecognizerExpr,
+          inspectorId: source.inspectorId,
+          groupName: scene.sourceScene.groupName,
+        );
+        if (r == 'true') node.affordances.add(Affordance.tappable);
+      } on Object {
+        // best-effort
+      }
+    }
+  }
+}
+
 /// Reads `hint` (InputDecoration.labelText) and `currentValue` (live
 /// EditableText controller text) for each [SemanticInput]. Capped at [maxInputs].
 class InputEnricher implements SemanticEnricher {

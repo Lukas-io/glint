@@ -15,7 +15,7 @@ enum SceneMode { flutter, native }
 
 /// How far to enrich a scene: [structural] = overlays + route (cheap);
 /// [interactive] = also input values + toggle states (change-detection);
-/// [full] = also icon names (for rendering).
+/// [full] = also icon names + inline link detection (for rendering).
 enum SceneDetail { structural, interactive, full }
 
 /// Per-connection state: runtime, device, readers, interactor. Tools
@@ -73,6 +73,7 @@ class GlintSession {
   InputEnricher? _inputEnricher;
   ToggleEnricher? _toggleEnricher;
   IconEnricher? _iconEnricher;
+  LinkEnricher? _linkEnricher;
   NavigationEnricher? _navEnricher;
   ReadinessGate? _readinessGate;
   SettleDetector? _settleDetector;
@@ -128,6 +129,8 @@ class GlintSession {
       _requireAttached(_toggleEnricher, 'toggle enricher');
   IconEnricher get iconEnricher =>
       _requireAttached(_iconEnricher, 'icon enricher');
+  LinkEnricher get linkEnricher =>
+      _requireAttached(_linkEnricher, 'link enricher');
   NavigationEnricher get navEnricher =>
       _requireAttached(_navEnricher, 'nav enricher');
   ReadinessGate get readinessGate =>
@@ -160,6 +163,7 @@ class GlintSession {
     final inputEnricher = InputEnricher(runtime: runtime, inspector: inspector);
     final toggleEnricher = ToggleEnricher(runtime: runtime);
     final iconEnricher = IconEnricher(runtime: runtime);
+    final linkEnricher = LinkEnricher(runtime: runtime);
     final navEnricher = NavigationEnricher(runtime: runtime);
     final readinessGate = ReadinessGate(reader: reader, resolver: resolver);
     final settleDetector = SettleDetector(runtime: runtime, reader: reader);
@@ -176,6 +180,7 @@ class GlintSession {
     _inputEnricher = inputEnricher;
     _toggleEnricher = toggleEnricher;
     _iconEnricher = iconEnricher;
+    _linkEnricher = linkEnricher;
     _navEnricher = navEnricher;
     _readinessGate = readinessGate;
     _settleDetector = settleDetector;
@@ -235,6 +240,7 @@ class GlintSession {
       }
       if (detail == SceneDetail.full) {
         await iconEnricher.enrich(semantic);
+        await linkEnricher.enrich(semantic);
       }
       return await use(semantic);
     } finally {
@@ -264,6 +270,7 @@ class GlintSession {
     _inputEnricher = null;
     _toggleEnricher = null;
     _iconEnricher = null;
+    _linkEnricher = null;
     _navEnricher = null;
     _readinessGate = null;
     _settleDetector = null;
