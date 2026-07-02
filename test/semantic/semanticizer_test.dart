@@ -185,6 +185,96 @@ void main() {
     });
   });
 
+  group('ButtonClassifier wrapper behavior', () {
+    SemanticNode classifyTree(SceneNode root) {
+      final tree = _rooted(root);
+      StableIdGenerator().assignIds(tree);
+      return Semanticizer()._classifyForTest(tree);
+    }
+
+    test('full-page GestureDetector wrapper keeps its subtree', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [
+          _n('Column', children: [
+            _n('Text', textPreview: 'Welcome back'),
+            _n('TextField'),
+            _n('ElevatedButton', children: [_n('Text', textPreview: 'Continue')]),
+          ]),
+        ]),
+      ]));
+      final wrapper = root.walk().whereType<SemanticButton>().first;
+      expect(wrapper.children, isNotEmpty, reason: 'wrapper must not swallow content');
+      expect(root.walk().whereType<SemanticInput>(), isNotEmpty);
+      expect(root.walk().whereType<SemanticText>().map((t) => t.content),
+          contains('Welcome back'));
+      expect(root.walk().whereType<SemanticButton>().map((b) => b.label),
+          contains('Continue'));
+    });
+
+    test('GestureDetector around plain caption stays a leaf button', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [_n('Text', textPreview: 'AeTrust')]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.label, 'AeTrust');
+      expect(btn.children, isEmpty);
+    });
+
+    test('leaf button joins two caption texts', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('ElevatedButton', children: [
+          _n('Text', textPreview: 'Buy'),
+          _n('Text', textPreview: r'$4.99'),
+        ]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.label, r'Buy · $4.99');
+      expect(btn.children, isEmpty);
+    });
+
+    test('three or more texts marks the tappable as a wrapper', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [
+          _n('Text', textPreview: 'title'),
+          _n('Text', textPreview: 'subtitle'),
+          _n('Text', textPreview: 'caption'),
+        ]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.children, hasLength(3));
+      expect(btn.label, isNull);
+    });
+  });
+
+  group('ToggleClassifier', () {
+    final reg = ClassifierRegistry.defaults();
+
+    test('Checkbox becomes a tappable SemanticButton', () {
+      final n = reg.classifierFor(_n('Checkbox')).build(_n('Checkbox'), const []);
+      expect(n, isA<SemanticButton>());
+      expect(n.affordances, contains(Affordance.tappable));
+    });
+
+    test('CheckboxListTile absorbs its inner toggle and takes the title', () {
+      final tile = _n('CheckboxListTile', children: [
+        _n('Text', textPreview: 'Remember me'),
+        _n('Checkbox'),
+      ]);
+      final tree = _rooted(_n('Scaffold', children: [tile]));
+      StableIdGenerator().assignIds(tree);
+      final root = Semanticizer()._classifyForTest(tree);
+      final buttons = root.walk().whereType<SemanticButton>().toList();
+      expect(buttons, hasLength(1), reason: 'inner Checkbox is absorbed');
+      expect(buttons.single.label, 'Remember me');
+    });
+
+    test('generic runtime types match via baseLabel', () {
+      final radio = _n('Radio<String>');
+      final n = reg.classifierFor(radio).build(radio, const []);
+      expect(n, isA<SemanticButton>());
+    });
+  });
+
   group('SceneCompactor', () {
     const c = SceneCompactor();
 
