@@ -353,6 +353,8 @@ class ContainerClassifier extends WidgetClassifier {
     'MaterialApp',
     'WidgetsApp',
     'CupertinoApp',
+    'SnackBar',
+    'MaterialBanner',
     'Theme',
     'DefaultTextStyle',
     'MediaQuery',
@@ -414,6 +416,10 @@ class ContainerClassifier extends WidgetClassifier {
         'Column' => 'column',
         'Stack' || 'IndexedStack' => 'stack',
         'Form' => 'form',
+        // Transient messages — the agent should read them but not treat them
+        // as permanent UI or a blocking modal.
+        'SnackBar' => 'snackbar (transient)',
+        'MaterialBanner' => 'banner (transient)',
         _ => null,
       };
 }
