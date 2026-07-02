@@ -246,6 +246,28 @@ void main() {
     });
   });
 
+  group('offstage subtrees', () {
+    test('contribute nothing to the scene', () {
+      final tree = _rooted(_n('Scaffold', children: [
+        _n('IndexedStack', children: [
+          _n('Column', children: [_n('Text', textPreview: 'active tab')]),
+          _n('Column', children: [_n('Text', textPreview: 'hidden tab')]),
+        ]),
+      ]));
+      StableIdGenerator().assignIds(tree);
+      final stack =
+          tree.walk().firstWhere((n) => n.label == 'IndexedStack');
+      for (final n in stack.children[1].walk()) {
+        n.isOffstage = true;
+      }
+      final root = Semanticizer()._classifyForTest(tree);
+      final texts =
+          root.walk().whereType<SemanticText>().map((t) => t.content);
+      expect(texts, contains('active tab'));
+      expect(texts, isNot(contains('hidden tab')));
+    });
+  });
+
   group('selectActivePage', () {
     final s = Semanticizer();
 
@@ -446,20 +468,11 @@ void main() {
   });
 }
 
-// Test-only access to Semanticizer's classify pipeline so we can run it
-// against a hand-built tree without a real Scene.
+// Test-only entry: run the real classify pipeline (via classifyNode) against
+// a hand-built tree without a real Scene, then hoist like semanticize() does.
 extension on Semanticizer {
   SemanticNode _classifyForTest(SceneNode root) {
-    final classified = _classifyRec(root);
-    return const SceneCompactor().hoistPage(classified);
-  }
-
-  SemanticNode _classifyRec(SceneNode node) {
-    final children = node.children
-        .map(_classifyRec)
-        .expand(const SceneCompactor().expandChild)
-        .toList();
-    return ClassifierRegistry.defaults().classifierFor(node).build(node, children);
+    return const SceneCompactor().hoistPage(classifyNode(root));
   }
 }
 
