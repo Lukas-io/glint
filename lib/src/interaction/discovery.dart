@@ -287,10 +287,31 @@ class DeviceDiscovery {
     return null;
   }
 
+  // ── app identity for the CORRELATED project (precise) ────────────────────
+  /// (CFBundleIdentifier, display name) from the app flutter built for
+  /// [projectDir]. Tied to the exact project behind our VM ([projectDirForVm]),
+  /// so it can't grab a different app that also ran on the device. Null when no
+  /// built product exists (e.g. attached to an app we didn't build here).
+  Future<(String?, String?)?> appInfoForProject(String projectDir) async {
+    for (final variant in const ['iphonesimulator', 'iphoneos']) {
+      final appDir = '$projectDir/build/ios/$variant/Runner.app';
+      if (!File('$appDir/Info.plist').existsSync()) continue;
+      final info = await _readBundleInfo(appDir);
+      if (info != null && info.$1 != null) return info;
+    }
+    return null;
+  }
+
   // ── app identity for a known device (bundle id, for kill/identity) ────────
   /// (CFBundleIdentifier, display name) of the user app running on iOS [udid],
-  /// found by its `Containers/Bundle/Application/…app` process — independent of
-  /// the flaky VM-port correlation, since the device id is already known.
+  /// found by its `Containers/Bundle/Application/…app` process — device-global,
+  /// NOT correlated to our VM. Fallback only, for when the project dir is
+  /// unknown; prefer [appInfoForProject].
+  ///
+  /// Returns null when MORE THAN ONE distinct app is running on the sim: the
+  /// scan can't tell which one owns the caller's VM, and a wrong bundleId would
+  /// make kill_app terminate the wrong app. Callers fall back to the VM's
+  /// authoritative package name instead of a guessed identity.
   Future<(String?, String?)?> appInfoForDevice(String udid) async {
     final ProcessResult ps;
     try {
@@ -299,16 +320,25 @@ class DeviceDiscovery {
       return null;
     }
     if (ps.exitCode != 0) return null;
+    final appPaths = appBundlePathsForDevice(ps.stdout as String, udid);
+    if (appPaths.length != 1) return null; // none, or ambiguous
+    return await _readBundleInfo(appPaths.first);
+  }
+
+  /// Distinct `…app` bundle paths for [udid] found in `ps` [output]. More than
+  /// one means multiple apps share the sim — the caller treats that as
+  /// ambiguous. Static + pure so it's unit-testable without a live `ps`.
+  static List<String> appBundlePathsForDevice(String output, String udid) {
     final re = RegExp(
       '(/\\S*/CoreSimulator/Devices/$udid/data/Containers/'
       'Bundle/Application/[^/]+/[^/]+\\.app)',
     );
-    for (final line in (ps.stdout as String).split('\n')) {
+    final appPaths = <String>{};
+    for (final line in output.split('\n')) {
       final appPath = re.firstMatch(line)?.group(1);
-      if (appPath == null) continue;
-      return await _readBundleInfo(appPath);
+      if (appPath != null) appPaths.add(appPath);
     }
-    return null;
+    return appPaths.toList();
   }
 
   // ── connected Android devices / emulators ────────────────────────────────
