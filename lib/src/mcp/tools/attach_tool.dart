@@ -349,13 +349,21 @@ class AttachTool extends GlintTool {
           : null;
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
-      // App identity: package from the VM, plus display name / bundle id. The
-      // bundle id comes from correlation, else the running app's bundle on the
-      // (already-known) device — needed for kill_app's terminate.
+      // Project dir behind our VM (port→DDS-cwd correlation) — the anchor for
+      // app identity and relaunch. Resolved before identity so bundle id/name
+      // come from OUR built app, not a different app that also ran here.
+      final projectDir = await discovery.projectDirForVm(vmUri);
+
+      // App identity: package from the VM, plus display name / bundle id. Prefer
+      // the project-correlated built app; fall back to a device scan only when
+      // the project is unknown. Needed for kill_app's terminate.
       final package = _packageName(probe.rootLibraryUri);
       final iosInfo = platform == DevicePlatform.ios &&
               (link?.bundleId == null || link?.displayName == null)
-          ? await discovery.appInfoForDevice(deviceId)
+          ? (projectDir != null
+                  ? await discovery.appInfoForProject(projectDir)
+                  : null) ??
+              await discovery.appInfoForDevice(deviceId)
           : null;
       final bundleId = link?.bundleId ?? iosInfo?.$1;
       final displayName = link?.displayName ?? iosInfo?.$2;
@@ -368,7 +376,6 @@ class AttachTool extends GlintTool {
       session.attachedBundleId = bundleId; // for kill_app
 
       // Remember this attach so a future cold start can relaunch it.
-      final projectDir = await discovery.projectDirForVm(vmUri);
       final appKey = package ?? _basename(projectDir) ?? link?.appName;
       if (appKey != null) {
         final now = DateTime.now();
