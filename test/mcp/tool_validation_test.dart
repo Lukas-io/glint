@@ -123,4 +123,16 @@ void main() {
       expect(s['errorKind'], 'sessionNotAttached');
     });
   });
+
+  group('resolve (unattached session)', () {
+    test('falls through to sessionNotAttached, not internal', () async {
+      const tool = ResolveTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'resolve', arguments: const {'glintId': 'x'}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached');
+    });
+  });
 }

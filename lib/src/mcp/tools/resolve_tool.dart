@@ -1,5 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
+import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -40,6 +42,13 @@ class ResolveTool extends GlintTool {
 
     final scene = await session.reader.readSummary();
     try {
+      if (scene.findByGlintId(glintId) == null) {
+        return StructuredResponse.error(
+          summary: 'no node with glintId "$glintId" in the current scene',
+          errorKind: GlintErrorKind.unresolvedTarget,
+          nextSteps: const ['re-run get_scene to read current glintIds'],
+        );
+      }
       final c = await session.resolver.resolve(scene, glintId);
       return StructuredResponse(
         summary: 'resolved $glintId at (${c.physicalCenter.x}, '
@@ -47,6 +56,19 @@ class ResolveTool extends GlintTool {
             '(painted=${c.painted}, hittable=${c.hittable})',
         warnings: c.warnings,
         data: c.toJson(),
+      );
+    } on GeometryResolveError catch (e) {
+      // Same failure the interactor maps cleanly — resolve must not leak it as
+      // a raw `internal` stack trace. A non-string eval usually means the node
+      // has no usable geometry (offstage/zero-size) or the app's VM is wedged.
+      return StructuredResponse.error(
+        summary: 'could not resolve geometry for $glintId',
+        errorKind: GlintErrorKind.geometryResolveError,
+        detail: e.message,
+        nextSteps: const [
+          'the element may be offstage or zero-size — get_scene to confirm it is on screen',
+          'if the app just threw or hot-reloaded, its VM may be wedged — re-attach or hot-restart',
+        ],
       );
     } finally {
       await scene.dispose();
