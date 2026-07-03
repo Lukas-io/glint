@@ -1,5 +1,23 @@
 import '../../semantic.dart';
+import 'envelope.dart';
 import 'session.dart';
+
+/// When [returnScene] and [response] is a success, settle + read the post-action
+/// scene and merge {changed, changeCategory, [postScene]} into it. The shared
+/// tail every gesture tool ran inline. Returns [response] unchanged in device
+/// mode's error/no-scene cases (readPostActionState returns null).
+Future<StructuredResponse> appendPostAction(
+  GlintSession session,
+  StructuredResponse response,
+  SceneSnapshot? pre, {
+  required bool returnScene,
+  required bool fetchScene,
+}) async {
+  if (!returnScene || response.isError) return response;
+  final post =
+      await readPostActionState(session, pre, includeSceneText: fetchScene);
+  return post == null ? response : response.mergeData(post.toData());
+}
 
 /// Lightweight snapshot of observable scene state for change detection.
 class SceneSnapshot {

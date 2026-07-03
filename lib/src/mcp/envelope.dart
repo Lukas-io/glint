@@ -64,6 +64,31 @@ class StructuredResponse {
   final Map<String, Object?>? data;
   final bool isError;
 
+  /// Returns a copy with the given fields replaced — so callers augmenting a
+  /// response don't re-list all five fields by hand.
+  StructuredResponse copyWith({
+    String? summary,
+    List<String>? warnings,
+    List<String>? nextSteps,
+    Map<String, Object?>? data,
+    bool? isError,
+  }) =>
+      StructuredResponse(
+        summary: summary ?? this.summary,
+        warnings: warnings ?? this.warnings,
+        nextSteps: nextSteps ?? this.nextSteps,
+        data: data ?? this.data,
+        isError: isError ?? this.isError,
+      );
+
+  /// Merges [extra] into [data] (extra keys win).
+  StructuredResponse mergeData(Map<String, Object?> extra) =>
+      copyWith(data: {...?data, ...extra});
+
+  /// Appends [extra] to [warnings] (no-op when empty).
+  StructuredResponse addWarnings(List<String> extra) =>
+      extra.isEmpty ? this : copyWith(warnings: [...warnings, ...extra]);
+
   String renderText() {
     final buf = StringBuffer(summary);
     // Surface the first line of detail on errors so agents see the real reason

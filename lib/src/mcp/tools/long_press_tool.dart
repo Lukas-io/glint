@@ -103,20 +103,8 @@ class LongPressTool extends GlintTool {
       );
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
-      if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
-        if (post != null) {
-          response = StructuredResponse(
-            summary: response.summary,
-            warnings: response.warnings,
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
-          );
-        }
-      }
-      return response;
+      return appendPostAction(session, response, pre,
+          returnScene: returnScene, fetchScene: fetchScene);
     } finally {
       await scene.dispose();
     }

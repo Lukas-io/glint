@@ -75,13 +75,8 @@ Future<ArmingOutcome> maybeAwaitReady({
 /// Wraps an action's [StructuredResponse] with armed metadata. Use after
 /// the action fires when [arming] reports ready.
 StructuredResponse withArmedMetadata(
-    StructuredResponse response, ArmingReady arming) {
-  return StructuredResponse(
-    summary:
-        'armed (${arming.attempts} polls / ${arming.elapsedMs}ms) — ${response.summary}',
-    warnings: response.warnings,
-    nextSteps: response.nextSteps,
-    data: {...?response.data, 'armed': arming.toJson()},
-    isError: response.isError,
-  );
-}
+        StructuredResponse response, ArmingReady arming) =>
+    response.mergeData({'armed': arming.toJson()}).copyWith(
+      summary: 'armed (${arming.attempts} polls / ${arming.elapsedMs}ms) — '
+          '${response.summary}',
+    );

@@ -101,6 +101,34 @@ void main() {
     });
   });
 
+  group('StructuredResponse copy helpers', () {
+    final base = StructuredResponse(
+      summary: 'ok',
+      warnings: const ['w1'],
+      nextSteps: const ['n1'],
+      data: const {'a': 1},
+    );
+
+    test('copyWith replaces only the given fields', () {
+      final c = base.copyWith(summary: 'changed', data: const {'b': 2});
+      expect(c.summary, 'changed');
+      expect(c.data, const {'b': 2});
+      expect(c.warnings, const ['w1'], reason: 'untouched fields carry over');
+      expect(c.nextSteps, const ['n1']);
+    });
+
+    test('mergeData unions into data, new keys win', () {
+      final c = base.mergeData(const {'a': 9, 'b': 2});
+      expect(c.data, const {'a': 9, 'b': 2});
+      expect(c.summary, 'ok');
+    });
+
+    test('addWarnings appends; empty is a no-op returning the same instance', () {
+      expect(base.addWarnings(const ['w2']).warnings, const ['w1', 'w2']);
+      expect(identical(base.addWarnings(const []), base), isTrue);
+    });
+  });
+
   group('StructuredResponse.renderText', () {
     test('plain summary with no warnings or next steps', () {
       final r = StructuredResponse(summary: 'tapped fab');
