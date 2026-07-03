@@ -297,7 +297,26 @@ class AttachTool extends GlintTool {
       final DeviceTarget device;
       switch (platform) {
         case DevicePlatform.android:
-          device = AndroidDevice(serial: deviceId, adbPath: adbPath);
+          // Probe the viewport for the real DPR — raw x,y gestures pass logical
+          // points and adb takes physical pixels, so without the scale a
+          // coordinate tap silently lands in the wrong place (glintId gestures
+          // are unaffected: the resolver already yields physical px).
+          final baseMs = session.config.attachProbeTimeoutMs;
+          final timeoutMs = launchedDeviceId != null && baseMs < 30000
+              ? 30000
+              : baseMs;
+          final vp = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          if (vp == null) {
+            warnings.add(
+              'could not probe the Android viewport — raw x,y gestures may be '
+              'mis-scaled; glintId gestures are unaffected',
+            );
+          }
+          device = AndroidDevice(
+            serial: deviceId,
+            adbPath: adbPath,
+            devicePixelRatio: vp?.dpr ?? 1.0,
+          );
         case DevicePlatform.ios:
           final bridgePath =
               (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
