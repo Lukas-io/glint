@@ -31,22 +31,24 @@ class StructuredResponse {
     );
   }
 
-  /// Builds a response from an [ActionResult]. When [detail] is false
-  /// (the default), verbose geometry fields (painted, hittable, physicalCenter)
-  /// are omitted — the agent only needs `ok` to continue. Use `detail:true`
-  /// on the tool call to get the full geometry.
+  /// Builds a response from an [ActionResult]. The envelope already carries
+  /// `summary`/`warnings`/`nextSteps` at the top level, so those are dropped
+  /// from `data` rather than duplicated. Geometry (painted, hittable,
+  /// physicalCenter) is omitted unless [detail] is true — the agent only needs
+  /// `ok` + the changed-signal to continue. The failure reason is routed to the
+  /// shared `detail` key so it surfaces in prose and the action log.
   factory StructuredResponse.fromActionResult(
     ActionResult r, {
     bool detail = false,
   }) {
-    final json = r.toJson();
-    final data = detail
-        ? json
-        : {
-            for (final entry in json.entries)
-              if (!const {'painted', 'hittable', 'physicalCenter'}.contains(entry.key))
-                entry.key: entry.value,
-          };
+    const dup = {'summary', 'warnings', 'nextSteps', 'error'};
+    const geometry = {'painted', 'hittable', 'physicalCenter'};
+    final data = <String, Object?>{
+      for (final e in r.toJson().entries)
+        if (!dup.contains(e.key) && (detail || !geometry.contains(e.key)))
+          e.key: e.value,
+    };
+    if (r.error != null) data['detail'] = r.error;
     return StructuredResponse(
       summary: r.summary,
       warnings: r.warnings,

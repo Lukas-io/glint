@@ -54,6 +54,51 @@ void main() {
       expect(env.isError, isTrue);
       expect(env.data?['errorKind'], 'unresolvedTarget');
     });
+
+    test('routes the failure reason to detail so renderText shows it', () {
+      final result = ActionResult.failure(
+        action: const Tap(SymbolicTarget('x')),
+        summary: 'tap x',
+        errorKind: GlintErrorKind.notHittable,
+        error: 'an absorber covers the target',
+      );
+      final env = StructuredResponse.fromActionResult(result);
+      expect(env.data?['detail'], 'an absorber covers the target');
+      expect(env.data?.containsKey('error'), isFalse,
+          reason: 'error is folded into detail, not duplicated');
+      expect(env.renderText(), contains('detail: an absorber covers'));
+    });
+
+    test('does not duplicate summary/warnings/nextSteps inside data', () {
+      final result = ActionResult.success(
+        action: const Tap(SymbolicTarget('foo')),
+        summary: 'tapped',
+        warnings: const ['w'],
+        nextSteps: const ['n'],
+      );
+      final data = StructuredResponse.fromActionResult(result).data!;
+      expect(data.containsKey('summary'), isFalse);
+      expect(data.containsKey('warnings'), isFalse);
+      expect(data.containsKey('nextSteps'), isFalse);
+      expect(data['ok'], isTrue, reason: 'ok stays — structuredContent needs it');
+    });
+
+    test('geometry stays out unless detail:true', () {
+      final result = ActionResult.success(
+        action: const Tap(SymbolicTarget('foo')),
+        summary: 'tapped',
+        physicalCenter: (x: 10, y: 20),
+        devicePixelRatio: 3,
+        painted: true,
+        hittable: true,
+      );
+      final lean = StructuredResponse.fromActionResult(result).data!;
+      expect(lean.containsKey('painted'), isFalse);
+      expect(lean.containsKey('physicalCenter'), isFalse);
+      final full = StructuredResponse.fromActionResult(result, detail: true).data!;
+      expect(full['painted'], isTrue);
+      expect(full['physicalCenter'], isNotNull);
+    });
   });
 
   group('StructuredResponse.renderText', () {
