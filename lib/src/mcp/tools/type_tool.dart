@@ -34,7 +34,10 @@ class TypeTool extends GlintTool {
               description:
                   'Only meaningful with `focus`: block until the focus target is hittable.',
             ),
-            'readyTimeoutMs': Schema.int(),
+            'readyTimeoutMs': Schema.int(
+              description:
+                  'Ceiling for `awaitReady` on the focus field. Default 5000.',
+            ),
             'returnScene': Schema.bool(
               description:
                   'After typing, settle and return the new scene plus changed '

@@ -61,7 +61,8 @@ class SessionTool extends GlintTool {
       case 'close':
         final s = mgr.close(seq);
         if (s == null) {
-          return _bad('no active session to close');
+          return _bad('no active session to close',
+              const ['open one first: session op:open name:"..."']);
         }
         return StructuredResponse(
           summary: 'closed session "${s.name}" (id=${s.id}); '
@@ -75,7 +76,10 @@ class SessionTool extends GlintTool {
           return _bad('op=note requires `text`');
         }
         final ok = mgr.note(text);
-        if (!ok) return _bad('no active session to note');
+        if (!ok) {
+          return _bad('no active session to note',
+              const ['open one first: session op:open name:"..."']);
+        }
         return StructuredResponse(
           summary: 'noted: $text',
           data: {'active': mgr.active?.toJson()},
@@ -123,8 +127,10 @@ class SessionTool extends GlintTool {
     }
   }
 
-  StructuredResponse _bad(String msg) => StructuredResponse.error(
+  StructuredResponse _bad(String msg, [List<String> nextSteps = const []]) =>
+      StructuredResponse.error(
         summary: msg,
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: nextSteps,
       );
 }

@@ -86,6 +86,10 @@ class DragTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'drag needs either fromGlintId + toGlintId, or x1,y1,x2,y2',
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'pass fromGlintId + toGlintId (from get_scene), or all four of '
+              'x1,y1,x2,y2',
+        ],
       );
     }
     final armed = (args['awaitReady'] as bool?) ?? false;
