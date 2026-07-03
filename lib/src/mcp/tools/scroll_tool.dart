@@ -6,6 +6,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 enum ScrollDirection { up, down, left, right }
 
@@ -60,9 +61,7 @@ class ScrollTool extends GlintTool {
     final returnScene = (args['returnScene'] as bool?) ?? true;
     final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
-    final dir = ScrollDirection.values
-        .where((d) => d.name == dirName)
-        .firstOrNull;
+    final dir = enumByName(ScrollDirection.values, dirName);
     if (dir == null) {
       return StructuredResponse.error(
         summary: 'unknown scroll direction: $dirName',

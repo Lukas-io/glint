@@ -6,6 +6,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 class TypeTool extends GlintTool {
   const TypeTool();
@@ -62,14 +63,9 @@ class TypeTool extends GlintTool {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final detail = (args['detail'] as bool?) ?? false;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
+    final t = readTargetedArgs(args, session.config);
 
-    final pre = returnScene ? await snapshotPreAction(session) : null;
+    final pre = t.returnScene ? await snapshotPreAction(session) : null;
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -78,8 +74,8 @@ class TypeTool extends GlintTool {
       final arming = await maybeAwaitReady(
         session: session,
         glintId: focus,
-        awaitReady: armed,
-        ceilingMs: ceilingMs,
+        awaitReady: t.awaitReady,
+        ceilingMs: t.readyTimeoutMs,
         toolLabel: 'type:focus',
       );
       if (arming is ArmingFailed) return arming.envelope;
@@ -108,13 +104,14 @@ class TypeTool extends GlintTool {
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(scene, TypeText(text));
-      var response = StructuredResponse.fromActionResult(result, detail: detail)
-          .addWarnings(warnings);
+      var response =
+          StructuredResponse.fromActionResult(result, detail: t.detail)
+              .addWarnings(warnings);
       if (focusArming != null) response = withArmedMetadata(response, focusArming);
 
-      if (returnScene && !response.isError) {
+      if (t.returnScene && !response.isError) {
         final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
+            includeSceneText: t.fetchScene);
         if (post != null) {
           // A successful type always changes the field's value → contentChanged.
           // 'nothing' with no `focus` means the text landed nowhere — call it

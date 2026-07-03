@@ -4,6 +4,7 @@ import '../../../interaction.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// iOS Xcode 26: lock + unlock + home all wired. Others
 /// (back, volumeUp/Down, appSwitcher) raise UnsupportedBackendAction.
@@ -37,9 +38,7 @@ class HardwareButtonTool extends GlintTool {
     final args = request.arguments ?? const {};
     final name = args['button']! as String;
 
-    final button = HardwareButton.values
-        .where((b) => b.name == name)
-        .firstOrNull;
+    final button = enumByName(HardwareButton.values, name);
     if (button == null) {
       return StructuredResponse.error(
         summary: 'unknown hardware button: $name',

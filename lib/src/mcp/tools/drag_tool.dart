@@ -7,6 +7,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// Mechanically a swipe with a longer default hold so listeners recognise
 /// it as drag rather than fling.
@@ -65,18 +66,16 @@ class DragTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = (args['durationMs'] as int?) ?? 800;
+    final t = readTargetedArgs(args, session.config);
 
-    final x1 = (args['x1'] as num?)?.toDouble();
-    final y1 = (args['y1'] as num?)?.toDouble();
-    final x2 = (args['x2'] as num?)?.toDouble();
-    final y2 = (args['y2'] as num?)?.toDouble();
-    if (x1 != null && y1 != null && x2 != null && y2 != null) {
+    final seg = readSegment(args);
+    if (seg != null) {
       return withCoordinateChange(
         session,
-        () => coordinateSwipe(session, x1, y1, x2, y2, durationMs,
+        () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs,
             verb: 'dragged'),
-        returnScene: (args['returnScene'] as bool?) ?? true,
-        fetchScene: (args['fetchScene'] as bool?) ?? false,
+        returnScene: t.returnScene,
+        fetchScene: t.fetchScene,
       );
     }
 
@@ -92,19 +91,14 @@ class DragTool extends GlintTool {
         ],
       );
     }
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
-    final pre = returnScene ? await snapshotPreAction(session) : null;
+    final pre = t.returnScene ? await snapshotPreAction(session) : null;
 
     final arming = await maybeAwaitReady(
       session: session,
       glintId: from,
-      awaitReady: armed,
-      ceilingMs: ceilingMs,
+      awaitReady: t.awaitReady,
+      ceilingMs: t.readyTimeoutMs,
       toolLabel: 'drag',
     );
     if (arming is ArmingFailed) return arming.envelope;
@@ -119,7 +113,7 @@ class DragTool extends GlintTool {
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
       return appendPostAction(session, response, pre,
-          returnScene: returnScene, fetchScene: fetchScene);
+          returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
       await scene.dispose();
     }
