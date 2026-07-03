@@ -71,8 +71,13 @@ class DragTool extends GlintTool {
     final x2 = (args['x2'] as num?)?.toDouble();
     final y2 = (args['y2'] as num?)?.toDouble();
     if (x1 != null && y1 != null && x2 != null && y2 != null) {
-      return coordinateSwipe(session, x1, y1, x2, y2, durationMs,
-          verb: 'dragged');
+      return withCoordinateChange(
+        session,
+        () => coordinateSwipe(session, x1, y1, x2, y2, durationMs,
+            verb: 'dragged'),
+        returnScene: (args['returnScene'] as bool?) ?? true,
+        fetchScene: (args['fetchScene'] as bool?) ?? false,
+      );
     }
 
     final from = args['fromGlintId'] as String?;
