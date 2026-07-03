@@ -177,6 +177,15 @@ class CoordinateResolver {
       throw GeometryResolveError('evaluate(geometry) returned non-string');
     }
     final decoded = jsonDecode(json) as Map<String, Object?>;
+    // A ModalBarrier blocks the base screen through its own hit-testing, not an
+    // AbsorbPointer/IgnorePointer ancestor — so the eval reports base nodes as
+    // hittable while a modal actually covers them. Fold in the barrier the
+    // scene already detected: a base-tree node under a barrier is not hittable.
+    final evalHittable = decoded['hit'] as bool;
+    final id = node.glintId;
+    final blockedByBarrier = scene.hasBarrierOverlay &&
+        id != null &&
+        !scene.isInOverlay(id);
     return ResolvedCoord(
       glintId: node.glintId!,
       logicalCenter: (
@@ -196,7 +205,7 @@ class CoordinateResolver {
       ),
       nearestAncestorOpacity: (decoded['op'] as num).toDouble(),
       nearestAncestorVisible: decoded['vis'] as bool,
-      hittable: decoded['hit'] as bool,
+      hittable: evalHittable && !blockedByBarrier,
     );
   }
 }
@@ -219,12 +228,15 @@ class GeometryExpr {
       '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
   static const _ancVisible =
       '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
-  // On Dart 3.12 the CFE rejects `HitTestResult` in synthetic eval scopes even
-  // though the type is re-exported via package:flutter/widgets.dart. Same root
-  // cause as the attach probe (fixed separately). We replace the full hit-test
-  // with a widget-tree ancestor walk: nearest AbsorbPointer / IgnorePointer.
-  // Trade-off: overlay-based coverings (e.g. opaque GestureDetector in a modal)
-  // are not detected, but the common cases are covered and no type is named.
+  // A true hit-test is unreachable here: the eval runs in the app's root
+  // library, where `HitTestResult`/`GestureBinding` don't resolve (RPCError 113,
+  // confirmed empirically — they're only re-exported, not declared, by the
+  // imported libraries). So hittability is approximated in two layers: this
+  // ancestor walk (nearest AbsorbPointer / IgnorePointer), plus a scene-level
+  // ModalBarrier check in CoordinateResolver (a barrier blocks via its own hit
+  // test, not an absorber ancestor). Residual gap: a plain opaque sibling drawn
+  // on top in the same layer, with no barrier, can still read as hittable —
+  // only a real hit-test would catch that.
   static const _hittable =
       '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
