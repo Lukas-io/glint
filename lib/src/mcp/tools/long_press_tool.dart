@@ -63,7 +63,12 @@ class LongPressTool extends GlintTool {
     final x = (args['x'] as num?)?.toDouble();
     final y = (args['y'] as num?)?.toDouble();
     if (x != null && y != null) {
-      return coordinateLongPress(session, x, y, durationMs);
+      return withCoordinateChange(
+        session,
+        () => coordinateLongPress(session, x, y, durationMs),
+        returnScene: (args['returnScene'] as bool?) ?? true,
+        fetchScene: (args['fetchScene'] as bool?) ?? false,
+      );
     }
 
     final glintId = args['glintId'] as String?;

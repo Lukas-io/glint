@@ -81,9 +81,18 @@ class TapTool extends GlintTool {
     final args = request.arguments ?? const {};
 
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
+    // In Flutter mode it still gets a changed-signal so raw x,y taps aren't
+    // blind about whether anything happened.
     final x = (args['x'] as num?)?.toDouble();
     final y = (args['y'] as num?)?.toDouble();
-    if (x != null && y != null) return coordinateTap(session, x, y);
+    if (x != null && y != null) {
+      return withCoordinateChange(
+        session,
+        () => coordinateTap(session, x, y),
+        returnScene: (args['returnScene'] as bool?) ?? true,
+        fetchScene: (args['fetchScene'] as bool?) ?? false,
+      );
+    }
 
     final glintId = args['glintId'] as String?;
     if (glintId == null) {
