@@ -25,31 +25,15 @@ class AttachTool extends GlintTool {
   Tool get definition => Tool(
         name: 'attach',
         description:
-            'Connect glint to a running Flutter debug app. Must be called once '
-            'before any other tool. ALL ARGS OPTIONAL — call with no args and '
-            'glint discovers the app, derives platform from the VM, and '
-            'correlates the app to the exact simulator it runs on (correct even '
-            'with multiple sims booted). '
-            'vmUri: VM service URI (http:// or ws://) — omit to auto-discover. '
-            'platform: ios | android — omit to derive from the VM. '
-            'device: UDID / serial — omit to auto-correlate; if you pass one '
-            'that does not host the app, attach refuses (taps would hit the '
-            'wrong device). '
-            'mode: flutter | device | auto (default). device mode drives the '
-            'simulator with NO Flutter app — perception via device '
-            'op:screenshot, interaction via x,y coordinate taps. '
-            'When nothing is running attach does not error — it reports "no app '
-            'running" and lists previous launches (app + simulator + path); '
-            'pass that device to start its app and attach. '
-            'returnScene: include the first get_scene render. dryRun: list '
-            'attachable apps + devices + launch history without attaching. '
-            'awaitSettle: wait for the UI to settle first. '
-            'Returns platform, device + app identity, hardwareButtons available, '
-            'and screen (viewport, dpr, orientation, brightness, locale). '
-            'errorKind: targetNotFound (no app / no device), invalidArgument '
-            '(device/app mismatch), internal (VM unreachable). '
-            'Companion: flutter-network__network_attach takes the same vmUri for '
-            'logs + HTTP monitoring (separate connection, no conflict).',
+            'Connect glint to a running Flutter debug app. Call once before any '
+            'other tool. ALL ARGS OPTIONAL: with no args glint discovers the '
+            'app, derives the platform from the VM, and correlates it to the '
+            'exact simulator it runs on (correct even with several booted). A '
+            '`device` that does not host the app is refused (taps would hit the '
+            'wrong one). When nothing is running it does not error — it reports '
+            '"no app running" and lists prior launches to start from. The reply '
+            'carries device + app identity, available hardwareButtons, and '
+            'screen (viewport, dpr, orientation, locale). See each arg below.',
         inputSchema: ObjectSchema(
           properties: {
             'vmUri': Schema.string(

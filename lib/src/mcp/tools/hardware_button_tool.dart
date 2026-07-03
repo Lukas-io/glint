@@ -17,8 +17,9 @@ class HardwareButtonTool extends GlintTool {
         description:
             'Press a physical hardware button. iOS Sim: lock + unlock '
             '(Face ID auth via Darwin notification + bottom-edge swipe) + '
-            'home (Face ID gesture) all work on Xcode 26. Others are '
-            'platform-dependent; check capabilities.',
+            'home (Face ID gesture) all work on Xcode 26. Returns the app '
+            'lifecycle after the press (resumed / inactive / paused) so you know '
+            'it took. Available buttons are listed in attach\'s reply.',
         inputSchema: ObjectSchema(
           properties: {
             'button': Schema.string(
@@ -81,10 +82,21 @@ class HardwareButtonTool extends GlintTool {
       );
       final response = StructuredResponse.fromActionResult(result);
       if (!response.isError) {
+        // The "what happened" for a hardware button is a lifecycle change, not
+        // a scene diff. Read it best-effort (home may background the app and
+        // make the eval fail — that itself signals it took).
+        String? lifecycle;
+        try {
+          lifecycle = await session.lifecycleState();
+        } on Object {
+          // app backgrounded / VM unreachable — leave lifecycle null
+        }
         return StructuredResponse(
-          summary: response.summary,
+          summary: lifecycle != null
+              ? '${response.summary} — app is $lifecycle'
+              : response.summary,
           warnings: response.warnings,
-          data: response.data,
+          data: {...?response.data, if (lifecycle != null) 'lifecycle': lifecycle},
           nextSteps: [
             if (button == HardwareButton.unlock)
               'call get_scene to read the screen after unlock'

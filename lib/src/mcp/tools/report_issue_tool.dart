@@ -88,6 +88,8 @@ class ReportIssueTool extends GlintTool {
     );
 
     if (dryRun) {
+      // The summary already carries the composed body readably; don't ship a
+      // second raw copy in `pasteBody`. deepLink stays (the fileable form).
       return StructuredResponse(
         summary: 'dry-run — composed body but did not file:\n\n# '
             '$title\n\n$fullBody',
@@ -96,7 +98,6 @@ class ReportIssueTool extends GlintTool {
           'type': type,
           'title': title,
           'labels': labels,
-          'pasteBody': fullBody,
           'deepLink': deepLink,
         },
       );
