@@ -7,6 +7,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 class TapTool extends GlintTool {
   const TapTool();
@@ -73,18 +74,18 @@ class TapTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
+    final t = readTargetedArgs(args, session.config);
 
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
     // In Flutter mode it still gets a changed-signal so raw x,y taps aren't
     // blind about whether anything happened.
-    final x = (args['x'] as num?)?.toDouble();
-    final y = (args['y'] as num?)?.toDouble();
-    if (x != null && y != null) {
+    final pt = readPoint(args);
+    if (pt != null) {
       return withCoordinateChange(
         session,
-        () => coordinateTap(session, x, y),
-        returnScene: (args['returnScene'] as bool?) ?? true,
-        fetchScene: (args['fetchScene'] as bool?) ?? false,
+        () => coordinateTap(session, pt.x, pt.y),
+        returnScene: t.returnScene,
+        fetchScene: t.fetchScene,
       );
     }
 
@@ -99,21 +100,15 @@ class TapTool extends GlintTool {
       );
     }
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final detail = (args['detail'] as bool?) ?? false;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
     // Pre-action snapshot (cheap) — only needed when returnScene is requested.
-    final pre = returnScene ? await snapshotPreAction(session) : null;
+    final pre = t.returnScene ? await snapshotPreAction(session) : null;
 
     final arming = await maybeAwaitReady(
       session: session,
       glintId: glintId,
-      awaitReady: armed,
-      ceilingMs: ceilingMs,
+      awaitReady: t.awaitReady,
+      ceilingMs: t.readyTimeoutMs,
       toolLabel: 'tap',
     );
     if (arming is ArmingFailed) return arming.envelope;
@@ -122,7 +117,8 @@ class TapTool extends GlintTool {
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
-      var response = StructuredResponse.fromActionResult(result, detail: detail);
+      var response =
+          StructuredResponse.fromActionResult(result, detail: t.detail);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
       if (!result.ok) {
@@ -156,7 +152,7 @@ class TapTool extends GlintTool {
       }
 
       return appendPostAction(session, response, pre,
-          returnScene: returnScene, fetchScene: fetchScene);
+          returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
       await scene.dispose();
     }

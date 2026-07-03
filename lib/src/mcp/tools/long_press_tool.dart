@@ -7,6 +7,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 class LongPressTool extends GlintTool {
   const LongPressTool();
@@ -59,15 +60,15 @@ class LongPressTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = (args['durationMs'] as int?) ?? 500;
+    final t = readTargetedArgs(args, session.config);
 
-    final x = (args['x'] as num?)?.toDouble();
-    final y = (args['y'] as num?)?.toDouble();
-    if (x != null && y != null) {
+    final pt = readPoint(args);
+    if (pt != null) {
       return withCoordinateChange(
         session,
-        () => coordinateLongPress(session, x, y, durationMs),
-        returnScene: (args['returnScene'] as bool?) ?? true,
-        fetchScene: (args['fetchScene'] as bool?) ?? false,
+        () => coordinateLongPress(session, pt.x, pt.y, durationMs),
+        returnScene: t.returnScene,
+        fetchScene: t.fetchScene,
       );
     }
 
@@ -76,21 +77,19 @@ class LongPressTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'long_press needs either glintId or x + y',
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'pass glintId from get_scene, or x,y coordinates',
+        ],
       );
     }
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
-    final pre = returnScene ? await snapshotPreAction(session) : null;
+    final pre = t.returnScene ? await snapshotPreAction(session) : null;
 
     final arming = await maybeAwaitReady(
       session: session,
       glintId: glintId,
-      awaitReady: armed,
-      ceilingMs: ceilingMs,
+      awaitReady: t.awaitReady,
+      ceilingMs: t.readyTimeoutMs,
       toolLabel: 'long_press',
     );
     if (arming is ArmingFailed) return arming.envelope;
@@ -104,7 +103,7 @@ class LongPressTool extends GlintTool {
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
       return appendPostAction(session, response, pre,
-          returnScene: returnScene, fetchScene: fetchScene);
+          returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
       await scene.dispose();
     }

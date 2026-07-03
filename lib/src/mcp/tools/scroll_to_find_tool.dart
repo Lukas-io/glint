@@ -5,6 +5,7 @@ import '../../../perception.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 import 'scroll_tool.dart';
 
 /// Loops `get_scene` + `scroll` until a target (glintId or text content)
@@ -69,9 +70,7 @@ class ScrollToFindTool extends GlintTool {
       );
     }
 
-    final dir = ScrollDirection.values
-        .where((d) => d.name == dirName)
-        .firstOrNull;
+    final dir = enumByName(ScrollDirection.values, dirName);
     if (dir == null) {
       return StructuredResponse.error(
         summary: 'unknown scroll direction: $dirName',

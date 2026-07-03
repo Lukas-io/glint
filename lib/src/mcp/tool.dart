@@ -7,6 +7,7 @@ import '../../observability.dart';
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
+import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/config_tool.dart';
@@ -119,10 +120,8 @@ abstract class GlintTool {
       return;
     }
     final kindName = response.data?['errorKind'] as String?;
-    final errorKind = GlintErrorKind.values
-            .where((e) => e.name == kindName)
-            .firstOrNull ??
-        GlintErrorKind.internal;
+    final errorKind =
+        enumByName(GlintErrorKind.values, kindName) ?? GlintErrorKind.internal;
     session.actionLog.record(FailureEntry(
       sequence: seq,
       timestamp: start,
