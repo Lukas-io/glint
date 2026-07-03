@@ -125,9 +125,18 @@ class TypeTool extends GlintTool {
         final post = await readPostActionState(session, pre,
             includeSceneText: fetchScene);
         if (post != null) {
+          // A successful type always changes the field's value → contentChanged.
+          // 'nothing' with no `focus` means the text landed nowhere — call it
+          // out instead of reporting a silent success.
+          final wentNowhere = post.changeCategory == 'nothing' && focus == null;
           response = StructuredResponse(
             summary: response.summary,
-            warnings: response.warnings,
+            warnings: [
+              ...response.warnings,
+              if (wentNowhere)
+                'no field changed — is an input focused? pass '
+                    'focus:<glintId> to tap one first',
+            ],
             nextSteps: response.nextSteps,
             isError: response.isError,
             data: {...?response.data, ...post.toData()},

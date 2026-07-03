@@ -15,20 +15,14 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by its glintId from get_scene, OR pass x,y to tap raw '
+            'Tap a node by its glintId from get_scene, or pass x,y for raw '
             'coordinates (device mode: screenshot pixels; flutter mode: logical '
-            'points) — coordinates bypass glintId resolution and hit-testing. '
-            'Returns structuredContent with: ok (bool), painted, hittable, '
-            'physicalCenter, changed (bool), changeCategory (routeChanged/'
-            'overlayAppeared/overlayDismissed/contentChanged/nothing). '
-            'errorKind values: unresolvedTarget (glintId not found — re-run '
-            'get_scene to get current ids), notHittable (covered by overlay/'
-            'absorber — dismiss it first), offViewport (target scrolled '
-            'off-screen — scroll_to_find it first), backendToolError '
-            '(native tap failed). '
-            'With awaitReady: true: blocks until the target exists AND passes '
-            'hit-test, then fires — use when targeting across screen transitions. '
-            'ceilingMs controls the armed-intent timeout (default 5000).',
+            'points). Returns changed + changeCategory (routeChanged / '
+            'overlayAppeared / overlayDismissed / contentChanged / nothing) so '
+            'you know if the screen reacted; pass detail:true for geometry. '
+            'awaitReady:true blocks until the target exists AND is hittable '
+            'before firing — use across screen transitions '
+            '(readyTimeoutMs, default 5000).',
         inputSchema: ObjectSchema(
           properties: {
             'glintId': Schema.string(
