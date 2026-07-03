@@ -123,62 +123,40 @@ class TapTool extends GlintTool {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
       var response = StructuredResponse.fromActionResult(result, detail: detail);
+      if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
-      // Enrich unresolvedTarget with overlay context — helps agent understand
-      // whether the scene changed (overlay appeared/dismissed) since last read.
-      if (!result.ok &&
-          result.errorKind == GlintErrorKind.unresolvedTarget &&
-          scene.overlayRoots.isNotEmpty) {
-        response = StructuredResponse.error(
-          summary: response.summary,
-          errorKind: GlintErrorKind.unresolvedTarget,
-          detail: 'glintId "$glintId" not found in scene. '
-              'A ${scene.hasBarrierOverlay ? "modal" : ""} overlay is currently '
-              'active — the scene may have changed since your last get_scene. '
-              'Re-read with get_scene to see current ids including overlay content.',
-          nextSteps: const [
-            'call get_scene to read the current overlay and base-screen ids',
-          ],
-        );
-      }
-
-      // Warn when tapping a base-screen node while a modal barrier is up —
-      // the barrier absorbs the touch, so hittable:true can be misleading.
-      if (result.ok &&
-          scene.hasBarrierOverlay &&
-          !scene.isInOverlay(glintId)) {
-        response = StructuredResponse(
-          summary: response.summary,
-          warnings: [
-            ...response.warnings,
-            'a modal overlay is present; the tap may have landed on the barrier '
-                'rather than your target — if the action had no effect, dismiss '
-                'the dialog first and retry',
-          ],
-          nextSteps: response.nextSteps,
-          isError: response.isError,
-          data: response.data,
-        );
-      }
-
-      // Post-action scene + changed signal (only when requested).
-      if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
-        if (post != null) {
-          response = StructuredResponse(
+      if (!result.ok) {
+        // Enrich unresolvedTarget with overlay context — the scene may have
+        // changed (overlay appeared/dismissed) since the agent's last read.
+        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
+            scene.overlayRoots.isNotEmpty) {
+          response = StructuredResponse.error(
             summary: response.summary,
-            warnings: response.warnings,
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
+            errorKind: GlintErrorKind.unresolvedTarget,
+            detail: 'glintId "$glintId" not found in scene. '
+                'A ${scene.hasBarrierOverlay ? "modal" : ""} overlay is active — '
+                'the scene may have changed since your last get_scene. '
+                'Re-read with get_scene to see current ids including overlay content.',
+            nextSteps: const [
+              'call get_scene to read the current overlay and base-screen ids',
+            ],
           );
         }
+        return response;
       }
 
-      return arming is ArmingReady
-          ? withArmedMetadata(response, arming)
-          : response;
+      // Warn when tapping a base-screen node while a modal barrier is up — the
+      // barrier absorbs the touch, so hittable:true can be misleading.
+      if (scene.hasBarrierOverlay && !scene.isInOverlay(glintId)) {
+        response = response.addWarnings(const [
+          'a modal overlay is present; the tap may have landed on the barrier '
+              'rather than your target — if the action had no effect, dismiss '
+              'the dialog first and retry',
+        ]);
+      }
+
+      return appendPostAction(session, response, pre,
+          returnScene: returnScene, fetchScene: fetchScene);
     } finally {
       await scene.dispose();
     }

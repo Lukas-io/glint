@@ -105,19 +105,12 @@ class ScrollTool extends GlintTool {
       final movedPx = await _anchorDisplacement(session, anchor, dir);
       if (post != null) {
         final merged = mergeScrollSignal(post.changeCategory, movedPx);
-        response = StructuredResponse(
-          summary: response.summary,
-          warnings: response.warnings,
-          nextSteps: response.nextSteps,
-          isError: response.isError,
-          data: {
-            ...?response.data,
-            ...post.toData(),
-            'changed': merged.changed,
-            'changeCategory': merged.category,
-            if (movedPx != null) 'scrolledPx': movedPx.round(),
-          },
-        );
+        response = response.mergeData({
+          ...post.toData(),
+          'changed': merged.changed,
+          'changeCategory': merged.category,
+          if (movedPx != null) 'scrolledPx': movedPx.round(),
+        });
       }
     }
     return response;

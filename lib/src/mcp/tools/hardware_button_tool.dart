@@ -91,11 +91,10 @@ class HardwareButtonTool extends GlintTool {
         } on Object {
           // app backgrounded / VM unreachable — leave lifecycle null
         }
-        return StructuredResponse(
+        return response.copyWith(
           summary: lifecycle != null
               ? '${response.summary} — app is $lifecycle'
               : response.summary,
-          warnings: response.warnings,
           data: {...?response.data, if (lifecycle != null) 'lifecycle': lifecycle},
           nextSteps: [
             if (button == HardwareButton.unlock)

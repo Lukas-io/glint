@@ -108,19 +108,10 @@ class TypeTool extends GlintTool {
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(scene, TypeText(text));
-      var response = StructuredResponse.fromActionResult(result, detail: detail);
-      if (warnings.isNotEmpty || focusArming != null) {
-        response = StructuredResponse(
-          summary: response.summary,
-          warnings: [...warnings, ...response.warnings],
-          nextSteps: response.nextSteps,
-          data: {
-            ...?response.data,
-            if (focusArming != null) 'armed': focusArming.toJson(),
-          },
-          isError: response.isError,
-        );
-      }
+      var response = StructuredResponse.fromActionResult(result, detail: detail)
+          .addWarnings(warnings);
+      if (focusArming != null) response = withArmedMetadata(response, focusArming);
+
       if (returnScene && !response.isError) {
         final post = await readPostActionState(session, pre,
             includeSceneText: fetchScene);
@@ -129,18 +120,11 @@ class TypeTool extends GlintTool {
           // 'nothing' with no `focus` means the text landed nowhere — call it
           // out instead of reporting a silent success.
           final wentNowhere = post.changeCategory == 'nothing' && focus == null;
-          response = StructuredResponse(
-            summary: response.summary,
-            warnings: [
-              ...response.warnings,
-              if (wentNowhere)
-                'no field changed — is an input focused? pass '
-                    'focus:<glintId> to tap one first',
-            ],
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
-          );
+          response = response.mergeData(post.toData()).addWarnings([
+            if (wentNowhere)
+              'no field changed — is an input focused? pass '
+                  'focus:<glintId> to tap one first',
+          ]);
         }
       }
       return response;
