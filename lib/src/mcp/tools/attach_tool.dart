@@ -13,6 +13,32 @@ import '../tool.dart';
 const String _kDefaultBridgePath =
     'native/ios_sim_bridge/.build/debug/glint-iossim';
 
+/// Resolves the glint-iossim bridge: explicit arg, then the copy inside glint's
+/// own package tree (the MCP server's CWD is the host app's dir, not glint's),
+/// then the legacy CWD-relative default.
+String _resolveIosBridgePath(String? explicit) {
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+  return _bridgeUnderGlintRoot() ?? _kDefaultBridgePath;
+}
+
+/// Walks up from the running script to find the bridge under glint's package.
+String? _bridgeUnderGlintRoot() {
+  Directory dir;
+  try {
+    dir = File(Platform.script.toFilePath()).parent;
+  } catch (_) {
+    return null;
+  }
+  for (var i = 0; i < 6; i++) {
+    final candidate = File('${dir.path}/$_kDefaultBridgePath');
+    if (candidate.existsSync()) return candidate.path;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
 /// platform from the VM, correlates the app to its real simulator (so it picks
@@ -303,7 +329,7 @@ class AttachTool extends GlintTool {
           );
         case DevicePlatform.ios:
           final bridgePath =
-              (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
+              _resolveIosBridgePath(args['iosBridgePath'] as String?);
           if (!File(bridgePath).existsSync()) {
             warnings.add(
               'glint-iossim bridge not found at $bridgePath — tap / swipe / '
@@ -545,7 +571,7 @@ class AttachTool extends GlintTool {
     switch (target.platform) {
       case DevicePlatform.ios:
         final bridgePath =
-            (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
+            _resolveIosBridgePath(args['iosBridgePath'] as String?);
         if (!File(bridgePath).existsSync()) {
           warnings.add(
             'glint-iossim bridge not found at $bridgePath — tap / swipe / '
