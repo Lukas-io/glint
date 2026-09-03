@@ -20,6 +20,7 @@ class ClassifierRegistry {
         PageClassifier(),
         AppBarClassifier(),
         InputClassifier(),
+        ToggleClassifier(),
         ButtonClassifier(),
         ListClassifier(),
         TextClassifier(),
@@ -44,7 +45,7 @@ class ClassifierRegistry {
 // Helpers shared by the classifiers below.
 // ---------------------------------------------------------------------------
 
-bool _labelOneOf(SceneNode n, Set<String> names) => names.contains(n.label);
+bool _labelOneOf(SceneNode n, Set<String> names) => names.contains(n.baseLabel);
 
 String? _firstTextIn(List<SemanticNode> nodes) {
   for (final n in nodes) {
@@ -72,12 +73,7 @@ class PageClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // Offstage Scaffolds (non-active IndexedStack children, GoRouter shell
-    // branches) have NaN geometry — return SemanticUnknown so hoistPage, which
-    // selects SemanticPage, skips them.
-    if (node.isOffstage) {
-      return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
-    }
+    // Offstage Scaffolds never reach here — Semanticizer short-circuits them.
     SemanticAppBar? appBar;
     final body = <SemanticNode>[];
     for (final c in children) {
@@ -107,11 +103,37 @@ class AppBarClassifier extends WidgetClassifier {
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
+    // Keep the buttons — the leading back button and the action buttons
+    // (search, menu, …) live in the AppBar's subtree. Dropping them (the old
+    // `actions: const []`) made back-navigation and app-bar actions invisible.
+    final buttons = <SemanticNode>[];
+    void collect(List<SemanticNode> ns) {
+      for (final n in ns) {
+        if (n is SemanticButton) {
+          buttons.add(n);
+        } else {
+          collect(n.children);
+        }
+      }
+    }
+
+    collect(children);
     return SemanticAppBar(
       glintId: node.glintId,
-      title: _firstTextIn(children),
-      actions: const [],
+      title: _titleIn(children),
+      actions: buttons,
     );
+  }
+
+  /// First text NOT inside a button — the title, not a button's caption.
+  String? _titleIn(List<SemanticNode> nodes) {
+    for (final n in nodes) {
+      if (n is SemanticButton) continue;
+      if (n is SemanticText) return n.content;
+      final inner = _titleIn(n.children);
+      if (inner != null) return inner;
+    }
+    return null;
   }
 }
 
@@ -133,6 +155,38 @@ class InputClassifier extends WidgetClassifier {
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
     // hint + currentValue are filled later by InputEnricher via property reads.
     return SemanticInput(glintId: node.glintId);
+  }
+}
+
+/// Checkbox / Switch / Radio and their ListTile forms — tappable one-liners;
+/// a ListTile's inner toggle widget is absorbed, the tile is the tap target.
+class ToggleClassifier extends WidgetClassifier {
+  const ToggleClassifier();
+
+  @override
+  int get priority => 35;
+
+  static const _toggleLabels = {
+    'Checkbox',
+    'Switch',
+    'Radio',
+    'CupertinoSwitch',
+    'CupertinoCheckbox',
+    'CheckboxListTile',
+    'SwitchListTile',
+    'RadioListTile',
+  };
+
+  @override
+  bool matches(SceneNode node) => _labelOneOf(node, _toggleLabels);
+
+  @override
+  SemanticNode build(SceneNode node, List<SemanticNode> children) {
+    return SemanticButton(
+      glintId: node.glintId,
+      label: _firstTextIn(children),
+      isToggle: true,
+    );
   }
 }
 
@@ -160,13 +214,18 @@ class ButtonClassifier extends WidgetClassifier {
   };
 
   @override
-  bool matches(SceneNode node) => _buttonLabels.contains(node.label);
+  bool matches(SceneNode node) => _labelOneOf(node, _buttonLabels);
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
-    // Absorb Text into the label; keep Icon / Image as children so the
-    // IconEnricher can populate them post-classify.
-    final label = _firstTextIn(children);
+    // A tap-wrapper around rich content (keyboard-dismiss GestureDetector,
+    // tappable card) must keep its subtree — absorbing it blinds the agent.
+    if (_wrapsRichContent(children)) {
+      return SemanticButton(glintId: node.glintId, children: children);
+    }
+    // Leaf button: absorb caption text into the label; keep Icon / Image as
+    // children so the IconEnricher can populate them post-classify.
+    final label = _captionIn(children);
     final kept = children
         .where((c) => c is SemanticIcon || c is SemanticImage)
         .toList(growable: false);
@@ -175,6 +234,40 @@ class ButtonClassifier extends WidgetClassifier {
       label: label,
       children: kept,
     );
+  }
+
+  /// True when the subtree holds interactive/structural nodes or 3+ texts —
+  /// content, not a caption.
+  bool _wrapsRichContent(List<SemanticNode> children) {
+    var texts = 0;
+    for (final c in children) {
+      for (final n in c.walk()) {
+        if (n is SemanticInput ||
+            n is SemanticButton ||
+            n is SemanticList ||
+            n is SemanticPage ||
+            n is SemanticAppBar) {
+          return true;
+        }
+        if (n is SemanticText && ++texts > 2) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Caption label: up to two texts joined with ' · ' so a subtitle survives.
+  String? _captionIn(List<SemanticNode> nodes) {
+    final texts = <String>[];
+    void visit(List<SemanticNode> ns) {
+      for (final n in ns) {
+        if (texts.length >= 2) return;
+        if (n is SemanticText) texts.add(n.content);
+        visit(n.children);
+      }
+    }
+
+    visit(nodes);
+    return texts.isEmpty ? null : texts.join(' · ');
   }
 }
 
@@ -260,6 +353,8 @@ class ContainerClassifier extends WidgetClassifier {
     'MaterialApp',
     'WidgetsApp',
     'CupertinoApp',
+    'SnackBar',
+    'MaterialBanner',
     'Theme',
     'DefaultTextStyle',
     'MediaQuery',
@@ -305,7 +400,7 @@ class ContainerClassifier extends WidgetClassifier {
   };
 
   @override
-  bool matches(SceneNode node) => _containerLabels.contains(node.label);
+  bool matches(SceneNode node) => _labelOneOf(node, _containerLabels);
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
@@ -321,6 +416,10 @@ class ContainerClassifier extends WidgetClassifier {
         'Column' => 'column',
         'Stack' || 'IndexedStack' => 'stack',
         'Form' => 'form',
+        // Transient messages — the agent should read them but not treat them
+        // as permanent UI or a blocking modal.
+        'SnackBar' => 'snackbar (transient)',
+        'MaterialBanner' => 'banner (transient)',
         _ => null,
       };
 }

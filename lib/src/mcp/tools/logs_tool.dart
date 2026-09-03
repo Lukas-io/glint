@@ -27,7 +27,9 @@ class LogsTool extends GlintTool {
             'tool': Schema.string(
               description: 'Filter by tool name (exact match).',
             ),
-            'failuresOnly': Schema.bool(),
+            'failuresOnly': Schema.bool(
+              description: 'Only entries that failed (had an errorKind).',
+            ),
             'sinceSeq': Schema.int(
               description: 'Return entries with sequence >= sinceSeq.',
             ),

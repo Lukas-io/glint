@@ -7,12 +7,19 @@ enum GlintErrorKind {
   backendToolError,
   unresolvedTarget,
   notHittable,
+  offViewport,
   geometryResolveError,
   // mcp-layer failures
   sessionNotAttached,
   invalidArgument,
+  // `app:` named no attached app, or several
+  unknownApp,
+  // perception unavailable — app backgrounded / no frame to inspect
+  appNotResumed,
   // transport failures
   connectionLost,
+  // the simulator / emulator behind the session is no longer booted
+  deviceGone,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // scroll_to_find specific failures

@@ -20,9 +20,14 @@ class ConfigTool extends GlintTool {
           properties: {
             'op': Schema.string(description: 'get | set'),
             'key': Schema.string(
-              description: 'Config key (required for set).',
+              description: 'Config key to set, e.g. scrollMaxScrolls '
+                  '(required for set; `get` lists all keys + current values).',
             ),
-            'value': Schema.combined(),
+            'value': Schema.combined(
+              description: 'New value for `key` (required for set). Type matches '
+                  'the key: int (scrollMaxScrolls), double (scrollAmountFraction), '
+                  'or bool.',
+            ),
           },
           required: ['op'],
         ),
@@ -48,10 +53,12 @@ class ConfigTool extends GlintTool {
       case 'set':
         final key = args['key'] as String?;
         final value = args['value'];
+        final keys = cfg.toJson().keys.join(', ');
         if (key == null || value == null) {
           return StructuredResponse.error(
             summary: 'op=set requires both `key` and `value`',
             errorKind: GlintErrorKind.invalidArgument,
+            nextSteps: ['keys: $keys'],
           );
         }
         final err = cfg.set(key, value);
@@ -59,11 +66,13 @@ class ConfigTool extends GlintTool {
           return StructuredResponse.error(
             summary: err,
             errorKind: GlintErrorKind.invalidArgument,
+            nextSteps: ['keys: $keys'],
           );
         }
+        // Echo only the changed setting — `config op:get` returns the full map.
         return StructuredResponse(
           summary: '$key = $value',
-          data: {'config': cfg.toJson()},
+          data: {'key': key, 'value': value},
         );
       default:
         return StructuredResponse.error(

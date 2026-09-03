@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:vm_service/vm_service.dart' show Event, InstanceRef, VmService;
 
 import '../runtime/flutter_runtime.dart';
@@ -48,24 +49,42 @@ class SceneReader {
 
   // ── offstage pruning (IndexedStack / GoRouter shell routes) ──────────────
 
-  /// Marks Scaffolds under an `offstage=true` [Offstage] (and their subtree)
-  /// [SceneNode.isOffstage] so id assignment, [firstAddressableId], [hoistPage]
-  /// and the classifier skip them. [Offstage] is filtered from the summary
-  /// tree, so we probe per-Scaffold rather than detect it structurally.
+  /// Probes hidden-subtree candidates and marks them [SceneNode.isOffstage] so
+  /// id assignment, [firstAddressableId], page selection and the classifier
+  /// skip them. Candidates: Scaffolds (GoRouter shell branches sit under
+  /// `Offstage`) and IndexedStack children (hidden via
+  /// `Visibility.maintain(visible:false)` since Flutter 3.7 — never Offstage).
+  /// Both wrappers are framework-created and filtered from the summary tree,
+  /// so we probe ancestors per candidate rather than detect structurally.
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
-    final scaffolds = root.walk().where((n) => n.label == 'Scaffold').toList();
-    if (scaffolds.isEmpty) return;
-    // Pick any addressable node for the selection, then check each Scaffold.
-    for (final scaffold in scaffolds) {
-      if (scaffold.inspectorId.isEmpty) continue;
-      final result = await _runtime.evaluateWithSelection(
-        expression: '(WidgetInspectorService.instance.selection.currentElement!'
-            '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()',
-        inspectorId: scaffold.inspectorId,
-        groupName: groupName,
-      );
+    final candidates = <SceneNode>{
+      ...root.walk().where((n) => n.baseLabel == 'Scaffold'),
+      ...root
+          .walk()
+          .where((n) => n.baseLabel == 'IndexedStack')
+          .expand((n) => n.children),
+    };
+    for (final candidate in candidates) {
+      if (candidate.inspectorId.isEmpty) continue;
+      if (candidate.isOffstage) continue;
+      final String? result;
+      try {
+        result = await _runtime.evaluateWithSelection(
+          expression:
+              '((WidgetInspectorService.instance.selection.currentElement!'
+              '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
+              ' || !(WidgetInspectorService.instance.selection.currentElement!'
+              '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true))'
+              '.toString()',
+          inspectorId: candidate.inspectorId,
+          groupName: groupName,
+        );
+      } on Object {
+        // One unprobeable candidate must not sink the whole read; treat as onstage.
+        continue;
+      }
       if (result == 'true') {
-        for (final n in scaffold.walk()) {
+        for (final n in candidate.walk()) {
           n.isOffstage = true;
         }
       }
@@ -110,7 +129,17 @@ class SceneReader {
   /// - Entries with a Scaffold descendant → base route, skip.
   /// - Entries with only barrier widgets → modal barrier, skip (sets hasBarrier).
   /// - Everything else → dialog content, include.
-  _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
+  /// First meaningful glintId inside each surfaced dialog entry — the test
+  /// seam for overlay classification. Each entry is an [_OverlayEntryWidget]
+  /// wrapper, so we dig to the first descendant carrying a glintId.
+  @visibleForTesting
+  static List<String?> debugOverlayContentIds(SceneNode fullRoot) =>
+      _extractDialogEntries(fullRoot).contentRoots
+          .map((n) => n.walk().firstWhere((d) => d.glintId != null,
+              orElse: () => n).glintId)
+          .toList();
+
+  static _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
     final overlay = _findNode(fullRoot, 'Overlay');
     if (overlay == null) {
       return const _DialogExtraction(contentRoots: [], hasBarrier: false);
@@ -130,6 +159,7 @@ class SceneReader {
     for (final entry in entriesParent.children) {
       if (!_isEntryWidget(entry)) continue;
       if (_hasScaffoldDescendant(entry)) continue; // base route
+      if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
       if (_isBarrierOnlyEntry(entry)) {
         hasBarrier = true;
         continue;
@@ -155,7 +185,21 @@ class SceneReader {
   }
 
   static bool _hasScaffoldDescendant(SceneNode n) =>
-      n.walk().any((d) => d.label == 'Scaffold');
+      n.walk().any((d) => d.baseLabel == 'Scaffold');
+
+  /// Text-editing overlays — cursor drag handles + the copy/paste toolbar —
+  /// ride in their own [OverlayEntry] whenever a field is focused. They are
+  /// transient affordances, not modal content: surfacing them as `--- dialog
+  /// ---` makes the agent think a modal is open and try to dismiss it.
+  static bool _isTextEditingOverlay(SceneNode n) => n.walk().any((d) =>
+      const {
+        '_SelectionHandleOverlay',
+        '_SelectionToolbarWrapper',
+        'TextSelectionToolbar',
+        'CupertinoTextSelectionToolbar',
+        'SelectionContainer',
+        'ContextMenu',
+      }.contains(d.baseLabel));
 
   /// True when every descendant is a known barrier/gesture-plumbing widget
   /// with no user-meaningful content.
@@ -249,6 +293,32 @@ class Scene {
     return null;
   }
 
+  /// Every addressable id on screen (offstage excluded).
+  List<String> get glintIds => [
+        for (final n in root.walk())
+          if (!n.isOffstage && n.glintId != null) n.glintId!,
+      ];
+
+  /// Cheap fingerprint of what the agent can read: labels + text previews in
+  /// tree order. Equal signatures across two reads mean nothing readable moved.
+  String contentSignature() {
+    var hash = 0;
+    void mix(String s) {
+      for (final c in s.codeUnits) {
+        hash = (hash * 31 + c) & 0x7fffffff;
+      }
+    }
+
+    var count = 0;
+    for (final n in root.walk()) {
+      if (n.isOffstage) continue;
+      count++;
+      mix(n.label);
+      mix(n.textPreview ?? '');
+    }
+    return '$count:$hash';
+  }
+
   /// True when [glintId] belongs to an overlay entry (dialog/sheet) rather
   /// than the base screen. The tap tool uses this to warn when a barrier may
   /// intercept the tap.
@@ -268,11 +338,14 @@ class Scene {
   /// accurate ModalRoute.settings.name. Deep nodes (inside ShellRoute inner
   /// navigators or PageView pages) sit inside nested routes whose settings.name
   /// is null or different from the outer GoRouter path.
-  List<SceneNode> addressableCandidates({int max = 5}) {
+  /// [within] restricts the walk to that subtree (e.g. the active page), so
+  /// probes can't land on a covered sibling route.
+  List<SceneNode> addressableCandidates({int max = 5, SceneNode? within}) {
+    final walkRoot = within ?? root;
     final seen = <String>{};
     final result = <SceneNode>[];
     // First pass: shallow (depth ≤ 12) user-code nodes, skipping platform views.
-    for (final n in root.walk().skip(1)) {
+    for (final n in walkRoot.walk().skip(1)) {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;
@@ -282,7 +355,7 @@ class Scene {
       if (n.createdByLocalProject) result.add(n);
     }
     // Second pass: any addressable node (deeper fallbacks).
-    for (final n in root.walk().skip(1)) {
+    for (final n in walkRoot.walk().skip(1)) {
       if (result.length >= max) break;
       if (n.isOffstage || n.inspectorId.isEmpty) continue;
       if (n.glintId == null || n.glintId!.isEmpty) continue;

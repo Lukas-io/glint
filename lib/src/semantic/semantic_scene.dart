@@ -29,6 +29,15 @@ class SemanticScene {
     return null;
   }
 
+  Map<String, SceneNode>? _sourceIndex;
+
+  /// Raw [SceneNode] behind a glintId — one shared lazy index so enrichers
+  /// don't each re-walk [sourceScene].
+  SceneNode? sourceFor(String glintId) => (_sourceIndex ??= {
+        for (final n in sourceScene.root.walk())
+          if (!n.isOffstage && n.glintId != null) n.glintId!: n,
+      })[glintId];
+
   Map<String, Object?> toJson() => {
         // Overlays first — mirrors the text renderer (topmost = most
         // interactive) and keeps dialog ids addressable in JSON mode.

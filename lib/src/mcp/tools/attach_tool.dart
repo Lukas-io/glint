@@ -13,6 +13,32 @@ import '../tool.dart';
 const String _kDefaultBridgePath =
     'native/ios_sim_bridge/.build/debug/glint-iossim';
 
+/// Resolves the glint-iossim bridge: explicit arg, then the copy inside glint's
+/// own package tree (the MCP server's CWD is the host app's dir, not glint's),
+/// then the legacy CWD-relative default.
+String _resolveIosBridgePath(String? explicit) {
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+  return _bridgeUnderGlintRoot() ?? _kDefaultBridgePath;
+}
+
+/// Walks up from the running script to find the bridge under glint's package.
+String? _bridgeUnderGlintRoot() {
+  Directory dir;
+  try {
+    dir = File(Platform.script.toFilePath()).parent;
+  } catch (_) {
+    return null;
+  }
+  for (var i = 0; i < 6; i++) {
+    final candidate = File('${dir.path}/$_kDefaultBridgePath');
+    if (candidate.existsSync()) return candidate.path;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
 /// platform from the VM, correlates the app to its real simulator (so it picks
@@ -21,37 +47,33 @@ const String _kDefaultBridgePath =
 class AttachTool extends GlintTool {
   const AttachTool();
 
+  /// `app` here means "which app to attach/switch to", not call routing.
+  @override
+  bool get routesByApp => false;
+
   @override
   Tool get definition => Tool(
         name: 'attach',
         description:
-            'Connect glint to a running Flutter debug app. Must be called once '
-            'before any other tool. ALL ARGS OPTIONAL — call with no args and '
-            'glint discovers the app, derives platform from the VM, and '
-            'correlates the app to the exact simulator it runs on (correct even '
-            'with multiple sims booted). '
-            'vmUri: VM service URI (http:// or ws://) — omit to auto-discover. '
-            'platform: ios | android — omit to derive from the VM. '
-            'device: UDID / serial — omit to auto-correlate; if you pass one '
-            'that does not host the app, attach refuses (taps would hit the '
-            'wrong device). '
-            'mode: flutter | device | auto (default). device mode drives the '
-            'simulator with NO Flutter app — perception via device '
-            'op:screenshot, interaction via x,y coordinate taps. '
-            'When nothing is running attach does not error — it reports "no app '
-            'running" and lists previous launches (app + simulator + path); '
-            'pass that device to start its app and attach. '
-            'returnScene: include the first get_scene render. dryRun: list '
-            'attachable apps + devices + launch history without attaching. '
-            'awaitSettle: wait for the UI to settle first. '
-            'Returns platform, device + app identity, hardwareButtons available, '
-            'and screen (viewport, dpr, orientation, brightness, locale). '
-            'errorKind: targetNotFound (no app / no device), invalidArgument '
-            '(device/app mismatch), internal (VM unreachable). '
-            'Companion: flutter-network__network_attach takes the same vmUri for '
-            'logs + HTTP monitoring (separate connection, no conflict).',
+            'Connect glint to a running Flutter debug app. Call once before any '
+            'other tool. ALL ARGS OPTIONAL: with no args glint discovers the '
+            'app, derives the platform from the VM, and correlates it to the '
+            'exact simulator it runs on (correct even with several booted). A '
+            '`device` that does not host the app is refused (taps would hit the '
+            'wrong one). When nothing is running it does not error — it reports '
+            '"no app running" and lists prior launches to start from. The reply '
+            'carries device + app identity, available hardwareButtons, and '
+            'screen (viewport, dpr, orientation, locale). Apps stay attached: '
+            'attaching a second app pools it, and re-attaching a pooled app '
+            '(by `app` or `device`) switches instantly with no probe.',
         inputSchema: ObjectSchema(
           properties: {
+            'app': Schema.string(
+              description:
+                  'App to attach or switch to: display name, package, bundle '
+                  'id, or the simulator name it runs on. Matches running apps '
+                  'and already-attached ones.',
+            ),
             'vmUri': Schema.string(
               description:
                   'VM service URI, e.g. ws://127.0.0.1:1234/abc=/ws. Omit to '
@@ -125,7 +147,11 @@ class AttachTool extends GlintTool {
       );
     }
 
-    final adbPath = (args['adbPath'] as String?) ?? 'adb';
+    final adbResolved = resolveAdbPath(args['adbPath'] as String?);
+    final adbPath = adbResolved ?? 'adb';
+    if (adbResolved == null && platformArg == 'android') {
+      return _adbMissing();
+    }
     final returnScene = (args['returnScene'] as bool?) ?? false;
     final dryRun = (args['dryRun'] as bool?) ?? false;
     final awaitSettle = (args['awaitSettle'] as bool?) ?? false;
@@ -150,10 +176,23 @@ class AttachTool extends GlintTool {
     final vmUriArg = args['vmUri'] as String?;
     final launchPath = (args['launch'] as String?)?.trim();
     final deviceArg = args['device'] as String?;
+    final appArg = (args['app'] as String?)?.trim();
 
     // Progress sink for slow work (boot, flutter run) — emits a phase every 15s
     // when the client supplied a progress token.
     final onProgress = _progressSink(session, request);
+
+    // ── 0. Instant switch to an app that is already attached ───────────────
+    if (vmUriArg == null && launchPath == null) {
+      final key = appArg ?? deviceArg;
+      final pooled = key == null ? null : session.findApp(key);
+      if (pooled != null &&
+          pooled.isLive &&
+          (mode == null || mode == 'auto' || (mode == 'device') == pooled.deviceMode)) {
+        session.activate(pooled);
+        return _switched(session, pooled, returnScene: returnScene);
+      }
+    }
 
     // ── Device mode: explicit ───────────────────────────────────────────────
     if (mode == 'device') {
@@ -173,13 +212,15 @@ class AttachTool extends GlintTool {
       launchedDeviceId = r.deviceId;
     } else if (vmUriArg != null) {
       vmUri = Uri.parse(vmUriArg);
-    } else if (scan.vmUris.length == 1) {
+    } else if (scan.vmUris.length == 1 && appArg == null && deviceArg == null) {
       vmUri = scan.vmUris.single;
-    } else if (scan.vmUris.length > 1) {
-      return _selection(
-        'multiple running Flutter apps found — re-call attach with one vmUri',
-        scan,
-      );
+    } else if (scan.vmUris.isNotEmpty) {
+      final running = await discovery.describeRunningApps(scan);
+      final picked = _pickRunning(running, appArg: appArg, deviceArg: deviceArg);
+      if (picked.app == null) {
+        return _selection(picked.reason!, scan, running: running, session: session);
+      }
+      vmUri = picked.app!.vmUri;
     } else if (deviceArg != null) {
       // Nothing running, but a specific device was selected — start its
       // remembered app on it.
@@ -227,6 +268,9 @@ class AttachTool extends GlintTool {
       final vm = await probe.rawService.getVM();
       final platform =
           _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
+      if (platform == DevicePlatform.android && adbResolved == null) {
+        return _adbMissing();
+      }
       if (platform == null) {
         return StructuredResponse.error(
           summary: 'could not determine platform from the VM '
@@ -297,10 +341,32 @@ class AttachTool extends GlintTool {
       final DeviceTarget device;
       switch (platform) {
         case DevicePlatform.android:
-          device = AndroidDevice(serial: deviceId, adbPath: adbPath);
+          // Probe the viewport for the real DPR — raw x,y gestures pass logical
+          // points and adb takes physical pixels, so without the scale a
+          // coordinate tap silently lands in the wrong place (glintId gestures
+          // are unaffected: the resolver already yields physical px).
+          final baseMs = session.config.attachProbeTimeoutMs;
+          final timeoutMs = launchedDeviceId != null && baseMs < 30000
+              ? 30000
+              : baseMs;
+          final probed =
+              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final vp = probed.viewport;
+          if (vp == null) {
+            warnings.add(
+              'could not probe the Android viewport — raw x,y gestures may be '
+              'mis-scaled; glintId gestures are unaffected'
+              '${probed.lastError != null ? " (last probe error: ${probed.lastError})" : ""}',
+            );
+          }
+          device = AndroidDevice(
+            serial: deviceId,
+            adbPath: adbPath,
+            devicePixelRatio: vp?.dpr ?? 1.0,
+          );
         case DevicePlatform.ios:
           final bridgePath =
-              (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
+              _resolveIosBridgePath(args['iosBridgePath'] as String?);
           if (!File(bridgePath).existsSync()) {
             warnings.add(
               'glint-iossim bridge not found at $bridgePath — tap / swipe / '
@@ -314,17 +380,21 @@ class AttachTool extends GlintTool {
           final timeoutMs = launchedDeviceId != null && baseMs < 30000
               ? 30000
               : baseMs;
-          final vp = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final probed =
+              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final vp = probed.viewport;
           if (vp == null) {
             return StructuredResponse.error(
               summary: 'attached to the VM but could not probe the iOS viewport',
-              errorKind: GlintErrorKind.targetNotFound,
-              detail: 'no addressable node rendered within ${timeoutMs}ms — '
-                  'the app may be stuck on a blank/loading frame',
+              errorKind: GlintErrorKind.geometryResolveError,
+              detail: 'no viewport probe succeeded within ${timeoutMs}ms'
+                  '${probed.lastError != null ? " — last probe error: ${probed.lastError}" : " — no frame rendered yet"}',
               nextSteps: const [
                 'wait for the first screen to render, then call attach again',
                 'raise the ceiling for slow launches: '
                     'config set attachProbeTimeoutMs <ms>',
+                'if the detail names an eval error, file it with '
+                    '`report_issue` — attach should not need a specific root widget',
               ],
             );
           }
@@ -349,13 +419,21 @@ class AttachTool extends GlintTool {
           : null;
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
-      // App identity: package from the VM, plus display name / bundle id. The
-      // bundle id comes from correlation, else the running app's bundle on the
-      // (already-known) device — needed for kill_app's terminate.
+      // Project dir behind our VM (port→DDS-cwd correlation) — the anchor for
+      // app identity and relaunch. Resolved before identity so bundle id/name
+      // come from OUR built app, not a different app that also ran here.
+      final projectDir = await discovery.projectDirForVm(vmUri);
+
+      // App identity: package from the VM, plus display name / bundle id. Prefer
+      // the project-correlated built app; fall back to a device scan only when
+      // the project is unknown. Needed for kill_app's terminate.
       final package = _packageName(probe.rootLibraryUri);
       final iosInfo = platform == DevicePlatform.ios &&
               (link?.bundleId == null || link?.displayName == null)
-          ? await discovery.appInfoForDevice(deviceId)
+          ? (projectDir != null
+                  ? await discovery.appInfoForProject(projectDir)
+                  : null) ??
+              await discovery.appInfoForDevice(deviceId)
           : null;
       final bundleId = link?.bundleId ?? iosInfo?.$1;
       final displayName = link?.displayName ?? iosInfo?.$2;
@@ -365,10 +443,13 @@ class AttachTool extends GlintTool {
         if (displayName != null) 'name': displayName,
         if (bundleId != null) 'bundleId': bundleId,
       };
-      session.attachedBundleId = bundleId; // for kill_app
+      session.active!
+        ..package = package
+        ..displayName = displayName
+        ..bundleId = bundleId
+        ..deviceName = deviceName;
 
       // Remember this attach so a future cold start can relaunch it.
-      final projectDir = await discovery.projectDirForVm(vmUri);
       final appKey = package ?? _basename(projectDir) ?? link?.appName;
       if (appKey != null) {
         final now = DateTime.now();
@@ -416,17 +497,21 @@ class AttachTool extends GlintTool {
         if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
       };
 
+      final others = session.apps.where((a) => a.id != deviceId).toList();
       return StructuredResponse(
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
             '${appLabel != null ? " running $appLabel" : ""} '
-            'at $vmUri',
+            'at $vmUri'
+            '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}',
         warnings: warnings,
         nextSteps: [
-          'call flutter-network__network_attach vmServiceUri:"$vmUri" for app '
-              'logs (flutter-network__logs_tail) + HTTP monitoring — same URI, '
-              'separate connection, no conflict',
           if (!returnScene) 'call `get_scene` to read the current screen',
           'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
+          if (others.isNotEmpty)
+            'switch with attach app:"<name>", or target once with app:"<name>" '
+                'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',
+          'call flutter-network__network_attach vmServiceUri:"$vmUri" for HTTP '
+              'monitoring — same URI, separate connection, no conflict',
         ],
         data: {
           'platform': platform.name,
@@ -451,11 +536,98 @@ class AttachTool extends GlintTool {
           'screen': screen,
           if (settleData != null) 'settle': settleData,
           if (sceneText != null) 'scene': sceneText,
+          'apps': session.appsJson(),
         },
       );
     } finally {
       await probe.disconnect();
     }
+  }
+
+  StructuredResponse _adbMissing() => StructuredResponse.error(
+        summary: 'adb not found — cannot drive an Android emulator',
+        errorKind: GlintErrorKind.invalidArgument,
+        detail: 'looked on PATH, \$ANDROID_HOME, \$ANDROID_SDK_ROOT, '
+            '~/Library/Android/sdk and ~/Android/Sdk',
+        nextSteps: const [
+          'pass adbPath:"<sdk>/platform-tools/adb"',
+          'or set ANDROID_HOME so glint can find it',
+        ],
+      );
+
+  /// Reply for an instant switch to an already-attached app.
+  Future<StructuredResponse> _switched(GlintSession session, AppSession app,
+      {required bool returnScene}) async {
+    String? sceneText;
+    if (returnScene && !app.deviceMode) {
+      try {
+        sceneText = await _renderScene(session);
+      } on Object {
+        sceneText = null;
+      }
+    }
+    return StructuredResponse(
+      summary: 'switched to ${app.label} on ${app.deviceName ?? app.id}'
+          '${app.deviceMode ? " (device mode)" : ""}',
+      nextSteps: [
+        if (!returnScene && !app.deviceMode) 'call `get_scene` to read the current screen',
+        if (app.deviceMode) 'call `device op:screenshot` to see the screen',
+      ],
+      data: {
+        'switched': true,
+        'platform': app.platform.name,
+        'device': app.id,
+        if (app.deviceName != null) 'deviceName': app.deviceName,
+        if (!app.deviceMode)
+          'app': {
+            if (app.package != null) 'package': app.package,
+            if (app.displayName != null) 'name': app.displayName,
+            if (app.bundleId != null) 'bundleId': app.bundleId,
+          },
+        if (app.vmUri != null) 'vmUri': app.vmUri.toString(),
+        'mode': app.deviceMode ? 'device' : 'flutter',
+        if (sceneText != null) 'scene': sceneText,
+        'apps': session.appsJson(),
+      },
+    );
+  }
+
+  /// Choose one running app from [running] by [appArg] / [deviceArg]; with
+  /// neither, only an unambiguous single app is picked.
+  ({RunningApp? app, String? reason}) _pickRunning(
+    List<RunningApp> running, {
+    String? appArg,
+    String? deviceArg,
+  }) {
+    if (appArg != null) {
+      final hits = running.where((r) => r.matches(appArg)).toList();
+      if (hits.length == 1) return (app: hits.single, reason: null);
+      return (
+        app: null,
+        reason: hits.isEmpty
+            ? 'no running app matches app:"$appArg"'
+            : 'app:"$appArg" matches ${hits.length} running apps — pick one',
+      );
+    }
+    if (deviceArg != null) {
+      final hits = running.where((r) => r.deviceId == deviceArg).toList();
+      if (hits.length == 1) return (app: hits.single, reason: null);
+      if (hits.isEmpty && running.length == 1) {
+        return (app: running.single, reason: null);
+      }
+      return (
+        app: null,
+        reason: hits.isEmpty
+            ? 'no running app could be correlated to device $deviceArg'
+            : '${hits.length} running apps on $deviceArg — pick one by app',
+      );
+    }
+    if (running.length == 1) return (app: running.single, reason: null);
+    return (
+      app: null,
+      reason: 'multiple running Flutter apps found — re-call attach with app '
+          'or device',
+    );
   }
 
   /// Bind a device with no Flutter app — perception via screenshots, interaction via x,y (iOS sized to screenshot pixels, dpr=1).
@@ -535,7 +707,7 @@ class AttachTool extends GlintTool {
     switch (target.platform) {
       case DevicePlatform.ios:
         final bridgePath =
-            (args['iosBridgePath'] as String?) ?? _kDefaultBridgePath;
+            _resolveIosBridgePath(args['iosBridgePath'] as String?);
         if (!File(bridgePath).existsSync()) {
           warnings.add(
             'glint-iossim bridge not found at $bridgePath — tap / swipe / '
@@ -613,8 +785,12 @@ class AttachTool extends GlintTool {
             .screenshot(path);
   }
 
-  /// Probe the logical viewport, retrying past a blank first frame until [timeoutMs]; null if none ever appears.
-  Future<({double w, double h, double dpr})?> _probeViewportWithRetry(
+  /// Probe the logical viewport, retrying past a blank first frame until
+  /// [timeoutMs]. The implicit view is asked first (no node needed); a
+  /// selected node is the fallback. On failure the last error is kept so the
+  /// agent sees the real reason instead of a guess.
+  Future<({({double w, double h, double dpr})? viewport, Object? lastError})>
+      _probeViewportWithRetry(
     VmServiceRuntime probe,
     int timeoutMs,
     void Function(int, String?)? onProgress, {
@@ -626,22 +802,37 @@ class AttachTool extends GlintTool {
     final deadline = start.add(Duration(milliseconds: timeoutMs));
     var nextUpdate = start.add(const Duration(seconds: 15));
     var first = true;
+    Object? lastError;
     while (first || DateTime.now().isBefore(deadline)) {
       first = false;
+      try {
+        final vp = await resolver.resolveViewportNodeFree();
+        if (vp.w > 0 && vp.h > 0) {
+          return (viewport: (w: vp.w, h: vp.h, dpr: vp.dpr), lastError: null);
+        }
+        lastError = 'implicit view reports a zero-sized viewport';
+      } on Object catch (e) {
+        lastError = e;
+      }
       try {
         final scene = await reader.readSummary();
         try {
           final probeId = scene.firstAddressableId();
           if (probeId != null) {
             final vp = await resolver.resolveViewport(scene, probeId);
-            return (w: vp.w, h: vp.h, dpr: vp.dpr);
+            return (
+              viewport: (w: vp.w, h: vp.h, dpr: vp.dpr),
+              lastError: null
+            );
           }
+          lastError = 'tree read ok but no addressable node yet';
         } finally {
           await scene.dispose();
         }
-      } on Object {
+      } on Object catch (e) {
         // Inspector not ready yet — common in the first frames after a fresh
         // launch (getRootWidgetTree returns null). Keep retrying until deadline.
+        lastError = e;
       }
       final now = DateTime.now();
       if (onProgress != null && now.isAfter(nextUpdate)) {
@@ -654,22 +845,11 @@ class AttachTool extends GlintTool {
         break;
       }
     }
-    return null;
+    return (viewport: null, lastError: lastError);
   }
 
-  Future<String> _renderScene(GlintSession session) async {
-    final scene = await session.reader.readSummary();
-    try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.overlayEnricher.enrich(semantic);
-      await session.inputEnricher.enrich(semantic);
-      await session.iconEnricher.enrich(semantic);
-      await session.navEnricher.enrich(semantic);
-      return const PlainTextSceneRenderer().render(semantic);
-    } finally {
-      await scene.dispose();
-    }
-  }
+  Future<String> _renderScene(GlintSession session) =>
+      session.withScene((s) async => const PlainTextSceneRenderer().render(s));
 
   String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history) {
     return [
@@ -879,18 +1059,36 @@ class AttachTool extends GlintTool {
 
   /// A "needs selection" reply: not an error, but glint can't pick for the
   /// agent. Lists the candidates so the agent re-calls with an explicit choice.
-  StructuredResponse _selection(String summary, DiscoveryResult d) {
+  StructuredResponse _selection(
+    String summary,
+    DiscoveryResult d, {
+    List<RunningApp>? running,
+    GlintSession? session,
+  }) {
+    final pooled = session?.apps ?? const <AppSession>[];
     return StructuredResponse(
       summary: summary,
       nextSteps: [
-        for (final u in d.vmUris) 'vmUri: "$u"',
+        if (running != null)
+          for (final r in running)
+            r.label != null
+                ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
+                : r.deviceId != null
+                    ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
+                    : 'attach vmUri:"${r.vmUri}"  (device not correlated)',
+        if (running == null) for (final u in d.vmUris) 'vmUri: "$u"',
         for (final dev in d.devices)
           'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
+        for (final a in pooled)
+          'already attached: app:"${a.label}" on ${a.deviceName ?? a.id}',
       ],
       data: {
         'needsSelection': true,
-        'apps': [for (final u in d.vmUris) u.toString()],
+        'apps': running != null
+            ? [for (final r in running) r.toJson()]
+            : [for (final u in d.vmUris) u.toString()],
         'devices': [for (final dev in d.devices) dev.toJson()],
+        if (session != null) 'attached': session.appsJson(),
       },
     );
   }

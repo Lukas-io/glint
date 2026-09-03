@@ -111,6 +111,21 @@ void main() {
     test('AppBar becomes a SemanticAppBar', () {
       expect(classify(_n('AppBar')), isA<SemanticAppBar>());
     });
+    test('AppBar keeps its back button + actions, title skips button text', () {
+      final tree = _rooted(_n('AppBar', children: [
+        _n('BackButton', children: [_n('Icon')]),
+        _n('Text', textPreview: 'Daily News'),
+        _n('IconButton', children: [_n('Icon')]),
+      ]));
+      StableIdGenerator().assignIds(tree);
+      final reg = ClassifierRegistry.defaults();
+      SemanticNode rec(SceneNode n) => reg.classifierFor(n).build(
+          n, n.children.map(rec).toList());
+      final bar = rec(tree) as SemanticAppBar;
+      expect(bar.title, 'Daily News');
+      expect(bar.actions.whereType<SemanticButton>(), hasLength(2),
+          reason: 'back button + action button preserved');
+    });
     test('FloatingActionButton becomes a SemanticButton with tappable', () {
       final n = classify(_n('FloatingActionButton'));
       expect(n, isA<SemanticButton>());
@@ -136,6 +151,16 @@ void main() {
       expect(n, isA<SemanticContainer>());
       expect((n as SemanticContainer).hint, 'column');
     });
+    test('SnackBar → container hinted as transient', () {
+      final n = classify(_n('SnackBar'));
+      expect(n, isA<SemanticContainer>());
+      expect((n as SemanticContainer).hint, contains('transient'));
+    });
+    test('MaterialBanner → container hinted as transient', () {
+      final n = classify(_n('MaterialBanner'));
+      expect((n as SemanticContainer).hint, contains('transient'));
+    });
+
     test('Unknown widget falls through to SemanticUnknown', () {
       final n = classify(_n('SomeCustomWidget'));
       expect(n, isA<SemanticUnknown>());
@@ -185,6 +210,156 @@ void main() {
     });
   });
 
+  group('ButtonClassifier wrapper behavior', () {
+    SemanticNode classifyTree(SceneNode root) {
+      final tree = _rooted(root);
+      StableIdGenerator().assignIds(tree);
+      return Semanticizer()._classifyForTest(tree);
+    }
+
+    test('full-page GestureDetector wrapper keeps its subtree', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [
+          _n('Column', children: [
+            _n('Text', textPreview: 'Welcome back'),
+            _n('TextField'),
+            _n('ElevatedButton', children: [_n('Text', textPreview: 'Continue')]),
+          ]),
+        ]),
+      ]));
+      final wrapper = root.walk().whereType<SemanticButton>().first;
+      expect(wrapper.children, isNotEmpty, reason: 'wrapper must not swallow content');
+      expect(root.walk().whereType<SemanticInput>(), isNotEmpty);
+      expect(root.walk().whereType<SemanticText>().map((t) => t.content),
+          contains('Welcome back'));
+      expect(root.walk().whereType<SemanticButton>().map((b) => b.label),
+          contains('Continue'));
+    });
+
+    test('GestureDetector around plain caption stays a leaf button', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [_n('Text', textPreview: 'AeTrust')]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.label, 'AeTrust');
+      expect(btn.children, isEmpty);
+    });
+
+    test('leaf button joins two caption texts', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('ElevatedButton', children: [
+          _n('Text', textPreview: 'Buy'),
+          _n('Text', textPreview: r'$4.99'),
+        ]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.label, r'Buy · $4.99');
+      expect(btn.children, isEmpty);
+    });
+
+    test('three or more texts marks the tappable as a wrapper', () {
+      final root = classifyTree(_n('Scaffold', children: [
+        _n('GestureDetector', children: [
+          _n('Text', textPreview: 'title'),
+          _n('Text', textPreview: 'subtitle'),
+          _n('Text', textPreview: 'caption'),
+        ]),
+      ]));
+      final btn = root.walk().whereType<SemanticButton>().first;
+      expect(btn.children, hasLength(3));
+      expect(btn.label, isNull);
+    });
+  });
+
+  group('offstage subtrees', () {
+    test('contribute nothing to the scene', () {
+      final tree = _rooted(_n('Scaffold', children: [
+        _n('IndexedStack', children: [
+          _n('Column', children: [_n('Text', textPreview: 'active tab')]),
+          _n('Column', children: [_n('Text', textPreview: 'hidden tab')]),
+        ]),
+      ]));
+      StableIdGenerator().assignIds(tree);
+      final stack =
+          tree.walk().firstWhere((n) => n.label == 'IndexedStack');
+      for (final n in stack.children[1].walk()) {
+        n.isOffstage = true;
+      }
+      final root = Semanticizer()._classifyForTest(tree);
+      final texts =
+          root.walk().whereType<SemanticText>().map((t) => t.content);
+      expect(texts, contains('active tab'));
+      expect(texts, isNot(contains('hidden tab')));
+    });
+  });
+
+  group('selectActivePage', () {
+    final s = Semanticizer();
+
+    test('stacked navigator routes: last onstage page wins', () {
+      final home = SemanticPage(glintId: 'scaffold#home', body: const []);
+      final details = SemanticPage(glintId: 'scaffold#details', body: const []);
+      final tree = SemanticUnknown(
+        label: 'Navigator',
+        children: [home, details],
+      );
+      expect(s.selectActivePage(tree), same(details));
+    });
+
+    test('a page nested inside a page is never the route', () {
+      final tab = SemanticPage(glintId: 'scaffold#tab', body: const []);
+      final route = SemanticPage(glintId: 'scaffold#route', body: [
+        SemanticList(glintId: 'page_view', children: [tab]),
+      ]);
+      expect(s.selectActivePage(route), same(route));
+    });
+
+    test('offstage scaffolds (classified unknown) are not candidates', () {
+      final active = SemanticPage(glintId: 'scaffold#active', body: const []);
+      final tree = SemanticUnknown(label: 'IndexedStack', children: [
+        active,
+        SemanticUnknown(glintId: null, label: 'offstage'),
+      ]);
+      expect(s.selectActivePage(tree), same(active));
+    });
+
+    test('no page falls back to the given root', () {
+      final tree = SemanticUnknown(label: 'CustomApp', children: [
+        SemanticText(glintId: 't', content: 'x'),
+      ]);
+      expect(s.selectActivePage(tree), same(tree));
+    });
+  });
+
+  group('ToggleClassifier', () {
+    final reg = ClassifierRegistry.defaults();
+
+    test('Checkbox becomes a tappable SemanticButton', () {
+      final n = reg.classifierFor(_n('Checkbox')).build(_n('Checkbox'), const []);
+      expect(n, isA<SemanticButton>());
+      expect(n.affordances, contains(Affordance.tappable));
+    });
+
+    test('CheckboxListTile absorbs its inner toggle and takes the title', () {
+      final tile = _n('CheckboxListTile', children: [
+        _n('Text', textPreview: 'Remember me'),
+        _n('Checkbox'),
+      ]);
+      final tree = _rooted(_n('Scaffold', children: [tile]));
+      StableIdGenerator().assignIds(tree);
+      final root = Semanticizer()._classifyForTest(tree);
+      final buttons = root.walk().whereType<SemanticButton>().toList();
+      expect(buttons, hasLength(1), reason: 'inner Checkbox is absorbed');
+      expect(buttons.single.label, 'Remember me');
+    });
+
+    test('generic runtime types match via baseLabel', () {
+      final radio = _n('Radio<String>');
+      final n = reg.classifierFor(radio).build(radio, const []);
+      expect(n, isA<SemanticButton>());
+    });
+  });
+
   group('SceneCompactor', () {
     const c = SceneCompactor();
 
@@ -217,6 +392,12 @@ void main() {
     test('expandChild keeps leaf unknowns so they stay visible', () {
       final leaf = SemanticUnknown(glintId: 'x', label: 'MyWidget');
       expect(c.expandChild(leaf), [leaf]);
+    });
+    test('expandChild drops leaf framework plumbing (gaps, semantics)', () {
+      for (final label in ['_RawGap', 'Semantics', 'SizedBox.expand']) {
+        final leaf = SemanticUnknown(glintId: 'x', label: label);
+        expect(c.expandChild(leaf), isEmpty, reason: label);
+      }
     });
     test('hoistPage surfaces a page nested under wrappers', () {
       final page = SemanticPage(body: const []);
@@ -263,6 +444,31 @@ void main() {
       expect(out, contains('> input email_field (email)'));
     });
 
+    test('a text with the tappable affordance renders with * (inline link)', () {
+      final link = SemanticText(glintId: 'signin', content: 'Sign in to account')
+        ..affordances.add(Affordance.tappable);
+      final plain = SemanticText(glintId: 'plain', content: 'Welcome');
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [link, plain]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('* text signin "Sign in to account"'));
+      expect(out, contains('- text plain "Welcome"'));
+    });
+
+    test('input renders its validation error', () {
+      final input = SemanticInput(glintId: 'email_field')
+        ..hint = 'email'
+        ..error = 'Enter your email address';
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [input]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('⚠ Enter your email address'));
+    });
+
     test('input renders both hint and currentValue when both set', () {
       final input = SemanticInput(glintId: 'email_field')
         ..hint = 'email'
@@ -273,6 +479,52 @@ void main() {
       );
       final out = const PlainTextSceneRenderer().render(scene);
       expect(out, contains('> input email_field (email) "a@b"'));
+    });
+
+    test('multiline label renders on one line', () {
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [
+          SemanticText(glintId: 'title', content: 'the\nGreat Wall'),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('"the Great Wall"'));
+      expect(out, isNot(contains('the\nGreat')));
+    });
+
+    test('app-shell nested page is expanded, not summarised', () {
+      // Outer shell Scaffold wraps the real content Scaffold (Edgo pattern):
+      // the inner page holds the login form and MUST render.
+      final inner = SemanticPage(glintId: 'scaffold#content', body: [
+        SemanticInput(glintId: 'email')..hint = 'Email',
+        SemanticButton(glintId: 'login', label: 'Login'),
+      ]);
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(glintId: 'scaffold#shell', body: [
+          SemanticContainer(hint: 'stack', children: [inner]),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('email'), reason: 'nested login field must render');
+      expect(out, contains('login Login'));
+    });
+
+    test('pages nested inside a list (PageView tabs) stay summarised', () {
+      final tab = SemanticPage(glintId: 'scaffold#tab', body: [
+        SemanticText(glintId: 'tab_body', content: 'tab content'),
+      ]);
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(glintId: 'scaffold#route', body: [
+          SemanticList(glintId: 'page_view', children: [tab]),
+        ]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('page scaffold#tab'), reason: 'tab page line shown');
+      expect(out, isNot(contains('tab content')),
+          reason: 'tab body summarised away');
     });
 
     test('collapses runs of identical-role siblings sharing an id prefix', () {
@@ -300,20 +552,11 @@ void main() {
   });
 }
 
-// Test-only access to Semanticizer's classify pipeline so we can run it
-// against a hand-built tree without a real Scene.
+// Test-only entry: run the real classify pipeline (via classifyNode) against
+// a hand-built tree without a real Scene, then hoist like semanticize() does.
 extension on Semanticizer {
   SemanticNode _classifyForTest(SceneNode root) {
-    final classified = _classifyRec(root);
-    return const SceneCompactor().hoistPage(classified);
-  }
-
-  SemanticNode _classifyRec(SceneNode node) {
-    final children = node.children
-        .map(_classifyRec)
-        .expand(const SceneCompactor().expandChild)
-        .toList();
-    return ClassifierRegistry.defaults().classifierFor(node).build(node, children);
+    return const SceneCompactor().hoistPage(classifyNode(root));
   }
 }
 

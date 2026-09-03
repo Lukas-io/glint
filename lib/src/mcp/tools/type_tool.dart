@@ -6,6 +6,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 class TypeTool extends GlintTool {
   const TypeTool();
@@ -34,7 +35,10 @@ class TypeTool extends GlintTool {
               description:
                   'Only meaningful with `focus`: block until the focus target is hittable.',
             ),
-            'readyTimeoutMs': Schema.int(),
+            'readyTimeoutMs': Schema.int(
+              description:
+                  'Ceiling for `awaitReady` on the focus field. Default 5000.',
+            ),
             'returnScene': Schema.bool(
               description:
                   'After typing, settle and return the new scene plus changed '
@@ -59,14 +63,7 @@ class TypeTool extends GlintTool {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final detail = (args['detail'] as bool?) ?? false;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
-
-    final pre = returnScene ? await snapshotPreAction(session) : null;
+    final t = readTargetedArgs(args, session.config);
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -75,15 +72,19 @@ class TypeTool extends GlintTool {
       final arming = await maybeAwaitReady(
         session: session,
         glintId: focus,
-        awaitReady: armed,
-        ceilingMs: ceilingMs,
+        awaitReady: t.awaitReady,
+        ceilingMs: t.readyTimeoutMs,
         toolLabel: 'type:focus',
       );
       if (arming is ArmingFailed) return arming.envelope;
       if (arming is ArmingReady) focusArming = arming;
+    }
 
-      final scene = await session.reader.readSummary();
-      try {
+    final action = await openActionScene(session, snapshot: t.returnScene);
+    final scene = action.scene;
+    final pre = action.pre;
+    try {
+      if (focus != null) {
         final focusResult = await session.interactor.run(
           scene,
           Tap(SymbolicTarget(focus)),
@@ -97,43 +98,32 @@ class TypeTool extends GlintTool {
           );
         }
         warnings.addAll(focusResult.warnings);
-      } finally {
-        await scene.dispose();
       }
-    }
 
-    final scene = await session.reader.readSummary();
-    try {
       final result = await session.interactor.run(scene, TypeText(text));
-      var response = StructuredResponse.fromActionResult(result, detail: detail);
-      if (warnings.isNotEmpty || focusArming != null) {
-        response = StructuredResponse(
-          summary: response.summary,
-          warnings: [...warnings, ...response.warnings],
-          nextSteps: response.nextSteps,
-          data: {
-            ...?response.data,
-            if (focusArming != null) 'armed': focusArming.toJson(),
-          },
-          isError: response.isError,
-        );
-      }
-      if (returnScene && !response.isError) {
+      var response =
+          StructuredResponse.fromActionResult(result, detail: t.detail)
+              .addWarnings(warnings);
+      if (focusArming != null) response = withArmedMetadata(response, focusArming);
+
+      if (t.returnScene && !response.isError) {
         final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
+            includeSceneText: t.fetchScene);
         if (post != null) {
-          response = StructuredResponse(
-            summary: response.summary,
-            warnings: response.warnings,
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
-          );
+          // A successful type always changes the field's value → contentChanged.
+          // 'nothing' with no `focus` means the text landed nowhere — call it
+          // out instead of reporting a silent success.
+          final wentNowhere = post.changeCategory == 'nothing' && focus == null;
+          response = response.mergeData(post.toData()).addWarnings([
+            if (wentNowhere)
+              'no field changed — is an input focused? pass '
+                  'focus:<glintId> to tap one first',
+          ]);
         }
       }
       return response;
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
   }
 }

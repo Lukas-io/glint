@@ -34,9 +34,10 @@ class ShutdownSimTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final all = (args['all'] as bool?) ?? false;
-    final adbPath = session.isAttached && session.device is AndroidDevice
-        ? (session.device as AndroidDevice).adbPath
-        : 'adb';
+    final attachedDevice = session.active?.device;
+    final adbPath = attachedDevice is AndroidDevice
+        ? attachedDevice.adbPath
+        : resolveAdbPath(null) ?? 'adb';
     const launcher = AppLauncher();
     final scan = await DeviceDiscovery(adbPath: adbPath).scan();
 
@@ -52,7 +53,7 @@ class ShutdownSimTool extends GlintTool {
         final err = await launcher.shutdown(d.platform, d.id, adbPath: adbPath);
         done.add(err == null ? d.id : '${d.id} (failed: $err)');
       }
-      if (session.isAttached) await session.detach();
+      await session.detachAll();
       return StructuredResponse(
         summary: 'shut down ${scan.devices.length} device(s)',
         data: {'shutDown': done},
@@ -70,8 +71,8 @@ class ShutdownSimTool extends GlintTool {
       );
     }
     final platform = _platformOf(deviceId, scan, session);
-    final isThisDevice = session.isAttached && session.device.id == deviceId;
-    if (isThisDevice) await session.detach();
+    final isThisDevice = session.hasApp(deviceId);
+    if (isThisDevice) await session.detach(deviceId: deviceId);
 
     final err = await launcher.shutdown(platform, deviceId, adbPath: adbPath);
     if (err != null) {
@@ -94,11 +95,8 @@ class ShutdownSimTool extends GlintTool {
     for (final d in scan.devices) {
       if (d.id == id) return d.platform;
     }
-    if (session.isAttached && session.device.id == id) {
-      return session.device is IosSimulator
-          ? DevicePlatform.ios
-          : DevicePlatform.android;
-    }
+    final pooled = session.appFor(id);
+    if (pooled != null) return pooled.platform;
     return id.length == 36 && id.contains('-')
         ? DevicePlatform.ios
         : DevicePlatform.android;

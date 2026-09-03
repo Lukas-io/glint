@@ -22,10 +22,13 @@ sealed class SemanticNode {
     required this.glintId,
     required this.children,
     Set<Affordance>? affordances,
-  }) : affordances = affordances ?? const <Affordance>{};
+  }) : affordances = {...?affordances};
 
   /// Null when the node is purely structural.
   final String? glintId;
+
+  /// Intrinsic role affordances are seeded at construction; mutable so a later
+  /// behavior pass can add ones the role alone can't know (e.g. onTap-wrapped).
   final Set<Affordance> affordances;
   final List<SemanticNode> children;
 
@@ -110,6 +113,7 @@ class SemanticButton extends SemanticNode {
   SemanticButton({
     super.glintId,
     this.label,
+    this.isToggle = false,
     super.children = const [],
   }) : super(affordances: const {Affordance.tappable});
 
@@ -117,15 +121,25 @@ class SemanticButton extends SemanticNode {
   /// so [IconEnricher] can populate their name post-classify.
   final String? label;
 
+  /// True for Checkbox / Switch / Radio-shaped widgets ([ToggleClassifier]).
+  final bool isToggle;
+
+  /// 'on' / 'off', populated by [ToggleEnricher]; null when unknown.
+  String? toggleState;
+
   @override
   SemanticRole get role => SemanticRole.button;
 
   @override
-  String get displayLabel => label ?? '';
+  String get displayLabel {
+    final state = toggleState != null ? '[$toggleState]' : null;
+    return [label, state].nonNulls.join(' ');
+  }
 
   @override
   Map<String, Object?> _extraJson() => {
         if (label != null) 'label': label,
+        if (toggleState != null) 'toggleState': toggleState,
       };
 }
 
@@ -146,6 +160,10 @@ class SemanticInput extends SemanticNode {
   /// Live text in the field. Populated by [InputEnricher].
   String? currentValue;
 
+  /// Current validation error (InputDecoration.errorText), populated by
+  /// [InputEnricher]; null when the field is valid or shows no error.
+  String? error;
+
   @override
   SemanticRole get role => SemanticRole.input;
 
@@ -156,6 +174,7 @@ class SemanticInput extends SemanticNode {
     if (currentValue != null && currentValue!.isNotEmpty) {
       parts.add('"$currentValue"');
     }
+    if (error != null && error!.isNotEmpty) parts.add('⚠ $error');
     return parts.isEmpty ? 'input' : parts.join(' ');
   }
 
@@ -163,6 +182,7 @@ class SemanticInput extends SemanticNode {
   Map<String, Object?> _extraJson() => {
         if (hint != null) 'hint': hint,
         if (currentValue != null) 'value': currentValue,
+        if (error != null) 'error': error,
       };
 }
 

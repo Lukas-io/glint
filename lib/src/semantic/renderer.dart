@@ -49,28 +49,44 @@ class PlainTextSceneRenderer extends SceneRenderer {
   // Maximum nesting depth before content is suppressed (keeps scenes compact).
   static const _maxDepth = 8;
 
-  void _write(StringBuffer buf, SemanticNode node, {required int depth}) {
-    if (depth > _maxDepth) return;
+  /// One subtree only — no overlays, no route stack. [maxDepth] counts from
+  /// [node] (0 = just its line).
+  String renderSubtree(SemanticNode node, {int? maxDepth}) {
+    final buf = StringBuffer();
+    _write(buf, node, depth: 0, maxDepth: maxDepth ?? _maxDepth);
+    return buf.toString();
+  }
+
+  void _write(StringBuffer buf, SemanticNode node,
+      {required int depth, bool inList = false, int maxDepth = _maxDepth}) {
+    if (depth > maxDepth) return;
     _writeNodeLine(buf, node, depth: depth);
-    // Nested pages (PageView tabs, shell route branches) are summarised, not
-    // expanded — the agent can get_scene after navigating to them.
-    if (node is SemanticPage && depth > 0) return;
-    _writeChildren(buf, node.children, depth: depth + 1);
+    // A nested page inside a PageView/IndexedStack (SemanticList) is an
+    // alternate tab/route — summarise it; the agent navigates to it and
+    // re-reads. But an app-shell that nests the real content Scaffold (a
+    // page directly under a container) IS the current screen — expand it, or
+    // its whole form stays invisible in text mode.
+    if (node is SemanticPage && depth > 0 && inList) return;
+    _writeChildren(buf, node.children,
+        depth: depth + 1, inList: node is SemanticList, maxDepth: maxDepth);
   }
 
   void _writeChildren(
     StringBuffer buf,
     List<SemanticNode> children, {
     required int depth,
+    bool inList = false,
+    int maxDepth = _maxDepth,
   }) {
     var i = 0;
     while (i < children.length) {
       final run = _detectRun(children, i);
       if (run != null) {
-        _writeRun(buf, children, i, run, depth: depth);
+        _writeRun(buf, children, i, run, depth: depth, maxDepth: maxDepth);
         i += run.length;
       } else {
-        _write(buf, children[i], depth: depth);
+        _write(buf, children[i],
+            depth: depth, inList: inList, maxDepth: maxDepth);
         i += 1;
       }
     }
@@ -102,14 +118,20 @@ class PlainTextSceneRenderer extends SceneRenderer {
     buf.writeln();
   }
 
-  static String _truncate(String s) =>
-      s.length <= _maxLabelChars ? s : '${s.substring(0, _maxLabelChars - 1)}…';
+  /// Multiline labels would break the line-per-node contract — collapse all
+  /// whitespace runs to a single space before truncating.
+  static String _truncate(String s) {
+    final flat = s.replaceAll(RegExp(r'\s+'), ' ');
+    return flat.length <= _maxLabelChars
+        ? flat
+        : '${flat.substring(0, _maxLabelChars - 1)}…';
+  }
 
   void _writeRun(StringBuffer buf, List<SemanticNode> all, int start,
       _SiblingRun run,
-      {required int depth}) {
+      {required int depth, int maxDepth = _maxDepth}) {
     // First item full, rest collapsed: agent gets one concrete example.
-    _write(buf, all[start], depth: depth);
+    _write(buf, all[start], depth: depth, maxDepth: maxDepth);
     final hidden = run.length - 1;
     if (hidden == 0) return;
     final last = all[start + run.length - 1];
@@ -131,7 +153,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
   String _lastLabelSuffix(SemanticNode last) {
     final label = last.displayLabel;
     if (label.isEmpty || label == last.role.name) return '';
-    return ' $label';
+    return ' ${_truncate(label)}';
   }
 
   /// Null when shorter than [groupThreshold] or no shared prefix.

@@ -1,12 +1,14 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../armed.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 class TapTool extends GlintTool {
   const TapTool();
@@ -15,18 +17,14 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by its glintId from get_scene, OR pass x,y to tap raw '
+            'Tap a node by its glintId from get_scene, or pass x,y for raw '
             'coordinates (device mode: screenshot pixels; flutter mode: logical '
-            'points) — coordinates bypass glintId resolution and hit-testing. '
-            'Returns structuredContent with: ok (bool), painted, hittable, '
-            'physicalCenter, changed (bool), changeCategory (routeChanged/'
-            'overlayAppeared/overlayDismissed/contentChanged/nothing). '
-            'errorKind values: unresolvedTarget (glintId not found — re-run '
-            'get_scene to get current ids), notHittable (covered by overlay/'
-            'absorber — dismiss it first), backendToolError (native tap failed). '
-            'With awaitReady: true: blocks until the target exists AND passes '
-            'hit-test, then fires — use when targeting across screen transitions. '
-            'ceilingMs controls the armed-intent timeout (default 5000).',
+            'points). Returns changed + changeCategory (routeChanged / '
+            'overlayAppeared / overlayDismissed / contentChanged / nothing) so '
+            'you know if the screen reacted; pass detail:true for geometry. '
+            'awaitReady:true blocks until the target exists AND is hittable '
+            'before firing — use across screen transitions '
+            '(readyTimeoutMs, default 5000).',
         inputSchema: ObjectSchema(
           properties: {
             'glintId': Schema.string(
@@ -77,11 +75,20 @@ class TapTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
+    final t = readTargetedArgs(args, session.config);
 
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
-    final x = (args['x'] as num?)?.toDouble();
-    final y = (args['y'] as num?)?.toDouble();
-    if (x != null && y != null) return coordinateTap(session, x, y);
+    // In Flutter mode it still gets a changed-signal so raw x,y taps aren't
+    // blind about whether anything happened.
+    final pt = readPoint(args);
+    if (pt != null) {
+      return withCoordinateChange(
+        session,
+        () => coordinateTap(session, pt.x, pt.y),
+        returnScene: t.returnScene,
+        fetchScene: t.fetchScene,
+      );
+    }
 
     final glintId = args['glintId'] as String?;
     if (glintId == null) {
@@ -94,88 +101,67 @@ class TapTool extends GlintTool {
       );
     }
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
-    final armed = (args['awaitReady'] as bool?) ?? false;
-    final ceilingMs =
-        (args['readyTimeoutMs'] as int?) ?? session.config.readyTimeoutMs;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final detail = (args['detail'] as bool?) ?? false;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
-
-    // Pre-action snapshot (cheap) — only needed when returnScene is requested.
-    final pre = returnScene ? await snapshotPreAction(session) : null;
 
     final arming = await maybeAwaitReady(
       session: session,
       glintId: glintId,
-      awaitReady: armed,
-      ceilingMs: ceilingMs,
+      awaitReady: t.awaitReady,
+      ceilingMs: t.readyTimeoutMs,
       toolLabel: 'tap',
     );
     if (arming is ArmingFailed) return arming.envelope;
 
-    final scene = await session.reader.readSummary();
+    final action = await openActionScene(session, snapshot: t.returnScene);
+    final scene = action.scene;
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
-      var response = StructuredResponse.fromActionResult(result, detail: detail);
+      var response =
+          StructuredResponse.fromActionResult(result, detail: t.detail);
+      if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
-      // Enrich unresolvedTarget with overlay context — helps agent understand
-      // whether the scene changed (overlay appeared/dismissed) since last read.
-      if (!result.ok &&
-          result.errorKind == GlintErrorKind.unresolvedTarget &&
-          scene.overlayRoots.isNotEmpty) {
-        response = StructuredResponse.error(
-          summary: response.summary,
-          errorKind: GlintErrorKind.unresolvedTarget,
-          detail: 'glintId "$glintId" not found in scene. '
-              'A ${scene.hasBarrierOverlay ? "modal" : ""} overlay is currently '
-              'active — the scene may have changed since your last get_scene. '
-              'Re-read with get_scene to see current ids including overlay content.',
-          nextSteps: const [
-            'call get_scene to read the current overlay and base-screen ids',
-          ],
-        );
-      }
-
-      // Warn when tapping a base-screen node while a modal barrier is up —
-      // the barrier absorbs the touch, so hittable:true can be misleading.
-      if (result.ok &&
-          scene.hasBarrierOverlay &&
-          !scene.isInOverlay(glintId)) {
-        response = StructuredResponse(
-          summary: response.summary,
-          warnings: [
-            ...response.warnings,
-            'a modal overlay is present; the tap may have landed on the barrier '
-                'rather than your target — if the action had no effect, dismiss '
-                'the dialog first and retry',
-          ],
-          nextSteps: response.nextSteps,
-          isError: response.isError,
-          data: response.data,
-        );
-      }
-
-      // Post-action scene + changed signal (only when requested).
-      if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
-        if (post != null) {
-          response = StructuredResponse(
+      if (!result.ok) {
+        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
+            scene.overlayRoots.isEmpty) {
+          final hint = didYouMean(suggestIds(scene.glintIds, glintId));
+          if (hint != null) {
+            response = response.copyWith(
+                nextSteps: [hint, ...response.nextSteps]);
+          }
+        }
+        // Enrich unresolvedTarget with overlay context — the scene may have
+        // changed (overlay appeared/dismissed) since the agent's last read.
+        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
+            scene.overlayRoots.isNotEmpty) {
+          response = StructuredResponse.error(
             summary: response.summary,
-            warnings: response.warnings,
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
+            errorKind: GlintErrorKind.unresolvedTarget,
+            detail: 'glintId "$glintId" not found in scene. '
+                'A ${scene.hasBarrierOverlay ? "modal" : ""} overlay is active — '
+                'the scene may have changed since your last get_scene. '
+                'Re-read with get_scene to see current ids including overlay content.',
+            nextSteps: const [
+              'call get_scene to read the current overlay and base-screen ids',
+            ],
           );
         }
+        return response;
       }
 
-      return arming is ArmingReady
-          ? withArmedMetadata(response, arming)
-          : response;
+      // Warn when tapping a base-screen node while a modal barrier is up — the
+      // barrier absorbs the touch, so hittable:true can be misleading.
+      if (scene.hasBarrierOverlay && !scene.isInOverlay(glintId)) {
+        response = response.addWarnings(const [
+          'a modal overlay is present; the tap may have landed on the barrier '
+              'rather than your target — if the action had no effect, dismiss '
+              'the dialog first and retry',
+        ]);
+      }
+
+      return await appendPostAction(session, response, action.pre,
+          returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
   }
 }

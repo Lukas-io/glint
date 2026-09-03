@@ -57,6 +57,10 @@ class OverlayEnricher implements SemanticEnricher {
     for (final n in root.walk()) {
       final l = n.label;
       if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
+      // Transient messages ride in an OverlayEntry too — flag them as such so
+      // the agent reads the message but doesn't treat it as a blocking modal.
+      if (l.contains('SnackBar')) return 'snackbar';
+      if (l.contains('Toast')) return 'toast';
       if (l.contains('Dialog') || l.contains('Alert')) return 'dialog';
     }
     return 'dialog';
@@ -78,7 +82,12 @@ class NavigationEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    for (final source in scene.sourceScene.addressableCandidates()) {
+    // Probe only within the ACTIVE page — a covered sibling route would
+    // answer with its own (wrong) name. No name beats a wrong name.
+    final pageId = scene.root.glintId;
+    final pageSource = pageId != null ? scene.sourceFor(pageId) : null;
+    for (final source
+        in scene.sourceScene.addressableCandidates(within: pageSource)) {
       final result = await runtime.evaluateWithSelection(
         expression: _routeExpr,
         inspectorId: source.inspectorId,
@@ -111,7 +120,7 @@ class IconEnricher implements SemanticEnricher {
     for (var i = 0; i < budget; i++) {
       final node = icons[i];
       if (node.glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(node.glintId!);
+      final source = scene.sourceFor(node.glintId!);
       if (source == null) continue;
       try {
         await _enrichOne(source, scene.sourceScene.groupName, node);
@@ -137,6 +146,103 @@ class IconEnricher implements SemanticEnricher {
   }
 }
 
+/// Reads the live `value` of Checkbox / Switch-shaped toggles into
+/// [SemanticButton.toggleState] ('on'/'off'). Radio is excluded — its `value`
+/// is the option, not the checked state. Capped at [maxToggles].
+class ToggleEnricher implements SemanticEnricher {
+  ToggleEnricher({required this.runtime, this.maxToggles = 10});
+
+  final FlutterRuntime runtime;
+  final int maxToggles;
+
+  static const _valueToggles = {
+    'Checkbox',
+    'Switch',
+    'CupertinoSwitch',
+    'CupertinoCheckbox',
+    'CheckboxListTile',
+    'SwitchListTile',
+  };
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final toggles = scene.root
+        .walk()
+        .whereType<SemanticButton>()
+        .where((b) => b.isToggle)
+        .toList();
+    final budget = min(toggles.length, maxToggles);
+    for (var i = 0; i < budget; i++) {
+      final node = toggles[i];
+      if (node.glintId == null) continue;
+      final source = scene.sourceFor(node.glintId!);
+      if (source == null) continue;
+      if (!_valueToggles.contains(source.baseLabel)) continue;
+      try {
+        final raw = await runtime.evaluateWithSelection(
+          expression:
+              '((WidgetInspectorService.instance.selection.currentElement!.widget'
+              ' as dynamic).value).toString()',
+          inspectorId: source.inspectorId,
+          groupName: scene.sourceScene.groupName,
+        );
+        node.toggleState = switch (raw) {
+          'true' => 'on',
+          'false' => 'off',
+          _ => null,
+        };
+      } on Object {
+        // best-effort
+      }
+    }
+  }
+}
+
+/// Marks a [SemanticText] tappable when its RichText carries a
+/// [GestureRecognizer] on a span — inline links ("Sign in", Terms & Conditions,
+/// "Resend") that render as plain text but navigate on tap. Without this they
+/// show as static `-` and an agent can't discover them. Capped at [maxTexts]
+/// (one eval each); runs at full detail only.
+class LinkEnricher implements SemanticEnricher {
+  LinkEnricher({required this.runtime, this.maxTexts = 30});
+
+  final FlutterRuntime runtime;
+  final int maxTexts;
+
+  // Single-line (the CFE eval rejects newlines, not block bodies): true when
+  // any span in the RichText's InlineSpan tree has a recognizer.
+  static const _hasRecognizerExpr =
+      '((r) { if (r is! RichText) return false; var f = false; '
+      'r.text.visitChildren((s) { if (s is TextSpan && s.recognizer != null) f = true; return true; }); '
+      'return f; })'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget).toString()';
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final texts = scene.root
+        .walk()
+        .whereType<SemanticText>()
+        .where((t) => t.glintId != null && t.affordances.isEmpty)
+        .toList();
+    final budget = min(texts.length, maxTexts);
+    for (var i = 0; i < budget; i++) {
+      final node = texts[i];
+      final source = scene.sourceFor(node.glintId!);
+      if (source == null) continue;
+      try {
+        final r = await runtime.evaluateWithSelection(
+          expression: _hasRecognizerExpr,
+          inspectorId: source.inspectorId,
+          groupName: scene.sourceScene.groupName,
+        );
+        if (r == 'true') node.affordances.add(Affordance.tappable);
+      } on Object {
+        // best-effort
+      }
+    }
+  }
+}
+
 /// Reads `hint` (InputDecoration.labelText) and `currentValue` (live
 /// EditableText controller text) for each [SemanticInput]. Capped at [maxInputs].
 class InputEnricher implements SemanticEnricher {
@@ -157,42 +263,78 @@ class InputEnricher implements SemanticEnricher {
     for (var i = 0; i < budget; i++) {
       final node = inputs[i];
       if (node.glintId == null) continue;
-      final source = scene.sourceScene.findByGlintId(node.glintId!);
+      final source = scene.sourceFor(node.glintId!);
       if (source == null) continue;
       await _enrichOne(source, scene.sourceScene, node);
     }
   }
 
+  // Arrow-only (the CFE eval rejects statement-block lambdas): read a
+  // TextField's labelText, falling back to hintText (placeholder).
+  static const _labelExpr =
+      '((w) => w is TextField ? (w.decoration?.labelText ?? '
+      'w.decoration?.hintText ?? "") : "")'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget)';
+
+  // Current validation error. TextFormField copies the FormField's errorText
+  // into the inner TextField's decoration, so reading it here surfaces live
+  // validation feedback (why a submit was rejected).
+  static const _errorExpr =
+      '((w) => w is TextField ? (w.decoration?.errorText ?? "") : "")'
+      '(WidgetInspectorService.instance.selection.currentElement!.widget)';
+
   Future<void> _enrichOne(
       SceneNode source, Scene scene, SemanticInput target) async {
+    // One subtree read serves both label and value lookups.
+    Map<String, Object?>? subtree;
     try {
-      target.hint = await _readLabelText(source, scene.groupName);
+      subtree = await inspector.getDetailsSubtree(
+        inspectorId: source.inspectorId,
+        groupName: scene.groupName,
+      );
+    } on Object {
+      // best-effort — fall back to the source node below
+    }
+    // The inner TextField carries decoration (label + errorText); resolve it
+    // once and reuse for both reads.
+    final fieldId = subtree == null
+        ? source.inspectorId
+        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
+            source.inspectorId);
+    try {
+      target.hint = await _readDecoration(scene, fieldId, _labelExpr);
     } on Object {
       // best-effort
     }
     try {
-      target.currentValue = await _readCurrentValue(source, scene);
+      target.error = await _readDecoration(scene, fieldId, _errorExpr);
+    } on Object {
+      // best-effort
+    }
+    try {
+      target.currentValue = await _readCurrentValue(scene, subtree);
     } on Object {
       // best-effort
     }
   }
 
-  Future<String?> _readLabelText(SceneNode source, String groupName) async {
+  /// Evaluates a decoration [expr] against the inner [fieldId] TextField. A
+  /// [TextFormField] builds an inner TextField, so [fieldId] is resolved from
+  /// the subtree rather than the source (which would be the FormField).
+  Future<String?> _readDecoration(
+      Scene scene, String fieldId, String expr) async {
     final v = await runtime.evaluateWithSelection(
-      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
-          ' as TextField).decoration?.labelText ?? ""',
-      inspectorId: source.inspectorId,
-      groupName: groupName,
+      expression: expr,
+      inspectorId: fieldId,
+      groupName: scene.groupName,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  Future<String?> _readCurrentValue(SceneNode source, Scene scene) async {
-    final subtree = await inspector.getDetailsSubtree(
-      inspectorId: source.inspectorId,
-      groupName: scene.groupName,
-    );
-    final editableId = _findEditableTextId(subtree);
+  Future<String?> _readCurrentValue(
+      Scene scene, Map<String, Object?>? subtree) async {
+    if (subtree == null) return null;
+    final editableId = _findWidgetId(subtree, const {'EditableText'});
     if (editableId == null) return null;
 
     final v = await runtime.evaluateWithSelection(
@@ -204,10 +346,11 @@ class InputEnricher implements SemanticEnricher {
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  String? _findEditableTextId(Map<String, Object?> node) {
+  /// First subtree node whose widget type is in [types], returning its valueId.
+  String? _findWidgetId(Map<String, Object?> node, Set<String> types) {
     final label = (node['description'] as String?) ?? '';
     final type = (node['widgetRuntimeType'] as String?) ?? '';
-    if (label == 'EditableText' || type == 'EditableText') {
+    if (types.contains(label) || types.contains(type)) {
       final id = node['valueId'] as String?;
       if (id != null && id.isNotEmpty) return id;
     }
@@ -215,7 +358,7 @@ class InputEnricher implements SemanticEnricher {
     if (kids is List) {
       for (final c in kids) {
         if (c is Map) {
-          final found = _findEditableTextId(c.cast<String, Object?>());
+          final found = _findWidgetId(c.cast<String, Object?>(), types);
           if (found != null) return found;
         }
       }

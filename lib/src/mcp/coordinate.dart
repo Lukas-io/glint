@@ -1,5 +1,6 @@
 import '../../interaction.dart';
 import 'envelope.dart';
+import 'post_action.dart';
 import 'session.dart';
 
 // Backend-direct coordinate actions, shared by tap / long_press / swipe / drag.
@@ -10,6 +11,25 @@ import 'session.dart';
 
 Map<String, Object?> _ok(GlintSession session, Map<String, Object?> extra) =>
     {'ok': true, ...extra, if (session.isDeviceMode) 'mode': 'device'};
+
+/// Runs a raw-coordinate [action] and, in Flutter mode with [returnScene], adds
+/// the changed-signal via pre/post snapshots — so a raw x,y tap answers "did
+/// anything happen?" the same way a glintId tap does. Device mode has no Flutter
+/// scene to compare, so it returns the bare action result unchanged.
+Future<StructuredResponse> withCoordinateChange(
+  GlintSession session,
+  Future<StructuredResponse> Function() action, {
+  bool returnScene = true,
+  bool fetchScene = false,
+}) async {
+  if (session.isDeviceMode || !returnScene) return action();
+  final pre = await snapshotPreAction(session);
+  final response = await action();
+  if (response.isError) return response;
+  final post =
+      await readPostActionState(session, pre, includeSceneText: fetchScene);
+  return post == null ? response : response.mergeData(post.toData());
+}
 
 Future<StructuredResponse> coordinateTap(
     GlintSession session, double x, double y) async {
