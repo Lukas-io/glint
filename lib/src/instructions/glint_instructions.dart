@@ -102,7 +102,7 @@ const _toolSurface = '''
 
 `attach` connect to app · `get_scene` read screen · `tap` tap (returnScene:true = scene+changed; detail:true = geometry) · `type` text (focus:<id>; detail:true) · `scroll` scroll · `scroll_to_find` scroll until target hittable · `swipe` swipe · `long_press` long-press · `drag` drag · `hardware_button` lock/unlock/home · `wait_for_settle` wait for settle · `resolve` full geometry for a glintId · `session` status
 
-Responses are minimal by default. Use `detail:true` on tap/type or call `resolve` for geometry.
+Replies are minimal; `detail:true` (tap/type) or `resolve` adds geometry.
 ''';
 
 const _examples = '''

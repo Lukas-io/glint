@@ -34,9 +34,10 @@ class ShutdownSimTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final all = (args['all'] as bool?) ?? false;
-    final adbPath = session.isAttached && session.device is AndroidDevice
-        ? (session.device as AndroidDevice).adbPath
-        : 'adb';
+    final attachedDevice = session.active?.device;
+    final adbPath = attachedDevice is AndroidDevice
+        ? attachedDevice.adbPath
+        : resolveAdbPath(null) ?? 'adb';
     const launcher = AppLauncher();
     final scan = await DeviceDiscovery(adbPath: adbPath).scan();
 

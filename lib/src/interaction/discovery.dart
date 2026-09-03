@@ -108,6 +108,36 @@ class DiscoveryResult {
       devices.where((d) => d.platform == p).toList();
 }
 
+/// Where `adb` lives: [explicit] first, then PATH, then the usual SDK homes
+/// (`ANDROID_HOME`, `ANDROID_SDK_ROOT`, `~/Library/Android/sdk`,
+/// `~/Android/Sdk`). Null when none exists — callers say so instead of
+/// reporting "no android device".
+String? resolveAdbPath(String? explicit, [Map<String, String>? env]) {
+  final e = env ?? Platform.environment;
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+  final exe = Platform.isWindows ? 'adb.exe' : 'adb';
+  final sep = Platform.isWindows ? ';' : ':';
+  for (final dir in (e['PATH'] ?? '').split(sep)) {
+    if (dir.isEmpty) continue;
+    final f = File('$dir/$exe');
+    if (f.existsSync()) return f.path;
+  }
+  final home = e['HOME'] ?? e['USERPROFILE'] ?? '';
+  final roots = [
+    e['ANDROID_HOME'],
+    e['ANDROID_SDK_ROOT'],
+    if (home.isNotEmpty) '$home/Library/Android/sdk',
+    if (home.isNotEmpty) '$home/Android/Sdk',
+    if (e['LOCALAPPDATA'] != null) '${e['LOCALAPPDATA']}/Android/Sdk',
+  ];
+  for (final root in roots) {
+    if (root == null || root.isEmpty) continue;
+    final f = File('$root/platform-tools/$exe');
+    if (f.existsSync()) return f.path;
+  }
+  return null;
+}
+
 /// Finds running Flutter apps + booted devices so `attach` can auto-fill omitted args.
 /// Pure host inspection: `ps` for VM URIs, `xcrun simctl` for iOS sims, `adb devices` for Android.
 class DeviceDiscovery {

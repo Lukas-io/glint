@@ -48,8 +48,9 @@ class KillAppTool extends GlintTool {
     final isThisDevice = pooled != null;
     final platform = pooled?.platform;
     final pooledDevice = pooled?.device;
-    final adbPath =
-        pooledDevice is AndroidDevice ? pooledDevice.adbPath : 'adb';
+    final adbPath = pooledDevice is AndroidDevice
+        ? pooledDevice.adbPath
+        : resolveAdbPath(null) ?? 'adb';
 
     final done = <String>[];
 
