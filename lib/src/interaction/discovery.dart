@@ -145,6 +145,15 @@ class DeviceDiscovery {
 
   final String adbPath;
 
+  /// Whether [deviceId] is still booted / connected — the cheap check behind
+  /// `deviceGone`, so a closed simulator is named instead of guessed at.
+  Future<bool> isDevicePresent(String deviceId, DevicePlatform platform) async {
+    final devices = platform == DevicePlatform.ios
+        ? await _bootedIosSims()
+        : await _adbDevices();
+    return devices.any((d) => d.id == deviceId);
+  }
+
   Future<DiscoveryResult> scan() async {
     final vmUris = await _scanVmUris();
     final ios = await _bootedIosSims();

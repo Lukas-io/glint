@@ -41,6 +41,7 @@ AndroidDevice _device(String serial) =>
     AndroidDevice(serial: serial, adbPath: 'adb');
 
 void main() {
+  deviceGoneMain();
   group('GlintSession pool', () {
     late int created;
     late GlintSession session;
@@ -161,5 +162,20 @@ void main() {
         }
       }
     });
+  });
+}
+
+void deviceGoneMain() {
+  test('deviceGoneResponse names the device and how to get it back', () async {
+    final session = GlintSession();
+    final app = AppSession.bindDevice(
+        device: AndroidDevice(serial: 'emulator-5554', adbPath: 'adb'))
+      ..displayName = 'AeTrust'
+      ..deviceName = 'Pixel 8';
+    final r = GlintTool.deviceGoneResponse(session, app);
+    expect(r.isError, isTrue);
+    expect(r.data?['errorKind'], 'deviceGone');
+    expect(r.summary, contains('emulator Pixel 8'));
+    expect(r.nextSteps.first, contains('attach device:"emulator-5554"'));
   });
 }
