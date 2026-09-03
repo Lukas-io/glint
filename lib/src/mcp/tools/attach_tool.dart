@@ -147,7 +147,11 @@ class AttachTool extends GlintTool {
       );
     }
 
-    final adbPath = (args['adbPath'] as String?) ?? 'adb';
+    final adbResolved = resolveAdbPath(args['adbPath'] as String?);
+    final adbPath = adbResolved ?? 'adb';
+    if (adbResolved == null && platformArg == 'android') {
+      return _adbMissing();
+    }
     final returnScene = (args['returnScene'] as bool?) ?? false;
     final dryRun = (args['dryRun'] as bool?) ?? false;
     final awaitSettle = (args['awaitSettle'] as bool?) ?? false;
@@ -264,6 +268,9 @@ class AttachTool extends GlintTool {
       final vm = await probe.rawService.getVM();
       final platform =
           _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
+      if (platform == DevicePlatform.android && adbResolved == null) {
+        return _adbMissing();
+      }
       if (platform == null) {
         return StructuredResponse.error(
           summary: 'could not determine platform from the VM '
@@ -536,6 +543,17 @@ class AttachTool extends GlintTool {
       await probe.disconnect();
     }
   }
+
+  StructuredResponse _adbMissing() => StructuredResponse.error(
+        summary: 'adb not found — cannot drive an Android emulator',
+        errorKind: GlintErrorKind.invalidArgument,
+        detail: 'looked on PATH, \$ANDROID_HOME, \$ANDROID_SDK_ROOT, '
+            '~/Library/Android/sdk and ~/Android/Sdk',
+        nextSteps: const [
+          'pass adbPath:"<sdk>/platform-tools/adb"',
+          'or set ANDROID_HOME so glint can find it',
+        ],
+      );
 
   /// Reply for an instant switch to an already-attached app.
   Future<StructuredResponse> _switched(GlintSession session, AppSession app,
