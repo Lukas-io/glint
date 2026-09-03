@@ -18,6 +18,8 @@ enum GlintErrorKind {
   appNotResumed,
   // transport failures
   connectionLost,
+  // the simulator / emulator behind the session is no longer booted
+  deviceGone,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // scroll_to_find specific failures

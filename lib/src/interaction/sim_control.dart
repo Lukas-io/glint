@@ -41,6 +41,10 @@ class SimControl {
   const SimControl();
 
   /// Full status for [udid], or null if no such device exists.
+  /// True when [udid] is currently booted; false when shut down or unknown.
+  Future<bool> isBooted(String udid) async =>
+      (await status(udid))?.state == 'Booted';
+
   Future<SimStatus?> status(String udid) async {
     final target = udid.toUpperCase();
     final entry = await _deviceEntry(target);

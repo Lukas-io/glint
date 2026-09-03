@@ -83,6 +83,7 @@ abstract class GlintTool {
     StructuredResponse response;
     final target =
         routesByApp ? (request.arguments?['app'] as String?) : null;
+    var app = session.active;
     try {
       if (target == null) {
         response = await handle(session, request);
@@ -91,6 +92,7 @@ abstract class GlintTool {
         if (matches.length != 1) {
           response = unknownAppResponse(session, target, matches);
         } else {
+          app = matches.single;
           response = await session.withApp(
               matches.single, () async => await handle(session, request));
         }
@@ -127,8 +129,58 @@ abstract class GlintTool {
         detail: '$e\n$st',
       );
     }
+    response = await _checkDeviceGone(session, app, response);
     logCall(session, request, response, start);
     return response.toCallResult();
+  }
+
+  static const _deviceSensitive = {
+    GlintErrorKind.connectionLost,
+    GlintErrorKind.backendToolError,
+    GlintErrorKind.internal,
+  };
+
+  /// A lost VM or a failing native tool is often a simulator that was closed.
+  /// Ask the host once; when the device is gone, say so and drop its session.
+  Future<StructuredResponse> _checkDeviceGone(
+      GlintSession session, AppSession? app, StructuredResponse response) async {
+    if (!response.isError || app == null) return response;
+    final kind = enumByName(
+        GlintErrorKind.values, response.data?['errorKind'] as String?);
+    if (kind == null || !_deviceSensitive.contains(kind)) return response;
+    final adb = app.device is AndroidDevice
+        ? (app.device as AndroidDevice).adbPath
+        : 'adb';
+    final bool present;
+    try {
+      present = await DeviceDiscovery(adbPath: adb)
+          .isDevicePresent(app.id, app.platform);
+    } on Object {
+      return response;
+    }
+    if (present) return response;
+    await session.detach(deviceId: app.id);
+    return deviceGoneResponse(session, app);
+  }
+
+  /// The device behind [app] is no longer booted: name it, and say how back.
+  static StructuredResponse deviceGoneResponse(
+      GlintSession session, AppSession app) {
+    final what = app.platform == DevicePlatform.ios ? 'simulator' : 'emulator';
+    final remaining = session.apps;
+    return StructuredResponse.error(
+      summary: '$what ${app.deviceName ?? app.id} is no longer booted — it was '
+          'closed or crashed, so ${app.label} is gone',
+      errorKind: GlintErrorKind.deviceGone,
+      detail: 'device ${app.id} is not in the booted list; its session was '
+          'dropped from the pool',
+      nextSteps: [
+        'attach device:"${app.id}" boots it and relaunches ${app.label} from history',
+        if (remaining.isNotEmpty)
+          'or continue on: ${remaining.map((a) => '"${a.label}"').join(", ")} (attach app:"<name>")',
+        'ask the user if the $what should stay open while you work',
+      ],
+    );
   }
 
   /// Records one call in the action log + usage recorder. Public so a
