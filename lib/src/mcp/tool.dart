@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dart_mcp/server.dart';
 
@@ -138,10 +139,13 @@ abstract class GlintTool {
       argKeys: argKeys,
       durationMs: elapsedMs,
       resultBytes: resultBytes,
+      errorKind: errorKind.name,
     );
   }
 
-  int _resultBytes(StructuredResponse r) => r.summary.length;
+  /// Size of what the client actually receives (the structured payload).
+  int _resultBytes(StructuredResponse r) =>
+      jsonEncode(r.toStructuredContent()).length;
 
   String _shortSummary(String s) {
     const max = 160;

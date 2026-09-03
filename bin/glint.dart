@@ -52,14 +52,14 @@ Future<void> main(List<String> args) async {
   // kill our children and exit(0) explicitly; lingering sockets don't
   // get a vote.
   var exiting = false;
-  Never shutdown(String reason) {
-    if (!exiting) {
-      exiting = true;
-      stderr.writeln('glint: $reason — shutting down.');
-      try {
-        server.session.killLaunchedApps();
-      } catch (_) {/* best effort */}
-    }
+  Future<void> shutdown(String reason) async {
+    if (exiting) return;
+    exiting = true;
+    stderr.writeln('glint: $reason — shutting down.');
+    try {
+      server.session.killLaunchedApps();
+    } catch (_) {/* best effort */}
+    await server.session.usageReporter.shipOnExit();
     exit(0);
   }
 
@@ -74,5 +74,5 @@ Future<void> main(List<String> args) async {
   // Block until the client disconnects. dart_mcp closes `done` when the
   // underlying channel goes away or shutdown completes.
   await server.done;
-  shutdown('MCP host closed the stdio channel');
+  await shutdown('MCP host closed the stdio channel');
 }

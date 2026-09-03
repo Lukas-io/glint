@@ -240,4 +240,73 @@ void main() {
       expect(second.events, 0);
     });
   });
+
+  group('UsageEventStore', () {
+    late Directory tmp;
+
+    setUp(() {
+      tmp = Directory.systemTemp.createTempSync('glint-store-test-');
+    });
+    tearDown(() => tmp.deleteSync(recursive: true));
+
+    test('ids continue across recorder instances and rows persist', () {
+      final a = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      a.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
+      a.record(tool: 'get_scene', outcome: ToolOutcome.error, argKeys: const [], durationMs: 2, resultBytes: 20, errorKind: 'internal');
+      expect(a.maxId, 2);
+
+      final b = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      expect(b.nextId, 3);
+      b.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 3, resultBytes: 30);
+      final rows = b.eventsAfterId(0);
+      expect(rows.map((r) => r['id']), [1, 2, 3]);
+      expect(rows[1]['error_kind'], 'internal');
+      expect(b.eventsAfterId(2).length, 1);
+    });
+
+    test('ship reads persisted events from an earlier process', () async {
+      final earlier = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      earlier.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
+      final later = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      final res = await UsageReporter(later).ship(dataDir: tmp.path, dryRun: true);
+      expect(res.events, 1);
+    });
+
+    test('a watermark past every known id ships from the start', () async {
+      final r = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      r.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
+      File('${tmp.path}/usage-ship-state.json')
+          .writeAsStringSync('{"lastShippedEventId": 999, "shipCount": 1}');
+      final reporter = UsageReporter(r);
+      expect(reporter.unshippedCount(dataDir: tmp.path), 1);
+      final res = await reporter.ship(dataDir: tmp.path, dryRun: true);
+      expect(res.events, 1);
+    });
+
+    test('shipOnExit is a no-op with nothing unshipped', () async {
+      final r = UsageRecorder.config(enabled: true, dataDir: tmp.path);
+      await UsageReporter(r).shipOnExit(dataDir: tmp.path);
+      expect(File('${tmp.path}/${AuditLog.fileName}').existsSync(), false);
+    });
+  });
+
+  group('summarizeUsage rollup fields', () {
+    test('error kinds, outcome-tagged transitions, self-correction, tokens', () {
+      final rows = [
+        {'correlation_id': 't1', 'tool': 'tap', 'outcome': 'error', 'error_kind': 'unresolvedTarget', 'duration_ms': 10, 'result_bytes': 400},
+        {'correlation_id': 't1', 'tool': 'get_scene', 'outcome': 'ok', 'duration_ms': 30, 'result_bytes': 4000},
+        {'correlation_id': 't1', 'tool': 'tap', 'outcome': 'ok', 'duration_ms': 12, 'result_bytes': 200},
+      ];
+      final out = summarizeUsage(rows);
+      final tap = (out['tools'] as List).firstWhere((t) => (t as Map)['tool'] == 'tap') as Map;
+      expect(tap['errorKinds'], {'unresolvedTarget': 1});
+      expect(tap['totalEstimatedTokens'], 150);
+      expect(out['totalEstimatedTokens'], 1150);
+      final trans = (out['transitions'] as List).cast<Map>();
+      expect(trans.first['fromOutcome'], 'error');
+      final sc = (out['selfCorrection'] as List).cast<Map>();
+      expect(sc.single['signal'], 'unresolvedTarget');
+      expect(sc.single['recovered'], 1);
+    });
+  });
 }
