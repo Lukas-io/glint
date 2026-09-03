@@ -229,23 +229,32 @@ class GlintSession {
   }) async {
     final scene = await reader.readSummary();
     try {
-      final semantic = semanticizer.semanticize(scene);
-      // Overlay first so overlayLayers is populated before anything renders;
-      // the rest are order-independent.
-      await overlayEnricher.enrich(semantic);
-      await navEnricher.enrich(semantic);
-      if (detail != SceneDetail.structural) {
-        await inputEnricher.enrich(semantic);
-        await toggleEnricher.enrich(semantic);
-      }
-      if (detail == SceneDetail.full) {
-        await iconEnricher.enrich(semantic);
-        await linkEnricher.enrich(semantic);
-      }
-      return await use(semantic);
+      return await use(await semanticize(scene, detail: detail));
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// Semanticize + enrich an already-read [scene] to [detail]. The caller
+  /// still owns the scene's dispose.
+  Future<SemanticScene> semanticize(
+    Scene scene, {
+    SceneDetail detail = SceneDetail.full,
+  }) async {
+    final semantic = semanticizer.semanticize(scene);
+    // Overlay first so overlayLayers is populated before anything renders;
+    // the rest are order-independent.
+    await overlayEnricher.enrich(semantic);
+    await navEnricher.enrich(semantic);
+    if (detail != SceneDetail.structural) {
+      await inputEnricher.enrich(semantic);
+      await toggleEnricher.enrich(semantic);
+    }
+    if (detail == SceneDetail.full) {
+      await iconEnricher.enrich(semantic);
+      await linkEnricher.enrich(semantic);
+    }
+    return semantic;
   }
 
   Future<void> detach() async {
@@ -342,19 +351,25 @@ class GlintSession {
       probeViewport() async {
     final scene = await reader.readSummary();
     try {
-      final probeId = scene.firstAddressableId();
-      if (probeId == null) {
-        throw StateError('no addressable node in scene to probe viewport from');
-      }
-      final c = await resolver.resolve(scene, probeId);
-      return (
-        logicalW: c.logicalViewSize.w,
-        logicalH: c.logicalViewSize.h,
-        dpr: c.devicePixelRatio,
-      );
+      return await viewportIn(scene);
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// [probeViewport] against a scene the caller already holds.
+  Future<({double logicalW, double logicalH, double dpr})> viewportIn(
+      Scene scene) async {
+    final probeId = scene.firstAddressableId();
+    if (probeId == null) {
+      throw StateError('no addressable node in scene to probe viewport from');
+    }
+    final c = await resolver.resolve(scene, probeId);
+    return (
+      logicalW: c.logicalViewSize.w,
+      logicalH: c.logicalViewSize.h,
+      dpr: c.devicePixelRatio,
+    );
   }
 
   /// Reference point inside the primary scrollable, for scroll-displacement
@@ -365,40 +380,30 @@ class GlintSession {
   Future<({String glintId, double x, double y})?> probeScrollAnchor() async {
     final scene = await reader.readSummary();
     try {
-      final semantic = semanticizer.semanticize(scene);
-      final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
-      if (list == null) return null;
-      for (final n in list.walk()) {
-        final id = n.glintId;
-        if (id == null) continue;
-        try {
-          final c = await resolver.resolve(scene, id);
-          if (c.hasNonZeroBounds) {
-            return (glintId: id, x: c.logicalCenter.x, y: c.logicalCenter.y);
-          }
-        } on Object {
-          // unresolvable node — try the next descendant
-        }
-      }
-      return null;
+      return await scrollAnchorIn(scene, semanticizer.semanticize(scene));
     } finally {
       await scene.dispose();
     }
   }
 
-  /// Logical center of [glintId] now, or null if it's gone/unresolvable.
-  /// Paired with [probeScrollAnchor] to measure how far a scroll moved.
-  Future<({double x, double y})?> probeNodeCenter(String glintId) async {
-    final scene = await reader.readSummary();
-    try {
-      if (scene.findByGlintId(glintId) == null) return null;
-      final c = await resolver.resolve(scene, glintId);
-      return (x: c.logicalCenter.x, y: c.logicalCenter.y);
-    } on Object {
-      return null;
-    } finally {
-      await scene.dispose();
+  /// [probeScrollAnchor] against a scene + semantic view the caller holds.
+  Future<({String glintId, double x, double y})?> scrollAnchorIn(
+      Scene scene, SemanticScene semantic) async {
+    final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
+    if (list == null) return null;
+    for (final n in list.walk()) {
+      final id = n.glintId;
+      if (id == null) continue;
+      try {
+        final c = await resolver.resolve(scene, id);
+        if (c.hasNonZeroBounds) {
+          return (glintId: id, x: c.logicalCenter.x, y: c.logicalCenter.y);
+        }
+      } on Object {
+        // unresolvable node — try the next descendant
+      }
     }
+    return null;
   }
 
   // ── private ───────────────────────────────────────────────────────────────

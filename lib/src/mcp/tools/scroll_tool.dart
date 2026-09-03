@@ -90,42 +90,38 @@ class ScrollTool extends GlintTool {
           verb: 'scrolled');
     }
 
-    final pre = returnScene ? await snapshotPreAction(session) : null;
-    final anchor = returnScene ? await session.probeScrollAnchor() : null;
-
-    final vp = await session.probeViewport();
-    final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
-    var response = await coordinateSwipe(
-        session, line.fromX, line.fromY, line.toX, line.toY, 300,
-        verb: 'scrolled');
-    if (returnScene && !response.isError) {
-      final post = await readPostActionState(session, pre,
-          includeSceneText: fetchScene);
-      final movedPx = await _anchorDisplacement(session, anchor, dir);
-      if (post != null) {
-        final merged = mergeScrollSignal(post.changeCategory, movedPx);
-        response = response.mergeData({
-          ...post.toData(),
-          'changed': merged.changed,
-          'changeCategory': merged.category,
-          if (movedPx != null) 'scrolledPx': movedPx.round(),
-        });
-      }
-    }
-    return response;
-  }
-
-  /// How far the pre-scroll [anchor] moved along the scroll axis, or null when
-  /// there's no anchor or it's no longer resolvable (e.g. scrolled off a lazy
-  /// list — the tree-hash detector catches that case instead).
-  Future<double?> _anchorDisplacement(GlintSession session,
-      ({String glintId, double x, double y})? anchor, ScrollDirection dir) async {
-    if (anchor == null) return null;
-    final after = await session.probeNodeCenter(anchor.glintId);
-    if (after == null) return null;
     final horizontal =
         dir == ScrollDirection.left || dir == ScrollDirection.right;
-    return horizontal ? (after.x - anchor.x).abs() : (after.y - anchor.y).abs();
+    final action = await openActionScene(session, snapshot: returnScene);
+    try {
+      final anchor = action.semantic == null
+          ? null
+          : await session.scrollAnchorIn(action.scene, action.semantic!);
+      final vp = await session.viewportIn(action.scene);
+      final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
+      var response = await coordinateSwipe(
+          session, line.fromX, line.fromY, line.toX, line.toY, 300,
+          verb: 'scrolled');
+      if (returnScene && !response.isError) {
+        final post = await readPostActionState(session, action.pre,
+            includeSceneText: fetchScene,
+            scrollAnchor: anchor,
+            horizontalScroll: horizontal);
+        if (post != null) {
+          final movedPx = post.scrolledPx;
+          final merged = mergeScrollSignal(post.changeCategory, movedPx);
+          response = response.mergeData({
+            ...post.toData(),
+            'changed': merged.changed,
+            'changeCategory': merged.category,
+            if (movedPx != null) 'scrolledPx': movedPx.round(),
+          });
+        }
+      }
+      return response;
+    } finally {
+      await action.dispose();
+    }
   }
 
   /// Below this a scroll didn't meaningfully move — treat as no scroll.

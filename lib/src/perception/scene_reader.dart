@@ -287,6 +287,26 @@ class Scene {
     return null;
   }
 
+  /// Cheap fingerprint of what the agent can read: labels + text previews in
+  /// tree order. Equal signatures across two reads mean nothing readable moved.
+  String contentSignature() {
+    var hash = 0;
+    void mix(String s) {
+      for (final c in s.codeUnits) {
+        hash = (hash * 31 + c) & 0x7fffffff;
+      }
+    }
+
+    var count = 0;
+    for (final n in root.walk()) {
+      if (n.isOffstage) continue;
+      count++;
+      mix(n.label);
+      mix(n.textPreview ?? '');
+    }
+    return '$count:$hash';
+  }
+
   /// True when [glintId] belongs to an overlay entry (dialog/sheet) rather
   /// than the base screen. The tap tool uses this to warn when a barrier may
   /// intercept the tap.

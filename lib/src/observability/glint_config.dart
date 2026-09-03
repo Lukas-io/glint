@@ -8,6 +8,7 @@ class GlintConfig {
     this.attachProbeTimeoutMs = 2000,
     this.launchTimeoutMs = 180000,
     this.settleCeilingMs = 5000,
+    this.postActionSettleMs = 1500,
     this.settleQuietFrames = 3,
     this.scrollMaxScrolls = 8,
     this.scrollAmountFraction = 0.6,
@@ -30,6 +31,9 @@ class GlintConfig {
 
   /// Default ceiling for the `wait_for_settle` tool.
   int settleCeilingMs;
+
+  /// Settle ceiling folded into every gesture's post-action read.
+  int postActionSettleMs;
 
   /// Consecutive `schedulerPhase==idle` polls before declaring settled.
   int settleQuietFrames;
@@ -61,6 +65,7 @@ class GlintConfig {
         'attachProbeTimeoutMs': attachProbeTimeoutMs,
         'launchTimeoutMs': launchTimeoutMs,
         'settleCeilingMs': settleCeilingMs,
+        'postActionSettleMs': postActionSettleMs,
         'settleQuietFrames': settleQuietFrames,
         'scrollMaxScrolls': scrollMaxScrolls,
         'scrollAmountFraction': scrollAmountFraction,
@@ -89,6 +94,10 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'settleCeilingMs must be a positive int';
         settleCeilingMs = v;
+      case 'postActionSettleMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'postActionSettleMs must be a positive int';
+        postActionSettleMs = v;
       case 'settleQuietFrames':
         final v = _asPositiveInt(value);
         if (v == null) return 'settleQuietFrames must be a positive int';
