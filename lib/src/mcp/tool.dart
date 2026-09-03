@@ -10,6 +10,7 @@ import 'session.dart';
 import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
+import 'tools/batch_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
@@ -126,11 +127,13 @@ abstract class GlintTool {
         detail: '$e\n$st',
       );
     }
-    _log(session, request, response, start);
+    logCall(session, request, response, start);
     return response.toCallResult();
   }
 
-  void _log(
+  /// Records one call in the action log + usage recorder. Public so a
+  /// composite tool (batch) can log each step under its own tool name.
+  void logCall(
     GlintSession session,
     CallToolRequest request,
     StructuredResponse response,
@@ -240,6 +243,7 @@ const List<GlintTool> kDefaultGlintTools = [
   TypeTool(),
   HardwareButtonTool(),
   WaitForSettleTool(),
+  BatchTool(),
   LogsTool(),
   AppLogsTool(),
   SessionTool(),
