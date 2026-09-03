@@ -12,6 +12,8 @@ enum GlintErrorKind {
   // mcp-layer failures
   sessionNotAttached,
   invalidArgument,
+  // `app:` named no attached app, or several
+  unknownApp,
   // perception unavailable — app backgrounded / no frame to inspect
   appNotResumed,
   // transport failures

@@ -38,6 +38,31 @@ abstract class GlintTool {
 
   Tool get definition;
 
+  /// [definition] plus the shared `app` routing arg — what the server registers.
+  Tool get registeredDefinition =>
+      routesByApp ? withAppArg(definition) : definition;
+
+  /// Tools that give `app` their own meaning (attach) opt out of routing.
+  bool get routesByApp => true;
+
+  /// Adds the optional `app` property every routed tool accepts.
+  static Tool withAppArg(Tool tool) {
+    final raw = tool as Map<String, Object?>;
+    final schema = Map<String, Object?>.from(
+        raw['inputSchema'] as Map<String, Object?>? ?? const {});
+    final props = Map<String, Object?>.from(
+        (schema['properties'] as Map?)?.cast<String, Object?>() ?? const {});
+    props['app'] = Schema.string(
+      description: 'Which attached app to target when several are attached: '
+          'device id, app name, package, or simulator name. Defaults to the '
+          'active app.',
+    );
+    return Tool.fromMap({
+      ...raw,
+      'inputSchema': {...schema, 'type': 'object', 'properties': props},
+    });
+  }
+
   FutureOr<StructuredResponse> handle(
     GlintSession session,
     CallToolRequest request,
@@ -56,16 +81,34 @@ abstract class GlintTool {
   ) async {
     final start = DateTime.now();
     StructuredResponse response;
+    final target =
+        routesByApp ? (request.arguments?['app'] as String?) : null;
     try {
-      response = await handle(session, request);
+      if (target == null) {
+        response = await handle(session, request);
+      } else {
+        final matches = session.matchApps(target);
+        if (matches.length != 1) {
+          response = unknownAppResponse(session, target, matches);
+        } else {
+          response = await session.withApp(
+              matches.single, () async => await handle(session, request));
+        }
+      }
     } on SessionNotAttachedError catch (e) {
+      final pooled = session.apps;
       response = StructuredResponse.error(
-        summary: 'glint is not attached to a Flutter app yet',
+        summary: pooled.isEmpty
+            ? 'glint is not attached to a Flutter app yet'
+            : 'no active app — ${pooled.length} attached app(s) to pick from',
         errorKind: GlintErrorKind.sessionNotAttached,
         detail: e.toString(),
-        nextSteps: const [
-          'call the `attach` tool first with the running app\'s VM URI and device target',
-        ],
+        nextSteps: pooled.isEmpty
+            ? const ['call `attach` (no args) to discover and connect the running app']
+            : [
+                for (final a in pooled)
+                  'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
+              ],
       );
     } on RuntimeConnectionLostError catch (e) {
       response = StructuredResponse.error(
@@ -140,6 +183,27 @@ abstract class GlintTool {
       durationMs: elapsedMs,
       resultBytes: resultBytes,
       errorKind: errorKind.name,
+    );
+  }
+
+  /// `app:` named none or several attached apps: list what is attached.
+  static StructuredResponse unknownAppResponse(
+      GlintSession session, String target, List<AppSession> matches) {
+    final pooled = session.apps;
+    return StructuredResponse.error(
+      summary: matches.isEmpty
+          ? 'no attached app matches app:"$target"'
+          : 'app:"$target" is ambiguous — ${matches.length} attached apps match',
+      errorKind: GlintErrorKind.unknownApp,
+      detail: pooled.isEmpty
+          ? 'nothing is attached'
+          : 'attached: ${pooled.map((a) => "${a.label} on ${a.deviceName ?? a.id}").join(", ")}',
+      nextSteps: [
+        if (pooled.isEmpty) 'call `attach` first',
+        for (final a in (matches.isEmpty ? pooled : matches))
+          'app:"${a.deviceName ?? a.id}" or app:"${a.label}"',
+        'or `attach` (no args) to discover a running app that is not attached yet',
+      ],
     );
   }
 

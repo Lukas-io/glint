@@ -50,6 +50,53 @@ class AppDeviceLink {
   final String? displayName;
 }
 
+/// One running Flutter app, correlated to its device and identity as far as
+/// the host can tell without connecting to the VM.
+class RunningApp {
+  const RunningApp({
+    required this.vmUri,
+    this.platform,
+    this.deviceId,
+    this.deviceName,
+    this.bundleId,
+    this.displayName,
+    this.appName,
+  });
+
+  final Uri vmUri;
+  final DevicePlatform? platform;
+  final String? deviceId;
+  final String? deviceName;
+  final String? bundleId;
+  final String? displayName;
+  final String? appName;
+
+  /// Best human label; null when nothing but the URI is known.
+  String? get label => displayName ?? bundleId ?? appName;
+
+  /// Case-insensitive match on app identity or device (id or name prefix).
+  bool matches(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    if (deviceId?.toLowerCase() == q) return true;
+    for (final s in [displayName, bundleId, appName, deviceName]) {
+      if (s == null) continue;
+      final v = s.toLowerCase();
+      if (v == q || v.startsWith(q)) return true;
+    }
+    return false;
+  }
+
+  Map<String, Object?> toJson() => {
+        'vmUri': vmUri.toString(),
+        if (platform != null) 'platform': platform!.name,
+        if (deviceId != null) 'device': deviceId,
+        if (deviceName != null) 'deviceName': deviceName,
+        if (label != null) 'app': label,
+        if (bundleId != null) 'bundleId': bundleId,
+      };
+}
+
 /// Running Flutter VM URIs + booted devices. Uncorrelated by design — a 127.0.0.1 URI carries no device identity; `attach` pairs them later.
 class DiscoveryResult {
   const DiscoveryResult({required this.vmUris, required this.devices});
@@ -165,39 +212,121 @@ class DeviceDiscovery {
   // ── app → device correlation ─────────────────────────────────────────────
   /// Recover the device an app runs on from its VM service URI — when several sims share 127.0.0.1
   /// the port is ambiguous, but the listening process reveals its sim.
+  /// Describe every running app in [scan]: device (iOS via the flutter_tools
+  /// process chain, Android via `adb forward`) plus bundle identity when the
+  /// app's Info.plist is reachable. Best-effort per app; never throws.
+  Future<List<RunningApp>> describeRunningApps(DiscoveryResult scan) async {
+    final out = <RunningApp>[];
+    for (final uri in scan.vmUris) {
+      AppDeviceLink? link;
+      DevicePlatform? platform;
+      try {
+        link = await _correlateIosSim(uri.port, scan.devices);
+        if (link != null) platform = DevicePlatform.ios;
+        if (link == null && scan.devicesFor(DevicePlatform.android).isNotEmpty) {
+          link = await _correlateAndroid(uri.port);
+          if (link != null) platform = DevicePlatform.android;
+        }
+      } on Object {
+        link = null;
+      }
+      var bundleId = link?.bundleId;
+      var displayName = link?.displayName;
+      if (link != null && platform == DevicePlatform.ios && displayName == null) {
+        final info = await appInfoForDevice(link.deviceId);
+        bundleId ??= info?.$1;
+        displayName ??= info?.$2;
+      }
+      BootedDevice? dev;
+      for (final d in scan.devices) {
+        if (d.id == link?.deviceId) dev = d;
+      }
+      out.add(RunningApp(
+        vmUri: uri,
+        platform: platform ?? dev?.platform,
+        deviceId: link?.deviceId,
+        deviceName: dev?.name,
+        bundleId: bundleId,
+        displayName: displayName,
+        appName: link?.appName,
+      ));
+    }
+    return out;
+  }
+
   Future<AppDeviceLink?> correlate(Uri vmUri, DevicePlatform platform) async {
     final port = vmUri.port;
     if (port == 0) return null;
     return switch (platform) {
-      DevicePlatform.ios => _correlateIosSim(port),
+      DevicePlatform.ios => _correlateIosSim(port, const []),
       DevicePlatform.android => _correlateAndroid(port),
     };
   }
 
-  Future<AppDeviceLink?> _correlateIosSim(int port) async {
-    final pid = await _listeningPid(port);
-    if (pid == null) return null;
-    final ProcessResult ps;
-    try {
-      ps = await Process.run('ps', ['-o', 'command=', '-p', '$pid']);
-    } on Object {
-      return null;
+  /// The port's listener is the `flutter run` tool process (DDS host), whose
+  /// command line names the target with `-d <udid|name>`; the app path form
+  /// (`CoreSimulator/Devices/<udid>/…/X.app`) is checked first where present.
+  /// Walks up to three parents in case the listener is a helper child.
+  Future<AppDeviceLink?> _correlateIosSim(
+      int port, List<BootedDevice> booted) async {
+    var pid = await _listeningPid(port);
+    for (var hop = 0; pid != null && hop < 4; hop++) {
+      final ProcessResult ps;
+      try {
+        ps = await Process.run('ps', ['-o', 'ppid=,command=', '-p', '$pid']);
+      } on Object {
+        return null;
+      }
+      if (ps.exitCode != 0) return null;
+      final line = (ps.stdout as String).trim();
+      final split = line.indexOf(' ');
+      final ppid = int.tryParse(split < 0 ? line : line.substring(0, split));
+      final cmd = split < 0 ? '' : line.substring(split + 1);
+      final link = await linkFromCommandLine(cmd, booted, _readBundleInfo);
+      if (link != null) return link;
+      if (ppid == null || ppid <= 1) break;
+      pid = ppid;
     }
-    if (ps.exitCode != 0) return null;
-    final cmd = ps.stdout as String;
-    final udid = RegExp(r'CoreSimulator/Devices/([0-9A-Fa-f-]{36})')
+    return null;
+  }
+
+  /// Pure: the device link a process command line reveals, if any.
+  static Future<AppDeviceLink?> linkFromCommandLine(
+    String cmd,
+    List<BootedDevice> booted,
+    Future<(String?, String?)?> Function(String appPath) readBundle,
+  ) async {
+    final pathUdid = RegExp(r'CoreSimulator/Devices/([0-9A-Fa-f-]{36})')
         .firstMatch(cmd)
         ?.group(1);
-    if (udid == null) return null;
-    final appMatch = RegExp(r'(\S*/([^/]+)\.app)').firstMatch(cmd);
-    final info =
-        appMatch != null ? await _readBundleInfo(appMatch.group(1)!) : null;
-    return AppDeviceLink(
-      deviceId: udid,
-      appName: appMatch?.group(2),
-      bundleId: info?.$1,
-      displayName: info?.$2,
-    );
+    if (pathUdid != null) {
+      final appMatch = RegExp(r'(\S*/([^/]+)\.app)').firstMatch(cmd);
+      final info =
+          appMatch != null ? await readBundle(appMatch.group(1)!) : null;
+      return AppDeviceLink(
+        deviceId: pathUdid,
+        appName: appMatch?.group(2),
+        bundleId: info?.$1,
+        displayName: info?.$2,
+      );
+    }
+    final flag = RegExp(r'(?:^|\s)(?:-d|--device-id)[=\s]+("[^"]+"|\S+)')
+        .firstMatch(cmd)
+        ?.group(1)
+        ?.replaceAll('"', '');
+    if (flag == null) return null;
+    if (RegExp(r'^[0-9A-Fa-f-]{36}$').hasMatch(flag)) {
+      return AppDeviceLink(deviceId: flag);
+    }
+    final q = flag.toLowerCase();
+    for (final d in booted) {
+      if (d.platform != DevicePlatform.ios) continue;
+      final n = d.name.toLowerCase();
+      if (n == q || n.startsWith(q) || d.id.toLowerCase().startsWith(q)) {
+        return AppDeviceLink(deviceId: d.id);
+      }
+    }
+    return null;
   }
 
   /// (CFBundleIdentifier, CFBundleDisplayName ?? CFBundleName) from an app's
