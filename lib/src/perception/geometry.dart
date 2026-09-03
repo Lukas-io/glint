@@ -115,6 +115,26 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
+  /// Viewport dimensions straight from the implicit view — no selected node,
+  /// so it works before the first addressable widget renders (issue #13).
+  Future<({double dpr, double w, double h})> resolveViewportNodeFree() async {
+    final String? json;
+    try {
+      json = await _runtime.evaluateString(GeometryExpr.buildImplicitViewProbe());
+    } on RuntimeEvalError catch (e) {
+      throw GeometryResolveError('evaluate(implicitView) failed: ${e.message}');
+    }
+    if (json == null) {
+      throw GeometryResolveError('evaluate(implicitView) returned non-string');
+    }
+    final decoded = _decode(json, 'implicitView');
+    return (
+      dpr: (decoded['dpr'] as num).toDouble(),
+      w: (decoded['vw'] as num).toDouble(),
+      h: (decoded['vh'] as num).toDouble(),
+    );
+  }
+
   /// Viewport dimensions without a hit-test. Safe on Dart 3.12 / iOS 26 where
   /// [HitTestResult] is inaccessible in the CFE eval scope; use over [resolve].
   Future<({double dpr, double w, double h})> resolveViewport(
@@ -142,7 +162,7 @@ class CoordinateResolver {
     if (json == null) {
       throw GeometryResolveError('evaluate(viewProbe) returned non-string');
     }
-    final decoded = jsonDecode(json) as Map<String, Object?>;
+    final decoded = _decode(json, 'viewProbe');
     return (
       dpr: (decoded['dpr'] as num).toDouble(),
       w: (decoded['vw'] as num).toDouble(),
@@ -176,7 +196,7 @@ class CoordinateResolver {
     if (json == null) {
       throw GeometryResolveError('evaluate(geometry) returned non-string');
     }
-    final decoded = jsonDecode(json) as Map<String, Object?>;
+    final decoded = _decode(json, 'geometry');
     // A ModalBarrier blocks the base screen through its own hit-testing, not an
     // AbsorbPointer/IgnorePointer ancestor — so the eval reports base nodes as
     // hittable while a modal actually covers them. Fold in the barrier the
@@ -208,6 +228,19 @@ class CoordinateResolver {
       hittable: evalHittable && !blockedByBarrier,
     );
   }
+}
+
+/// An eval can come back as prose (`Instance of…`, a Sentinel, an error text)
+/// instead of the JSON blob; surface that as a typed failure, never a crash.
+Map<String, Object?> _decode(String json, String what) {
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is Map<String, Object?>) return decoded;
+  } on FormatException {
+    // fall through
+  }
+  final head = json.length > 120 ? '${json.substring(0, 120)}…' : json;
+  throw GeometryResolveError('evaluate($what) returned non-JSON: $head');
 }
 
 class GeometryResolveError implements Exception {
@@ -270,6 +303,24 @@ class GeometryExpr {
       "'}'",
     ].join(' + ');
     return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
+  }
+
+  static const _implicitView =
+      'WidgetsBinding.instance.platformDispatcher.implicitView!';
+
+  /// dpr/vw/vh from the implicit view — needs no inspector selection, so it
+  /// works on any root widget and before the first addressable node renders.
+  static String buildImplicitViewProbe() {
+    final body = [
+      "'{\"dpr\":'",
+      '$_implicitView.devicePixelRatio.toString()',
+      "',\"vw\":'",
+      '($_implicitView.physicalSize.width / $_implicitView.devicePixelRatio).toString()',
+      "',\"vh\":'",
+      '($_implicitView.physicalSize.height / $_implicitView.devicePixelRatio).toString()',
+      "'}'",
+    ].join(' + ');
+    return body;
   }
 
   /// Returns only dpr/vw/vh — skips the hit-test half of [build] because the

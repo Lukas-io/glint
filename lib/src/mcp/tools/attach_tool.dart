@@ -315,11 +315,14 @@ class AttachTool extends GlintTool {
           final timeoutMs = launchedDeviceId != null && baseMs < 30000
               ? 30000
               : baseMs;
-          final vp = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final probed =
+              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final vp = probed.viewport;
           if (vp == null) {
             warnings.add(
               'could not probe the Android viewport — raw x,y gestures may be '
-              'mis-scaled; glintId gestures are unaffected',
+              'mis-scaled; glintId gestures are unaffected'
+              '${probed.lastError != null ? " (last probe error: ${probed.lastError})" : ""}',
             );
           }
           device = AndroidDevice(
@@ -343,17 +346,21 @@ class AttachTool extends GlintTool {
           final timeoutMs = launchedDeviceId != null && baseMs < 30000
               ? 30000
               : baseMs;
-          final vp = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final probed =
+              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final vp = probed.viewport;
           if (vp == null) {
             return StructuredResponse.error(
               summary: 'attached to the VM but could not probe the iOS viewport',
-              errorKind: GlintErrorKind.targetNotFound,
-              detail: 'no addressable node rendered within ${timeoutMs}ms — '
-                  'the app may be stuck on a blank/loading frame',
+              errorKind: GlintErrorKind.geometryResolveError,
+              detail: 'no viewport probe succeeded within ${timeoutMs}ms'
+                  '${probed.lastError != null ? " — last probe error: ${probed.lastError}" : " — no frame rendered yet"}',
               nextSteps: const [
                 'wait for the first screen to render, then call attach again',
                 'raise the ceiling for slow launches: '
                     'config set attachProbeTimeoutMs <ms>',
+                'if the detail names an eval error, file it with '
+                    '`report_issue` — attach should not need a specific root widget',
               ],
             );
           }
@@ -649,8 +656,12 @@ class AttachTool extends GlintTool {
             .screenshot(path);
   }
 
-  /// Probe the logical viewport, retrying past a blank first frame until [timeoutMs]; null if none ever appears.
-  Future<({double w, double h, double dpr})?> _probeViewportWithRetry(
+  /// Probe the logical viewport, retrying past a blank first frame until
+  /// [timeoutMs]. The implicit view is asked first (no node needed); a
+  /// selected node is the fallback. On failure the last error is kept so the
+  /// agent sees the real reason instead of a guess.
+  Future<({({double w, double h, double dpr})? viewport, Object? lastError})>
+      _probeViewportWithRetry(
     VmServiceRuntime probe,
     int timeoutMs,
     void Function(int, String?)? onProgress, {
@@ -662,22 +673,37 @@ class AttachTool extends GlintTool {
     final deadline = start.add(Duration(milliseconds: timeoutMs));
     var nextUpdate = start.add(const Duration(seconds: 15));
     var first = true;
+    Object? lastError;
     while (first || DateTime.now().isBefore(deadline)) {
       first = false;
+      try {
+        final vp = await resolver.resolveViewportNodeFree();
+        if (vp.w > 0 && vp.h > 0) {
+          return (viewport: (w: vp.w, h: vp.h, dpr: vp.dpr), lastError: null);
+        }
+        lastError = 'implicit view reports a zero-sized viewport';
+      } on Object catch (e) {
+        lastError = e;
+      }
       try {
         final scene = await reader.readSummary();
         try {
           final probeId = scene.firstAddressableId();
           if (probeId != null) {
             final vp = await resolver.resolveViewport(scene, probeId);
-            return (w: vp.w, h: vp.h, dpr: vp.dpr);
+            return (
+              viewport: (w: vp.w, h: vp.h, dpr: vp.dpr),
+              lastError: null
+            );
           }
+          lastError = 'tree read ok but no addressable node yet';
         } finally {
           await scene.dispose();
         }
-      } on Object {
+      } on Object catch (e) {
         // Inspector not ready yet — common in the first frames after a fresh
         // launch (getRootWidgetTree returns null). Keep retrying until deadline.
+        lastError = e;
       }
       final now = DateTime.now();
       if (onProgress != null && now.isAfter(nextUpdate)) {
@@ -690,7 +716,7 @@ class AttachTool extends GlintTool {
         break;
       }
     }
-    return null;
+    return (viewport: null, lastError: lastError);
   }
 
   Future<String> _renderScene(GlintSession session) =>

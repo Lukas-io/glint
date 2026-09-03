@@ -357,12 +357,20 @@ class GlintSession {
     }
   }
 
-  /// [probeViewport] against a scene the caller already holds.
+  /// [probeViewport] against a scene the caller already holds. The implicit
+  /// view answers without a node; a selected node is the fallback.
   Future<({double logicalW, double logicalH, double dpr})> viewportIn(
       Scene scene) async {
+    try {
+      final v = await resolver.resolveViewportNodeFree();
+      return (logicalW: v.w, logicalH: v.h, dpr: v.dpr);
+    } on GeometryResolveError {
+      // fall back to a node-anchored probe below
+    }
     final probeId = scene.firstAddressableId();
     if (probeId == null) {
-      throw StateError('no addressable node in scene to probe viewport from');
+      throw GeometryResolveError(
+          'no addressable node in scene to probe viewport from');
     }
     final c = await resolver.resolve(scene, probeId);
     return (

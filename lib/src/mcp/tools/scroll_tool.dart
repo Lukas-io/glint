@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
@@ -97,7 +98,20 @@ class ScrollTool extends GlintTool {
       final anchor = action.semantic == null
           ? null
           : await session.scrollAnchorIn(action.scene, action.semantic!);
-      final vp = await session.viewportIn(action.scene);
+      final ({double logicalW, double logicalH, double dpr}) vp;
+      try {
+        vp = await session.viewportIn(action.scene);
+      } on GeometryResolveError catch (e) {
+        return StructuredResponse.error(
+          summary: 'scroll could not measure the viewport',
+          errorKind: GlintErrorKind.geometryResolveError,
+          detail: e.message,
+          nextSteps: const [
+            'the screen may be mid-transition — wait_for_settle, then retry',
+            'or pass x1,y1,x2,y2 to swipe by coordinates',
+          ],
+        );
+      }
       final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
       var response = await coordinateSwipe(
           session, line.fromX, line.fromY, line.toX, line.toY, 300,
