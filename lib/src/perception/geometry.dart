@@ -197,6 +197,11 @@ class CoordinateResolver {
       throw GeometryResolveError('evaluate(geometry) returned non-string');
     }
     final decoded = _decode(json, 'geometry');
+    if (decoded['gx'] == null || decoded['gy'] == null) {
+      throw GeometryResolveError(
+          '${node.glintId} is not laid out — offstage or an inactive tab '
+          'page; bring it on screen first');
+    }
     // A ModalBarrier blocks the base screen through its own hit-testing, not an
     // AbsorbPointer/IgnorePointer ancestor — so the eval reports base nodes as
     // hittable while a modal actually covers them. Fold in the barrier the
@@ -232,9 +237,12 @@ class CoordinateResolver {
 
 /// An eval can come back as prose (`Instance of…`, a Sentinel, an error text)
 /// instead of the JSON blob; surface that as a typed failure, never a crash.
+/// Dart prints unlaid-out geometry as `NaN`, which is not JSON: it becomes
+/// null so callers can name the condition.
 Map<String, Object?> _decode(String json, String what) {
   try {
-    final decoded = jsonDecode(json);
+    final decoded =
+        jsonDecode(json.replaceAll(RegExp(r'-?(?:NaN|Infinity)'), 'null'));
     if (decoded is Map<String, Object?>) return decoded;
   } on FormatException {
     // fall through
