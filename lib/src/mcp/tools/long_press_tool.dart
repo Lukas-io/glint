@@ -83,8 +83,6 @@ class LongPressTool extends GlintTool {
       );
     }
 
-    final pre = t.returnScene ? await snapshotPreAction(session) : null;
-
     final arming = await maybeAwaitReady(
       session: session,
       glintId: glintId,
@@ -94,7 +92,8 @@ class LongPressTool extends GlintTool {
     );
     if (arming is ArmingFailed) return arming.envelope;
 
-    final scene = await session.reader.readSummary();
+    final action = await openActionScene(session, snapshot: t.returnScene);
+    final scene = action.scene;
     try {
       final result = await session.interactor.run(
         scene,
@@ -102,10 +101,10 @@ class LongPressTool extends GlintTool {
       );
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
-      return appendPostAction(session, response, pre,
+      return await appendPostAction(session, response, action.pre,
           returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
   }
 }

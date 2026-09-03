@@ -65,8 +65,6 @@ class TypeTool extends GlintTool {
     final focus = args['focus'] as String?;
     final t = readTargetedArgs(args, session.config);
 
-    final pre = t.returnScene ? await snapshotPreAction(session) : null;
-
     final warnings = <String>[];
     ArmingReady? focusArming;
 
@@ -80,9 +78,13 @@ class TypeTool extends GlintTool {
       );
       if (arming is ArmingFailed) return arming.envelope;
       if (arming is ArmingReady) focusArming = arming;
+    }
 
-      final scene = await session.reader.readSummary();
-      try {
+    final action = await openActionScene(session, snapshot: t.returnScene);
+    final scene = action.scene;
+    final pre = action.pre;
+    try {
+      if (focus != null) {
         final focusResult = await session.interactor.run(
           scene,
           Tap(SymbolicTarget(focus)),
@@ -96,13 +98,8 @@ class TypeTool extends GlintTool {
           );
         }
         warnings.addAll(focusResult.warnings);
-      } finally {
-        await scene.dispose();
       }
-    }
 
-    final scene = await session.reader.readSummary();
-    try {
       final result = await session.interactor.run(scene, TypeText(text));
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail)
@@ -126,7 +123,7 @@ class TypeTool extends GlintTool {
       }
       return response;
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
   }
 }

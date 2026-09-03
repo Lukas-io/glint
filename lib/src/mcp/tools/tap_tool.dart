@@ -101,9 +101,6 @@ class TapTool extends GlintTool {
     }
     final refuse = (args['refuseNotHittable'] as bool?) ?? false;
 
-    // Pre-action snapshot (cheap) — only needed when returnScene is requested.
-    final pre = t.returnScene ? await snapshotPreAction(session) : null;
-
     final arming = await maybeAwaitReady(
       session: session,
       glintId: glintId,
@@ -113,7 +110,8 @@ class TapTool extends GlintTool {
     );
     if (arming is ArmingFailed) return arming.envelope;
 
-    final scene = await session.reader.readSummary();
+    final action = await openActionScene(session, snapshot: t.returnScene);
+    final scene = action.scene;
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
@@ -151,10 +149,10 @@ class TapTool extends GlintTool {
         ]);
       }
 
-      return appendPostAction(session, response, pre,
+      return await appendPostAction(session, response, action.pre,
           returnScene: t.returnScene, fetchScene: t.fetchScene);
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
   }
 }

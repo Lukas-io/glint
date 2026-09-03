@@ -63,6 +63,16 @@ class WaitForSettleTool extends GlintTool {
           summary: 'settled in ${result.elapsedMs}ms',
           data: {'settled': true, 'elapsedMs': result.elapsedMs},
         );
+      case SettledAnimating():
+        return StructuredResponse(
+          summary: 'settled in ${result.elapsedMs}ms (frames still animating, '
+              'content stable)',
+          data: {
+            'settled': true,
+            'elapsedMs': result.elapsedMs,
+            'animating': true,
+          },
+        );
       case SettledButLoading():
         return StructuredResponse(
           summary: 'frame-quiet but loading affordances still present after '
