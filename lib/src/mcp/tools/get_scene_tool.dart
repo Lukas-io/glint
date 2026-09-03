@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
@@ -27,11 +29,23 @@ class GetSceneTool extends GlintTool {
             'keyboardVisible (bool), route.name, state '
             '(loaded/loading/error, or device/native when no Flutter tree). '
             'format param: "text" (default) or "json"; json also carries an '
-            'overlayLayers array when a dialog is open.',
+            'overlayLayers array when a dialog is open. '
+            'glintId: render only that node\'s subtree (drill-down); depth '
+            'caps how many levels below it are shown.',
         inputSchema: ObjectSchema(
           properties: {
             'format': Schema.string(
               description: 'Output format. One of: text (default), json',
+            ),
+            'glintId': Schema.string(
+              description:
+                  'Only this node and its descendants. Use to drill into one '
+                  'container or list instead of re-reading the whole screen.',
+            ),
+            'depth': Schema.int(
+              description:
+                  'With glintId: levels below it to include (0 = the node '
+                  'only). Default: all, up to the renderer\'s cap.',
             ),
           },
         ),
@@ -42,6 +56,8 @@ class GetSceneTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
+    final glintId = args['glintId'] as String?;
+    final depth = args['depth'] as int?;
 
     // Validate format up front — before the scene read + VM-eval enrichers,
     // so a bad arg fails cheaply instead of after the round-trips.
@@ -68,7 +84,8 @@ class GetSceneTool extends GlintTool {
     }
 
     try {
-      return await _readFlutterScene(session, format);
+      return await _readFlutterScene(session, format,
+          glintId: glintId, depth: depth);
     } on InspectorReadError catch (e) {
       // A null widget tree usually means no frame to inspect — the app is
       // backgrounded or paused behind a native surface (permission dialog,
@@ -93,34 +110,94 @@ class GetSceneTool extends GlintTool {
   }
 
   Future<StructuredResponse> _readFlutterScene(
-      GlintSession session, String format) async {
+    GlintSession session,
+    String format, {
+    String? glintId,
+    int? depth,
+  }) async {
     return session.withScene((semantic) async {
-      final rendered = format == 'json'
-          ? const JsonSceneRenderer().render(semantic)
-          : const PlainTextSceneRenderer().render(semantic);
+      SemanticNode? subtree;
+      if (glintId != null) {
+        subtree = semantic.findByGlintId(glintId) ??
+            semantic.overlayLayers
+                .expand((l) => l.nodes)
+                .expand((n) => n.walk())
+                .cast<SemanticNode?>()
+                .firstWhere((n) => n!.glintId == glintId, orElse: () => null);
+        if (subtree == null) {
+          final ids = [
+            for (final n in semantic.root.walk())
+              if (n.glintId != null) n.glintId!,
+          ];
+          final hint = didYouMean(suggestIds(ids, glintId));
+          return StructuredResponse.error(
+            summary: 'no node with glintId "$glintId" on this screen',
+            errorKind: GlintErrorKind.unresolvedTarget,
+            nextSteps: [
+              if (hint != null) hint,
+              'call get_scene without glintId to read the current ids',
+            ],
+          );
+        }
+      }
+
+      final String rendered;
+      if (subtree != null) {
+        rendered = format == 'json'
+            ? const JsonEncoder.withIndent('  ').convert(subtree.toJson())
+            : const PlainTextSceneRenderer()
+                .renderSubtree(subtree, maxDepth: depth);
+      } else {
+        rendered = format == 'json'
+            ? const JsonSceneRenderer().render(semantic)
+            : const PlainTextSceneRenderer().render(semantic);
+      }
 
       final state = const StateObserver().observe(semantic);
       final lifecycle = await session.lifecycleState();
       final ui = await session.uiState();
-      return StructuredResponse(
-        summary: rendered,
-        data: {
-          'format': format,
-          'state': state.name,
-          if (lifecycle != null && lifecycle != 'resumed') 'lifecycle': lifecycle,
-          if (ui.focusedType != null) 'focusedType': ui.focusedType,
-          if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
-          if (ui.orientation != null && ui.orientation != 'portrait')
-            'orientation': ui.orientation,
-          if (ui.brightness != null && ui.brightness != 'light')
-            'brightness': ui.brightness,
-          if (semantic.routeStack.isNotEmpty)
-            'route': semantic.routeStack.first.toJson(),
-          if (semantic.overlayLayers.isNotEmpty) ...{
-            'hasOverlay': true,
-            'overlayKind': semantic.overlayLayers.first.kind,
+      final route =
+          semantic.routeStack.isEmpty ? null : semantic.routeStack.first;
+      final overlay = semantic.overlayLayers.isEmpty
+          ? null
+          : semantic.overlayLayers.first.kind;
+      final trailer = [
+        'state: ${state.name}',
+        if (lifecycle != null && lifecycle != 'resumed') 'lifecycle: $lifecycle',
+        if (route != null) 'route: ${route.name}',
+        if (overlay != null) 'overlay: $overlay',
+        if (ui.focusedType != null) 'focused: ${ui.focusedType}',
+        if (ui.keyboardBottomPx > 0) 'keyboard: visible',
+        if (ui.orientation != null && ui.orientation != 'portrait')
+          'orientation: ${ui.orientation}',
+        if (ui.brightness != null && ui.brightness != 'light')
+          'brightness: ${ui.brightness}',
+        if (subtree != null) 'subtree: $glintId',
+      ].join(' · ');
+
+      if (format == 'json') {
+        return StructuredResponse(
+          summary: rendered,
+          data: {
+            'format': format,
+            'state': state.name,
+            if (lifecycle != null && lifecycle != 'resumed')
+              'lifecycle': lifecycle,
+            if (ui.focusedType != null) 'focusedType': ui.focusedType,
+            if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
+            if (ui.orientation != null && ui.orientation != 'portrait')
+              'orientation': ui.orientation,
+            if (ui.brightness != null && ui.brightness != 'light')
+              'brightness': ui.brightness,
+            if (route != null) 'route': route.toJson(),
+            if (overlay != null) ...{'hasOverlay': true, 'overlayKind': overlay},
+            if (subtree != null) 'subtree': glintId,
           },
-        },
+        );
+      }
+      return StructuredResponse(
+        summary: '${rendered.trimRight()}\n$trailer',
+        textOnly: true,
       );
     });
   }

@@ -43,10 +43,14 @@ class ResolveTool extends GlintTool {
     final scene = await session.reader.readSummary();
     try {
       if (scene.findByGlintId(glintId) == null) {
+        final hint = didYouMean(suggestIds(scene.glintIds, glintId));
         return StructuredResponse.error(
           summary: 'no node with glintId "$glintId" in the current scene',
           errorKind: GlintErrorKind.unresolvedTarget,
-          nextSteps: const ['re-run get_scene to read current glintIds'],
+          nextSteps: [
+            if (hint != null) hint,
+            're-run get_scene to read current glintIds',
+          ],
         );
       }
       final c = await session.resolver.resolve(scene, glintId);

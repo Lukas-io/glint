@@ -166,4 +166,14 @@ void main() {
       expect(call.structuredContent?['x'], 1);
     });
   });
+
+  test('textOnly ships content text and no structuredContent', () {
+    final r = StructuredResponse(summary: 'scene\nstate: loaded', textOnly: true);
+    final call = r.toCallResult();
+    expect(call.structuredContent, isNull);
+    expect(r.wireBytes, r.renderText().length);
+    final plain = StructuredResponse(summary: 'x', data: const {'a': 1});
+    expect(plain.toCallResult().structuredContent, isNotNull);
+    expect(plain.wireBytes, greaterThan(plain.renderText().length));
+  });
 }

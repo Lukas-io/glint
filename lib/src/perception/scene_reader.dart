@@ -293,6 +293,12 @@ class Scene {
     return null;
   }
 
+  /// Every addressable id on screen (offstage excluded).
+  List<String> get glintIds => [
+        for (final n in root.walk())
+          if (!n.isOffstage && n.glintId != null) n.glintId!,
+      ];
+
   /// Cheap fingerprint of what the agent can read: labels + text previews in
   /// tree order. Equal signatures across two reads mean nothing readable moved.
   String contentSignature() {

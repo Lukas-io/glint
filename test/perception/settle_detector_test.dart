@@ -59,6 +59,7 @@ SettleDetector _detector(List<String> phases, List<SceneNode> roots) {
 }
 
 void main() {
+  readinessGateMain();
   group('SettleDetector', () {
     test('idle frames with no loading affordance settle', () async {
       final d = _detector(['idle'], [_node('Scaffold')]);
@@ -118,5 +119,36 @@ void main() {
         root: _node('Scaffold', kids: [_node('Text', text: 'a')]));
     expect(a.contentSignature(), isNot(b.contentSignature()));
     expect(a.contentSignature(), c.contentSignature());
+  });
+}
+
+class _NoGeometryRuntime implements FlutterRuntime {
+  @override
+  Future<void> setInspectorSelection(
+          {required String inspectorId, required String groupName}) async {}
+  @override
+  Future<String?> evaluateString(String expression) async =>
+      '{"gx":1,"gy":1,"bx":0,"by":0,"bw":1,"bh":1,"dpr":1,"vw":1,"vh":1,'
+      '"op":1.0,"vis":true,"hit":true}';
+  @override
+  dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
+}
+
+void readinessGateMain() {
+  test('ReadinessGate fails fast on a static screen without the target',
+      () async {
+    final rt = _NoGeometryRuntime();
+    final reader = _FakeReader(rt, [
+      _node('Scaffold', kids: [_node('Text', text: 'hello')])
+    ]);
+    final gate = ReadinessGate(
+        reader: reader, resolver: CoordinateResolver(rt), pollIntervalMs: 5);
+    final r = await gate.awaitReady(
+        glintId: 'text#stale', ceilingMs: 2000, staleAfterMs: 40);
+    expect(r, isA<NotFoundResult>());
+    final nf = r as NotFoundResult;
+    expect(nf.staleScreen, isTrue);
+    expect(nf.elapsedMs, lessThan(1000));
+    expect(nf.suggestions, contains('text'));
   });
 }

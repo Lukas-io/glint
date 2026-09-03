@@ -135,4 +135,30 @@ void main() {
       expect(s['errorKind'], 'sessionNotAttached');
     });
   });
+
+  group('scroll_to_find text alias + session status default', () {
+    test('text alone passes argument validation', () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {
+          'text': 'Orders',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached',
+          reason: 'validation passed; the unattached session is the next wall');
+    });
+
+    test('session with no op reports status instead of erroring', () async {
+      const tool = SessionTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'session', arguments: const {}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], isNull);
+      expect(s['summary'], contains('not attached'));
+    });
+  });
 }

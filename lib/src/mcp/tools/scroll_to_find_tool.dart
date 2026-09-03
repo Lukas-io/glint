@@ -34,8 +34,12 @@ class ScrollToFindTool extends GlintTool {
             ),
             'targetTextContent': Schema.string(
               description:
-                  'Substring to match against any text node\'s content. '
-                  'Useful when the compact renderer collapsed the id you wanted.',
+                  'Case-insensitive substring to match against any text '
+                  'node\'s content. Useful when the compact renderer collapsed '
+                  'the id you wanted.',
+            ),
+            'text': Schema.string(
+              description: 'Alias of targetTextContent.',
             ),
             'direction': Schema.string(
               description: 'One of: up, down, left, right. Default down.',
@@ -55,7 +59,8 @@ class ScrollToFindTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final targetGlintId = args['targetGlintId'] as String?;
-    final targetText = args['targetTextContent'] as String?;
+    final targetText =
+        (args['targetTextContent'] as String?) ?? (args['text'] as String?);
     final dirName = (args['direction'] as String?) ?? 'down';
     final maxScrolls =
         (args['maxScrolls'] as int?) ?? session.config.scrollMaxScrolls;
@@ -89,10 +94,14 @@ class ScrollToFindTool extends GlintTool {
 
     var seenInTree = false;   // target appeared in scene at least once
     var seenInOverlay = false; // target found in overlay (not in scrollable content)
+    var lastTexts = const <String>[];
+    var lastIds = const <String>[];
 
     for (var i = 0; i <= maxScrolls; i++) {
       final scene = await session.reader.readSummary();
       try {
+        lastTexts = _visibleTexts(scene.root);
+        lastIds = scene.glintIds;
         final hit = targetGlintId != null
             ? scene.findByGlintId(targetGlintId)
             : _findTextNode(scene.root, targetText!);
@@ -163,23 +172,46 @@ class ScrollToFindTool extends GlintTool {
         ],
       );
     }
+    final hint = targetGlintId != null
+        ? didYouMean(suggestIds(lastIds, targetGlintId))
+        : null;
     return StructuredResponse.error(
       summary: '$criterion was not found in any scene during $maxScrolls scroll(s) '
           'in $dirName — target is not in this list',
       errorKind: GlintErrorKind.targetNotFound,
-      nextSteps: const [
+      detail: lastTexts.isEmpty
+          ? 'the screen shows no text at all'
+          : 'text visible now: ${lastTexts.map((t) => '"$t"').join(", ")}',
+      nextSteps: [
+        if (hint != null) hint,
         'try a different `direction` (the target may be above/beside the viewport)',
+        'if the text you want is not listed in detail, it lives on another '
+            'screen or tab — navigate there first',
         'use `get_scene` to confirm the correct glintId or text content',
-        'if the target is in a different list, navigate to it first',
       ],
     );
   }
 
   SceneNode? _findTextNode(SceneNode root, String needle) {
+    final want = needle.toLowerCase();
     for (final n in root.walk()) {
+      if (n.isOffstage) continue;
       final preview = n.textPreview;
-      if (preview != null && preview.contains(needle)) return n;
+      if (preview != null && preview.toLowerCase().contains(want)) return n;
     }
     return null;
+  }
+
+  /// Up to 12 distinct text snippets on screen, for the not-found hint.
+  static List<String> _visibleTexts(SceneNode root, {int max = 12}) {
+    final out = <String>[];
+    for (final n in root.walk()) {
+      if (n.isOffstage) continue;
+      final t = n.textPreview?.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (t == null || t.isEmpty || out.contains(t)) continue;
+      out.add(t.length > 40 ? '${t.substring(0, 39)}…' : t);
+      if (out.length >= max) break;
+    }
+    return out;
   }
 }
