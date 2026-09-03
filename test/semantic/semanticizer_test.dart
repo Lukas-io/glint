@@ -540,14 +540,13 @@ void main() {
         root: SemanticPage(body: rows),
       );
       final out = const PlainTextSceneRenderer().render(scene);
-      // First row shown in full, last row name surfaced in the summary
-      // line, intermediate rows folded away.
+      // First row in full, then one digest naming the next ten by label and
+      // #hash, then the remainder as a count.
       expect(out, contains('"item 0"'));
-      expect(out, contains('"item 29"'));
-      expect(out, contains('row#* (29 more'));
-      // A middle item should NOT appear at all — folded by the run.
-      expect(out, isNot(contains('"item 5"')));
+      expect(out, contains('… 29 more like it: "item 1" #1, "item 2" #2'));
+      expect(out, contains('+19'));
       expect(out, isNot(contains('"item 15"')));
+      expect(out, isNot(contains('"item 29"')));
     });
   });
 }
