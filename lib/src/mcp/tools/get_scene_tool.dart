@@ -305,20 +305,37 @@ class GetSceneTool extends GlintTool {
         errorKind: GlintErrorKind.unsupportedBackendAction,
       );
     }
+    final app = session.active;
+    final lifecycle = app?.lastLifecycle ?? await _safeLifecycle(session);
+    final overlay = lifecycleIsOverlay(lifecycle);
+    final capture = app?.captures.newest ?? await app?.captureNow('lifecycle');
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
+    final dpr = session.device.devicePixelRatio;
     return StructuredResponse(
-      summary: isSentinel
-          ? '--- native surface active ---\n'
-              'A native iOS surface is blocking the Flutter UI. No widget tree available.\n'
-              'Options: use `hardware_button home` to return to the app, or wait for the '
-              'app to return to the foreground.'
-          : '--- native surface ---\n${NativeSceneReader.renderAsText(nativeScene)}',
+      summary: [
+        '--- native surface active ---',
+        '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
+        if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
+        if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
+      ].join('\n'),
+      nextSteps: [
+        if (capture != null) 'read the screenshot to see what is on top',
+        if (overlay)
+          'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
+        if (overlay) 'or wait: some sheets dismiss on their own, then get_scene again',
+        if (!overlay) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
+        if (!overlay) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+      ],
       data: {
         'format': format,
         'state': 'native',
         'nativeScene': true,
         'sceneMode': 'native',
+        if (lifecycle != null) 'lifecycle': lifecycle,
+        'overlay': overlay,
+        if (capture != null) 'screenshot': capture.toJson(),
+        'devicePixelRatio': dpr,
       },
     );
   }

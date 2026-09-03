@@ -41,6 +41,12 @@ class DeviceTool extends GlintTool {
               description:
                   'Target simulator UDID. Defaults to the attached device.',
             ),
+            'latest': Schema.bool(
+              description:
+                  'screenshot only: return the newest background capture '
+                  '(taken when the app left the foreground) instead of taking '
+                  'a new one. Default false.',
+            ),
             'value': Schema.string(
               description: 'appearance: light|dark. openurl: the URL.',
             ),
@@ -116,13 +122,32 @@ class DeviceTool extends GlintTool {
         return _result(err, 'opened $url on $udid');
 
       case 'screenshot':
+        final app = session.active;
+        if (app != null && (args['udid'] as String?) == null) {
+          final latest = (args['latest'] as bool?) ?? false;
+          final capture = latest
+              ? (app.captures.newest ?? await app.captureNow('explicit'))
+              : await app.captureNow('explicit');
+          if (capture == null) {
+            return StructuredResponse.error(
+              summary: 'screenshot failed',
+              errorKind: GlintErrorKind.backendToolError,
+            );
+          }
+          return StructuredResponse(
+            summary: 'screenshot ${latest ? "(newest capture)" : "saved"}: '
+                '${capture.path} (${capture.describe()})',
+            nextSteps: ['read the image at ${capture.path} to see the screen'],
+            data: {
+              'ok': true,
+              ...capture.toJson(),
+              'captures': app.captures.length,
+            },
+          );
+        }
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
             '${DateTime.now().millisecondsSinceEpoch}.png';
-        // Use the attached backend (works iOS + Android) when targeting the
-        // attached device; otherwise screenshot a specific iOS sim by udid.
-        final shot = (session.isAttached && (args['udid'] as String?) == null)
-            ? await session.backend.screenshot(path)
-            : await sim.screenshot(udid, path);
+        final shot = await sim.screenshot(udid, path);
         if (shot.error != null || shot.path == null) {
           return StructuredResponse.error(
             summary: shot.error ?? 'screenshot failed',

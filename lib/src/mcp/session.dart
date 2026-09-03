@@ -12,6 +12,7 @@ import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
 
 export 'app_session.dart' show AppSession, SceneMode;
+export 'capture_ring.dart';
 
 /// How far to enrich a scene: [structural] = overlays + route (cheap);
 /// [interactive] = also input values + toggle states (change-detection);
@@ -207,6 +208,7 @@ class GlintSession {
       runtimeFactory: _runtimeFactory,
       appLogCapacity: config.appLogCapacity,
     );
+    app.captureSettleMs = config.captureSettleMs;
     _pool[device.id] = app;
     _active = app;
     return app;
