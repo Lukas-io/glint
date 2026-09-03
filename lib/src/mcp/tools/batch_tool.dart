@@ -149,10 +149,12 @@ class BatchTool extends GlintTool {
           session, CallToolRequest(name: step.tool, arguments: stepArgs), r, start);
       final changed = r.data?['changed'] as bool?;
       final category = r.data?['changeCategory'] as String?;
+      final elapsedMs = DateTime.now().difference(start).inMilliseconds;
       results.add({
         'step': i + 1,
         'tool': step.tool,
         'ok': !r.isError,
+        'elapsedMs': elapsedMs,
         'summary': _short(r.summary),
         if (changed != null) 'changed': changed,
         if (category != null) 'changeCategory': category,
@@ -163,7 +165,7 @@ class BatchTool extends GlintTool {
       });
       lines.add('${i + 1}. ${step.tool} ${_target(step.args)} → '
           '${r.isError ? "FAIL ${r.data?['errorKind']}: " : ""}${_short(r.summary)}'
-          '${category != null ? " · $category" : ""}');
+          '${category != null ? " · $category" : ""} [${elapsedMs}ms]');
       if (r.isError) {
         reason = 'error';
         stoppedAt = i + 1;

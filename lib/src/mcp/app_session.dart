@@ -203,6 +203,10 @@ class AppSession {
     await _teardownRuntime();
   }
 
+  /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
+  /// read right after a native dialog closes does not report a stale mode.
+  Future<void> refreshSceneMode() => _pollLifecycle();
+
   Future<void> _pollLifecycle() async {
     final rt = runtime;
     if (rt == null || nativeReader == null) return;

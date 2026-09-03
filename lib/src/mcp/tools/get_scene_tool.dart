@@ -80,6 +80,9 @@ class GetSceneTool extends GlintTool {
     }
 
     if (session.sceneMode == SceneMode.native) {
+      await session.active?.refreshSceneMode();
+    }
+    if (session.sceneMode == SceneMode.native) {
       return _handleNativeMode(session, format);
     }
 
@@ -144,7 +147,8 @@ class GetSceneTool extends GlintTool {
       final String rendered;
       if (subtree != null) {
         rendered = format == 'json'
-            ? const JsonEncoder.withIndent('  ').convert(subtree.toJson())
+            ? const JsonEncoder.withIndent('  ')
+                .convert(_pruneDepth(subtree.toJson(), depth))
             : const PlainTextSceneRenderer()
                 .renderSubtree(subtree, maxDepth: depth);
       } else {
@@ -200,6 +204,24 @@ class GetSceneTool extends GlintTool {
         textOnly: true,
       );
     });
+  }
+
+  /// Drops `children` below [depth] levels (null = unlimited).
+  static Map<String, Object?> _pruneDepth(Map<String, Object?> node, int? depth) {
+    if (depth == null) return node;
+    final kids = node['children'];
+    if (kids is! List) return node;
+    if (depth <= 0) {
+      return {for (final e in node.entries) if (e.key != 'children') e.key: e.value,
+        'childCount': kids.length};
+    }
+    return {
+      ...node,
+      'children': [
+        for (final k in kids)
+          if (k is Map<String, Object?>) _pruneDepth(k, depth - 1) else k,
+      ],
+    };
   }
 
   Future<String?> _safeLifecycle(GlintSession session) async {
