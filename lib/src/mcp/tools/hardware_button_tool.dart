@@ -84,23 +84,28 @@ class HardwareButtonTool extends GlintTool {
         // The "what happened" for a hardware button is a lifecycle change, not
         // a scene diff. Read it best-effort (home may background the app and
         // make the eval fail — that itself signals it took).
-        String? lifecycle;
-        try {
-          lifecycle = await session.lifecycleState();
-        } on Object {
-          // app backgrounded / VM unreachable — leave lifecycle null
-        }
+        final lifecycle = await _settledLifecycle(session, button);
+        final stuck = lifecycle == 'resumed' &&
+            (button == HardwareButton.home || button == HardwareButton.lock);
         return response.copyWith(
           summary: lifecycle != null
               ? '${response.summary} — app is $lifecycle'
               : response.summary,
           data: {...?response.data, if (lifecycle != null) 'lifecycle': lifecycle},
+          warnings: [
+            if (stuck)
+              'the app never left the foreground — the ${button.name} press may '
+                  'not have registered; try once more or use `device op:screenshot`',
+          ],
           nextSteps: [
-            if (button == HardwareButton.unlock)
+            if (button == HardwareButton.unlock && lifecycle != 'resumed')
+              'the app is still $lifecycle — wait a moment, then get_scene; '
+                  'if it stays paused, `hardware_button home` and reopen it'
+            else if (button == HardwareButton.unlock)
               'call get_scene to read the screen after unlock'
-            else if (button == HardwareButton.home)
+            else if (button == HardwareButton.home && !stuck)
               'the app is now backgrounded — reopen it then call get_scene'
-            else if (button == HardwareButton.lock)
+            else if (button == HardwareButton.lock && !stuck)
               'device is locked — call hardware_button with unlock to resume',
           ],
         );
@@ -109,5 +114,24 @@ class HardwareButtonTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// The lifecycle after the press has taken effect: polls up to ~1.5s for a
+  /// change away from (or back to) resumed, so the reply reports the outcome
+  /// rather than the state a few ms after the press.
+  Future<String?> _settledLifecycle(
+      GlintSession session, HardwareButton button) async {
+    final wantsResumed = button == HardwareButton.unlock;
+    String? last;
+    for (var i = 0; i < 6; i++) {
+      try {
+        last = await session.lifecycleState();
+      } on Object {
+        return last;
+      }
+      if (wantsResumed ? last == 'resumed' : last != 'resumed') return last;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return last;
   }
 }
