@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../armed.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
@@ -120,6 +121,14 @@ class TapTool extends GlintTool {
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
       if (!result.ok) {
+        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
+            scene.overlayRoots.isEmpty) {
+          final hint = didYouMean(suggestIds(scene.glintIds, glintId));
+          if (hint != null) {
+            response = response.copyWith(
+                nextSteps: [hint, ...response.nextSteps]);
+          }
+        }
         // Enrich unresolvedTarget with overlay context — the scene may have
         // changed (overlay appeared/dismissed) since the agent's last read.
         if (result.errorKind == GlintErrorKind.unresolvedTarget &&

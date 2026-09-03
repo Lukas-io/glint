@@ -49,9 +49,17 @@ class PlainTextSceneRenderer extends SceneRenderer {
   // Maximum nesting depth before content is suppressed (keeps scenes compact).
   static const _maxDepth = 8;
 
+  /// One subtree only — no overlays, no route stack. [maxDepth] counts from
+  /// [node] (0 = just its line).
+  String renderSubtree(SemanticNode node, {int? maxDepth}) {
+    final buf = StringBuffer();
+    _write(buf, node, depth: 0, maxDepth: maxDepth ?? _maxDepth);
+    return buf.toString();
+  }
+
   void _write(StringBuffer buf, SemanticNode node,
-      {required int depth, bool inList = false}) {
-    if (depth > _maxDepth) return;
+      {required int depth, bool inList = false, int maxDepth = _maxDepth}) {
+    if (depth > maxDepth) return;
     _writeNodeLine(buf, node, depth: depth);
     // A nested page inside a PageView/IndexedStack (SemanticList) is an
     // alternate tab/route — summarise it; the agent navigates to it and
@@ -60,7 +68,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
     // its whole form stays invisible in text mode.
     if (node is SemanticPage && depth > 0 && inList) return;
     _writeChildren(buf, node.children,
-        depth: depth + 1, inList: node is SemanticList);
+        depth: depth + 1, inList: node is SemanticList, maxDepth: maxDepth);
   }
 
   void _writeChildren(
@@ -68,15 +76,17 @@ class PlainTextSceneRenderer extends SceneRenderer {
     List<SemanticNode> children, {
     required int depth,
     bool inList = false,
+    int maxDepth = _maxDepth,
   }) {
     var i = 0;
     while (i < children.length) {
       final run = _detectRun(children, i);
       if (run != null) {
-        _writeRun(buf, children, i, run, depth: depth);
+        _writeRun(buf, children, i, run, depth: depth, maxDepth: maxDepth);
         i += run.length;
       } else {
-        _write(buf, children[i], depth: depth, inList: inList);
+        _write(buf, children[i],
+            depth: depth, inList: inList, maxDepth: maxDepth);
         i += 1;
       }
     }
@@ -119,9 +129,9 @@ class PlainTextSceneRenderer extends SceneRenderer {
 
   void _writeRun(StringBuffer buf, List<SemanticNode> all, int start,
       _SiblingRun run,
-      {required int depth}) {
+      {required int depth, int maxDepth = _maxDepth}) {
     // First item full, rest collapsed: agent gets one concrete example.
-    _write(buf, all[start], depth: depth);
+    _write(buf, all[start], depth: depth, maxDepth: maxDepth);
     final hidden = run.length - 1;
     if (hidden == 0) return;
     final last = all[start + run.length - 1];

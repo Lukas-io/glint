@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
@@ -12,6 +14,7 @@ class StructuredResponse {
     this.nextSteps = const [],
     this.data,
     this.isError = false,
+    this.textOnly = false,
   });
 
   factory StructuredResponse.error({
@@ -64,6 +67,10 @@ class StructuredResponse {
   final Map<String, Object?>? data;
   final bool isError;
 
+  /// Ship only the plain text: no structuredContent, so a scene-sized reply
+  /// reaches the agent once and unescaped instead of as JSON-encoded text.
+  final bool textOnly;
+
   /// Returns a copy with the given fields replaced — so callers augmenting a
   /// response don't re-list all five fields by hand.
   StructuredResponse copyWith({
@@ -72,6 +79,7 @@ class StructuredResponse {
     List<String>? nextSteps,
     Map<String, Object?>? data,
     bool? isError,
+    bool? textOnly,
   }) =>
       StructuredResponse(
         summary: summary ?? this.summary,
@@ -79,7 +87,13 @@ class StructuredResponse {
         nextSteps: nextSteps ?? this.nextSteps,
         data: data ?? this.data,
         isError: isError ?? this.isError,
+        textOnly: textOnly ?? this.textOnly,
       );
+
+  /// Bytes the client receives: the structured payload, or the text alone.
+  int get wireBytes => textOnly
+      ? renderText().length
+      : jsonEncode(toStructuredContent()).length;
 
   /// Merges [extra] into [data] (extra keys win).
   StructuredResponse mergeData(Map<String, Object?> extra) =>
@@ -132,7 +146,7 @@ class StructuredResponse {
   CallToolResult toCallResult() {
     return CallToolResult(
       content: [Content.text(text: renderText())],
-      structuredContent: toStructuredContent(),
+      structuredContent: textOnly ? null : toStructuredContent(),
       isError: isError,
     );
   }
