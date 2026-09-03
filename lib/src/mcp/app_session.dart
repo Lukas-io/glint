@@ -52,6 +52,9 @@ class AppSession {
   String? bundleId;
   String? deviceName;
 
+  /// Screen signature the last developer hint was issued for (one per screen).
+  String? lastHintSignature;
+
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
