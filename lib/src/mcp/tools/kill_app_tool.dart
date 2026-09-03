@@ -36,8 +36,7 @@ class KillAppTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final deviceArg = args['device'] as String?;
-    final attached = session.isAttached;
-    final deviceId = deviceArg ?? (attached ? session.device.id : null);
+    final deviceId = deviceArg ?? session.active?.id;
     if (deviceId == null) {
       return StructuredResponse.error(
         summary: 'no device to stop — attach first, or pass device',
@@ -45,15 +44,12 @@ class KillAppTool extends GlintTool {
         nextSteps: const ['pass device:"<udid/serial>"'],
       );
     }
-    final isThisDevice = attached && session.device.id == deviceId;
-    final platform = isThisDevice
-        ? (session.device is IosSimulator
-            ? DevicePlatform.ios
-            : DevicePlatform.android)
-        : null;
-    final adbPath = isThisDevice && session.device is AndroidDevice
-        ? (session.device as AndroidDevice).adbPath
-        : 'adb';
+    final pooled = session.appFor(deviceId);
+    final isThisDevice = pooled != null;
+    final platform = pooled?.platform;
+    final pooledDevice = pooled?.device;
+    final adbPath =
+        pooledDevice is AndroidDevice ? pooledDevice.adbPath : 'adb';
 
     final done = <String>[];
 
@@ -66,8 +62,7 @@ class KillAppTool extends GlintTool {
     }
 
     // 2. Terminate on device when we know the app id and platform.
-    final appId = (args['appId'] as String?) ??
-        (isThisDevice ? session.attachedBundleId : null);
+    final appId = (args['appId'] as String?) ?? pooled?.bundleId;
     if (platform != null && appId != null) {
       final err = await const AppLauncher()
           .terminateApp(platform, deviceId, appId, adbPath: adbPath);
@@ -76,7 +71,7 @@ class KillAppTool extends GlintTool {
 
     // 3. Detach when we were driving this device.
     if (isThisDevice) {
-      await session.detach();
+      await session.detach(deviceId: deviceId);
       done.add('detached');
     }
 

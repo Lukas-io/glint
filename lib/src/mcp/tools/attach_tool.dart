@@ -47,6 +47,10 @@ String? _bridgeUnderGlintRoot() {
 class AttachTool extends GlintTool {
   const AttachTool();
 
+  /// `app` here means "which app to attach/switch to", not call routing.
+  @override
+  bool get routesByApp => false;
+
   @override
   Tool get definition => Tool(
         name: 'attach',
@@ -59,9 +63,17 @@ class AttachTool extends GlintTool {
             'wrong one). When nothing is running it does not error — it reports '
             '"no app running" and lists prior launches to start from. The reply '
             'carries device + app identity, available hardwareButtons, and '
-            'screen (viewport, dpr, orientation, locale). See each arg below.',
+            'screen (viewport, dpr, orientation, locale). Apps stay attached: '
+            'attaching a second app pools it, and re-attaching a pooled app '
+            '(by `app` or `device`) switches instantly with no probe.',
         inputSchema: ObjectSchema(
           properties: {
+            'app': Schema.string(
+              description:
+                  'App to attach or switch to: display name, package, bundle '
+                  'id, or the simulator name it runs on. Matches running apps '
+                  'and already-attached ones.',
+            ),
             'vmUri': Schema.string(
               description:
                   'VM service URI, e.g. ws://127.0.0.1:1234/abc=/ws. Omit to '
@@ -160,10 +172,23 @@ class AttachTool extends GlintTool {
     final vmUriArg = args['vmUri'] as String?;
     final launchPath = (args['launch'] as String?)?.trim();
     final deviceArg = args['device'] as String?;
+    final appArg = (args['app'] as String?)?.trim();
 
     // Progress sink for slow work (boot, flutter run) — emits a phase every 15s
     // when the client supplied a progress token.
     final onProgress = _progressSink(session, request);
+
+    // ── 0. Instant switch to an app that is already attached ───────────────
+    if (vmUriArg == null && launchPath == null) {
+      final key = appArg ?? deviceArg;
+      final pooled = key == null ? null : session.findApp(key);
+      if (pooled != null &&
+          pooled.isLive &&
+          (mode == null || mode == 'auto' || (mode == 'device') == pooled.deviceMode)) {
+        session.activate(pooled);
+        return _switched(session, pooled, returnScene: returnScene);
+      }
+    }
 
     // ── Device mode: explicit ───────────────────────────────────────────────
     if (mode == 'device') {
@@ -183,13 +208,15 @@ class AttachTool extends GlintTool {
       launchedDeviceId = r.deviceId;
     } else if (vmUriArg != null) {
       vmUri = Uri.parse(vmUriArg);
-    } else if (scan.vmUris.length == 1) {
+    } else if (scan.vmUris.length == 1 && appArg == null && deviceArg == null) {
       vmUri = scan.vmUris.single;
-    } else if (scan.vmUris.length > 1) {
-      return _selection(
-        'multiple running Flutter apps found — re-call attach with one vmUri',
-        scan,
-      );
+    } else if (scan.vmUris.isNotEmpty) {
+      final running = await discovery.describeRunningApps(scan);
+      final picked = _pickRunning(running, appArg: appArg, deviceArg: deviceArg);
+      if (picked.app == null) {
+        return _selection(picked.reason!, scan, running: running, session: session);
+      }
+      vmUri = picked.app!.vmUri;
     } else if (deviceArg != null) {
       // Nothing running, but a specific device was selected — start its
       // remembered app on it.
@@ -409,7 +436,11 @@ class AttachTool extends GlintTool {
         if (displayName != null) 'name': displayName,
         if (bundleId != null) 'bundleId': bundleId,
       };
-      session.attachedBundleId = bundleId; // for kill_app
+      session.active!
+        ..package = package
+        ..displayName = displayName
+        ..bundleId = bundleId
+        ..deviceName = deviceName;
 
       // Remember this attach so a future cold start can relaunch it.
       final appKey = package ?? _basename(projectDir) ?? link?.appName;
@@ -459,17 +490,21 @@ class AttachTool extends GlintTool {
         if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
       };
 
+      final others = session.apps.where((a) => a.id != deviceId).toList();
       return StructuredResponse(
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
             '${appLabel != null ? " running $appLabel" : ""} '
-            'at $vmUri',
+            'at $vmUri'
+            '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}',
         warnings: warnings,
         nextSteps: [
-          'call flutter-network__network_attach vmServiceUri:"$vmUri" for app '
-              'logs (flutter-network__logs_tail) + HTTP monitoring — same URI, '
-              'separate connection, no conflict',
           if (!returnScene) 'call `get_scene` to read the current screen',
           'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
+          if (others.isNotEmpty)
+            'switch with attach app:"<name>", or target once with app:"<name>" '
+                'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',
+          'call flutter-network__network_attach vmServiceUri:"$vmUri" for HTTP '
+              'monitoring — same URI, separate connection, no conflict',
         ],
         data: {
           'platform': platform.name,
@@ -494,11 +529,87 @@ class AttachTool extends GlintTool {
           'screen': screen,
           if (settleData != null) 'settle': settleData,
           if (sceneText != null) 'scene': sceneText,
+          'apps': session.appsJson(),
         },
       );
     } finally {
       await probe.disconnect();
     }
+  }
+
+  /// Reply for an instant switch to an already-attached app.
+  Future<StructuredResponse> _switched(GlintSession session, AppSession app,
+      {required bool returnScene}) async {
+    String? sceneText;
+    if (returnScene && !app.deviceMode) {
+      try {
+        sceneText = await _renderScene(session);
+      } on Object {
+        sceneText = null;
+      }
+    }
+    return StructuredResponse(
+      summary: 'switched to ${app.label} on ${app.deviceName ?? app.id}'
+          '${app.deviceMode ? " (device mode)" : ""}',
+      nextSteps: [
+        if (!returnScene && !app.deviceMode) 'call `get_scene` to read the current screen',
+        if (app.deviceMode) 'call `device op:screenshot` to see the screen',
+      ],
+      data: {
+        'switched': true,
+        'platform': app.platform.name,
+        'device': app.id,
+        if (app.deviceName != null) 'deviceName': app.deviceName,
+        if (!app.deviceMode)
+          'app': {
+            if (app.package != null) 'package': app.package,
+            if (app.displayName != null) 'name': app.displayName,
+            if (app.bundleId != null) 'bundleId': app.bundleId,
+          },
+        if (app.vmUri != null) 'vmUri': app.vmUri.toString(),
+        'mode': app.deviceMode ? 'device' : 'flutter',
+        if (sceneText != null) 'scene': sceneText,
+        'apps': session.appsJson(),
+      },
+    );
+  }
+
+  /// Choose one running app from [running] by [appArg] / [deviceArg]; with
+  /// neither, only an unambiguous single app is picked.
+  ({RunningApp? app, String? reason}) _pickRunning(
+    List<RunningApp> running, {
+    String? appArg,
+    String? deviceArg,
+  }) {
+    if (appArg != null) {
+      final hits = running.where((r) => r.matches(appArg)).toList();
+      if (hits.length == 1) return (app: hits.single, reason: null);
+      return (
+        app: null,
+        reason: hits.isEmpty
+            ? 'no running app matches app:"$appArg"'
+            : 'app:"$appArg" matches ${hits.length} running apps — pick one',
+      );
+    }
+    if (deviceArg != null) {
+      final hits = running.where((r) => r.deviceId == deviceArg).toList();
+      if (hits.length == 1) return (app: hits.single, reason: null);
+      if (hits.isEmpty && running.length == 1) {
+        return (app: running.single, reason: null);
+      }
+      return (
+        app: null,
+        reason: hits.isEmpty
+            ? 'no running app could be correlated to device $deviceArg'
+            : '${hits.length} running apps on $deviceArg — pick one by app',
+      );
+    }
+    if (running.length == 1) return (app: running.single, reason: null);
+    return (
+      app: null,
+      reason: 'multiple running Flutter apps found — re-call attach with app '
+          'or device',
+    );
   }
 
   /// Bind a device with no Flutter app — perception via screenshots, interaction via x,y (iOS sized to screenshot pixels, dpr=1).
@@ -930,18 +1041,36 @@ class AttachTool extends GlintTool {
 
   /// A "needs selection" reply: not an error, but glint can't pick for the
   /// agent. Lists the candidates so the agent re-calls with an explicit choice.
-  StructuredResponse _selection(String summary, DiscoveryResult d) {
+  StructuredResponse _selection(
+    String summary,
+    DiscoveryResult d, {
+    List<RunningApp>? running,
+    GlintSession? session,
+  }) {
+    final pooled = session?.apps ?? const <AppSession>[];
     return StructuredResponse(
       summary: summary,
       nextSteps: [
-        for (final u in d.vmUris) 'vmUri: "$u"',
+        if (running != null)
+          for (final r in running)
+            r.label != null
+                ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
+                : r.deviceId != null
+                    ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
+                    : 'attach vmUri:"${r.vmUri}"  (device not correlated)',
+        if (running == null) for (final u in d.vmUris) 'vmUri: "$u"',
         for (final dev in d.devices)
           'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
+        for (final a in pooled)
+          'already attached: app:"${a.label}" on ${a.deviceName ?? a.id}',
       ],
       data: {
         'needsSelection': true,
-        'apps': [for (final u in d.vmUris) u.toString()],
+        'apps': running != null
+            ? [for (final r in running) r.toJson()]
+            : [for (final u in d.vmUris) u.toString()],
         'devices': [for (final dev in d.devices) dev.toJson()],
+        if (session != null) 'attached': session.appsJson(),
       },
     );
   }

@@ -78,6 +78,7 @@ const _recovery = '''
 - `backendToolError` — native tool exited non-zero; read `detail`.
 - `geometryResolveError` — inspector eval failed. Retry; else re-`attach`.
 - `sessionNotAttached` — call `attach`.
+- `unknownApp` — `app:` matched none/several attached apps; pick from the list.
 - `invalidArgument` — fix per tool description.
 - `appNotResumed` — app behind a native dialog. Dismiss it, retry.
 - `internal` — glint bug. Surface `detail`.
@@ -92,8 +93,8 @@ const _gotchas = '''
 - **iOS hardware buttons** (Xcode 26 Sim): `lock`, `unlock`, `home` work on Face ID devices.
 - **`type` needs focus.** Pass `focus: <id>` to tap-and-type in one call.
 - **Scroll is content-relative.** `scroll down` moves content down (finger swipes up).
-- **`scroll_to_find`** caps at 8 scrolls; raise `maxScrolls` if needed.
-- **`resolve`** — when a tap fails, drill down to exact bounds/painted/hittable.
+- **`scroll_to_find`** caps at 8 scrolls (`maxScrolls`).
+- **`resolve`** — after a failed tap: exact bounds/painted/hittable.
 ''';
 
 const _toolSurface = '''
@@ -121,7 +122,7 @@ scroll_to_find targetGlintId="text_in_list#5ifw" direction="down"
 tap glintId=submit_button
 tap glintId=ok_on_confirm_modal awaitReady=true
 
-# dialog open — tap the dialog button (glintId from --- dialog --- section)
+# dialog open — tap its button (id from --- dialog ---)
 tap glintId=ok_button_in_alert_dialog
 ```
 ''';
