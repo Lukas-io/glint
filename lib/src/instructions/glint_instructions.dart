@@ -19,7 +19,7 @@ const _feedback = '''
 Every action already answers "what did that do?": `tap` / `type` / `scroll` settle and return `changed` + `changeCategory` (routeChanged / overlayAppeared / overlayDismissed / contentChanged / nothing), plus `state` when the screen is loading.
 
 1. `changed:false` = delivered, target didn't react. Re-read the scene; never retry blind.
-2. No `wait_for_settle` or screenshot after an action — it already settled. `wait_for_settle` is for async work you started (a network call).
+2. No `wait_for_settle` or screenshot after an action — it already settled. `wait_for_settle` is for async work you started (a network call). `state: native` brings a screenshot path: read it, then `tap x,y` (logical points).
 3. Failures explain: read `detail` + `nextSteps`; a "did you mean" names the live id.
 4. When in doubt: `get_scene`. The framework is truth, not your prediction.
 ''';
@@ -31,7 +31,7 @@ const _behaviors = '''
 2. **Re-observe, never escalate.** Nothing happened → `get_scene` again first.
 3. **Wait for what you started.** `state: loading` → `wait_for_settle`, then read.
 4. **Read context.** Know the screen and the step of the flow. Stay goal-directed.
-5. **Recover bounded.** One or two obvious alternatives, then step back and reassess. No 15-approach spirals.
+5. **Recover bounded.** Try one or two alternatives, then step back and reassess.
 ''';
 
 const _antiPatterns = '''
@@ -47,8 +47,9 @@ const _workflow = '''
 2. `get_scene` to read the screen. A dialog shows first under `--- dialog ---`; the base screen follows under `--- screen (blocked by modal) ---`.
 3. Act with a `glintId`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static.
 4. Read `changed`; `get_scene` when you need the new layout; `get_scene glintId:<id>` drills into one container.
+5. Long lists fold: one row in full, then `… N more like it: "label" #hash`. Tap `<base>#hash`, or `get_scene glintId:<list>` for all.
 
-Several apps: `attach` again pools a second one; `attach app:"<name>"` switches instantly; `app:"<name>"` on any tool targets it for one call.
+Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>"` on any tool targets one call.
 ''';
 
 const _addressing = '''
@@ -71,7 +72,7 @@ const _recovery = '''
 - `unresolvedTarget` — stale id; use the "did you mean" or `get_scene`.
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
-- `targetNeverReady` — present but never hittable; dismiss the cover or raise `readyTimeoutMs`.
+- `targetNeverReady` — never hittable; dismiss the cover or raise `readyTimeoutMs`.
 - `targetNotFound` — `scroll_to_find` miss; `detail` lists the text on screen: wrong screen or wrong words.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped (hot restart?). `attach` again.
@@ -99,7 +100,7 @@ const _gotchas = '''
 const _toolSurface = '''
 ## Tool surface
 
-`attach` connect/switch · `get_scene` read (glintId: drill-down, format:json) · `tap` · `type` (focus:<id>) · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
+`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` (focus:<id>) · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
 ''';
 
 const _examples = '''
@@ -110,8 +111,7 @@ tap glintId=floating_action_button                → changed:true · routeChang
 type text="user@example.com" focus="email_field"
 scroll_to_find text="Password" direction="down"
 get_scene glintId="list_view_in_orders"           # drill into one list
-batch steps=[{tool:tap,args:{glintId:submit}},{tool:tap,args:{glintId:ok_in_dialog}}]
-attach app:"AeTrust"                              # switch between attached apps
+attach app:"AeTrust"
 ```
 ''';
 
