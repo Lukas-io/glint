@@ -173,13 +173,18 @@ class PostActionState {
     required this.state,
     this.sceneText,
     this.scrolledPx,
+    this.screenshot,
   });
 
   final bool changed;
   final String changeCategory;
 
-  /// `loaded` / `loading` / `error` from [StateObserver].
+  /// `loaded` / `loading` / `error` from [StateObserver], or `native` when a
+  /// native layer took the foreground after the action.
   final String state;
+
+  /// Newest background screenshot when [state] is `native`.
+  final String? screenshot;
 
   /// Set only when the caller passed `includeSceneText: true`; null otherwise
   /// to avoid token-heavy defaults.
@@ -192,6 +197,7 @@ class PostActionState {
         'changed': changed,
         'changeCategory': changeCategory,
         if (state != 'loaded') 'state': state,
+        if (screenshot != null) 'screenshot': screenshot,
         if (sceneText != null) 'postScene': sceneText,
       };
 }
@@ -257,6 +263,19 @@ Future<PostActionState?> readPostActionState(
           },
           detail: includeSceneText ? SceneDetail.full : SceneDetail.interactive,
         );
+    final app = session.active;
+    if (app != null && app.nativeReader != null) {
+      await app.refreshSceneMode();
+      if (app.sceneMode == SceneMode.native) {
+        final capture = app.captures.newest ?? await app.captureNow('lifecycle');
+        return PostActionState(
+          changed: true,
+          changeCategory: 'nativeSurface',
+          state: 'native',
+          screenshot: capture?.path,
+        );
+      }
+    }
     var state = await readOnce();
     if (state.state == 'loading') {
       await Future<void>.delayed(const Duration(milliseconds: 600));

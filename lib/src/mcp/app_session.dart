@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
 import '../runtime/flutter_runtime.dart';
+import 'capture_ring.dart';
 
 /// Whether an app is read through the Flutter VM tree or the native OS AX tree.
 enum SceneMode { flutter, native }
@@ -54,6 +56,15 @@ class AppSession {
 
   /// Screen signature the last developer hint was issued for (one per screen).
   String? lastHintSignature;
+
+  /// Background screenshots of this device, newest first.
+  final CaptureRing captures = CaptureRing();
+
+  /// Last lifecycle value the poll saw (`resumed`, `inactive`, `paused`, …).
+  String? lastLifecycle;
+
+  /// Wait after a lifecycle change before capturing, so the surface settles.
+  int captureSettleMs = 700;
 
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
@@ -204,6 +215,44 @@ class AppSession {
   Future<void> dispose() async {
     _disposed = true;
     await _teardownRuntime();
+    captures.clear();
+  }
+
+  /// Screenshot this device into the ring. Null on failure; never throws.
+  Future<Capture?> captureNow(String trigger) async {
+    if (_disposed) return null;
+    final dir = Directory('${Directory.systemTemp.path}/glint-captures/$id');
+    final path = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.png';
+    try {
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final shot = await backend.screenshot(path);
+      if (shot.error != null || shot.path == null) return null;
+      final c = Capture(
+        path: shot.path!,
+        takenAt: DateTime.now(),
+        trigger: trigger,
+        lifecycle: lastLifecycle,
+        width: shot.width,
+        height: shot.height,
+      );
+      captures.add(c);
+      return c;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// A lifecycle transition away from resumed (or between non-resumed states)
+  /// schedules one capture after [captureSettleMs]. Fire-and-forget.
+  void _onLifecycle(String? state) {
+    final previous = lastLifecycle;
+    lastLifecycle = state;
+    final leftResumed = state != null && state != 'resumed' && state != previous;
+    if (!leftResumed) return;
+    Future<void>.delayed(Duration(milliseconds: captureSettleMs), () async {
+      if (_disposed || lastLifecycle != state) return;
+      await captureNow('lifecycle');
+    });
   }
 
   /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
@@ -220,9 +269,11 @@ class AppSession {
       sceneMode = (state == null || state == 'resumed')
           ? SceneMode.flutter
           : SceneMode.native;
+      _onLifecycle(state ?? 'resumed');
     } on Object {
       // Eval failure means the isolate is paused (native surface active).
       sceneMode = SceneMode.native;
+      _onLifecycle('paused');
     }
   }
 }
