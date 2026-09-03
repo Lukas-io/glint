@@ -67,16 +67,22 @@ class SceneReader {
     for (final candidate in candidates) {
       if (candidate.inspectorId.isEmpty) continue;
       if (candidate.isOffstage) continue;
-      final result = await _runtime.evaluateWithSelection(
-        expression:
-            '((WidgetInspectorService.instance.selection.currentElement!'
-            '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
-            ' || !(WidgetInspectorService.instance.selection.currentElement!'
-            '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true))'
-            '.toString()',
-        inspectorId: candidate.inspectorId,
-        groupName: groupName,
-      );
+      final String? result;
+      try {
+        result = await _runtime.evaluateWithSelection(
+          expression:
+              '((WidgetInspectorService.instance.selection.currentElement!'
+              '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
+              ' || !(WidgetInspectorService.instance.selection.currentElement!'
+              '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true))'
+              '.toString()',
+          inspectorId: candidate.inspectorId,
+          groupName: groupName,
+        );
+      } on Object {
+        // One unprobeable candidate must not sink the whole read; treat as onstage.
+        continue;
+      }
       if (result == 'true') {
         for (final n in candidate.walk()) {
           n.isOffstage = true;

@@ -139,6 +139,10 @@ class _FakeResolver implements CoordinateResolver {
   Future<({double dpr, double w, double h})> resolveViewport(
           Scene scene, String glintId) async =>
       (dpr: 3.0, w: 420.0, h: 912.0);
+
+  @override
+  Future<({double dpr, double w, double h})> resolveViewportNodeFree() async =>
+      (dpr: 3.0, w: 420.0, h: 912.0);
 }
 
 /// findByGlintId must return non-null so SymbolicTarget resolution proceeds.
