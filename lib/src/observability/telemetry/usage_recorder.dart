@@ -102,9 +102,14 @@ class UsageRecorder {
     return UsageRecorder.config(
       enabled: !off,
       gapMs: gap,
-      dataDir: off ? null : resolveDataDir(),
+      dataDir: off || underTestRunner() ? null : resolveDataDir(),
     );
   }
+
+  /// True inside `dart test`: unit tests build real sessions, and their
+  /// synthetic calls must never land in the user's usage store.
+  static bool underTestRunner() =>
+      io.Platform.script.path.contains('dart_test');
 
   final bool enabled;
   final int gapMs;
