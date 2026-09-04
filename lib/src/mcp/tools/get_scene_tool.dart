@@ -273,13 +273,14 @@ class GetSceneTool extends GlintTool {
         final vh = last.logicalViewSize.h;
         if (vh <= 0 || last.logicalCenter.y < vh * 2) continue;
         int? fit;
-        if (run.firstItemId != null) {
+        if (run.firstItemId != null && run.count > 1) {
           final first = await session.resolver.resolve(semantic.sourceScene, run.firstItemId!);
-          if (first.logicalBounds.h > 0) fit = (vh / first.logicalBounds.h).floor();
+          final pitch = (last.logicalCenter.y - first.logicalCenter.y) / (run.count - 1);
+          if (pitch > 0) fit = (vh / pitch).floor();
         }
         out.add('list ${run.listId} has ${run.count} rows built'
             '${fit != null ? ", about $fit fit on screen" : ", far more than fit on screen"}'
-            ' — it is not lazy; if this is your app, consider ListView.builder');
+            '; it is not lazy. If this is your app, consider ListView.builder');
       } on GeometryResolveError {
         continue;
       }
