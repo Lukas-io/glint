@@ -16,6 +16,9 @@ class GlintConfig {
     this.appLogCapacity = 500,
     this.iconEnrichMax = 20,
     this.inputEnrichMax = 10,
+    this.sceneLineBudget = 160,
+    this.devHints = true,
+    this.captureSettleMs = 700,
   });
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
@@ -56,6 +59,15 @@ class GlintConfig {
   /// Max SemanticInputs enriched per scene (each costs ~2 VM evals).
   int inputEnrichMax;
 
+  /// Lines a full get_scene may return before the renderer reduces depth.
+  int sceneLineBudget;
+
+  /// Surface developer findings (eager lists) as warnings.
+  bool devHints;
+
+  /// Delay after a lifecycle change before the background screenshot.
+  int captureSettleMs;
+
   /// All known keys → string of current value, for the `config get` view.
   /// Telemetry is env-controlled now (GLINT_NO_TELEMETRY, GLINT_NO_USAGE);
   /// not exposed here so the agent can't accidentally re-enable telemetry
@@ -73,6 +85,9 @@ class GlintConfig {
         'appLogCapacity': appLogCapacity,
         'iconEnrichMax': iconEnrichMax,
         'inputEnrichMax': inputEnrichMax,
+        'sceneLineBudget': sceneLineBudget,
+        'devHints': devHints,
+        'captureSettleMs': captureSettleMs,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -128,6 +143,18 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'inputEnrichMax must be a positive int';
         inputEnrichMax = v;
+      case 'sceneLineBudget':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'sceneLineBudget must be a positive int';
+        sceneLineBudget = v;
+      case 'devHints':
+        final v = value is bool ? value : (value == 'true' ? true : value == 'false' ? false : null);
+        if (v == null) return 'devHints must be true or false';
+        devHints = v;
+      case 'captureSettleMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'captureSettleMs must be a positive int';
+        captureSettleMs = v;
       default:
         return 'unknown config key: $key';
     }

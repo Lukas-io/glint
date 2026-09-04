@@ -361,6 +361,8 @@ class ContainerClassifier extends WidgetClassifier {
     'SafeArea',
     'Material',
     'Card',
+    'ListTile',
+    'ExpansionTile',
     'Container',
     'DecoratedBox',
     'ColoredBox',
@@ -416,6 +418,8 @@ class ContainerClassifier extends WidgetClassifier {
         'Column' => 'column',
         'Stack' || 'IndexedStack' => 'stack',
         'Form' => 'form',
+        'Card' => 'card',
+        'ListTile' || 'ExpansionTile' => 'tile',
         // Transient messages — the agent should read them but not treat them
         // as permanent UI or a blocking modal.
         'SnackBar' => 'snackbar (transient)',

@@ -122,6 +122,8 @@ abstract class GlintTool {
           'call `attach` again with the same vmUri to reconnect',
         ],
       );
+    } on RuntimeUnresponsiveError catch (e) {
+      response = await _unresponsiveResponse(session, e);
     } catch (e, st) {
       response = StructuredResponse.error(
         summary: '${definition.name} failed',
@@ -132,6 +134,35 @@ abstract class GlintTool {
     response = await _checkDeviceGone(session, app, response);
     logCall(session, request, response, start);
     return response.toCallResult();
+  }
+
+  /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.
+  Future<StructuredResponse> _unresponsiveResponse(
+      GlintSession session, RuntimeUnresponsiveError e) async {
+    bool? locked;
+    try {
+      locked = await session.backend.lockState();
+    } on Object {
+      locked = null;
+    }
+    return StructuredResponse.error(
+      summary: locked == true
+          ? 'the device is locked, so the app is suspended and runs no Dart code'
+          : 'the app stopped answering: suspended in the background, paused at a '
+              'breakpoint, or frozen',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: e.toString(),
+      nextSteps: [
+        if (locked == true)
+          'hardware_button unlock, then retry'
+        else ...const [
+          '`device op:screenshot` to see what the device shows',
+          'if the app is in the background, `hardware_button home` and reopen it; '
+              'if a debugger paused it, resume it',
+          'attach again if the app was restarted',
+        ],
+      ],
+    );
   }
 
   static const _deviceSensitive = {

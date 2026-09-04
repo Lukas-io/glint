@@ -28,6 +28,7 @@ class IosSimBackend implements InteractionBackend {
   // Home:   bottom-edge swipe up; the sim reads any swipe starting in the home-indicator strip as a home press.
   // Unlock: Darwin notification `com.apple.BiometricKit_Sim.pearl.match` (Face ID auth) then a bottom-edge swipe past the authenticated-lock-screen state.
   //         From the Simulator.app binary: Pearl = Face ID, Oyster = Touch ID; default Pearl since modern test targets are Face ID.
+  // Back:   left-edge swipe, the iOS back gesture (there is no back button on iPhone).
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
@@ -35,6 +36,7 @@ class IosSimBackend implements InteractionBackend {
           HardwareButton.lock,
           HardwareButton.unlock,
           HardwareButton.home,
+          HardwareButton.back,
         },
       );
 
@@ -112,14 +114,13 @@ class IosSimBackend implements InteractionBackend {
   Future<void> pressHardwareButton(HardwareButton button) {
     switch (button) {
       case HardwareButton.lock:
-        // Raw IndigoHID code 1 fires Lock on Face ID devices (the bridge's SimButton.home naming
-        // pre-dates §13 RE); probe-button takes the raw int and dodges the misleading name.
-        return _run(_BridgeCommand.probeButton, [udid, '1']);
+        return _lock();
       case HardwareButton.home:
         return _bottomEdgeSwipeUp();
       case HardwareButton.unlock:
         return _unlockFaceID();
       case HardwareButton.back:
+        return _leftEdgeSwipeBack();
       case HardwareButton.volumeUp:
       case HardwareButton.volumeDown:
       case HardwareButton.appSwitcher:
@@ -129,6 +130,19 @@ class IosSimBackend implements InteractionBackend {
               'see source-of-truth §13',
         );
     }
+  }
+
+  /// The iOS back gesture: a swipe that starts at the left screen edge and travels past the middle.
+  Future<void> _leftEdgeSwipeBack() {
+    final midY = deviceLogicalHeight / 2;
+    return _run(_BridgeCommand.swipe, [
+      udid,
+      '$deviceLogicalWidth',
+      '$deviceLogicalHeight',
+      '8', '$midY',
+      '${deviceLogicalWidth * 0.8}', '$midY',
+      '350',
+    ]);
   }
 
   Future<void> _bottomEdgeSwipeUp() {
@@ -143,8 +157,23 @@ class IosSimBackend implements InteractionBackend {
     ]);
   }
 
-  /// Face ID match Darwin notification authenticates; the swipe then transitions past the authenticated lock screen to home.
+  /// Raw IndigoHID code 1 is Lock on Face ID devices (probe-button takes the raw int, dodging the bridge's older SimButton naming); waits for SpringBoard to report the lock.
+  Future<void> _lock() async {
+    await _run(_BridgeCommand.probeButton, [udid, '1']);
+    await _awaitLockState(true);
+  }
+
+  /// Face ID match Darwin notification authenticates; after about a second the bottom-edge swipe moves past the authenticated lock screen. Retried once when SpringBoard still reports locked.
   Future<void> _unlockFaceID() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await _postFaceIdMatch();
+      await Future<void>.delayed(Duration(milliseconds: attempt == 0 ? 1000 : 1500));
+      await _bottomEdgeSwipeUp();
+      if (await _awaitLockState(false) != true) return;
+    }
+  }
+
+  Future<void> _postFaceIdMatch() async {
     final result = await Process.run(
       'notifyutil',
       ['-p', 'com.apple.BiometricKit_Sim.pearl.match'],
@@ -157,9 +186,29 @@ class IosSimBackend implements InteractionBackend {
         stderr: ((result.stderr as String?) ?? '').trim(),
       );
     }
-    // Give the daemon a tick to propagate the auth before we swipe.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    await _bottomEdgeSwipeUp();
+  }
+
+  /// SpringBoard's `com.apple.springboard.lockstate` inside the simulator: 1 locked, 0 unlocked.
+  @override
+  Future<bool?> lockState() async {
+    final result = await Process.run('xcrun', [
+      'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.lockstate',
+    ]);
+    if (result.exitCode != 0) return null;
+    final m = RegExp(r'lockstate\s+(\d+)').firstMatch((result.stdout as String?) ?? '');
+    return m == null ? null : m.group(1) != '0';
+  }
+
+  /// Polls [lockState] until it reads [locked], the read fails, or two seconds pass; returns the last read.
+  Future<bool?> _awaitLockState(bool locked) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    bool? last;
+    while (DateTime.now().isBefore(deadline)) {
+      last = await lockState();
+      if (last == null || last == locked) return last;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return last;
   }
 
   ({double x, double y}) _logical(int physicalX, int physicalY) => (
