@@ -84,6 +84,31 @@ SceneNode _counterScene() {
 }
 
 void main() {
+  group('row-shaped containers keep their grouping', () {
+    final reg = ClassifierRegistry.defaults();
+
+    SemanticNode build(String label) {
+      final node = _n(label, children: [_n('Icon'), _n('Text')]);
+      final kids = [
+        SemanticIcon(glintId: 'icon'),
+        SemanticText(glintId: 'text', content: 'row'),
+      ];
+      return reg.classifierFor(node).build(node, kids);
+    }
+
+    test('ListTile, ExpansionTile and Card become hinted containers', () {
+      expect((build('ListTile') as SemanticContainer).hint, 'tile');
+      expect((build('ExpansionTile') as SemanticContainer).hint, 'tile');
+      expect((build('Card') as SemanticContainer).hint, 'card');
+    });
+
+    test('a hinted tile survives compaction, so sibling tiles can fold', () {
+      const c = SceneCompactor();
+      final tile = build('ListTile');
+      expect(c.expandChild(tile), [tile]);
+    });
+  });
+
   group('SemanticNode', () {
     test('toJson surfaces role, glintId, affordances, children', () {
       final btn = SemanticButton(
