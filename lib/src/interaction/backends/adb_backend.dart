@@ -92,6 +92,10 @@ class AdbBackend implements InteractionBackend {
     return _shell(['input', 'text', escaped]);
   }
 
+  /// Not read on Android yet; callers fall back to the app lifecycle.
+  @override
+  Future<bool?> lockState() async => null;
+
   @override
   Future<void> pressHardwareButton(HardwareButton button) {
     final code = button.androidKeyCode;
