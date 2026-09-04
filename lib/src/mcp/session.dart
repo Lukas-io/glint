@@ -12,6 +12,7 @@ import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
 
 export 'app_session.dart' show AppSession, SceneMode;
+export 'capture_ring.dart';
 
 /// How far to enrich a scene: [structural] = overlays + route (cheap);
 /// [interactive] = also input values + toggle states (change-detection);
@@ -175,6 +176,8 @@ class GlintSession {
       _requireAttached(_active?.linkEnricher, 'link enricher');
   NavigationEnricher get navEnricher =>
       _requireAttached(_active?.navEnricher, 'nav enricher');
+  PagedViewportEnricher get pagedEnricher =>
+      _requireAttached(_active?.pagedEnricher, 'paged enricher');
   ReadinessGate get readinessGate =>
       _requireAttached(_active?.readinessGate, 'readiness gate');
   SettleDetector get settleDetector =>
@@ -207,6 +210,7 @@ class GlintSession {
       runtimeFactory: _runtimeFactory,
       appLogCapacity: config.appLogCapacity,
     );
+    app.captureSettleMs = config.captureSettleMs;
     _pool[device.id] = app;
     _active = app;
     return app;
@@ -274,6 +278,7 @@ class GlintSession {
     // the rest are order-independent.
     await overlayEnricher.enrich(semantic);
     await navEnricher.enrich(semantic);
+    await pagedEnricher.enrich(semantic);
     if (detail != SceneDetail.structural) {
       await inputEnricher.enrich(semantic);
       await toggleEnricher.enrich(semantic);

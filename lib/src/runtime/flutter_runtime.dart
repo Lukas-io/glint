@@ -135,3 +135,13 @@ class RuntimeConnectionLostError implements Exception {
   @override
   String toString() => 'RuntimeConnectionLostError: $cause';
 }
+
+/// Thrown when a VM service call gets no answer within the runtime's deadline: the isolate is not running Dart code (device locked, app suspended, or paused at a breakpoint).
+class RuntimeUnresponsiveError implements Exception {
+  RuntimeUnresponsiveError(this.operation, this.timeout);
+  final String operation;
+  final Duration timeout;
+  @override
+  String toString() =>
+      'RuntimeUnresponsiveError: $operation gave no answer within ${timeout.inSeconds}s';
+}

@@ -84,6 +84,31 @@ SceneNode _counterScene() {
 }
 
 void main() {
+  group('row-shaped containers keep their grouping', () {
+    final reg = ClassifierRegistry.defaults();
+
+    SemanticNode build(String label) {
+      final node = _n(label, children: [_n('Icon'), _n('Text')]);
+      final kids = [
+        SemanticIcon(glintId: 'icon'),
+        SemanticText(glintId: 'text', content: 'row'),
+      ];
+      return reg.classifierFor(node).build(node, kids);
+    }
+
+    test('ListTile, ExpansionTile and Card become hinted containers', () {
+      expect((build('ListTile') as SemanticContainer).hint, 'tile');
+      expect((build('ExpansionTile') as SemanticContainer).hint, 'tile');
+      expect((build('Card') as SemanticContainer).hint, 'card');
+    });
+
+    test('a hinted tile survives compaction, so sibling tiles can fold', () {
+      const c = SceneCompactor();
+      final tile = build('ListTile');
+      expect(c.expandChild(tile), [tile]);
+    });
+  });
+
   group('SemanticNode', () {
     test('toJson surfaces role, glintId, affordances, children', () {
       final btn = SemanticButton(
@@ -540,14 +565,13 @@ void main() {
         root: SemanticPage(body: rows),
       );
       final out = const PlainTextSceneRenderer().render(scene);
-      // First row shown in full, last row name surfaced in the summary
-      // line, intermediate rows folded away.
+      // First row in full, then one digest naming the next ten by label and
+      // #hash, then the remainder as a count.
       expect(out, contains('"item 0"'));
-      expect(out, contains('"item 29"'));
-      expect(out, contains('row#* (29 more'));
-      // A middle item should NOT appear at all — folded by the run.
-      expect(out, isNot(contains('"item 5"')));
+      expect(out, contains('… 29 more like it: "item 1" #1, "item 2" #2'));
+      expect(out, contains('+19'));
       expect(out, isNot(contains('"item 15"')));
+      expect(out, isNot(contains('"item 29"')));
     });
   });
 }

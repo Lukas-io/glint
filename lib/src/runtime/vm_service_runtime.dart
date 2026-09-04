@@ -71,9 +71,14 @@ class VmServiceRuntime implements FlutterRuntime {
   /// Wraps a VM service call and converts disconnect-class errors to
   /// [RuntimeConnectionLostError] so the tool layer can return a structured,
   /// recoverable [GlintErrorKind.connectionLost] response.
-  Future<T> _guard<T>(Future<T> Function() fn) async {
+  /// Longest a single VM service call may take before it is reported as [RuntimeUnresponsiveError].
+  static const callTimeout = Duration(seconds: 10);
+
+  Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call'}) async {
     try {
-      return await fn();
+      return await fn().timeout(callTimeout);
+    } on TimeoutException {
+      throw RuntimeUnresponsiveError(op, callTimeout);
     } on StateError catch (e) {
       throw RuntimeConnectionLostError(e);
     } on RPCError catch (e) {
@@ -182,6 +187,7 @@ class VmServiceRuntime implements FlutterRuntime {
     try {
       raw = await _guard(
         () => _vm.service.evaluate(flutterIsolateId, rootLib, expression),
+        op: 'evaluate',
       );
     } on RPCError catch (e) {
       // Code 113 = expression compilation error (e.g. platform view context).
