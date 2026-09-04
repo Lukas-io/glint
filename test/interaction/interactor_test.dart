@@ -121,6 +121,9 @@ class _FakeBackend implements InteractionBackend {
   Future<void> typeText(String text) async {}
 
   @override
+  Future<bool?> lockState() async => null;
+
+  @override
   Future<void> pressHardwareButton(HardwareButton button) async {}
 
   @override

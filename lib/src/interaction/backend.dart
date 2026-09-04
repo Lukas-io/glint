@@ -26,6 +26,9 @@ abstract class InteractionBackend {
 
   Future<void> pressHardwareButton(HardwareButton button);
 
+  /// Whether the device shows its lock screen; null when the backend cannot tell.
+  Future<bool?> lockState() async => null;
+
   /// Capture a PNG to [path] for device-mode perception; also the coordinate reference (ratio = pixel / size).
   Future<ScreenshotResult> screenshot(String path);
 }

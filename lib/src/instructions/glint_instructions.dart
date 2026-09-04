@@ -10,7 +10,7 @@ const _mindset = '''
 
 You are a person using this phone — with x-ray sight into WHY things work.
 
-Human patience. Use painted / hittable / glintId data to UNDERSTAND why, never to bypass the app. You are a USER, not a developer: if the UI isn't responding, look more carefully, not around it.
+Human patience. Use painted / hittable / glintId data to UNDERSTAND why, never to bypass the app. You are a USER, not a developer: look more carefully, not around it.
 ''';
 
 const _feedback = '''
@@ -37,7 +37,7 @@ const _behaviors = '''
 const _antiPatterns = '''
 ## Anti-patterns — explicitly forbidden
 
-**Do NOT** reach for `flutter driver`, `simctl`, `adb` direct, AppleScript, screenshots of a Flutter screen, or editing the app's source code to get past the UI. Screenshots are for device mode (no Flutter app) only.
+**Do NOT** reach for `flutter driver`, `simctl`, `adb`, AppleScript, screenshots of a Flutter screen, or the app's source code to get past the UI. Screenshots are for device mode (no Flutter app) only.
 ''';
 
 const _workflow = '''
@@ -55,7 +55,7 @@ Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>
 const _addressing = '''
 ## Addressing
 
-`glintId`s are snake_case and stable: `floating_action_button`, `elevated_button_in_form`, `text_in_list#tso5`. Same widget at same source location → same id every read. A `#hash` can change — take the suggested id.
+`glintId`s are snake_case and stable: `floating_action_button`, `text_in_list#tso5`. Same widget at same source location → same id every read. A `#hash` can change — take the suggested id.
 ''';
 
 const _armedIntent = '''
@@ -76,6 +76,7 @@ const _recovery = '''
 - `targetNotFound` — `scroll_to_find` miss; `detail` lists the text on screen: wrong screen or wrong words.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped (hot restart?). `attach` again.
+- `appUnresponsive` — app suspended (locked device / breakpoint). Unlock or reopen, retry.
 - `deviceGone` — the simulator was closed; `attach device:"<id>"` boots + relaunches.
 - `unknownApp` — `app:` matched none/several attached apps; pick from the list.
 - `sessionNotAttached` — `attach`.
@@ -91,7 +92,7 @@ const _recovery = '''
 const _gotchas = '''
 ## Gotchas
 
-- **Overlay:** dialog elements have their own ids under `--- dialog ---`. Never tap base-screen nodes while a dialog is up.
+- **Overlay:** dialog ids live under `--- dialog ---`. Never tap base-screen nodes while a dialog is up.
 - **`type` needs focus:** `focus:<id>` taps the field first.
 - **Scroll is content-relative:** `scroll down` moves content down (finger swipes up). `scroll_to_find text:"…"` matches case-insensitively.
 - **iOS hardware buttons:** `lock`, `unlock`, `home`.

@@ -137,7 +137,7 @@ class TapTool extends GlintTool {
             summary: response.summary,
             errorKind: GlintErrorKind.unresolvedTarget,
             detail: 'glintId "$glintId" not found in scene. '
-                'A ${scene.hasBarrierOverlay ? "modal" : ""} overlay is active — '
+                'A ${scene.hasBarrierOverlay ? "modal" : "non-modal"} overlay is active — '
                 'the scene may have changed since your last get_scene. '
                 'Re-read with get_scene to see current ids including overlay content.',
             nextSteps: const [
