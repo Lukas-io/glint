@@ -74,6 +74,9 @@ class SemanticPage extends SemanticNode {
   final String? title;
   final SemanticAppBar? appBar;
 
+  /// For a page laid side by side in a PageView / TabBarView: whether it is the one on screen; null when not paged or not measured.
+  bool? onViewport;
+
   @override
   SemanticRole get role => SemanticRole.page;
 
@@ -83,6 +86,7 @@ class SemanticPage extends SemanticNode {
   @override
   Map<String, Object?> _extraJson() => {
         if (title != null) 'title': title,
+        if (onViewport != null) 'onViewport': onViewport,
       };
 }
 

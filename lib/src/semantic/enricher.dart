@@ -14,6 +14,38 @@ abstract class SemanticEnricher {
   Future<void> enrich(SemanticScene scene);
 }
 
+/// Source labels whose children are pages laid side by side: every page stays in the tree, so which one is on screen is a geometry fact.
+const Set<String> kPagedLabels = {'PageView', 'TabBarView'};
+
+/// Marks each page under a PageView / TabBarView with [SemanticPage.onViewport], one geometry read per page, capped at [maxPages].
+class PagedViewportEnricher implements SemanticEnricher {
+  PagedViewportEnricher({required this.resolver, this.maxPages = 8});
+
+  final CoordinateResolver resolver;
+  final int maxPages;
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    var budget = maxPages;
+    for (final list in scene.root.walk().whereType<SemanticList>()) {
+      final id = list.glintId;
+      if (id == null) continue;
+      final label = scene.sourceFor(id)?.baseLabel;
+      if (label == null || !kPagedLabels.contains(label)) continue;
+      for (final page in list.children.whereType<SemanticPage>()) {
+        final pageId = page.glintId;
+        if (pageId == null || budget-- <= 0) continue;
+        try {
+          final c = await resolver.resolve(scene.sourceScene, pageId);
+          page.onViewport = c.centerOnViewport;
+        } on Object {
+          continue;
+        }
+      }
+    }
+  }
+}
+
 /// Classifies overlay dialog content from [Scene.overlayRoots] into
 /// [SemanticScene.overlayLayers]. Must run before the renderer.
 class OverlayEnricher implements SemanticEnricher {

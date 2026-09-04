@@ -100,10 +100,11 @@ class _Writer {
     _nodeLine(node, depth);
     // A nested page inside a PageView/IndexedStack (SemanticList) is an
     // alternate tab/route — summarise it; the agent navigates to it and
-    // re-reads. But an app-shell that nests the real content Scaffold (a
-    // page directly under a container) IS the current screen — expand it, or
-    // its whole form stays invisible in text mode.
-    if (node is SemanticPage && depth > 0 && inList) return;
+    // re-reads. The page measured on the viewport IS the current screen, and
+    // so is an app-shell that nests the real content Scaffold (a page
+    // directly under a container) — expand those, or the whole form stays
+    // invisible in text mode.
+    if (node is SemanticPage && depth > 0 && inList && node.onViewport != true) return;
     final isList = node is SemanticList;
     if (isList) _listStack.add(node.glintId);
     _children(node.children, depth: depth + 1, inList: isList);

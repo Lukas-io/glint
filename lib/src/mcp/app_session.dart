@@ -44,6 +44,7 @@ class AppSession {
   IconEnricher? iconEnricher;
   LinkEnricher? linkEnricher;
   NavigationEnricher? navEnricher;
+  PagedViewportEnricher? pagedEnricher;
   ReadinessGate? readinessGate;
   SettleDetector? settleDetector;
   NativeSceneReader? nativeReader;
@@ -155,6 +156,7 @@ class AppSession {
     iconEnricher = IconEnricher(runtime: rt);
     linkEnricher = LinkEnricher(runtime: rt);
     navEnricher = NavigationEnricher(runtime: rt);
+    pagedEnricher = PagedViewportEnricher(resolver: res);
     readinessGate = ReadinessGate(reader: rd, resolver: res);
     settleDetector = SettleDetector(runtime: rt, reader: rd);
     final dev = device;

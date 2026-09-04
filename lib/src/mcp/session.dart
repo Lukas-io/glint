@@ -176,6 +176,8 @@ class GlintSession {
       _requireAttached(_active?.linkEnricher, 'link enricher');
   NavigationEnricher get navEnricher =>
       _requireAttached(_active?.navEnricher, 'nav enricher');
+  PagedViewportEnricher get pagedEnricher =>
+      _requireAttached(_active?.pagedEnricher, 'paged enricher');
   ReadinessGate get readinessGate =>
       _requireAttached(_active?.readinessGate, 'readiness gate');
   SettleDetector get settleDetector =>
@@ -276,6 +278,7 @@ class GlintSession {
     // the rest are order-independent.
     await overlayEnricher.enrich(semantic);
     await navEnricher.enrich(semantic);
+    await pagedEnricher.enrich(semantic);
     if (detail != SceneDetail.structural) {
       await inputEnricher.enrich(semantic);
       await toggleEnricher.enrich(semantic);

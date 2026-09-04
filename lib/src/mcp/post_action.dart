@@ -30,7 +30,7 @@ Future<ActionScene> openActionScene(GlintSession session,
     return ActionScene(
       scene: scene,
       semantic: semantic,
-      pre: await snapshotOf(session, semantic),
+      pre: snapshotOf(semantic),
     );
   } on Object {
     await scene.dispose();
@@ -112,16 +112,10 @@ class SceneSnapshot {
   }
 }
 
-/// Source labels whose children are pages laid side by side: every page stays
-/// in the tree, so which one is on screen is a geometry fact, not a tree fact.
-const _pagedLabels = {'PageView', 'TabBarView'};
-
 /// [SceneSnapshot.from] plus the on-viewport state of each page in a
-/// PageView / TabBarView, so a tab switch registers as a change even though
-/// the tree is identical before and after. Costs one geometry eval per page,
-/// capped at [maxPages].
-Future<SceneSnapshot> snapshotOf(GlintSession session, SemanticScene semantic,
-    {int maxPages = 8}) async {
+/// PageView / TabBarView (set by [PagedViewportEnricher]), so a tab switch
+/// registers as a change even though the tree is identical before and after.
+SceneSnapshot snapshotOf(SemanticScene semantic) {
   final base = SceneSnapshot.from(semantic);
   var hash = base.contentHash;
   void mix(String s) {
@@ -130,22 +124,10 @@ Future<SceneSnapshot> snapshotOf(GlintSession session, SemanticScene semantic,
     }
   }
 
-  var budget = maxPages;
-  for (final list in semantic.root.walk().whereType<SemanticList>()) {
-    final id = list.glintId;
-    if (id == null) continue;
-    final label = semantic.sourceFor(id)?.baseLabel;
-    if (label == null || !_pagedLabels.contains(label)) continue;
-    for (final page in list.children) {
-      final pageId = page.glintId;
-      if (pageId == null || budget-- <= 0) continue;
-      try {
-        final c = await session.resolver.resolve(semantic.sourceScene, pageId);
-        mix('$pageId:${c.centerOnViewport}');
-      } on Object {
-        // unresolvable page — leave it out of the signal
-      }
-    }
+  for (final page in semantic.root.walk().whereType<SemanticPage>()) {
+    final on = page.onViewport;
+    if (on == null || page.glintId == null) continue;
+    mix('${page.glintId}:$on');
   }
   return SceneSnapshot(
     routeName: base.routeName,
@@ -207,7 +189,7 @@ class PostActionState {
 Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
     return await session.withScene(
-      (semantic) => snapshotOf(session, semantic),
+      (semantic) async => snapshotOf(semantic),
       detail: SceneDetail.interactive,
     );
   } on Object {
@@ -246,7 +228,7 @@ Future<PostActionState?> readPostActionState(
     }
     Future<PostActionState> readOnce() => session.withScene(
           (semantic) async {
-            final post = await snapshotOf(session, semantic);
+            final post = snapshotOf(semantic);
             final category = pre != null ? changeCategory(pre, post) : 'unknown';
             return PostActionState(
               changed: category != 'nothing',
