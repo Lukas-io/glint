@@ -84,3 +84,31 @@ class PressHardwareButton extends Action {
   @override
   String get label => 'press ${button.name}';
 }
+
+/// A non-printing key the keyboard can send; each backend maps it to its own code.
+enum KeyName { backspace, delete, enter, tab, escape, space, up, down, left, right }
+
+/// A modifier held down around a key press.
+enum KeyModifier { cmd, shift, ctrl, alt }
+
+class PressKey extends Action {
+  const PressKey(this.key, {this.count = 1, this.modifiers = const {}});
+  final KeyName key;
+  final int count;
+  final Set<KeyModifier> modifiers;
+
+  @override
+  String get label {
+    final mods = [for (final m in modifiers) m.name].join('+');
+    final base = mods.isEmpty ? key.name : '$mods+${key.name}';
+    return 'key $base${count > 1 ? ' x$count' : ''}';
+  }
+}
+
+/// Select all in the focused field, then backspace — the platform-native way to empty it.
+class ClearField extends Action {
+  const ClearField();
+
+  @override
+  String get label => 'clear field';
+}

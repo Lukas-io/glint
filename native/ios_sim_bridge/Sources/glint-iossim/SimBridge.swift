@@ -371,6 +371,28 @@ struct SimDeviceProxy {
         }
     }
 
+    /// Presses HID [usage] [count] times; each press is bracketed by the modifiers in [modifierMask] (bit i = usage 0xE0 + i), with typeText's dwell and gap.
+    func pressKey(usage: Int32, count: Int, modifierMask: Int) throws {
+        let client = try makeHidClient()
+        let mods: [Int32] = (0..<4)
+            .filter { modifierMask & (1 << $0) != 0 }
+            .map { Int32(0xE0 + $0) }
+        for i in 0..<max(count, 1) {
+            for m in mods {
+                try sendKey(client: client, usage: m, direction: .down)
+            }
+            try sendKey(client: client, usage: usage, direction: .down)
+            Thread.sleep(forTimeInterval: Self.keyDwell)
+            try sendKey(client: client, usage: usage, direction: .up)
+            for m in mods.reversed() {
+                try sendKey(client: client, usage: m, direction: .up)
+            }
+            if i < count - 1 {
+                Thread.sleep(forTimeInterval: Self.interKeyGap)
+            }
+        }
+    }
+
     private func _ratio(x: CGFloat, y: CGFloat, in size: CGSize) -> CGPoint {
         CGPoint(x: x / size.width, y: y / size.height)
     }

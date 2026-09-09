@@ -7,6 +7,7 @@ import '../session.dart';
 import '../tool.dart';
 import 'drag_tool.dart';
 import 'hardware_button_tool.dart';
+import 'key_tool.dart';
 import 'long_press_tool.dart';
 import 'scroll_to_find_tool.dart';
 import 'scroll_tool.dart';
@@ -25,6 +26,7 @@ class BatchTool extends GlintTool {
   static const Map<String, GlintTool> _stepTools = {
     'tap': TapTool(),
     'type': TypeTool(),
+    'key': KeyTool(),
     'scroll': ScrollTool(),
     'scroll_to_find': ScrollToFindTool(),
     'swipe': SwipeTool(),

@@ -28,6 +28,7 @@ import 'tools/shutdown_sim_tool.dart';
 import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
 import 'tools/telemetry_tool.dart';
+import 'tools/key_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
 
@@ -324,6 +325,7 @@ const List<GlintTool> kDefaultGlintTools = [
   ScrollTool(),
   ScrollToFindTool(),
   TypeTool(),
+  KeyTool(),
   HardwareButtonTool(),
   WaitForSettleTool(),
   BatchTool(),
