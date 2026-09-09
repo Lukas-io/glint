@@ -161,4 +161,49 @@ void main() {
       expect(s['summary'], contains('not attached'));
     });
   });
+
+  group('record', () {
+    const tool = RecordTool();
+    test('bad ranges -> invalidArgument', () async {
+      for (final a in [
+        {'everyMs': 5},
+        {'maxFrames': 0},
+        {'durationMs': 60000},
+      ]) {
+        final r = _structured(await tool.invoke(
+            session, CallToolRequest(name: 'record', arguments: a)));
+        expect(r['errorKind'], 'invalidArgument', reason: '$a');
+      }
+    });
+
+    test('an unknown step tool -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(
+          session,
+          CallToolRequest(name: 'record', arguments: const {
+            'steps': [
+              {'tool': 'attach', 'args': {}},
+            ],
+          })));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('no steps and durationMs:0 -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'record', arguments: const {'durationMs': 0})));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('valid but unattached -> sessionNotAttached', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'record', arguments: const {'durationMs': 400})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+
+    test('registered with the app routing arg', () {
+      final def = tool.registeredDefinition as Map<String, Object?>;
+      final props = (def['inputSchema'] as Map)['properties'] as Map;
+      expect(props.containsKey('steps'), isTrue);
+      expect(props.containsKey('app'), isTrue);
+    });
+  });
 }

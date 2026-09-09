@@ -11,6 +11,7 @@ import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/batch_tool.dart';
+import 'tools/record_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
@@ -327,6 +328,7 @@ const List<GlintTool> kDefaultGlintTools = [
   HardwareButtonTool(),
   WaitForSettleTool(),
   BatchTool(),
+  RecordTool(),
   LogsTool(),
   AppLogsTool(),
   SessionTool(),
