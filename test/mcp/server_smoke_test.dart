@@ -20,6 +20,7 @@ void main() {
         Platform.resolvedExecutable,
         ['run', 'bin/glint.dart'],
         workingDirectory: Directory.current.path,
+        environment: {'GLINT_NO_TELEMETRY': 'true'},
       );
       incoming = proc.stdout
           .transform(utf8.decoder)

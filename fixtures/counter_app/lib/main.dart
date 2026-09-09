@@ -39,7 +39,25 @@ class _CounterPageState extends State<CounterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('glint counter fixture')),
+      appBar: AppBar(
+        title: const Text('glint counter fixture'),
+        actions: [
+          TextButton(
+            key: const Key('open_eager_list'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const _ListLabPage(lazy: false)),
+            ),
+            child: const Text('eager'),
+          ),
+          TextButton(
+            key: const Key('open_builder_list'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const _ListLabPage(lazy: true)),
+            ),
+            child: const Text('builder'),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         controller: _scrollController,
         child: Column(
@@ -229,4 +247,32 @@ String glintSyntheticTap(double x, double y) {
   b.handlePointerEvent(PointerDownEvent(position: p, pointer: 7));
   b.handlePointerEvent(PointerUpEvent(position: p, pointer: 7));
   return 'ok';
+}
+
+/// Forty identical rows: a Column inside a SingleChildScrollView builds every
+/// row up front (`lazy: false`); ListView.builder builds on demand (`lazy: true`).
+class _ListLabPage extends StatelessWidget {
+  const _ListLabPage({required this.lazy});
+  final bool lazy;
+
+  static const int rowCount = 40;
+
+  Widget _row(int i) => ListTile(
+        key: ValueKey('lab_row_$i'),
+        leading: const Icon(Icons.circle_outlined),
+        title: Text('lab row $i'),
+        subtitle: const Text('same shape every time'),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(lazy ? 'builder list' : 'eager list')),
+      body: lazy
+          ? ListView.builder(itemCount: rowCount, itemBuilder: (_, i) => _row(i))
+          : SingleChildScrollView(
+              child: Column(children: [for (var i = 0; i < rowCount; i++) _row(i)]),
+            ),
+    );
+  }
 }

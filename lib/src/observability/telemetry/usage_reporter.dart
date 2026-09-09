@@ -1,9 +1,10 @@
 /// Ships privacy-safe usage rollups to the shared collector: per-tool counts,
-/// outcome + latency stats, the tool→next-tool transition graph. Raw events
-/// never leave the machine; only the aggregate does. The rollup is appended to
-/// the hash-chained `telemetry-audit.log` BEFORE any network attempt, then
-/// HTTPS-POSTed when [kCollectorEndpoint] is set. Idempotent via a
-/// high-watermark (`usage-ship-state.json`) — re-running never double-counts.
+/// outcome + latency stats, error kinds, the outcome-tagged tool→next-tool
+/// transition graph and self-correction rates. Raw events never leave the
+/// machine; only the aggregate does. The rollup is appended to the
+/// hash-chained `telemetry-audit.log` BEFORE any network attempt, then
+/// HTTPS-POSTed to [kCollectorEndpoint]. Idempotent via a high-watermark
+/// (`usage-ship-state.json`) — re-running never double-counts.
 library;
 
 import 'dart:convert';
@@ -27,7 +28,8 @@ class UsageReporter {
   final UsageRecorder recorder;
 
   /// Fire-and-forget startup hook. Daily-gated. Never throws — safe to
-  /// `unawaited(...)` from server bootstrap.
+  /// `unawaited(...)` from server bootstrap. Ships what earlier processes
+  /// persisted but did not get to ship.
   Future<void> maybeAutoShip() async {
     try {
       if (usageDisabled()) return;
@@ -43,6 +45,33 @@ class UsageReporter {
     } on Object {
       // Telemetry hiccup must never disturb the server.
     }
+  }
+
+  /// Shutdown hook: ships whatever is unshipped, bounded by
+  /// [kTelemetryTimeout] so exit is never held hostage. Never throws.
+  Future<void> shipOnExit({String? dataDir}) async {
+    try {
+      if (usageDisabled()) return;
+      final dir = dataDir ?? resolveDataDir();
+      if (unshippedCount(dataDir: dir) == 0) return;
+      await ship(dataDir: dir).timeout(kTelemetryTimeout + const Duration(seconds: 1));
+    } on Object {
+      // Best-effort; the events stay persisted for the next startup ship.
+    }
+  }
+
+  /// Events recorded since the last ship (what a ship would send now).
+  int unshippedCount({String? dataDir}) {
+    final dir = dataDir ?? resolveDataDir();
+    return recorder.eventsAfterId(_shipFromId(dir)).length;
+  }
+
+  /// Watermark to ship from. A watermark past every known id means the event
+  /// store was reset (file deleted, memory-only run) — ship from the start
+  /// instead of silently dropping everything below the stale mark.
+  int _shipFromId(String dir) {
+    final mark = _readState(dir).lastShippedEventId;
+    return mark > recorder.maxId ? 0 : mark;
   }
 
   /// Builds + ships the rollup of every event newer than the watermark.
@@ -61,15 +90,15 @@ class UsageReporter {
     }
 
     final state = _readState(dir);
-    final rows = recorder.eventsAfterId(state.lastShippedEventId);
+    final fromId = _shipFromId(dir);
+    final rows = recorder.eventsAfterId(fromId);
     if (rows.isEmpty) {
       return UsageShipResult(
         shipped: false,
         events: 0,
-        fromEventId: state.lastShippedEventId,
-        toEventId: state.lastShippedEventId,
-        message: 'no new events since the last ship '
-            '(watermark id=${state.lastShippedEventId})',
+        fromEventId: fromId,
+        toEventId: fromId,
+        message: 'no new events since the last ship (watermark id=$fromId)',
       );
     }
 
@@ -82,7 +111,7 @@ class UsageReporter {
         shipped: false,
         dryRun: true,
         events: rows.length,
-        fromEventId: state.lastShippedEventId,
+        fromEventId: fromId,
         toEventId: toEventId,
         payloadJson: jsonStr,
         message: 'dry run: ${rows.length} event(s) would ship; nothing written',
@@ -130,7 +159,7 @@ class UsageReporter {
     return UsageShipResult(
       shipped: true,
       events: rows.length,
-      fromEventId: state.lastShippedEventId,
+      fromEventId: fromId,
       toEventId: toEventId,
       posted: posted,
       payloadJson: jsonStr,
@@ -225,8 +254,12 @@ Map<String, Object?> buildUsagePayload({
     },
     'totalEvents': stats['totalEvents'],
     'totalTurns': stats['totalTurns'],
+    if (stats['totalEstimatedTokens'] != null)
+      'totalEstimatedTokens': stats['totalEstimatedTokens'],
     'tools': stats['tools'],
     'transitions': stats['transitions'],
+    if (stats['selfCorrection'] != null)
+      'selfCorrection': stats['selfCorrection'],
     'reportedAt': DateTime.now().toUtc().toIso8601String(),
   };
 }

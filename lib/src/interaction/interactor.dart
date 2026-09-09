@@ -43,6 +43,21 @@ class Interactor {
           'use CoordinateTarget if the target genuinely isn\'t in the tree',
         ],
       );
+    } on OffViewportRefused catch (e) {
+      return ActionResult.failure(
+        action: action,
+        summary: e.message,
+        error: e.message,
+        errorKind: GlintErrorKind.offViewport,
+        physicalCenter: e.physicalCenter,
+        devicePixelRatio: e.devicePixelRatio,
+        painted: false,
+        hittable: false,
+        nextSteps: const [
+          'the target is scrolled out of the viewport — use scroll_to_find '
+              'with its glintId to bring it on-screen first',
+        ],
+      );
     } on NotHittableRefused catch (e) {
       return ActionResult.failure(
         action: action,
@@ -71,12 +86,14 @@ class Interactor {
     switch (action) {
       case Tap():
         final c = await _resolveOrThrow(scene, action.target);
+        _gateOnScreen(c);
         _gateHittable(c);
         await backend.tap(physicalX: c.physicalCenter.x, physicalY: c.physicalCenter.y);
         return _coordinateResult(action, c, verb: 'tapped');
 
       case LongPress():
         final c = await _resolveOrThrow(scene, action.target);
+        _gateOnScreen(c);
         _gateHittable(c);
         await backend.longPress(
           physicalX: c.physicalCenter.x,
@@ -87,6 +104,7 @@ class Interactor {
 
       case DoubleTap():
         final c = await _resolveOrThrow(scene, action.target);
+        _gateOnScreen(c);
         _gateHittable(c);
         await backend.tap(physicalX: c.physicalCenter.x, physicalY: c.physicalCenter.y);
         await Future<void>.delayed(Duration(milliseconds: action.gapMs));
@@ -96,6 +114,9 @@ class Interactor {
       case Swipe():
         final from = await _resolveOrThrow(scene, action.from);
         final to = await _resolveOrThrow(scene, action.to);
+        // Only the from endpoint must be on-screen: the finger starts there.
+        // A to endpoint past the edge is a legitimate long fling.
+        _gateOnScreen(from);
         await backend.swipe(
           physicalX1: from.physicalCenter.x,
           physicalY1: from.physicalCenter.y,
@@ -116,6 +137,17 @@ class Interactor {
       case TypeText():
         await backend.typeText(action.text);
         return ActionResult.success(action: action, summary: action.label);
+
+      case PressKey():
+        await backend.pressKey(action.key,
+            count: action.count, modifiers: action.modifiers);
+        return ActionResult.success(action: action, summary: action.label);
+
+      case ClearField():
+        await backend.selectAll();
+        await backend.pressKey(KeyName.backspace);
+        return ActionResult.success(
+            action: action, summary: 'select-all + backspace');
 
       case PressHardwareButton():
         await backend.pressHardwareButton(action.button);
@@ -142,6 +174,25 @@ class Interactor {
           hittable: true,
         );
     }
+  }
+
+  /// A symbolic target whose resolved center is outside the viewport can never
+  /// receive the gesture — firing would tap a void or system UI. Coordinate
+  /// targets skip this (caller owns raw coords; their sentinel viewport is 0×0).
+  void _gateOnScreen(ResolvedCoord coord) {
+    if (coord.glintId == '<coord>') return;
+    if (coord.logicalViewSize.w <= 0 || coord.logicalViewSize.h <= 0) return;
+    if (coord.centerOnViewport) return;
+    final c = coord.logicalCenter;
+    throw OffViewportRefused(
+      message: 'refusing action: ${coord.glintId} resolved to '
+          '(${c.x.toStringAsFixed(1)}, ${c.y.toStringAsFixed(1)}) logical — '
+          'outside the ${coord.logicalViewSize.w.toStringAsFixed(0)}x'
+          '${coord.logicalViewSize.h.toStringAsFixed(0)} viewport '
+          '(scrolled out or not laid out on-screen)',
+      physicalCenter: coord.physicalCenter,
+      devicePixelRatio: coord.devicePixelRatio,
+    );
   }
 
   void _gateHittable(ResolvedCoord coord) {
@@ -176,6 +227,17 @@ class UnresolvedTarget implements Exception {
   final String message;
   @override
   String toString() => 'UnresolvedTarget: $message';
+}
+
+class OffViewportRefused implements Exception {
+  OffViewportRefused({
+    required this.message,
+    this.physicalCenter,
+    this.devicePixelRatio,
+  });
+  final String message;
+  final ({int x, int y})? physicalCenter;
+  final double? devicePixelRatio;
 }
 
 class NotHittableRefused implements Exception {

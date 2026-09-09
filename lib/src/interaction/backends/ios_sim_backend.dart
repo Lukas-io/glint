@@ -3,6 +3,8 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
+import '../key_codes.dart';
+import '../screen_recording.dart';
 
 /// iOS Simulator backend over the `glint-iossim` Swift helper (`native/ios_sim_bridge/`),
 /// which speaks LOGICAL device points — so we undo the physical→logical conversion here.
@@ -13,8 +15,10 @@ class IosSimBackend implements InteractionBackend {
     required this.deviceLogicalHeight,
     required this.devicePixelRatio,
     required this.binaryPath,
+    this.run = Process.run,
   });
 
+  final ProcessRunner run;
   final String udid;
   final double deviceLogicalWidth;
   final double deviceLogicalHeight;
@@ -28,13 +32,17 @@ class IosSimBackend implements InteractionBackend {
   // Home:   bottom-edge swipe up; the sim reads any swipe starting in the home-indicator strip as a home press.
   // Unlock: Darwin notification `com.apple.BiometricKit_Sim.pearl.match` (Face ID auth) then a bottom-edge swipe past the authenticated-lock-screen state.
   //         From the Simulator.app binary: Pearl = Face ID, Oyster = Touch ID; default Pearl since modern test targets are Face ID.
+  // Back:   left-edge swipe, the iOS back gesture (there is no back button on iPhone).
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
+        keys: true,
+        record: true,
         hardwareButtons: {
           HardwareButton.lock,
           HardwareButton.unlock,
           HardwareButton.home,
+          HardwareButton.back,
         },
       );
 
@@ -92,6 +100,19 @@ class IosSimBackend implements InteractionBackend {
       _run(_BridgeCommand.type, [udid, text]);
 
   @override
+  Future<void> pressKey(KeyName key,
+          {int count = 1, Set<KeyModifier> modifiers = const {}}) =>
+      _run(_BridgeCommand.key,
+          [udid, '${key.hidUsage}', '$count', '${hidModifierMask(modifiers)}']);
+
+  @override
+  Future<void> selectAll() =>
+      _run(_BridgeCommand.key, [udid, '4', '1', '8']); // usage 0x04=a, mask 8=cmd
+  @override
+  Future<ScreenRecording> startRecording(String path) =>
+      SimctlRecording.start(udid: udid, path: path);
+
+  @override
   Future<ScreenshotResult> screenshot(String path) async {
     final res = await Process.run(
       'xcrun',
@@ -112,14 +133,13 @@ class IosSimBackend implements InteractionBackend {
   Future<void> pressHardwareButton(HardwareButton button) {
     switch (button) {
       case HardwareButton.lock:
-        // Raw IndigoHID code 1 fires Lock on Face ID devices (the bridge's SimButton.home naming
-        // pre-dates §13 RE); probe-button takes the raw int and dodges the misleading name.
-        return _run(_BridgeCommand.probeButton, [udid, '1']);
+        return _lock();
       case HardwareButton.home:
         return _bottomEdgeSwipeUp();
       case HardwareButton.unlock:
         return _unlockFaceID();
       case HardwareButton.back:
+        return _leftEdgeSwipeBack();
       case HardwareButton.volumeUp:
       case HardwareButton.volumeDown:
       case HardwareButton.appSwitcher:
@@ -129,6 +149,19 @@ class IosSimBackend implements InteractionBackend {
               'see source-of-truth §13',
         );
     }
+  }
+
+  /// The iOS back gesture: a swipe that starts at the left screen edge and travels past the middle.
+  Future<void> _leftEdgeSwipeBack() {
+    final midY = deviceLogicalHeight / 2;
+    return _run(_BridgeCommand.swipe, [
+      udid,
+      '$deviceLogicalWidth',
+      '$deviceLogicalHeight',
+      '8', '$midY',
+      '${deviceLogicalWidth * 0.8}', '$midY',
+      '350',
+    ]);
   }
 
   Future<void> _bottomEdgeSwipeUp() {
@@ -143,8 +176,23 @@ class IosSimBackend implements InteractionBackend {
     ]);
   }
 
-  /// Face ID match Darwin notification authenticates; the swipe then transitions past the authenticated lock screen to home.
+  /// Raw IndigoHID code 1 is Lock on Face ID devices (probe-button takes the raw int, dodging the bridge's older SimButton naming); waits for SpringBoard to report the lock.
+  Future<void> _lock() async {
+    await _run(_BridgeCommand.probeButton, [udid, '1']);
+    await _awaitLockState(true);
+  }
+
+  /// Face ID match Darwin notification authenticates; after about a second the bottom-edge swipe moves past the authenticated lock screen. Retried once when SpringBoard still reports locked.
   Future<void> _unlockFaceID() async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await _postFaceIdMatch();
+      await Future<void>.delayed(Duration(milliseconds: attempt == 0 ? 1000 : 1500));
+      await _bottomEdgeSwipeUp();
+      if (await _awaitLockState(false) != true) return;
+    }
+  }
+
+  Future<void> _postFaceIdMatch() async {
     final result = await Process.run(
       'notifyutil',
       ['-p', 'com.apple.BiometricKit_Sim.pearl.match'],
@@ -157,9 +205,29 @@ class IosSimBackend implements InteractionBackend {
         stderr: ((result.stderr as String?) ?? '').trim(),
       );
     }
-    // Give the daemon a tick to propagate the auth before we swipe.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    await _bottomEdgeSwipeUp();
+  }
+
+  /// SpringBoard's `com.apple.springboard.lockstate` inside the simulator: 1 locked, 0 unlocked.
+  @override
+  Future<bool?> lockState() async {
+    final result = await Process.run('xcrun', [
+      'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.lockstate',
+    ]);
+    if (result.exitCode != 0) return null;
+    final m = RegExp(r'lockstate\s+(\d+)').firstMatch((result.stdout as String?) ?? '');
+    return m == null ? null : m.group(1) != '0';
+  }
+
+  /// Polls [lockState] until it reads [locked], the read fails, or two seconds pass; returns the last read.
+  Future<bool?> _awaitLockState(bool locked) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    bool? last;
+    while (DateTime.now().isBefore(deadline)) {
+      last = await lockState();
+      if (last == null || last == locked) return last;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    return last;
   }
 
   ({double x, double y}) _logical(int physicalX, int physicalY) => (
@@ -169,7 +237,7 @@ class IosSimBackend implements InteractionBackend {
 
   Future<void> _run(_BridgeCommand cmd, List<String> args) async {
     final argv = [cmd.cliName, ...args];
-    final result = await Process.run(binaryPath, argv);
+    final result = await run(binaryPath, argv);
     if (result.exitCode != 0) {
       throw BackendToolError(
         backend: label,
@@ -192,6 +260,7 @@ enum _BridgeCommand {
   longPress('long-press'),
   swipe('swipe'),
   type('type'),
+  key('key'),
   probeButton('probe-button');
 
   const _BridgeCommand(this.cliName);

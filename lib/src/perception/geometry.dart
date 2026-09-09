@@ -54,6 +54,16 @@ class ResolvedCoord {
       nearestAncestorOpacity > 0 &&
       nearestAncestorVisible;
 
+  /// True when the resolved center lies inside the viewport — a gesture can
+  /// land there. Center goes through localToGlobal, so this is transform-safe.
+  bool get centerOnViewport =>
+      logicalViewSize.w > 0 &&
+      logicalViewSize.h > 0 &&
+      logicalCenter.x >= 0 &&
+      logicalCenter.y >= 0 &&
+      logicalCenter.x < logicalViewSize.w &&
+      logicalCenter.y < logicalViewSize.h;
+
   /// Non-fatal observations for [ActionResult.warnings].
   List<String> get warnings {
     final out = <String>[];
@@ -105,6 +115,26 @@ class CoordinateResolver {
     return _resolveNode(scene, node);
   }
 
+  /// Viewport dimensions straight from the implicit view — no selected node,
+  /// so it works before the first addressable widget renders (issue #13).
+  Future<({double dpr, double w, double h})> resolveViewportNodeFree() async {
+    final String? json;
+    try {
+      json = await _runtime.evaluateString(GeometryExpr.buildImplicitViewProbe());
+    } on RuntimeEvalError catch (e) {
+      throw GeometryResolveError('evaluate(implicitView) failed: ${e.message}');
+    }
+    if (json == null) {
+      throw GeometryResolveError('evaluate(implicitView) returned non-string');
+    }
+    final decoded = _decode(json, 'implicitView');
+    return (
+      dpr: (decoded['dpr'] as num).toDouble(),
+      w: (decoded['vw'] as num).toDouble(),
+      h: (decoded['vh'] as num).toDouble(),
+    );
+  }
+
   /// Viewport dimensions without a hit-test. Safe on Dart 3.12 / iOS 26 where
   /// [HitTestResult] is inaccessible in the CFE eval scope; use over [resolve].
   Future<({double dpr, double w, double h})> resolveViewport(
@@ -132,7 +162,7 @@ class CoordinateResolver {
     if (json == null) {
       throw GeometryResolveError('evaluate(viewProbe) returned non-string');
     }
-    final decoded = jsonDecode(json) as Map<String, Object?>;
+    final decoded = _decode(json, 'viewProbe');
     return (
       dpr: (decoded['dpr'] as num).toDouble(),
       w: (decoded['vw'] as num).toDouble(),
@@ -166,7 +196,21 @@ class CoordinateResolver {
     if (json == null) {
       throw GeometryResolveError('evaluate(geometry) returned non-string');
     }
-    final decoded = jsonDecode(json) as Map<String, Object?>;
+    final decoded = _decode(json, 'geometry');
+    if (decoded['gx'] == null || decoded['gy'] == null) {
+      throw GeometryResolveError(
+          '${node.glintId} is not laid out — offstage or an inactive tab '
+          'page; bring it on screen first');
+    }
+    // A ModalBarrier blocks the base screen through its own hit-testing, not an
+    // AbsorbPointer/IgnorePointer ancestor — so the eval reports base nodes as
+    // hittable while a modal actually covers them. Fold in the barrier the
+    // scene already detected: a base-tree node under a barrier is not hittable.
+    final evalHittable = decoded['hit'] as bool;
+    final id = node.glintId;
+    final blockedByBarrier = scene.hasBarrierOverlay &&
+        id != null &&
+        !scene.isInOverlay(id);
     return ResolvedCoord(
       glintId: node.glintId!,
       logicalCenter: (
@@ -186,9 +230,25 @@ class CoordinateResolver {
       ),
       nearestAncestorOpacity: (decoded['op'] as num).toDouble(),
       nearestAncestorVisible: decoded['vis'] as bool,
-      hittable: decoded['hit'] as bool,
+      hittable: evalHittable && !blockedByBarrier,
     );
   }
+}
+
+/// An eval can come back as prose (`Instance of…`, a Sentinel, an error text)
+/// instead of the JSON blob; surface that as a typed failure, never a crash.
+/// Dart prints unlaid-out geometry as `NaN`, which is not JSON: it becomes
+/// null so callers can name the condition.
+Map<String, Object?> _decode(String json, String what) {
+  try {
+    final decoded =
+        jsonDecode(json.replaceAll(RegExp(r'-?(?:NaN|Infinity)'), 'null'));
+    if (decoded is Map<String, Object?>) return decoded;
+  } on FormatException {
+    // fall through
+  }
+  final head = json.length > 120 ? '${json.substring(0, 120)}…' : json;
+  throw GeometryResolveError('evaluate($what) returned non-JSON: $head');
 }
 
 class GeometryResolveError implements Exception {
@@ -209,12 +269,15 @@ class GeometryExpr {
       '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
   static const _ancVisible =
       '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
-  // On Dart 3.12 the CFE rejects `HitTestResult` in synthetic eval scopes even
-  // though the type is re-exported via package:flutter/widgets.dart. Same root
-  // cause as the attach probe (fixed separately). We replace the full hit-test
-  // with a widget-tree ancestor walk: nearest AbsorbPointer / IgnorePointer.
-  // Trade-off: overlay-based coverings (e.g. opaque GestureDetector in a modal)
-  // are not detected, but the common cases are covered and no type is named.
+  // A true hit-test is unreachable here: the eval runs in the app's root
+  // library, where `HitTestResult`/`GestureBinding` don't resolve (RPCError 113,
+  // confirmed empirically — they're only re-exported, not declared, by the
+  // imported libraries). So hittability is approximated in two layers: this
+  // ancestor walk (nearest AbsorbPointer / IgnorePointer), plus a scene-level
+  // ModalBarrier check in CoordinateResolver (a barrier blocks via its own hit
+  // test, not an absorber ancestor). Residual gap: a plain opaque sibling drawn
+  // on top in the same layer, with no barrier, can still read as hittable —
+  // only a real hit-test would catch that.
   static const _hittable =
       '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
@@ -248,6 +311,24 @@ class GeometryExpr {
       "'}'",
     ].join(' + ');
     return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
+  }
+
+  static const _implicitView =
+      'WidgetsBinding.instance.platformDispatcher.implicitView!';
+
+  /// dpr/vw/vh from the implicit view — needs no inspector selection, so it
+  /// works on any root widget and before the first addressable node renders.
+  static String buildImplicitViewProbe() {
+    final body = [
+      "'{\"dpr\":'",
+      '$_implicitView.devicePixelRatio.toString()',
+      "',\"vw\":'",
+      '($_implicitView.physicalSize.width / $_implicitView.devicePixelRatio).toString()',
+      "',\"vh\":'",
+      '($_implicitView.physicalSize.height / $_implicitView.devicePixelRatio).toString()',
+      "'}'",
+    ].join(' + ');
+    return body;
   }
 
   /// Returns only dpr/vw/vh — skips the hit-test half of [build] because the

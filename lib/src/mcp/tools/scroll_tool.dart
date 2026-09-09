@@ -1,11 +1,13 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 enum ScrollDirection { up, down, left, right }
 
@@ -60,9 +62,7 @@ class ScrollTool extends GlintTool {
     final returnScene = (args['returnScene'] as bool?) ?? true;
     final fetchScene = (args['fetchScene'] as bool?) ?? false;
 
-    final dir = ScrollDirection.values
-        .where((d) => d.name == dirName)
-        .firstOrNull;
+    final dir = enumByName(ScrollDirection.values, dirName);
     if (dir == null) {
       return StructuredResponse.error(
         summary: 'unknown scroll direction: $dirName',
@@ -73,8 +73,7 @@ class ScrollTool extends GlintTool {
       );
     }
 
-    // Device mode: no Flutter viewport probe — swipe from center using the
-    // device's screen size (coordinateSwipe applies the dpr=1 ratio).
+    // Device mode: no Flutter viewport probe — use the device's screen size.
     if (session.isDeviceMode) {
       final size = session.device.screenSize;
       if (size == null) {
@@ -86,74 +85,94 @@ class ScrollTool extends GlintTool {
           ],
         );
       }
-      final dx = (dir == ScrollDirection.left
-              ? -size.w
-              : dir == ScrollDirection.right
-                  ? size.w
-                  : 0) *
-          amount;
-      final dy = (dir == ScrollDirection.up
-              ? -size.h
-              : dir == ScrollDirection.down
-                  ? size.h
-                  : 0) *
-          amount;
-      return coordinateSwipe(session, size.w / 2, size.h / 2,
-          size.w / 2 - dx, size.h / 2 - dy, 300,
+      final line = _swipeLine(dir, amount, size.w.toDouble(), size.h.toDouble());
+      return coordinateSwipe(
+          session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled');
     }
 
-    final pre = returnScene ? await snapshotPreAction(session) : null;
-
-    final vp = await session.probeViewport();
-    final centerXLogical = vp.logicalW / 2;
-    final centerYLogical = vp.logicalH / 2;
-    final deltaXLogical = (dir == ScrollDirection.left
-            ? -vp.logicalW
-            : dir == ScrollDirection.right
-                ? vp.logicalW
-                : 0) *
-        amount;
-    final deltaYLogical = (dir == ScrollDirection.up
-            ? -vp.logicalH
-            : dir == ScrollDirection.down
-                ? vp.logicalH
-                : 0) *
-        amount;
-
-    // Backend speaks physical pixels. Note the sign flip: scroll DOWN means
-    // "move content down" = swipe finger UP.
-    final fromX = centerXLogical * vp.dpr;
-    final fromY = centerYLogical * vp.dpr;
-    final toX = (centerXLogical - deltaXLogical) * vp.dpr;
-    final toY = (centerYLogical - deltaYLogical) * vp.dpr;
-
-    final scene = await session.reader.readSummary();
+    final horizontal =
+        dir == ScrollDirection.left || dir == ScrollDirection.right;
+    final action = await openActionScene(session, snapshot: returnScene);
     try {
-      final result = await session.interactor.run(
-        scene,
-        Swipe(
-          CoordinateTarget(x: fromX, y: fromY),
-          CoordinateTarget(x: toX, y: toY),
-        ),
-      );
-      var response = StructuredResponse.fromActionResult(result);
+      final anchor = action.semantic == null
+          ? null
+          : await session.scrollAnchorIn(action.scene, action.semantic!);
+      final ({double logicalW, double logicalH, double dpr}) vp;
+      try {
+        vp = await session.viewportIn(action.scene);
+      } on GeometryResolveError catch (e) {
+        return StructuredResponse.error(
+          summary: 'scroll could not measure the viewport',
+          errorKind: GlintErrorKind.geometryResolveError,
+          detail: e.message,
+          nextSteps: const [
+            'the screen may be mid-transition — wait_for_settle, then retry',
+            'or pass x1,y1,x2,y2 to swipe by coordinates',
+          ],
+        );
+      }
+      final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
+      var response = await coordinateSwipe(
+          session, line.fromX, line.fromY, line.toX, line.toY, 300,
+          verb: 'scrolled');
       if (returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre,
-            includeSceneText: fetchScene);
+        final post = await readPostActionState(session, action.pre,
+            includeSceneText: fetchScene,
+            scrollAnchor: anchor,
+            horizontalScroll: horizontal);
         if (post != null) {
-          response = StructuredResponse(
-            summary: response.summary,
-            warnings: response.warnings,
-            nextSteps: response.nextSteps,
-            isError: response.isError,
-            data: {...?response.data, ...post.toData()},
-          );
+          final movedPx = post.scrolledPx;
+          final merged = mergeScrollSignal(post.changeCategory, movedPx);
+          response = response.mergeData({
+            ...post.toData(),
+            'changed': merged.changed,
+            'changeCategory': merged.category,
+            if (movedPx != null) 'scrolledPx': movedPx.round(),
+          });
         }
       }
       return response;
     } finally {
-      await scene.dispose();
+      await action.dispose();
     }
+  }
+
+  /// Below this a scroll didn't meaningfully move — treat as no scroll.
+  static const _movedThresholdPx = 2.0;
+
+  /// Merge the tree-hash change category with physical anchor movement. A
+  /// fully-realized scrollable's tree is identical at every offset, so the
+  /// hash reports 'nothing' even when content moved — promote that to
+  /// 'scrolled' when the anchor physically shifted.
+  static ({bool changed, String category}) mergeScrollSignal(
+      String treeCategory, double? movedPx) {
+    final moved = movedPx != null && movedPx > _movedThresholdPx;
+    if (treeCategory == 'nothing' && moved) {
+      return (changed: true, category: 'scrolled');
+    }
+    return (changed: treeCategory != 'nothing', category: treeCategory);
+  }
+
+  /// Keeps the whole gesture this far inside each screen edge — off-screen
+  /// endpoints get clamped by the OS and can trip system edge gestures.
+  static const _edgeMarginFraction = 0.06;
+
+  /// Swipe travel centered on the viewport, clamped inside the edge margin.
+  /// Content moves toward [dir], so the finger travels the opposite way.
+  ({double fromX, double fromY, double toX, double toY}) _swipeLine(
+      ScrollDirection dir, double amount, double w, double h) {
+    final horizontal =
+        dir == ScrollDirection.left || dir == ScrollDirection.right;
+    final span = horizontal ? w : h;
+    final margin = span * _edgeMarginFraction;
+    final travel = (span * amount).clamp(0.0, span - 2 * margin);
+    final sign =
+        (dir == ScrollDirection.right || dir == ScrollDirection.down) ? -1 : 1;
+    final cx = w / 2, cy = h / 2;
+    final half = sign * travel / 2;
+    return horizontal
+        ? (fromX: cx - half, fromY: cy, toX: cx + half, toY: cy)
+        : (fromX: cx, fromY: cy - half, toX: cx, toY: cy + half);
   }
 }

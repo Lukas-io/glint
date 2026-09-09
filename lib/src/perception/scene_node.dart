@@ -77,6 +77,13 @@ class SceneNode {
           ? widgetRuntimeType!
           : description;
 
+  /// [label] with any generic suffix stripped: `Radio<String>` → `Radio`.
+  String get baseLabel {
+    final l = label;
+    final lt = l.indexOf('<');
+    return lt < 0 ? l : l.substring(0, lt);
+  }
+
   /// True when this node is a platform-view widget (GoogleMap, WebView, etc.)
   /// whose element context rejects ModalRoute and geometry evals (RPCError 113).
   bool get isPlatformView => _platformViewLabels.contains(label);

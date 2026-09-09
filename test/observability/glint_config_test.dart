@@ -7,6 +7,10 @@ void main() {
       final c = GlintConfig();
       expect(c.readyTimeoutMs, 5000);
       expect(c.settleCeilingMs, 5000);
+      expect(c.postActionSettleMs, 1500);
+      expect(c.sceneLineBudget, 160);
+      expect(c.devHints, isTrue);
+      expect(c.captureSettleMs, 700);
       expect(c.settleQuietFrames, 3);
       expect(c.scrollMaxScrolls, 8);
       expect(c.scrollAmountFraction, 0.6);

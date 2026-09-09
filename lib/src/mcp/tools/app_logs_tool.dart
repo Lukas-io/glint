@@ -22,11 +22,20 @@ class AppLogsTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'limit': Schema.int(description: 'Max entries. Default 50.'),
-            'errorsOnly': Schema.bool(),
+            'errorsOnly': Schema.bool(
+              description: 'Only entries that look like exceptions / stack '
+                  'traces.',
+            ),
+            'format': Schema.string(
+              description: 'text (default, rendered) or json (structured '
+                  'entries — pass this to get the entries array).',
+            ),
             'stream': Schema.string(
               description: 'Filter: stderr or logging.',
             ),
-            'sinceSeq': Schema.int(),
+            'sinceSeq': Schema.int(
+              description: 'Return entries with sequence >= sinceSeq.',
+            ),
           },
         ),
       );
@@ -37,6 +46,7 @@ class AppLogsTool extends GlintTool {
     final args = request.arguments ?? const {};
     final limit = (args['limit'] as int?) ?? 50;
     final errorsOnly = (args['errorsOnly'] as bool?) ?? false;
+    final asJson = (args['format'] as String?) == 'json';
     final streamName = args['stream'] as String?;
     final sinceSeq = args['sinceSeq'] as int?;
 
@@ -73,7 +83,9 @@ class AppLogsTool extends GlintTool {
         'count': entries.length,
         'capacity': session.appLogs.capacity,
         'nextSequence': session.appLogs.nextSequence,
-        'entries': entries.map((e) => e.toJson()).toList(),
+        // The rendered summary already carries the entries; only ship the
+        // structured array when json is explicitly requested (matches `logs`).
+        if (asJson) 'entries': entries.map((e) => e.toJson()).toList(),
       },
     );
   }

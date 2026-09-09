@@ -1,3 +1,4 @@
+import '../../perception.dart' show kLoadingAffordanceLabels;
 import '../../semantic.dart';
 
 /// Coarse top-level state per §8.6: derived cheaply from the already-
@@ -6,13 +7,6 @@ enum SceneState { loaded, loading, error }
 
 class StateObserver {
   const StateObserver();
-
-  static const _loadingLabels = {
-    'CircularProgressIndicator',
-    'LinearProgressIndicator',
-    'RefreshIndicator',
-    'CupertinoActivityIndicator',
-  };
 
   // A build that throws renders one of these instead of the widget — a
   // true error signal with no false positives. Heuristic error detection
@@ -27,7 +21,7 @@ class StateObserver {
     for (final n in scene.root.walk()) {
       if (n is! SemanticUnknown) continue;
       if (_errorLabels.contains(n.label)) return SceneState.error;
-      if (_loadingLabels.contains(n.label)) loading = true;
+      if (kLoadingAffordanceLabels.contains(n.label)) loading = true;
     }
     return loading ? SceneState.loading : SceneState.loaded;
   }

@@ -48,14 +48,21 @@ Future<ArmingOutcome> maybeAwaitReady({
       return ArmingReady(
           attempts: result.attempts, elapsedMs: result.elapsedMs);
     case NotFoundResult():
+      final hint = didYouMean(result.suggestions);
       return ArmingFailed(StructuredResponse.error(
         summary: '${toolLabel ?? "action"} on $glintId: target never appeared '
-            '(${result.attempts} polls, ${result.elapsedMs}ms)',
+            '(${result.attempts} polls, ${result.elapsedMs}ms'
+            '${result.staleScreen ? ", screen static" : ""})',
         errorKind: GlintErrorKind.unresolvedTarget,
-        detail: 'no scene poll within $ceilingMs ms saw glintId="$glintId"',
-        nextSteps: const [
+        detail: result.staleScreen
+            ? 'the screen stopped changing and still has no glintId="$glintId" — '
+                'the id is stale or belongs to another screen'
+            : 'no scene poll within $ceilingMs ms saw glintId="$glintId"',
+        nextSteps: [
+          if (hint != null) hint,
           'verify the glintId via `get_scene`',
-          'raise `readyTimeoutMs` if the target arrives slowly',
+          if (!result.staleScreen)
+            'raise `readyTimeoutMs` if the target arrives slowly',
         ],
       ));
     case NeverReadyResult():
@@ -75,13 +82,8 @@ Future<ArmingOutcome> maybeAwaitReady({
 /// Wraps an action's [StructuredResponse] with armed metadata. Use after
 /// the action fires when [arming] reports ready.
 StructuredResponse withArmedMetadata(
-    StructuredResponse response, ArmingReady arming) {
-  return StructuredResponse(
-    summary:
-        'armed (${arming.attempts} polls / ${arming.elapsedMs}ms) — ${response.summary}',
-    warnings: response.warnings,
-    nextSteps: response.nextSteps,
-    data: {...?response.data, 'armed': arming.toJson()},
-    isError: response.isError,
-  );
-}
+        StructuredResponse response, ArmingReady arming) =>
+    response.mergeData({'armed': arming.toJson()}).copyWith(
+      summary: 'armed (${arming.attempts} polls / ${arming.elapsedMs}ms) — '
+          '${response.summary}',
+    );

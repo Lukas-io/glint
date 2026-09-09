@@ -16,7 +16,8 @@ class WaitForSettleTool extends GlintTool {
         description:
             'Block until the screen is visually stable: no scheduled frames '
             'AND no loading spinners (CircularProgressIndicator, '
-            'LinearProgressIndicator, RefreshIndicator). '
+            'LinearProgressIndicator, RefreshIndicator). Needs a Flutter app '
+            '(device mode: errorKind flutterModeRequired). '
             'Use after an action that triggers async work (network call, '
             'animation, route transition) before reading the scene again. '
             'ceilingMs: hard timeout (default 5000). '
@@ -62,6 +63,16 @@ class WaitForSettleTool extends GlintTool {
         return StructuredResponse(
           summary: 'settled in ${result.elapsedMs}ms',
           data: {'settled': true, 'elapsedMs': result.elapsedMs},
+        );
+      case SettledAnimating():
+        return StructuredResponse(
+          summary: 'settled in ${result.elapsedMs}ms (frames still animating, '
+              'content stable)',
+          data: {
+            'settled': true,
+            'elapsedMs': result.elapsedMs,
+            'animating': true,
+          },
         );
       case SettledButLoading():
         return StructuredResponse(

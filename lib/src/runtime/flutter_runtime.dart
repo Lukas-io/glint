@@ -68,6 +68,12 @@ abstract class FlutterRuntime {
   /// Never throws — callers don't need to wrap this.
   Future<void> disposeInspectorGroup(String groupName);
 
+  /// The app's package root (…/app, no /lib), from the resolved main library; null when it cannot be resolved.
+  Future<String?> appRootDirectory();
+
+  /// Registers [dirs] as pub roots so the inspector marks the app's own widgets as local-project and keeps them in the summary tree.
+  Future<void> setPubRootDirectories(List<String> dirs);
+
   // ── evaluation ────────────────────────────────────────────────────
 
   /// Evaluates [expression] against the Flutter isolate's root library.
@@ -134,4 +140,14 @@ class RuntimeConnectionLostError implements Exception {
   final Object cause;
   @override
   String toString() => 'RuntimeConnectionLostError: $cause';
+}
+
+/// Thrown when a VM service call gets no answer within the runtime's deadline: the isolate is not running Dart code (device locked, app suspended, or paused at a breakpoint).
+class RuntimeUnresponsiveError implements Exception {
+  RuntimeUnresponsiveError(this.operation, this.timeout);
+  final String operation;
+  final Duration timeout;
+  @override
+  String toString() =>
+      'RuntimeUnresponsiveError: $operation gave no answer within ${timeout.inSeconds}s';
 }
