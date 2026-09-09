@@ -384,18 +384,10 @@ class AttachTool extends GlintTool {
               await _probeViewportWithRetry(probe, timeoutMs, onProgress);
           final vp = probed.viewport;
           if (vp == null) {
-            return StructuredResponse.error(
-              summary: 'attached to the VM but could not probe the iOS viewport',
-              errorKind: GlintErrorKind.geometryResolveError,
-              detail: 'no viewport probe succeeded within ${timeoutMs}ms'
-                  '${probed.lastError != null ? " — last probe error: ${probed.lastError}" : " — no frame rendered yet"}',
-              nextSteps: const [
-                'wait for the first screen to render, then call attach again',
-                'raise the ceiling for slow launches: '
-                    'config set attachProbeTimeoutMs <ms>',
-                'if the detail names an eval error, file it with '
-                    '`report_issue` — attach should not need a specific root widget',
-              ],
+            return probeFailureResponse(
+              lifecycle: await _safeProbeLifecycle(probe),
+              lastError: probed.lastError,
+              timeoutMs: timeoutMs,
             );
           }
           device = IosSimulator(
@@ -417,6 +409,18 @@ class AttachTool extends GlintTool {
       final simStatus = platform == DevicePlatform.ios
           ? await const SimControl().status(deviceId)
           : null;
+      if (lifecycle != null && lifecycle != 'resumed') {
+        warnings.add(
+          'the app is $lifecycle: a native layer (permission dialog, sheet, '
+          'or control center) is over it. get_scene returns that screenshot; '
+          'tap x,y in logical points to dismiss it',
+        );
+        try {
+          await session.active!.captureNow('lifecycle');
+        } on Object {
+          // best-effort pre-capture so the first get_scene has a frame
+        }
+      }
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
       // Project dir behind our VM (port→DDS-cwd correlation) — the anchor for
@@ -785,6 +789,17 @@ class AttachTool extends GlintTool {
             .screenshot(path);
   }
 
+  /// The app lifecycle from the probe runtime, or null when the eval fails; used to explain a failed probe.
+  Future<String?> _safeProbeLifecycle(VmServiceRuntime probe) async {
+    try {
+      final s = await probe
+          .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
+      return (s == null || s.isEmpty) ? null : s;
+    } on Object {
+      return null;
+    }
+  }
+
   /// Probe the logical viewport, retrying past a blank first frame until
   /// [timeoutMs]. The implicit view is asked first (no node needed); a
   /// selected node is the fallback. On failure the last error is kept so the
@@ -1112,4 +1127,40 @@ class AttachTool extends GlintTool {
         'android' => DevicePlatform.android,
         _ => null,
       };
+}
+
+/// The reply when the viewport never probed: a native layer over the app when it is not resumed, else the geometry reason.
+StructuredResponse probeFailureResponse({
+  required String? lifecycle,
+  required Object? lastError,
+  required int timeoutMs,
+}) {
+  if (lifecycle != null && lifecycle != 'resumed') {
+    return StructuredResponse.error(
+      summary: 'attached to the VM, but the app is $lifecycle: a native layer '
+          '(permission alert, sheet, or the lock screen) is over it, so no '
+          'frame could be probed',
+      errorKind: GlintErrorKind.appNotResumed,
+      detail: 'lifecycle is $lifecycle after ${timeoutMs}ms'
+          '${lastError != null ? "; last probe error: $lastError" : ""}',
+      nextSteps: const [
+        'device op:screenshot udid:<udid> shows what is on top',
+        'attach mode:"device", tap x,y (screenshot pixels) to dismiss it, '
+            'then attach again',
+        'if it is the lock screen, hardware_button unlock first',
+      ],
+    );
+  }
+  return StructuredResponse.error(
+    summary: 'attached to the VM but could not probe the iOS viewport',
+    errorKind: GlintErrorKind.geometryResolveError,
+    detail: 'no viewport probe succeeded within ${timeoutMs}ms'
+        '${lastError != null ? " — last probe error: $lastError" : " — no frame rendered yet"}',
+    nextSteps: const [
+      'wait for the first screen to render, then call attach again',
+      'if a native dialog (permission, sheet) is up, dismiss it: '
+          'device op:screenshot to see it, then attach mode:"device" and tap it',
+      'raise the ceiling for slow launches: config set attachProbeTimeoutMs <ms>',
+    ],
+  );
 }
