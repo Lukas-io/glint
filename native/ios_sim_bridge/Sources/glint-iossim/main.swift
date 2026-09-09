@@ -209,6 +209,23 @@ do {
         try proxy.pressKey(usage: usage, count: count, modifierMask: mask)
         print("OK key \(args[2]) usage=\(usage) x\(count) mods=\(mask)")
 
+    case "frames":
+        // Extract distinct frames from a recorded video via AVFoundation.
+        guard args.count == 7,
+            let everyMs = Int(args[4]), everyMs >= 16, everyMs <= 1000,
+            let maxFrames = Int(args[5]), maxFrames >= 1, maxFrames <= 60,
+            let distinct = Int(args[6]), distinct == 0 || distinct == 1
+        else {
+            die("usage: glint-iossim frames <video> <outDir> <everyMs 16-1000> <maxFrames 1-60> <distinct 0|1>")
+        }
+        try FrameSampler.run(FrameSampler.Options(
+            video: URL(fileURLWithPath: args[2]),
+            outDir: URL(fileURLWithPath: args[3]),
+            everyMs: everyMs,
+            maxFrames: maxFrames,
+            distinctOnly: distinct == 1,
+        ))
+
     case "ax-snapshot":
         // Read the iOS Simulator window's accessibility tree via macOS AXUIElement.
         // Works because the Simulator renders as a standard macOS window whose

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:glint/interaction.dart' show ProcessRunner;
 import 'package:glint/src/mcp/tools/report_issue_tool.dart';
 import 'package:test/test.dart';
 

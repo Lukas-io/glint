@@ -61,6 +61,9 @@ class AppSession {
   /// Background screenshots of this device, newest first.
   final CaptureRing captures = CaptureRing();
 
+  /// A recording in flight (set by the record tool); stopped on dispose so a crash mid-record does not orphan the simctl/adb process.
+  ScreenRecording? activeRecording;
+
   /// Last lifecycle value the poll saw (`resumed`, `inactive`, `paused`, …).
   String? lastLifecycle;
 
@@ -216,6 +219,15 @@ class AppSession {
 
   Future<void> dispose() async {
     _disposed = true;
+    final rec = activeRecording;
+    activeRecording = null;
+    if (rec != null) {
+      try {
+        await rec.stop();
+      } on Object {
+        // best-effort; the recorder process is killed with our children anyway
+      }
+    }
     await _teardownRuntime();
     captures.clear();
   }
