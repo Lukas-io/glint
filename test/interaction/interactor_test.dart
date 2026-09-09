@@ -127,6 +127,10 @@ class _FakeBackend implements InteractionBackend {
   Future<void> pressHardwareButton(HardwareButton button) async {}
 
   @override
+  Future<ScreenRecording> startRecording(String path) async =>
+      throw UnsupportedBackendAction('fake', 'no recording in tests');
+
+  @override
   Future<ScreenshotResult> screenshot(String path) async =>
       const ScreenshotResult();
 }

@@ -1,4 +1,5 @@
 import 'action.dart';
+import 'screen_recording.dart';
 
 /// Platform-native input layer. Speaks physical pixels; the Interactor
 /// resolves symbolic targets before calling here.
@@ -26,6 +27,10 @@ abstract class InteractionBackend {
 
   Future<void> pressHardwareButton(HardwareButton button);
 
+  /// Starts recording the display into [path]. Throws [UnsupportedBackendAction] when the backend cannot record.
+  Future<ScreenRecording> startRecording(String path) async =>
+      throw UnsupportedBackendAction(label, 'startRecording: this backend cannot record the display');
+
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
 
@@ -49,6 +54,7 @@ class BackendCapabilities {
     this.doubleTap = true,
     this.swipe = true,
     this.typeText = true,
+    this.record = false,
     this.hardwareButtons = const <HardwareButton>{},
   });
 
@@ -57,6 +63,7 @@ class BackendCapabilities {
   final bool doubleTap;
   final bool swipe;
   final bool typeText;
+  final bool record;
   final Set<HardwareButton> hardwareButtons;
 }
 

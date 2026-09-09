@@ -3,6 +3,7 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
+import '../screen_recording.dart';
 
 /// iOS Simulator backend over the `glint-iossim` Swift helper (`native/ios_sim_bridge/`),
 /// which speaks LOGICAL device points — so we undo the physical→logical conversion here.
@@ -32,6 +33,7 @@ class IosSimBackend implements InteractionBackend {
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
+        record: true,
         hardwareButtons: {
           HardwareButton.lock,
           HardwareButton.unlock,
@@ -92,6 +94,10 @@ class IosSimBackend implements InteractionBackend {
   @override
   Future<void> typeText(String text) =>
       _run(_BridgeCommand.type, [udid, text]);
+
+  @override
+  Future<ScreenRecording> startRecording(String path) =>
+      SimctlRecording.start(udid: udid, path: path);
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
