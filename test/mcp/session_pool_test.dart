@@ -19,6 +19,10 @@ class _FakeRuntime implements FlutterRuntime {
 
   @override
   Future<void> disconnect() async => attached = false;
+  @override
+  Future<String?> appRootDirectory() async => null;
+  @override
+  Future<void> setPubRootDirectories(List<String> dirs) async {}
 
   @override
   bool get isAttached => attached;
@@ -41,6 +45,7 @@ AndroidDevice _device(String serial) =>
     AndroidDevice(serial: serial, adbPath: 'adb');
 
 void main() {
+
   deviceGoneMain();
   group('GlintSession pool', () {
     late int created;

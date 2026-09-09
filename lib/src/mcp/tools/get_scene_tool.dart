@@ -147,6 +147,15 @@ class GetSceneTool extends GlintTool {
       final trailerBits = <String>[];
       final dataBits = <String, Object?>{};
       final warnings = <String>[];
+      if (semantic.sourceScene.degenerate) {
+        warnings.add(
+          'the inspector returned no widgets created by this project, so the '
+          'scene is only framework scaffolding. Usual causes: the app is not a '
+          'debug build (widget creation tracking is off), or its source path is '
+          'one the pub-root heuristic misreads. Try a debug run; if it persists, '
+          'report_issue with the app path.',
+        );
+      }
       final String rendered;
       if (subtree != null) {
         rendered = format == 'json'

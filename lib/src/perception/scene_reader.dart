@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:vm_service/vm_service.dart' show Event, InstanceRef, VmService;
 
 import '../runtime/flutter_runtime.dart';
+import '../runtime/inspector_params.dart';
 import 'inspector_client.dart';
 import 'scene_node.dart';
 import 'stable_id.dart';
@@ -14,12 +15,16 @@ class SceneReader {
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
 
+  bool _ensuredPubRoots = false;
+
   /// User-code tree — the agent's reading surface. The full tree is also read
   /// to extract overlay/dialog content, appended to the summary root so
   /// [Scene.findByGlintId] can address those nodes too.
   Future<Scene> readSummary() async {
+    await _ensurePubRoots();
     final groupName = _inspector.nextReadGroup();
     final root = await _inspector.readSummaryTree(groupName: groupName);
+    final degenerate = isDegenerateTree(root);
 
     // Mark offstage IndexedStack children BEFORE id assignment so stable-id
     // generation skips them and firstAddressableId()/hoistPage are unaffected.
@@ -36,7 +41,20 @@ class SceneReader {
       overlayRoots: overlay?.contentRoots ?? const [],
       hasBarrierOverlay: overlay?.hasBarrier ?? false,
       fullGroupName: overlay?.groupName,
+      degenerate: degenerate,
     );
+  }
+
+  /// Registers the app's own package root once per session, so the inspector's local-project filter keeps the app's widgets even when it runs from a path (e.g. under packages/flutter/) the default heuristic misreads.
+  Future<void> _ensurePubRoots() async {
+    if (_ensuredPubRoots) return;
+    _ensuredPubRoots = true;
+    try {
+      final dir = await _runtime.appRootDirectory();
+      if (dir != null) await _runtime.setPubRootDirectories([dir]);
+    } on Object {
+      // best-effort; a failed registration just leaves the default heuristic
+    }
   }
 
   /// Every framework element. Server-internal only.
@@ -260,12 +278,16 @@ class Scene {
     this.overlayRoots = const [],
     this.hasBarrierOverlay = false,
     String? fullGroupName,
+    this.degenerate = false,
   })  : _inspector = inspector,
         _fullGroupName = fullGroupName;
 
   final SceneNode root;
   final String groupName;
   final InspectorClient _inspector;
+
+  /// True when the summary tree held no app-created widgets: widget creation tracking is off or the pub root is still wrong. Consumers surface it as a warning.
+  final bool degenerate;
 
   /// Overlay dialog entry nodes (from the full tree). Also appended to
   /// [root.children] so [findByGlintId] and geometry resolution work
@@ -451,6 +473,12 @@ class _NullRuntime implements FlutterRuntime {
   Future<void> attach(Uri vmServiceUri) async {}
   @override
   Future<void> disconnect() async {}
+
+  @override
+  Future<String?> appRootDirectory() async => null;
+  @override
+  Future<void> setPubRootDirectories(List<String> dirs) async {}
+
   @override
   Future<InspectorJson> readWidgetTree({
     required String groupName,
