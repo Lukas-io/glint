@@ -19,7 +19,7 @@ const _feedback = '''
 Every action already answers "what did that do?": `tap` / `type` / `scroll` settle and return `changed` + `changeCategory` (routeChanged / overlayAppeared / overlayDismissed / contentChanged / nothing), plus `state` when the screen is loading.
 
 1. `changed:false` = delivered, target didn't react. Re-read the scene; never retry blind.
-2. No `wait_for_settle` or screenshot after an action — it already settled. `wait_for_settle` is for async work you started (a network call). `state: native` brings a screenshot path: read it, then `tap x,y` (logical points).
+2. No `wait_for_settle` or screenshot after an action — it already settled. `wait_for_settle` is for async work you started. `state: native` brings a screenshot path: read it, then `tap x,y` (logical points).
 3. Failures explain: read `detail` + `nextSteps`; a "did you mean" names the live id.
 4. When in doubt: `get_scene`. The framework is truth, not your prediction.
 ''';
@@ -73,7 +73,7 @@ const _recovery = '''
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady` — never hittable; dismiss the cover or raise `readyTimeoutMs`.
-- `targetNotFound` — `scroll_to_find` miss; `detail` lists the text on screen: wrong screen or wrong words.
+- `targetNotFound` — `scroll_to_find` miss; `detail` lists on-screen text.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped (hot restart?). `attach` again.
 - `appUnresponsive` — app suspended (locked device / breakpoint). Unlock or reopen, retry.
@@ -93,15 +93,14 @@ const _gotchas = '''
 ## Gotchas
 
 - **Overlay:** dialog ids live under `--- dialog ---`. Never tap base-screen nodes while a dialog is up.
-- **`type` needs focus:** `focus:<id>` taps the field first.
+- **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it; `key` sends backspace/enter/arrows.
 - **Scroll is content-relative:** `scroll down` moves content down (finger swipes up). `scroll_to_find text:"…"` matches case-insensitively.
-- **iOS hardware buttons:** `lock`, `unlock`, `home`.
 ''';
 
 const _toolSurface = '''
 ## Tool surface
 
-`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` (focus:<id>) · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
+`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` (focus:<id>, clear:true) · `key` backspace/enter/arrows · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
 ''';
 
 const _examples = '''

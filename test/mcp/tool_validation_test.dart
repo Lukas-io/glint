@@ -161,4 +161,49 @@ void main() {
       expect(s['summary'], contains('not attached'));
     });
   });
+
+  group('key', () {
+    const tool = KeyTool();
+    test('unknown key name -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'key', arguments: const {'key': 'hyper'})));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('count out of range -> invalidArgument', () async {
+      for (final c in [0, 51]) {
+        final r = _structured(await tool.invoke(
+            session,
+            CallToolRequest(
+                name: 'key', arguments: {'key': 'backspace', 'count': c})));
+        expect(r['errorKind'], 'invalidArgument', reason: 'count $c');
+      }
+    });
+
+    test('unknown modifier -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(
+          session,
+          CallToolRequest(name: 'key', arguments: const {
+            'key': 'left',
+            'modifiers': ['hyper'],
+          })));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('valid args but unattached -> sessionNotAttached', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'key', arguments: const {'key': 'enter'})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('type clear', () {
+    test('valid clear:true but unattached -> sessionNotAttached', () async {
+      final r = _structured(await const TypeTool().invoke(
+          session,
+          CallToolRequest(
+              name: 'type', arguments: const {'text': 'x', 'clear': true})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+  });
 }
