@@ -15,6 +15,10 @@ let package = Package(
                 // public-but-private-detail; same pattern.
                 .linkedFramework("Foundation"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("CoreMedia"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("ImageIO"),
             ]
         ),
     ]

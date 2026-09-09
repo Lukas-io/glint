@@ -4,6 +4,7 @@ import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
 import '../key_codes.dart';
+import '../screen_recording.dart';
 
 /// Android KEYCODE_* values for glint's [HardwareButton]. `unlock` is null —
 /// no stock biometric-match equivalent and per-OEM lock-screen behaviour; surfaced as [UnsupportedBackendAction] until v1.
@@ -37,6 +38,7 @@ class AdbBackend implements InteractionBackend {
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
         keys: true,
+        record: true,
         hardwareButtons: {
           HardwareButton.home,
           HardwareButton.back,
@@ -98,6 +100,10 @@ class AdbBackend implements InteractionBackend {
         .replaceAll(' ', '%s');
     return _shell(['input', 'text', escaped]);
   }
+
+  @override
+  Future<ScreenRecording> startRecording(String path) =>
+      AdbRecording.start(adbPath: adbPath, serial: deviceSerial, localPath: path);
 
   /// Not read on Android yet; callers fall back to the app lifecycle.
   @override

@@ -1,6 +1,7 @@
 import 'dart:io' show Process, ProcessResult;
 
 import 'action.dart';
+import 'screen_recording.dart';
 
 /// Runs one child process; injected so tests can capture argv without a device. Defaults to [Process.run].
 typedef ProcessRunner = Future<ProcessResult> Function(
@@ -40,6 +41,9 @@ abstract class InteractionBackend {
   /// Selects all text in the focused field (cmd+A on iOS, ctrl+A on Android).
   Future<void> selectAll() async =>
       throw UnsupportedBackendAction(label, 'selectAll: no keyboard on this backend');
+  /// Starts recording the display into [path]. Throws [UnsupportedBackendAction] when the backend cannot record.
+  Future<ScreenRecording> startRecording(String path) async =>
+      throw UnsupportedBackendAction(label, 'startRecording: this backend cannot record the display');
 
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
@@ -65,6 +69,7 @@ class BackendCapabilities {
     this.swipe = true,
     this.typeText = true,
     this.keys = false,
+    this.record = false,
     this.hardwareButtons = const <HardwareButton>{},
   });
 
@@ -74,6 +79,7 @@ class BackendCapabilities {
   final bool swipe;
   final bool typeText;
   final bool keys;
+  final bool record;
   final Set<HardwareButton> hardwareButtons;
 }
 
