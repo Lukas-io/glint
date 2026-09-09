@@ -22,6 +22,8 @@ enum GlintErrorKind {
   appUnresponsive,
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
+  /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
+  flutterModeRequired,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // scroll_to_find specific failures

@@ -161,4 +161,44 @@ void main() {
       expect(s['summary'], contains('not attached'));
     });
   });
+
+  group('device mode', () {
+    Future<GlintSession> deviceSession() async {
+      final s = GlintSession();
+      await s.attachDevice(
+          device: AndroidDevice(serial: 'emulator-0', adbPath: '/usr/bin/true'));
+      return s;
+    }
+
+    test('type reaches the backend instead of the scene reader', () async {
+      final s = await deviceSession();
+      final r = _structured(await const TypeTool().invoke(
+          s, CallToolRequest(name: 'type', arguments: const {'text': 'abc'})));
+      expect(r['ok'], isTrue);
+      expect(r['mode'], 'device');
+      expect(r['summary'], contains('device mode'));
+    });
+
+    test('type with focus is refused with a reason', () async {
+      final s = await deviceSession();
+      final r = _structured(await const TypeTool().invoke(
+          s,
+          CallToolRequest(
+              name: 'type', arguments: const {'text': 'abc', 'focus': 'f'})));
+      expect(r['errorKind'], 'invalidArgument');
+      expect(r['summary'], contains('device mode'));
+    });
+
+    test('a scene-needing tool says flutterModeRequired, not "not attached"', () async {
+      final s = await deviceSession();
+      final r = _structured(await const ScrollToFindTool().invoke(
+          s,
+          CallToolRequest(
+              name: 'scroll_to_find',
+              arguments: const {'targetTextContent': 'x'})));
+      expect(r['errorKind'], 'flutterModeRequired');
+      expect(r['summary'], contains('device mode'));
+      expect((r['nextSteps'] as List).join(' '), contains('attach'));
+    });
+  });
 }

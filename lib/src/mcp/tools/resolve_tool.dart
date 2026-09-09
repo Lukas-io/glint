@@ -17,7 +17,8 @@ class ResolveTool extends GlintTool {
   Tool get definition => Tool(
         name: 'resolve',
         description:
-            'Drill-down geometry for a glintId. Returns: physicalCenter (px), '
+            'Drill-down geometry for a glintId. Needs a Flutter app (device '
+            'mode: errorKind flutterModeRequired). Returns: physicalCenter (px), '
             'logicalBounds (logical px), logicalViewSize, devicePixelRatio, '
             'painted (visible to human), hittable (would receive a tap), '
             'and warnings (e.g. "target is not painted", "target is not hittable"). '
