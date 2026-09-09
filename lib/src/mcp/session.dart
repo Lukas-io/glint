@@ -347,6 +347,17 @@ class GlintSession {
     return (s == null || s.isEmpty) ? null : s;
   }
 
+  /// Text of the focused EditableText, or null when no text field has focus. A leading "1" marker separates "no field" (empty) from "focused but empty" ("1").
+  Future<String?> focusedFieldText() async {
+    final raw = await runtime.evaluateString(
+      '(FocusManager.instance.primaryFocus?.context'
+      '?.findAncestorStateOfType<EditableTextState>() == null'
+      ' ? "" : "1" + FocusManager.instance.primaryFocus!.context!'
+      '.findAncestorStateOfType<EditableTextState>()!.textEditingValue.text)',
+    );
+    return (raw == null || raw.isEmpty) ? null : raw.substring(1);
+  }
+
   /// Logical viewport size + DPR, probed via geometry resolver on any
   /// addressable node. Used by direction-based scroll tools.
   Future<({double logicalW, double logicalH, double dpr})>

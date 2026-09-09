@@ -138,6 +138,17 @@ class Interactor {
         await backend.typeText(action.text);
         return ActionResult.success(action: action, summary: action.label);
 
+      case PressKey():
+        await backend.pressKey(action.key,
+            count: action.count, modifiers: action.modifiers);
+        return ActionResult.success(action: action, summary: action.label);
+
+      case ClearField():
+        await backend.selectAll();
+        await backend.pressKey(KeyName.backspace);
+        return ActionResult.success(
+            action: action, summary: 'select-all + backspace');
+
       case PressHardwareButton():
         await backend.pressHardwareButton(action.button);
         return ActionResult.success(action: action, summary: action.label);

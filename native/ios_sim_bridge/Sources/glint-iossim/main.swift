@@ -196,6 +196,19 @@ do {
         try proxy.typeText(args[3])
         print("OK type \(args[2]) \(args[3].count) chars")
 
+    case "key":
+        // Press one HID usage N times, holding a modifier mask (bit i = usage 0xE0+i).
+        guard args.count == 6,
+            let usage = Int32(args[3]),
+            let count = Int(args[4]), count >= 1, count <= 500,
+            let mask = Int(args[5]), mask >= 0, mask <= 15
+        else {
+            die("usage: glint-iossim key <UDID> <hid-usage> <count 1-500> <modifier-mask 0-15>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        try proxy.pressKey(usage: usage, count: count, modifierMask: mask)
+        print("OK key \(args[2]) usage=\(usage) x\(count) mods=\(mask)")
+
     case "ax-snapshot":
         // Read the iOS Simulator window's accessibility tree via macOS AXUIElement.
         // Works because the Simulator renders as a standard macOS window whose

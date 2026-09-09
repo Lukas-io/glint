@@ -3,6 +3,7 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
+import '../key_codes.dart';
 
 /// iOS Simulator backend over the `glint-iossim` Swift helper (`native/ios_sim_bridge/`),
 /// which speaks LOGICAL device points — so we undo the physical→logical conversion here.
@@ -13,8 +14,10 @@ class IosSimBackend implements InteractionBackend {
     required this.deviceLogicalHeight,
     required this.devicePixelRatio,
     required this.binaryPath,
+    this.run = Process.run,
   });
 
+  final ProcessRunner run;
   final String udid;
   final double deviceLogicalWidth;
   final double deviceLogicalHeight;
@@ -32,6 +35,7 @@ class IosSimBackend implements InteractionBackend {
   // Others still gated; see source-of-truth §13.
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
+        keys: true,
         hardwareButtons: {
           HardwareButton.lock,
           HardwareButton.unlock,
@@ -92,6 +96,16 @@ class IosSimBackend implements InteractionBackend {
   @override
   Future<void> typeText(String text) =>
       _run(_BridgeCommand.type, [udid, text]);
+
+  @override
+  Future<void> pressKey(KeyName key,
+          {int count = 1, Set<KeyModifier> modifiers = const {}}) =>
+      _run(_BridgeCommand.key,
+          [udid, '${key.hidUsage}', '$count', '${hidModifierMask(modifiers)}']);
+
+  @override
+  Future<void> selectAll() =>
+      _run(_BridgeCommand.key, [udid, '4', '1', '8']); // usage 0x04=a, mask 8=cmd
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
@@ -218,7 +232,7 @@ class IosSimBackend implements InteractionBackend {
 
   Future<void> _run(_BridgeCommand cmd, List<String> args) async {
     final argv = [cmd.cliName, ...args];
-    final result = await Process.run(binaryPath, argv);
+    final result = await run(binaryPath, argv);
     if (result.exitCode != 0) {
       throw BackendToolError(
         backend: label,
@@ -241,6 +255,7 @@ enum _BridgeCommand {
   longPress('long-press'),
   swipe('swipe'),
   type('type'),
+  key('key'),
   probeButton('probe-button');
 
   const _BridgeCommand(this.cliName);
