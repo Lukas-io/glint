@@ -15,10 +15,6 @@ const String _kIssueNewBase = 'https://github.com/Lukas-io/glint/issues/new';
 /// Longest body the pre-filled GitHub URL carries; the full text is saved to a file past this.
 const int kDeepLinkBodyMax = 6000;
 
-/// Runs one child process; injected so tests can script `gh` without spawning it.
-typedef ProcessRunner = Future<ProcessResult> Function(
-    String executable, List<String> arguments);
-
 /// File a bug / UX / feature note into glint's GitHub repo via the local `gh`
 /// CLI, falling back to a pre-filled GitHub deep link when `gh` is missing or
 /// fails. Titles, bodies, and auto-attached context are path-redacted before

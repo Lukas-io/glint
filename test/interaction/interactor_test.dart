@@ -21,6 +21,28 @@ ResolvedCoord _coord({
 }
 
 void main() {
+  group('key actions', () {
+    test('PressKey dispatches key, count and modifiers', () async {
+      final b = _FakeBackend();
+      final ix = Interactor(backend: b, resolver: _FakeResolver(_coord(x: 10, y: 10)));
+      final r = await ix.run(_FakeScene(),
+          const PressKey(KeyName.left, count: 3, modifiers: {KeyModifier.shift}));
+      expect(r.ok, isTrue);
+      expect(b.keys.single.$1, KeyName.left);
+      expect(b.keys.single.$2, 3);
+      expect(b.keys.single.$3, {KeyModifier.shift});
+    });
+
+    test('ClearField selects all then backspaces once', () async {
+      final b = _FakeBackend();
+      final ix = Interactor(backend: b, resolver: _FakeResolver(_coord(x: 10, y: 10)));
+      final r = await ix.run(_FakeScene(), const ClearField());
+      expect(r.ok, isTrue);
+      expect(b.selectAllCalls, 1);
+      expect(b.keys.single.$1, KeyName.backspace);
+    });
+  });
+
   group('Interactor off-viewport gate', () {
     late _FakeBackend backend;
 
@@ -117,8 +139,22 @@ class _FakeBackend implements InteractionBackend {
     swipes.add((physicalX1, physicalY1, physicalX2, physicalY2));
   }
 
+  final keys = <(KeyName, int, Set<KeyModifier>)>[];
+  var selectAllCalls = 0;
+
   @override
   Future<void> typeText(String text) async {}
+
+  @override
+  Future<void> pressKey(KeyName key,
+      {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
+    keys.add((key, count, modifiers));
+  }
+
+  @override
+  Future<void> selectAll() async {
+    selectAllCalls++;
+  }
 
   @override
   Future<bool?> lockState() async => null;
@@ -161,4 +197,5 @@ class _FakeScene implements Scene {
 
   @override
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
+
 }

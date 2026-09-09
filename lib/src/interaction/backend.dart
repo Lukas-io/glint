@@ -1,4 +1,10 @@
+import 'dart:io' show Process, ProcessResult;
+
 import 'action.dart';
+
+/// Runs one child process; injected so tests can capture argv without a device. Defaults to [Process.run].
+typedef ProcessRunner = Future<ProcessResult> Function(
+    String executable, List<String> arguments);
 
 /// Platform-native input layer. Speaks physical pixels; the Interactor
 /// resolves symbolic targets before calling here.
@@ -26,6 +32,15 @@ abstract class InteractionBackend {
 
   Future<void> pressHardwareButton(HardwareButton button);
 
+  /// Presses [key] [count] times, each press bracketed by [modifiers]. Throws [UnsupportedBackendAction] when the backend has no keyboard.
+  Future<void> pressKey(KeyName key,
+          {int count = 1, Set<KeyModifier> modifiers = const {}}) async =>
+      throw UnsupportedBackendAction(label, 'pressKey: no keyboard on this backend');
+
+  /// Selects all text in the focused field (cmd+A on iOS, ctrl+A on Android).
+  Future<void> selectAll() async =>
+      throw UnsupportedBackendAction(label, 'selectAll: no keyboard on this backend');
+
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
 
@@ -49,6 +64,7 @@ class BackendCapabilities {
     this.doubleTap = true,
     this.swipe = true,
     this.typeText = true,
+    this.keys = false,
     this.hardwareButtons = const <HardwareButton>{},
   });
 
@@ -57,6 +73,7 @@ class BackendCapabilities {
   final bool doubleTap;
   final bool swipe;
   final bool typeText;
+  final bool keys;
   final Set<HardwareButton> hardwareButtons;
 }
 

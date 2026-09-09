@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart' show Scene;
 import '../armed.dart';
 import '../envelope.dart';
 import '../post_action.dart';
@@ -24,11 +25,17 @@ class TypeTool extends GlintTool {
             'changeCategory. '
             'errorKind: unresolvedTarget (focus glintId not found), '
             'targetNeverReady (focus field never became hittable within ceilingMs). '
+            'clear: true empties the focused field first (select-all + backspace). '
             'Device mode: types into whatever the OS has focused, with no '
             'change signal; focus: needs a Flutter app.',
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(description: 'Printable-ASCII text to type.'),
+            'clear': Schema.bool(
+              description:
+                  'Empty the focused field before typing (select-all + '
+                  'backspace, then a per-char backspace fallback). Default false.',
+            ),
             'focus': Schema.string(
               description:
                   'Optional glintId of an input to tap before typing.',
@@ -65,8 +72,9 @@ class TypeTool extends GlintTool {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
+    final clear = (args['clear'] as bool?) ?? false;
     final t = readTargetedArgs(args, session.config);
-    if (session.isDeviceMode) return _typeInDeviceMode(session, text, focus);
+    if (session.isDeviceMode) return _typeInDeviceMode(session, text, focus, clear);
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -103,10 +111,23 @@ class TypeTool extends GlintTool {
         warnings.addAll(focusResult.warnings);
       }
 
+      _ClearOutcome? cleared;
+      if (clear) {
+        cleared = await _clearField(session, scene);
+        warnings.addAll(cleared.warnings);
+      }
+
       final result = await session.interactor.run(scene, TypeText(text));
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail)
               .addWarnings(warnings);
+      if (cleared != null) {
+        response = response.mergeData(cleared.data);
+        if (cleared.summaryPrefix != null) {
+          response =
+              response.copyWith(summary: '${cleared.summaryPrefix}${response.summary}');
+        }
+      }
       if (focusArming != null) response = withArmedMetadata(response, focusArming);
 
       if (t.returnScene && !response.isError) {
@@ -130,9 +151,9 @@ class TypeTool extends GlintTool {
     }
   }
 
-  /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focus.
+  /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focused. clear does a blind select-all + backspace first.
   Future<StructuredResponse> _typeInDeviceMode(
-      GlintSession session, String text, String? focus) async {
+      GlintSession session, String text, String? focus, bool clear) async {
     if (focus != null) {
       return StructuredResponse.error(
         summary: 'focus:$focus needs a Flutter app; this session is in device mode',
@@ -144,6 +165,10 @@ class TypeTool extends GlintTool {
       );
     }
     try {
+      if (clear) {
+        await session.backend.selectAll();
+        await session.backend.pressKey(KeyName.backspace);
+      }
       await session.backend.typeText(text);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
@@ -159,9 +184,59 @@ class TypeTool extends GlintTool {
       );
     }
     return StructuredResponse(
-      summary: 'typed ${text.length} chars (device mode: no change signal)',
+      summary: '${clear ? "cleared blind, " : ""}typed ${text.length} chars '
+          '(device mode: no change signal)',
       data: {'ok': true, 'mode': 'device', 'chars': text.length},
       nextSteps: const ['device op:screenshot to confirm the text landed'],
     );
   }
+
+  /// Empties the focused field: select-all + backspace, then a per-char backspace fallback when text remains. Reads the field before and after in flutter mode; device mode clears blind.
+  Future<_ClearOutcome> _clearField(GlintSession session, Scene scene) async {
+    if (session.isDeviceMode) {
+      try {
+        await session.backend.selectAll();
+        await session.backend.pressKey(KeyName.backspace);
+      } on Object catch (e) {
+        return _ClearOutcome(
+          warnings: ['clear failed in device mode: $e'],
+          data: const {'clearBlind': true},
+        );
+      }
+      return _ClearOutcome(
+        summaryPrefix: 'cleared blind (device mode), ',
+        data: const {'clearBlind': true},
+      );
+    }
+    final before = await session.focusedFieldText();
+    await session.interactor.run(scene, const ClearField());
+    var after = await session.focusedFieldText();
+    if (after != null && after.isNotEmpty) {
+      await session.interactor
+          .run(scene, PressKey(KeyName.backspace, count: after.length));
+      after = await session.focusedFieldText();
+    }
+    final removed = before?.length ?? 0;
+    final remaining = after?.length ?? 0;
+    return _ClearOutcome(
+      summaryPrefix: before == null ? null : 'cleared $removed chars, ',
+      warnings: [
+        if (before == null)
+          'no focused text field found to clear; cleared blind',
+        if (remaining > 0) 'field still holds $remaining chars after clear',
+      ],
+      data: {
+        if (before != null) 'cleared': removed,
+        'remaining': remaining,
+      },
+    );
+  }
+}
+
+/// What `type clear:true` did: an optional summary prefix, warnings, and data fields to merge.
+class _ClearOutcome {
+  _ClearOutcome({this.summaryPrefix, this.warnings = const [], this.data = const {}});
+  final String? summaryPrefix;
+  final List<String> warnings;
+  final Map<String, Object?> data;
 }
