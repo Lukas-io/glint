@@ -8,6 +8,7 @@ class GlintConfig {
     this.attachProbeTimeoutMs = 2000,
     this.launchTimeoutMs = 180000,
     this.settleCeilingMs = 5000,
+    this.postActionSettleMs = 1500,
     this.settleQuietFrames = 3,
     this.scrollMaxScrolls = 8,
     this.scrollAmountFraction = 0.6,
@@ -15,6 +16,9 @@ class GlintConfig {
     this.appLogCapacity = 500,
     this.iconEnrichMax = 20,
     this.inputEnrichMax = 10,
+    this.sceneLineBudget = 160,
+    this.devHints = true,
+    this.captureSettleMs = 700,
   });
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
@@ -30,6 +34,9 @@ class GlintConfig {
 
   /// Default ceiling for the `wait_for_settle` tool.
   int settleCeilingMs;
+
+  /// Settle ceiling folded into every gesture's post-action read.
+  int postActionSettleMs;
 
   /// Consecutive `schedulerPhase==idle` polls before declaring settled.
   int settleQuietFrames;
@@ -52,6 +59,15 @@ class GlintConfig {
   /// Max SemanticInputs enriched per scene (each costs ~2 VM evals).
   int inputEnrichMax;
 
+  /// Lines a full get_scene may return before the renderer reduces depth.
+  int sceneLineBudget;
+
+  /// Surface developer findings (eager lists) as warnings.
+  bool devHints;
+
+  /// Delay after a lifecycle change before the background screenshot.
+  int captureSettleMs;
+
   /// All known keys → string of current value, for the `config get` view.
   /// Telemetry is env-controlled now (GLINT_NO_TELEMETRY, GLINT_NO_USAGE);
   /// not exposed here so the agent can't accidentally re-enable telemetry
@@ -61,6 +77,7 @@ class GlintConfig {
         'attachProbeTimeoutMs': attachProbeTimeoutMs,
         'launchTimeoutMs': launchTimeoutMs,
         'settleCeilingMs': settleCeilingMs,
+        'postActionSettleMs': postActionSettleMs,
         'settleQuietFrames': settleQuietFrames,
         'scrollMaxScrolls': scrollMaxScrolls,
         'scrollAmountFraction': scrollAmountFraction,
@@ -68,6 +85,9 @@ class GlintConfig {
         'appLogCapacity': appLogCapacity,
         'iconEnrichMax': iconEnrichMax,
         'inputEnrichMax': inputEnrichMax,
+        'sceneLineBudget': sceneLineBudget,
+        'devHints': devHints,
+        'captureSettleMs': captureSettleMs,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -89,6 +109,10 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'settleCeilingMs must be a positive int';
         settleCeilingMs = v;
+      case 'postActionSettleMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'postActionSettleMs must be a positive int';
+        postActionSettleMs = v;
       case 'settleQuietFrames':
         final v = _asPositiveInt(value);
         if (v == null) return 'settleQuietFrames must be a positive int';
@@ -119,6 +143,18 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'inputEnrichMax must be a positive int';
         inputEnrichMax = v;
+      case 'sceneLineBudget':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'sceneLineBudget must be a positive int';
+        sceneLineBudget = v;
+      case 'devHints':
+        final v = value is bool ? value : (value == 'true' ? true : value == 'false' ? false : null);
+        if (v == null) return 'devHints must be true or false';
+        devHints = v;
+      case 'captureSettleMs':
+        final v = _asPositiveInt(value);
+        if (v == null) return 'captureSettleMs must be a positive int';
+        captureSettleMs = v;
       default:
         return 'unknown config key: $key';
     }

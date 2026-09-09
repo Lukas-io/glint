@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:glint/interaction.dart' show ProcessRunner;
 import 'package:glint/src/mcp/tools/report_issue_tool.dart';
 import 'package:test/test.dart';
 
@@ -59,6 +62,116 @@ void main() {
         labels: [],
       );
       expect(url, contains('%0A'));
+    });
+  });
+
+  group('selectApplicableLabels', () {
+    test('keeps only labels the repo has', () {
+      expect(selectApplicableLabels(['bug', 'agent-filed'], {'bug', 'question'}),
+          ['bug']);
+    });
+
+    test('a failed lookup passes every label through', () {
+      expect(selectApplicableLabels(['bug', 'agent-filed'], null),
+          ['bug', 'agent-filed']);
+    });
+
+    test('nothing matches, nothing applied', () {
+      expect(selectApplicableLabels(['ux-friction'], {'bug'}), isEmpty);
+    });
+  });
+
+  group('isMissingLabelError', () {
+    test('matches the real gh wording', () {
+      expect(
+          isMissingLabelError(
+              "could not add label: 'agent-filed' not found"),
+          isTrue);
+    });
+
+    test('ignores unrelated failures', () {
+      expect(isMissingLabelError('authentication required'), isFalse);
+      expect(isMissingLabelError('repository not found'), isFalse);
+    });
+  });
+
+  group('capDeepLinkBody', () {
+    test('short bodies pass through', () {
+      expect(capDeepLinkBody('hello', max: 10), 'hello');
+    });
+
+    test('long bodies are cut and point at the saved file', () {
+      final out = capDeepLinkBody('x' * 30, max: 10, savedTo: '/tmp/full.md');
+      expect(out, startsWith('x' * 10));
+      expect(out, isNot(contains('x' * 11)));
+      expect(out, contains('/tmp/full.md'));
+    });
+  });
+
+  group('fileWithGh', () {
+    ProcessRunner script(List<ProcessResult> replies, List<List<String>> calls) {
+      var i = 0;
+      return (exe, args) async {
+        calls.add([exe, ...args]);
+        if (i >= replies.length) throw StateError('no reply scripted for $args');
+        return replies[i++];
+      };
+    }
+
+    ProcessResult r(int code, {String out = '', String err = ''}) =>
+        ProcessResult(0, code, out, err);
+
+    test('labels the repo lacks are dropped before the create', () async {
+      final calls = <List<String>>[];
+      final run = script([
+        r(0, out: '[{"name":"bug"},{"name":"question"}]'),
+        r(0, out: 'https://github.com/o/r/issues/7\n'),
+      ], calls);
+      final f = await fileWithGh(
+          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug', 'agent-filed']);
+      expect(f.url, 'https://github.com/o/r/issues/7');
+      expect(f.applied, ['bug']);
+      expect(f.droppedLabels, ['agent-filed']);
+      expect(calls[1], contains('--label'));
+      expect(calls[1][calls[1].indexOf('--label') + 1], 'bug');
+    });
+
+    test('a refused label is retried once with no labels at all', () async {
+      final calls = <List<String>>[];
+      final run = script([
+        r(1, err: 'gh: offline'),
+        r(1, err: "could not add label: 'agent-filed' not found"),
+        r(0, out: 'https://github.com/o/r/issues/8'),
+      ], calls);
+      final f = await fileWithGh(
+          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['ux-friction', 'agent-filed']);
+      expect(f.url, 'https://github.com/o/r/issues/8');
+      expect(f.applied, isEmpty);
+      expect(f.droppedLabels, ['ux-friction', 'agent-filed']);
+      expect(calls.length, 3);
+      expect(calls[2], isNot(contains('--label')));
+    });
+
+    test('other failures are reported, not retried', () async {
+      final calls = <List<String>>[];
+      final run = script([
+        r(0, out: '[]'),
+        r(1, err: 'authentication required'),
+      ], calls);
+      final f = await fileWithGh(
+          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug']);
+      expect(f.url, isNull);
+      expect(f.reason, contains('authentication required'));
+      expect(calls.length, 2);
+    });
+
+    test('a missing gh binary reads as unavailable', () async {
+      final f = await fileWithGh(
+        run: (exe, args) async => throw const ProcessException('gh', [], 'not found', 2),
+        repo: 'o/r', title: 't', body: 'b', labels: ['bug'],
+      );
+      expect(f.url, isNull);
+      expect(f.reason, startsWith('unavailable'));
     });
   });
 }

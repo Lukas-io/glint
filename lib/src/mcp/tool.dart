@@ -7,8 +7,11 @@ import '../../observability.dart';
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
+import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
 import 'tools/attach_tool.dart';
+import 'tools/batch_tool.dart';
+import 'tools/record_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
@@ -26,6 +29,7 @@ import 'tools/shutdown_sim_tool.dart';
 import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
 import 'tools/telemetry_tool.dart';
+import 'tools/key_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
 
@@ -35,6 +39,31 @@ abstract class GlintTool {
   const GlintTool();
 
   Tool get definition;
+
+  /// [definition] plus the shared `app` routing arg — what the server registers.
+  Tool get registeredDefinition =>
+      routesByApp ? withAppArg(definition) : definition;
+
+  /// Tools that give `app` their own meaning (attach) opt out of routing.
+  bool get routesByApp => true;
+
+  /// Adds the optional `app` property every routed tool accepts.
+  static Tool withAppArg(Tool tool) {
+    final raw = tool as Map<String, Object?>;
+    final schema = Map<String, Object?>.from(
+        raw['inputSchema'] as Map<String, Object?>? ?? const {});
+    final props = Map<String, Object?>.from(
+        (schema['properties'] as Map?)?.cast<String, Object?>() ?? const {});
+    props['app'] = Schema.string(
+      description: 'Which attached app to target when several are attached: '
+          'device id, app name, package, or simulator name. Defaults to the '
+          'active app.',
+    );
+    return Tool.fromMap({
+      ...raw,
+      'inputSchema': {...schema, 'type': 'object', 'properties': props},
+    });
+  }
 
   FutureOr<StructuredResponse> handle(
     GlintSession session,
@@ -54,17 +83,40 @@ abstract class GlintTool {
   ) async {
     final start = DateTime.now();
     StructuredResponse response;
+    final target =
+        routesByApp ? (request.arguments?['app'] as String?) : null;
+    var app = session.active;
     try {
-      response = await handle(session, request);
+      if (target == null) {
+        response = await handle(session, request);
+      } else {
+        final matches = session.matchApps(target);
+        if (matches.length != 1) {
+          response = unknownAppResponse(session, target, matches);
+        } else {
+          app = matches.single;
+          response = await session.withApp(
+              matches.single, () async => await handle(session, request));
+        }
+      }
     } on SessionNotAttachedError catch (e) {
-      response = StructuredResponse.error(
-        summary: 'glint is not attached to a Flutter app yet',
-        errorKind: GlintErrorKind.sessionNotAttached,
-        detail: e.toString(),
-        nextSteps: const [
-          'call the `attach` tool first with the running app\'s VM URI and device target',
-        ],
-      );
+      final pooled = session.apps;
+      final active = session.active;
+      response = active != null && active.deviceMode
+          ? flutterModeRequiredResponse(definition.name, active, e)
+          : StructuredResponse.error(
+              summary: pooled.isEmpty
+                  ? 'glint is not attached to a Flutter app yet'
+                  : 'no active app — ${pooled.length} attached app(s) to pick from',
+              errorKind: GlintErrorKind.sessionNotAttached,
+              detail: e.toString(),
+              nextSteps: pooled.isEmpty
+                  ? const ['call `attach` (no args) to discover and connect the running app']
+                  : [
+                      for (final a in pooled)
+                        'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
+                    ],
+            );
     } on RuntimeConnectionLostError catch (e) {
       response = StructuredResponse.error(
         summary: 'VM service connection lost — the app may have hot-restarted '
@@ -75,6 +127,8 @@ abstract class GlintTool {
           'call `attach` again with the same vmUri to reconnect',
         ],
       );
+    } on RuntimeUnresponsiveError catch (e) {
+      response = await _unresponsiveResponse(session, e);
     } catch (e, st) {
       response = StructuredResponse.error(
         summary: '${definition.name} failed',
@@ -82,11 +136,110 @@ abstract class GlintTool {
         detail: '$e\n$st',
       );
     }
-    _log(session, request, response, start);
+    response = await _checkDeviceGone(session, app, response);
+    logCall(session, request, response, start);
     return response.toCallResult();
   }
 
-  void _log(
+  /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.
+  Future<StructuredResponse> _unresponsiveResponse(
+      GlintSession session, RuntimeUnresponsiveError e) async {
+    bool? locked;
+    try {
+      locked = await session.backend.lockState();
+    } on Object {
+      locked = null;
+    }
+    return StructuredResponse.error(
+      summary: locked == true
+          ? 'the device is locked, so the app is suspended and runs no Dart code'
+          : 'the app stopped answering: suspended in the background, paused at a '
+              'breakpoint, or frozen',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: e.toString(),
+      nextSteps: [
+        if (locked == true)
+          'hardware_button unlock, then retry'
+        else ...const [
+          '`device op:screenshot` to see what the device shows',
+          'if the app is in the background, `hardware_button home` and reopen it; '
+              'if a debugger paused it, resume it',
+          'attach again if the app was restarted',
+        ],
+      ],
+    );
+  }
+
+  /// The session is attached, but in device mode: say what the tool is missing and what works without a Flutter tree.
+  static StructuredResponse flutterModeRequiredResponse(
+      String tool, AppSession app, SessionNotAttachedError cause) {
+    return StructuredResponse.error(
+      summary: '`$tool` needs a Flutter app; this session is in device mode '
+          'on ${app.deviceName ?? app.id}',
+      errorKind: GlintErrorKind.flutterModeRequired,
+      detail: 'device mode drives the simulator with no Flutter widget tree, '
+          'so the ${cause.missing} is unavailable',
+      nextSteps: const [
+        'once the app is running, attach without mode:"device" '
+            '(attach app:"<name>" or attach vmUri:<uri>)',
+        'in device mode use tap / long_press / swipe / drag with x,y '
+            '(screenshot pixels), type, hardware_button, device op:screenshot',
+      ],
+    );
+  }
+
+  static const _deviceSensitive = {
+    GlintErrorKind.connectionLost,
+    GlintErrorKind.backendToolError,
+    GlintErrorKind.internal,
+  };
+
+  /// A lost VM or a failing native tool is often a simulator that was closed.
+  /// Ask the host once; when the device is gone, say so and drop its session.
+  Future<StructuredResponse> _checkDeviceGone(
+      GlintSession session, AppSession? app, StructuredResponse response) async {
+    if (!response.isError || app == null) return response;
+    final kind = enumByName(
+        GlintErrorKind.values, response.data?['errorKind'] as String?);
+    if (kind == null || !_deviceSensitive.contains(kind)) return response;
+    final adb = app.device is AndroidDevice
+        ? (app.device as AndroidDevice).adbPath
+        : 'adb';
+    final bool present;
+    try {
+      present = await DeviceDiscovery(adbPath: adb)
+          .isDevicePresent(app.id, app.platform);
+    } on Object {
+      return response;
+    }
+    if (present) return response;
+    await session.detach(deviceId: app.id);
+    return deviceGoneResponse(session, app);
+  }
+
+  /// The device behind [app] is no longer booted: name it, and say how back.
+  static StructuredResponse deviceGoneResponse(
+      GlintSession session, AppSession app) {
+    final what = app.platform == DevicePlatform.ios ? 'simulator' : 'emulator';
+    final remaining = session.apps;
+    return StructuredResponse.error(
+      summary: '$what ${app.deviceName ?? app.id} is no longer booted — it was '
+          'closed or crashed, so ${app.label} is gone',
+      errorKind: GlintErrorKind.deviceGone,
+      detail: 'device ${app.id} is not in the booted list; its session was '
+          'dropped from the pool',
+      nextSteps: [
+        'attach device:"${app.id}" boots it and relaunches ${app.label} from history',
+        if (remaining.isNotEmpty)
+          'or continue on: ${remaining.map((a) => '"${a.label}"').join(", ")} (attach app:"<name>")',
+        'ask the user if the $what should stay open while you work',
+      ],
+    );
+  }
+
+  /// Records one call in the action log + usage recorder. Public so a
+  /// composite tool (batch) can log each step under its own tool name.
+  void logCall(
     GlintSession session,
     CallToolRequest request,
     StructuredResponse response,
@@ -119,10 +272,8 @@ abstract class GlintTool {
       return;
     }
     final kindName = response.data?['errorKind'] as String?;
-    final errorKind = GlintErrorKind.values
-            .where((e) => e.name == kindName)
-            .firstOrNull ??
-        GlintErrorKind.internal;
+    final errorKind =
+        enumByName(GlintErrorKind.values, kindName) ?? GlintErrorKind.internal;
     session.actionLog.record(FailureEntry(
       sequence: seq,
       timestamp: start,
@@ -139,10 +290,32 @@ abstract class GlintTool {
       argKeys: argKeys,
       durationMs: elapsedMs,
       resultBytes: resultBytes,
+      errorKind: errorKind.name,
     );
   }
 
-  int _resultBytes(StructuredResponse r) => r.summary.length;
+  /// `app:` named none or several attached apps: list what is attached.
+  static StructuredResponse unknownAppResponse(
+      GlintSession session, String target, List<AppSession> matches) {
+    final pooled = session.apps;
+    return StructuredResponse.error(
+      summary: matches.isEmpty
+          ? 'no attached app matches app:"$target"'
+          : 'app:"$target" is ambiguous — ${matches.length} attached apps match',
+      errorKind: GlintErrorKind.unknownApp,
+      detail: pooled.isEmpty
+          ? 'nothing is attached'
+          : 'attached: ${pooled.map((a) => "${a.label} on ${a.deviceName ?? a.id}").join(", ")}',
+      nextSteps: [
+        if (pooled.isEmpty) 'call `attach` first',
+        for (final a in (matches.isEmpty ? pooled : matches))
+          'app:"${a.deviceName ?? a.id}" or app:"${a.label}"',
+        'or `attach` (no args) to discover a running app that is not attached yet',
+      ],
+    );
+  }
+
+  int _resultBytes(StructuredResponse r) => r.wireBytes;
 
   String _shortSummary(String s) {
     const max = 160;
@@ -174,8 +347,11 @@ const List<GlintTool> kDefaultGlintTools = [
   ScrollTool(),
   ScrollToFindTool(),
   TypeTool(),
+  KeyTool(),
   HardwareButtonTool(),
   WaitForSettleTool(),
+  BatchTool(),
+  RecordTool(),
   LogsTool(),
   AppLogsTool(),
   SessionTool(),

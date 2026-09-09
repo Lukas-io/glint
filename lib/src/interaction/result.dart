@@ -7,12 +7,23 @@ enum GlintErrorKind {
   backendToolError,
   unresolvedTarget,
   notHittable,
+  offViewport,
   geometryResolveError,
   // mcp-layer failures
   sessionNotAttached,
   invalidArgument,
+  // `app:` named no attached app, or several
+  unknownApp,
+  // perception unavailable — app backgrounded / no frame to inspect
+  appNotResumed,
   // transport failures
   connectionLost,
+  /// The isolate stopped answering: device locked, app suspended by the OS, or paused at a breakpoint.
+  appUnresponsive,
+  // the simulator / emulator behind the session is no longer booted
+  deviceGone,
+  /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
+  flutterModeRequired,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // scroll_to_find specific failures

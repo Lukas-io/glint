@@ -32,7 +32,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
     final result = await super.initialize(request);
     for (final tool in _tools) {
       registerTool(
-        tool.definition,
+        tool.registeredDefinition,
         (req) => tool.invoke(session, req),
       );
     }
@@ -41,7 +41,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
 
   @override
   Future<void> shutdown() async {
-    await session.detach();
+    await session.detachAll();
     await super.shutdown();
   }
 }

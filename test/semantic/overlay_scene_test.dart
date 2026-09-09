@@ -1,11 +1,57 @@
+import 'package:glint/perception.dart';
+import 'package:glint/src/semantic/enricher.dart';
 import 'package:glint/src/semantic/renderer.dart';
 import 'package:glint/src/semantic/semantic_node.dart';
 import 'package:glint/src/semantic/semantic_scene.dart';
+import 'package:glint/src/semantic/semanticizer.dart';
 import 'package:test/test.dart';
 
 import '../perception/fake_scene.dart';
 
+SceneNode _sn(String label, {List<SceneNode> children = const [], String? text}) =>
+    SceneNode(
+      depth: 0,
+      indexInParent: -1,
+      description: label,
+      type: '_Element',
+      inspectorId: 'i-$label',
+      widgetRuntimeType: label,
+      textPreview: text,
+      children: children,
+    );
+
 void main() {
+  group('OverlayEnricher.kind inference', () {
+    Future<String?> kindOf(SceneNode overlayRoot) async {
+      final base = _sn('Scaffold');
+      final scene = SemanticScene(
+        root: SemanticPage(body: const []),
+        sourceScene: Scene.forTesting(root: base, overlayRoots: [overlayRoot]),
+      );
+      await OverlayEnricher(semanticizer: Semanticizer()).enrich(scene);
+      return scene.overlayLayers.isEmpty ? null : scene.overlayLayers.first.kind;
+    }
+
+    test('a _ToastWidget overlay is labelled toast', () async {
+      final root = _sn('_OverlayEntryWidget', children: [
+        _sn('_ToastWidget', children: [_sn('Text', text: 'Saved!')]),
+      ]);
+      expect(await kindOf(root), 'toast');
+    });
+    test('a SnackBar overlay is labelled snackbar', () async {
+      final root = _sn('_OverlayEntryWidget', children: [
+        _sn('SnackBar', children: [_sn('Text', text: 'Undo')]),
+      ]);
+      expect(await kindOf(root), 'snackbar');
+    });
+    test('a dialog overlay is still labelled dialog', () async {
+      final root = _sn('_OverlayEntryWidget', children: [
+        _sn('AlertDialog', children: [_sn('Text', text: 'Are you sure?')]),
+      ]);
+      expect(await kindOf(root), 'dialog');
+    });
+  });
+
   group('overlay-aware scene rendering', () {
     test('no overlay — renders identically to baseline (regression guard)', () {
       final scene = fakeSemanticScene(overlayLayers: []);

@@ -1,4 +1,5 @@
 import 'geometry.dart';
+import 'id_suggest.dart';
 import 'scene_reader.dart';
 
 /// §7.2 readiness primitive. Polls fresh scenes until [glintId] both exists in
@@ -14,20 +15,49 @@ class ReadinessGate {
   final CoordinateResolver resolver;
   final int pollIntervalMs;
 
+  /// Polls until [glintId] is hittable, or the ceiling. A screen whose
+  /// content has not changed for [staleAfterMs] and still lacks the target
+  /// fails fast as notFound (with id suggestions) — a static screen will not
+  /// grow the node by waiting.
   Future<ReadinessResult> awaitReady({
     required String glintId,
     int ceilingMs = 5000,
+    int staleAfterMs = 1500,
   }) async {
     final start = DateTime.now();
     var attempts = 0;
     String? lastDetail;
     var sawInTree = false;
+    String? lastSignature;
+    DateTime? stableSince;
+    var suggestions = const <String>[];
 
     while (true) {
       attempts++;
       final scene = await reader.readSummary();
       try {
         final node = scene.findByGlintId(glintId);
+        if (node == null) {
+          final sig = scene.contentSignature();
+          if (sig != lastSignature) {
+            lastSignature = sig;
+            stableSince = DateTime.now();
+          }
+          suggestions = suggestIds(
+            [for (final n in scene.root.walk()) if (n.glintId != null && !n.isOffstage) n.glintId!],
+            glintId,
+          );
+          final stableMs = DateTime.now().difference(stableSince!).inMilliseconds;
+          if (!sawInTree && stableMs >= staleAfterMs) {
+            return ReadinessResult.notFound(
+              glintId: glintId,
+              attempts: attempts,
+              elapsedMs: DateTime.now().difference(start).inMilliseconds,
+              suggestions: suggestions,
+              staleScreen: true,
+            );
+          }
+        }
         if (node != null) {
           sawInTree = true;
           try {
@@ -66,6 +96,7 @@ class ReadinessGate {
                 glintId: glintId,
                 attempts: attempts,
                 elapsedMs: elapsed,
+                suggestions: suggestions,
               );
       }
       await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
@@ -99,6 +130,8 @@ sealed class ReadinessResult {
     required String glintId,
     required int attempts,
     required int elapsedMs,
+    List<String> suggestions,
+    bool staleScreen,
   }) = NotFoundResult;
 
   final String glintId;
@@ -131,5 +164,13 @@ class NotFoundResult extends ReadinessResult {
     required super.glintId,
     required super.attempts,
     required super.elapsedMs,
+    this.suggestions = const [],
+    this.staleScreen = false,
   });
+
+  /// Closest ids on the last screen read.
+  final List<String> suggestions;
+
+  /// True when the gate gave up early because the screen stopped changing.
+  final bool staleScreen;
 }

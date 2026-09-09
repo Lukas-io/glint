@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
@@ -12,6 +14,7 @@ class StructuredResponse {
     this.nextSteps = const [],
     this.data,
     this.isError = false,
+    this.textOnly = false,
   });
 
   factory StructuredResponse.error({
@@ -31,22 +34,24 @@ class StructuredResponse {
     );
   }
 
-  /// Builds a response from an [ActionResult]. When [detail] is false
-  /// (the default), verbose geometry fields (painted, hittable, physicalCenter)
-  /// are omitted — the agent only needs `ok` to continue. Use `detail:true`
-  /// on the tool call to get the full geometry.
+  /// Builds a response from an [ActionResult]. The envelope already carries
+  /// `summary`/`warnings`/`nextSteps` at the top level, so those are dropped
+  /// from `data` rather than duplicated. Geometry (painted, hittable,
+  /// physicalCenter) is omitted unless [detail] is true — the agent only needs
+  /// `ok` + the changed-signal to continue. The failure reason is routed to the
+  /// shared `detail` key so it surfaces in prose and the action log.
   factory StructuredResponse.fromActionResult(
     ActionResult r, {
     bool detail = false,
   }) {
-    final json = r.toJson();
-    final data = detail
-        ? json
-        : {
-            for (final entry in json.entries)
-              if (!const {'painted', 'hittable', 'physicalCenter'}.contains(entry.key))
-                entry.key: entry.value,
-          };
+    const dup = {'summary', 'warnings', 'nextSteps', 'error'};
+    const geometry = {'painted', 'hittable', 'physicalCenter'};
+    final data = <String, Object?>{
+      for (final e in r.toJson().entries)
+        if (!dup.contains(e.key) && (detail || !geometry.contains(e.key)))
+          e.key: e.value,
+    };
+    if (r.error != null) data['detail'] = r.error;
     return StructuredResponse(
       summary: r.summary,
       warnings: r.warnings,
@@ -61,6 +66,42 @@ class StructuredResponse {
   final List<String> nextSteps;
   final Map<String, Object?>? data;
   final bool isError;
+
+  /// Ship only the plain text: no structuredContent, so a scene-sized reply
+  /// reaches the agent once and unescaped instead of as JSON-encoded text.
+  final bool textOnly;
+
+  /// Returns a copy with the given fields replaced — so callers augmenting a
+  /// response don't re-list all five fields by hand.
+  StructuredResponse copyWith({
+    String? summary,
+    List<String>? warnings,
+    List<String>? nextSteps,
+    Map<String, Object?>? data,
+    bool? isError,
+    bool? textOnly,
+  }) =>
+      StructuredResponse(
+        summary: summary ?? this.summary,
+        warnings: warnings ?? this.warnings,
+        nextSteps: nextSteps ?? this.nextSteps,
+        data: data ?? this.data,
+        isError: isError ?? this.isError,
+        textOnly: textOnly ?? this.textOnly,
+      );
+
+  /// Bytes the client receives: the structured payload, or the text alone.
+  int get wireBytes => textOnly
+      ? renderText().length
+      : jsonEncode(toStructuredContent()).length;
+
+  /// Merges [extra] into [data] (extra keys win).
+  StructuredResponse mergeData(Map<String, Object?> extra) =>
+      copyWith(data: {...?data, ...extra});
+
+  /// Appends [extra] to [warnings] (no-op when empty).
+  StructuredResponse addWarnings(List<String> extra) =>
+      extra.isEmpty ? this : copyWith(warnings: [...warnings, ...extra]);
 
   String renderText() {
     final buf = StringBuffer(summary);
@@ -105,7 +146,7 @@ class StructuredResponse {
   CallToolResult toCallResult() {
     return CallToolResult(
       content: [Content.text(text: renderText())],
-      structuredContent: toStructuredContent(),
+      structuredContent: textOnly ? null : toStructuredContent(),
       isError: isError,
     );
   }

@@ -20,8 +20,31 @@ class SceneCompactor {
   bool _isNoisyPassThrough(SemanticNode node) {
     if (node is SemanticContainer && node.hint == null) return true;
     if (node is SemanticUnknown && node.children.isNotEmpty) return true;
+    if (node is SemanticUnknown && _plumbingLabels.contains(node.label)) {
+      return true;
+    }
     return false;
   }
+
+  /// Leaf framework plumbing — spacing, semantics, focus — pure noise to agents.
+  static const _plumbingLabels = {
+    'offstage',
+    'Gap',
+    'SliverGap',
+    '_RawGap',
+    'Spacer',
+    'SizedBox.expand',
+    'SizedBox.shrink',
+    'Semantics',
+    'ExcludeSemantics',
+    'MergeSemantics',
+    'BlockSemantics',
+    'IndexedSemantics',
+    'KeyedSubtree',
+    'Focus',
+    'FocusScope',
+    'MouseRegion',
+  };
 
   SemanticPage? _findPage(SemanticNode node) {
     if (node is SemanticPage) return node;

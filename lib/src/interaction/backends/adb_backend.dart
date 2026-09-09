@@ -3,6 +3,8 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
+import '../key_codes.dart';
+import '../screen_recording.dart';
 
 /// Android KEYCODE_* values for glint's [HardwareButton]. `unlock` is null —
 /// no stock biometric-match equivalent and per-OEM lock-screen behaviour; surfaced as [UnsupportedBackendAction] until v1.
@@ -20,16 +22,23 @@ extension AndroidKeyCode on HardwareButton {
 
 /// Android emulator / device backend over `adb shell input`.
 class AdbBackend implements InteractionBackend {
-  AdbBackend({required this.deviceSerial, this.adbPath = 'adb'});
+  AdbBackend({
+    required this.deviceSerial,
+    this.adbPath = 'adb',
+    this.run = Process.run,
+  });
 
   final String deviceSerial;
   final String adbPath;
+  final ProcessRunner run;
 
   @override
   String get label => 'adb($deviceSerial)';
 
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
+        keys: true,
+        record: true,
         hardwareButtons: {
           HardwareButton.home,
           HardwareButton.back,
@@ -93,6 +102,14 @@ class AdbBackend implements InteractionBackend {
   }
 
   @override
+  Future<ScreenRecording> startRecording(String path) =>
+      AdbRecording.start(adbPath: adbPath, serial: deviceSerial, localPath: path);
+
+  /// Not read on Android yet; callers fall back to the app lifecycle.
+  @override
+  Future<bool?> lockState() async => null;
+
+  @override
   Future<void> pressHardwareButton(HardwareButton button) {
     final code = button.androidKeyCode;
     if (code == null) {
@@ -103,6 +120,27 @@ class AdbBackend implements InteractionBackend {
     }
     return _shell(['input', 'keyevent', '$code']);
   }
+
+  @override
+  Future<void> pressKey(KeyName key,
+      {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
+    final code = key.androidKeyCode;
+    if (modifiers.isEmpty) {
+      await _shell(['input', 'keyevent', ...List.filled(count, '$code')]);
+      return;
+    }
+    final combo = [
+      ...modifiers.map((m) => '${m.androidKeyCode}'),
+      '$code',
+    ];
+    for (var i = 0; i < count; i++) {
+      await _shell(['input', 'keycombination', ...combo]);
+    }
+  }
+
+  @override
+  Future<void> selectAll() =>
+      _shell(['input', 'keycombination', '113', '29']); // CTRL_LEFT + A
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
@@ -134,7 +172,7 @@ class AdbBackend implements InteractionBackend {
   }
 
   Future<void> _shell(List<String> shellArgs) async {
-    final result = await Process.run(
+    final result = await run(
       adbPath,
       ['-s', deviceSerial, 'shell', ...shellArgs],
     );

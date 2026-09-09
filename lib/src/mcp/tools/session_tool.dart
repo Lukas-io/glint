@@ -16,13 +16,14 @@ class SessionTool extends GlintTool {
   Tool get definition => Tool(
         name: 'session',
         description:
-            'Group action-log entries into named runs (e.g. test scenarios). '
-            'Ops: open (start), close (end active), note (annotate active), '
-            'list (history + active), export (action-log slice for one session).',
+            'Session status and named runs. Ops: status (default: attached apps, '
+            'active run, call counts), open (start a named run), close, note '
+            '(annotate active), list (history), export (action-log slice for '
+            'one run).',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
-              description: 'open | close | note | list | export',
+              description: 'status (default) | open | close | note | list | export',
             ),
             'name': Schema.string(
               description: 'Session name (required for op=open).',
@@ -34,7 +35,6 @@ class SessionTool extends GlintTool {
               description: 'Target session (optional for export; defaults to active).',
             ),
           },
-          required: ['op'],
         ),
       );
 
@@ -42,11 +42,35 @@ class SessionTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final op = args['op']! as String;
+    final op = (args['op'] as String?) ?? 'status';
     final mgr = session.sessions;
     final seq = session.actionLog.nextSequence;
 
     switch (op) {
+      case 'status':
+        final apps = session.apps;
+        final active = session.active;
+        final run = mgr.active;
+        return StructuredResponse(
+          summary: [
+            apps.isEmpty
+                ? 'not attached'
+                : 'attached: ${apps.map((a) => '${a.label} on ${a.deviceName ?? a.id}${identical(a, active) ? " (active)" : ""}').join(", ")}',
+            run == null
+                ? 'no named run open'
+                : 'run "${run.name}" open since seq=${run.firstSeq}',
+            '${seq - 1} tool call(s) logged this process',
+          ].join('\n'),
+          data: {
+            'attached': session.appsJson(),
+            'activeApp': active?.id,
+            'run': run?.toJson(),
+            'calls': seq - 1,
+            if (session.reconnectCount > 0)
+              'reconnectCount': session.reconnectCount,
+          },
+        );
+
       case 'open':
         final name = args['name'] as String?;
         if (name == null || name.isEmpty) {
@@ -61,7 +85,8 @@ class SessionTool extends GlintTool {
       case 'close':
         final s = mgr.close(seq);
         if (s == null) {
-          return _bad('no active session to close');
+          return _bad('no active session to close',
+              const ['open one first: session op:open name:"..."']);
         }
         return StructuredResponse(
           summary: 'closed session "${s.name}" (id=${s.id}); '
@@ -75,7 +100,10 @@ class SessionTool extends GlintTool {
           return _bad('op=note requires `text`');
         }
         final ok = mgr.note(text);
-        if (!ok) return _bad('no active session to note');
+        if (!ok) {
+          return _bad('no active session to note',
+              const ['open one first: session op:open name:"..."']);
+        }
         return StructuredResponse(
           summary: 'noted: $text',
           data: {'active': mgr.active?.toJson()},
@@ -119,12 +147,14 @@ class SessionTool extends GlintTool {
 
       default:
         return _bad(
-            'unknown op: $op (use one of open / close / note / list / export)');
+            'unknown op: $op (use one of status / open / close / note / list / export)');
     }
   }
 
-  StructuredResponse _bad(String msg) => StructuredResponse.error(
+  StructuredResponse _bad(String msg, [List<String> nextSteps = const []]) =>
+      StructuredResponse.error(
         summary: msg,
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: nextSteps,
       );
 }

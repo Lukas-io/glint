@@ -26,12 +26,25 @@ class GetSceneTool extends GlintTool {
             'structuredContent includes: hasOverlay (bool), overlayKind (string), '
             'keyboardVisible (bool), route.name, state '
             '(loaded/loading/error, or device/native when no Flutter tree). '
-            'format param: "text" (default) or "json"; json also carries an '
-            'overlayLayers array when a dialog is open.',
+            'Long lists are folded: the first row in full, then one digest '
+            'line naming the rest by label and #hash — tap by that id, or read '
+            'the list with glintId: for every row. '
+            'glintId: render only that node\'s subtree (drill-down); depth '
+            'caps how many levels below it are shown.',
         inputSchema: ObjectSchema(
           properties: {
             'format': Schema.string(
-              description: 'Output format. One of: text (default), json',
+              description: 'text (default). Leave unset.',
+            ),
+            'glintId': Schema.string(
+              description:
+                  'Only this node and its descendants. Use to drill into one '
+                  'container or list instead of re-reading the whole screen.',
+            ),
+            'depth': Schema.int(
+              description:
+                  'With glintId: levels below it to include (0 = the node '
+                  'only). Default: all, up to the renderer\'s cap.',
             ),
           },
         ),
@@ -42,6 +55,8 @@ class GetSceneTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
+    final glintId = args['glintId'] as String?;
+    final depth = args['depth'] as int?;
 
     // Validate format up front — before the scene read + VM-eval enrichers,
     // so a bad arg fails cheaply instead of after the round-trips.
@@ -64,43 +79,230 @@ class GetSceneTool extends GlintTool {
     }
 
     if (session.sceneMode == SceneMode.native) {
+      await session.active?.refreshSceneMode();
+    }
+    if (session.sceneMode == SceneMode.native) {
       return _handleNativeMode(session, format);
     }
 
-    final scene = await session.reader.readSummary();
     try {
-      final semantic = session.semanticizer.semanticize(scene);
-      await session.runEnrichers(semantic);
+      return await _readFlutterScene(session, format,
+          glintId: glintId, depth: depth);
+    } on InspectorReadError catch (e) {
+      // A null widget tree usually means no frame to inspect — the app is
+      // backgrounded or paused behind a native surface (permission dialog,
+      // another app). Translate the raw stack trace into an actionable state.
+      final lifecycle = await _safeLifecycle(session);
+      if (lifecycle != null && lifecycle != 'resumed') {
+        return StructuredResponse.error(
+          summary: 'the app is "$lifecycle", not resumed — no Flutter frame to '
+              'read. A native dialog or another app is likely in front.',
+          errorKind: GlintErrorKind.appNotResumed,
+          detail: e.toString(),
+          nextSteps: const [
+            'take a `device op:screenshot` to see what is on top',
+            'dismiss the native surface (e.g. tap its button via raw x,y), '
+                'then retry get_scene',
+            'or `hardware_button home` then reopen the app',
+          ],
+        );
+      }
+      rethrow;
+    }
+  }
 
-      final rendered = format == 'json'
-          ? const JsonSceneRenderer().render(semantic)
-          : const PlainTextSceneRenderer().render(semantic);
+  Future<StructuredResponse> _readFlutterScene(
+    GlintSession session,
+    String format, {
+    String? glintId,
+    int? depth,
+  }) async {
+    return session.withScene((semantic) async {
+      SemanticNode? subtree;
+      if (glintId != null) {
+        subtree = semantic.findByGlintId(glintId) ??
+            semantic.overlayLayers
+                .expand((l) => l.nodes)
+                .expand((n) => n.walk())
+                .cast<SemanticNode?>()
+                .firstWhere((n) => n!.glintId == glintId, orElse: () => null);
+        if (subtree == null) {
+          final ids = [
+            for (final n in semantic.root.walk())
+              if (n.glintId != null) n.glintId!,
+          ];
+          final hint = didYouMean(suggestIds(ids, glintId));
+          return StructuredResponse.error(
+            summary: 'no node with glintId "$glintId" on this screen',
+            errorKind: GlintErrorKind.unresolvedTarget,
+            nextSteps: [
+              if (hint != null) hint,
+              'call get_scene without glintId to read the current ids',
+            ],
+          );
+        }
+      }
+
+      final budget = session.config.sceneLineBudget;
+      final trailerBits = <String>[];
+      final dataBits = <String, Object?>{};
+      final warnings = <String>[];
+      if (semantic.sourceScene.degenerate) {
+        warnings.add(
+          'the inspector returned no widgets created by this project, so the '
+          'scene is only framework scaffolding. Usual causes: the app is not a '
+          'debug build (widget creation tracking is off), or its source path is '
+          'one the pub-root heuristic misreads. Try a debug run; if it persists, '
+          'report_issue with the app path.',
+        );
+      }
+      final String rendered;
+      if (subtree != null) {
+        rendered = format == 'json'
+            ? const JsonSceneRenderer().encode(const JsonSceneRenderer()
+                .nodeMap(subtree, fold: false, maxDepth: depth))
+            : const PlainTextSceneRenderer()
+                .renderSubtree(subtree, maxDepth: depth);
+      } else if (format == 'json') {
+        const jr = JsonSceneRenderer();
+        var map = jr.toMap(semantic);
+        var text = jr.encode(map);
+        var lines = text.split('\n').length;
+        final original = lines;
+        var used = PlainTextSceneRenderer.defaultMaxDepth;
+        while (lines > budget && used > 2) {
+          used--;
+          map = jr.toMap(semantic, maxDepth: used);
+          text = jr.encode(map);
+          lines = text.split('\n').length;
+        }
+        if (used < PlainTextSceneRenderer.defaultMaxDepth) {
+          dataBits['abridged'] = {'depth': used, 'fromLines': original, 'toLines': lines};
+        }
+        rendered = text;
+      } else {
+        const tr = PlainTextSceneRenderer();
+        var r = tr.renderDetailed(semantic);
+        final original = r.lineCount;
+        var used = PlainTextSceneRenderer.defaultMaxDepth;
+        while (r.lineCount > budget && used > 2) {
+          used--;
+          r = tr.renderDetailed(semantic, maxDepth: used);
+        }
+        if (r.runs.isNotEmpty) {
+          final where = r.runs.first.listId ?? r.runs.first.firstItemId;
+          trailerBits.add('folded: ${r.runs.length} run(s), ${r.foldedItems} rows'
+              '${where != null ? " · get_scene glintId:\"$where\" for all rows" : ""}');
+          dataBits['folded'] = [for (final run in r.runs) run.toJson()];
+          warnings.addAll(await _eagerListFindings(session, semantic, r.runs));
+        }
+        if (used < PlainTextSceneRenderer.defaultMaxDepth) {
+          trailerBits.add('abridged to depth $used ($original → ${r.lineCount} lines)'
+              ' · get_scene glintId:<id> for any part');
+          dataBits['abridged'] = {'depth': used, 'fromLines': original, 'toLines': r.lineCount};
+        }
+        rendered = r.text;
+      }
 
       final state = const StateObserver().observe(semantic);
       final lifecycle = await session.lifecycleState();
       final ui = await session.uiState();
-      return StructuredResponse(
-        summary: rendered,
-        data: {
-          'format': format,
-          'state': state.name,
-          if (lifecycle != null && lifecycle != 'resumed') 'lifecycle': lifecycle,
-          if (ui.focusedType != null) 'focusedType': ui.focusedType,
-          if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
-          if (ui.orientation != null && ui.orientation != 'portrait')
-            'orientation': ui.orientation,
-          if (ui.brightness != null && ui.brightness != 'light')
-            'brightness': ui.brightness,
-          if (semantic.routeStack.isNotEmpty)
-            'route': semantic.routeStack.first.toJson(),
-          if (semantic.overlayLayers.isNotEmpty) ...{
-            'hasOverlay': true,
-            'overlayKind': semantic.overlayLayers.first.kind,
+      final route =
+          semantic.routeStack.isEmpty ? null : semantic.routeStack.first;
+      final overlay = semantic.overlayLayers.isEmpty
+          ? null
+          : semantic.overlayLayers.first.kind;
+      final trailer = [
+        'state: ${state.name}',
+        if (lifecycle != null && lifecycle != 'resumed') 'lifecycle: $lifecycle',
+        if (route != null) 'route: ${route.name}',
+        if (overlay != null) 'overlay: $overlay',
+        if (ui.focusedType != null) 'focused: ${ui.focusedType}',
+        if (ui.keyboardBottomPx > 0) 'keyboard: visible',
+        if (ui.orientation != null && ui.orientation != 'portrait')
+          'orientation: ${ui.orientation}',
+        if (ui.brightness != null && ui.brightness != 'light')
+          'brightness: ${ui.brightness}',
+        if (subtree != null) 'subtree: $glintId',
+        ...trailerBits,
+      ].join(' · ');
+
+      if (format == 'json') {
+        return StructuredResponse(
+          summary: rendered,
+          warnings: warnings,
+          data: {
+            'format': format,
+            'state': state.name,
+            if (lifecycle != null && lifecycle != 'resumed')
+              'lifecycle': lifecycle,
+            if (ui.focusedType != null) 'focusedType': ui.focusedType,
+            if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
+            if (ui.orientation != null && ui.orientation != 'portrait')
+              'orientation': ui.orientation,
+            if (ui.brightness != null && ui.brightness != 'light')
+              'brightness': ui.brightness,
+            if (route != null) 'route': route.toJson(),
+            if (overlay != null) ...{'hasOverlay': true, 'overlayKind': overlay},
+            if (subtree != null) 'subtree': glintId,
+            ...dataBits,
           },
-        },
+        );
+      }
+      return StructuredResponse(
+        summary: '${rendered.trimRight()}\n$trailer',
+        warnings: warnings,
+        textOnly: true,
       );
-    } finally {
-      await scene.dispose();
+    });
+  }
+
+  static const _eagerListLabels = {
+    'ListView',
+    'SingleChildScrollView',
+    'CustomScrollView',
+  };
+
+  /// A folded run of more than ten rows whose last row is laid out far below
+  /// the viewport means the list builds everything up front. Reported once per
+  /// screen, as advice for whoever owns the app.
+  Future<List<String>> _eagerListFindings(GlintSession session,
+      SemanticScene semantic, List<FoldedRun> runs) async {
+    if (!session.config.devHints) return const [];
+    final app = session.active;
+    final signature = semantic.sourceScene.contentSignature();
+    if (app == null || app.lastHintSignature == signature) return const [];
+    final out = <String>[];
+    for (final run in runs) {
+      if (run.count <= 10 || run.listId == null || run.lastItemId == null) continue;
+      final label = semantic.sourceFor(run.listId!)?.baseLabel;
+      if (label == null || !_eagerListLabels.contains(label)) continue;
+      try {
+        final last = await session.resolver.resolve(semantic.sourceScene, run.lastItemId!);
+        final vh = last.logicalViewSize.h;
+        if (vh <= 0 || last.logicalCenter.y < vh * 2) continue;
+        int? fit;
+        if (run.firstItemId != null && run.count > 1) {
+          final first = await session.resolver.resolve(semantic.sourceScene, run.firstItemId!);
+          final pitch = (last.logicalCenter.y - first.logicalCenter.y) / (run.count - 1);
+          if (pitch > 0) fit = (vh / pitch).floor();
+        }
+        out.add('list ${run.listId} has ${run.count} rows built'
+            '${fit != null ? ", about $fit fit on screen" : ", far more than fit on screen"}'
+            '; it is not lazy. If this is your app, consider ListView.builder');
+      } on GeometryResolveError {
+        continue;
+      }
+    }
+    if (out.isNotEmpty) app.lastHintSignature = signature;
+    return out;
+  }
+
+  Future<String?> _safeLifecycle(GlintSession session) async {
+    try {
+      return await session.lifecycleState();
+    } on Object {
+      return null;
     }
   }
 
@@ -113,20 +315,37 @@ class GetSceneTool extends GlintTool {
         errorKind: GlintErrorKind.unsupportedBackendAction,
       );
     }
+    final app = session.active;
+    final lifecycle = app?.lastLifecycle ?? await _safeLifecycle(session);
+    final overlay = lifecycleIsOverlay(lifecycle);
+    final capture = app?.captures.newest ?? await app?.captureNow('lifecycle');
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
+    final dpr = session.device.devicePixelRatio;
     return StructuredResponse(
-      summary: isSentinel
-          ? '--- native surface active ---\n'
-              'A native iOS surface is blocking the Flutter UI. No widget tree available.\n'
-              'Options: use `hardware_button home` to return to the app, or wait for the '
-              'app to return to the foreground.'
-          : '--- native surface ---\n${NativeSceneReader.renderAsText(nativeScene)}',
+      summary: [
+        '--- native surface active ---',
+        '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
+        if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
+        if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
+      ].join('\n'),
+      nextSteps: [
+        if (capture != null) 'read the screenshot to see what is on top',
+        if (overlay)
+          'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
+        if (overlay) 'or wait: some sheets dismiss on their own, then get_scene again',
+        if (!overlay) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
+        if (!overlay) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+      ],
       data: {
         'format': format,
         'state': 'native',
         'nativeScene': true,
         'sceneMode': 'native',
+        if (lifecycle != null) 'lifecycle': lifecycle,
+        'overlay': overlay,
+        if (capture != null) 'screenshot': capture.toJson(),
+        'devicePixelRatio': dpr,
       },
     );
   }

@@ -30,4 +30,15 @@ void main() {
       expect(expr, isNot(contains('HitTestResult r')));
     });
   });
+
+  group('GeometryExpr.buildImplicitViewProbe()', () {
+    test('needs no inspector selection and carries dpr/vw/vh', () {
+      final expr = GeometryExpr.buildImplicitViewProbe();
+      expect(expr, isNot(contains('selection')));
+      expect(expr, contains('implicitView'));
+      for (final key in ['dpr', 'vw', 'vh']) {
+        expect(expr, contains('"$key":'));
+      }
+    });
+  });
 }

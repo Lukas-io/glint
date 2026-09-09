@@ -11,7 +11,8 @@ sealed class DeviceTarget {
   /// iOS UDID or Android serial.
   String get id;
 
-  /// Input-coords-to-physical-pixels scale: iOS uses the real DPR, Android takes raw pixels so 1.0.
+  /// Logical-coords→physical-pixels scale. Device mode passes screenshot
+  /// pixels (1.0); Flutter mode passes logical points, so this is the real DPR.
   double get devicePixelRatio;
 
   /// Screen size for device-mode center anchoring, or null if unknown.
@@ -28,6 +29,7 @@ class AndroidDevice extends DeviceTarget {
     this.adbPath = 'adb',
     this.screenWidth,
     this.screenHeight,
+    this.devicePixelRatio = 1.0,
   });
 
   /// adb `-s` serial, e.g. `emulator-5554`.
@@ -38,14 +40,16 @@ class AndroidDevice extends DeviceTarget {
   final double? screenWidth;
   final double? screenHeight;
 
+  /// 1.0 in device mode (adb takes physical pixels); the real DPR in Flutter
+  /// mode so logical-point coordinate gestures scale to physical pixels.
+  @override
+  final double devicePixelRatio;
+
   @override
   DevicePlatform get platform => DevicePlatform.android;
 
   @override
   String get id => serial;
-
-  @override
-  double get devicePixelRatio => 1.0;
 
   @override
   ({double w, double h})? get screenSize =>

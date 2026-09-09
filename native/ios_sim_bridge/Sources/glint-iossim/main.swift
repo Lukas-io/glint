@@ -196,6 +196,36 @@ do {
         try proxy.typeText(args[3])
         print("OK type \(args[2]) \(args[3].count) chars")
 
+    case "key":
+        // Press one HID usage N times, holding a modifier mask (bit i = usage 0xE0+i).
+        guard args.count == 6,
+            let usage = Int32(args[3]),
+            let count = Int(args[4]), count >= 1, count <= 500,
+            let mask = Int(args[5]), mask >= 0, mask <= 15
+        else {
+            die("usage: glint-iossim key <UDID> <hid-usage> <count 1-500> <modifier-mask 0-15>")
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        try proxy.pressKey(usage: usage, count: count, modifierMask: mask)
+        print("OK key \(args[2]) usage=\(usage) x\(count) mods=\(mask)")
+
+    case "frames":
+        // Extract distinct frames from a recorded video via AVFoundation.
+        guard args.count == 7,
+            let everyMs = Int(args[4]), everyMs >= 16, everyMs <= 1000,
+            let maxFrames = Int(args[5]), maxFrames >= 1, maxFrames <= 60,
+            let distinct = Int(args[6]), distinct == 0 || distinct == 1
+        else {
+            die("usage: glint-iossim frames <video> <outDir> <everyMs 16-1000> <maxFrames 1-60> <distinct 0|1>")
+        }
+        try FrameSampler.run(FrameSampler.Options(
+            video: URL(fileURLWithPath: args[2]),
+            outDir: URL(fileURLWithPath: args[3]),
+            everyMs: everyMs,
+            maxFrames: maxFrames,
+            distinctOnly: distinct == 1,
+        ))
+
     case "ax-snapshot":
         // Read the iOS Simulator window's accessibility tree via macOS AXUIElement.
         // Works because the Simulator renders as a standard macOS window whose

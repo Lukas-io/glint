@@ -4,6 +4,7 @@ import 'package:vm_service/vm_service.dart';
 
 import '../vm/vm_client.dart';
 import 'flutter_runtime.dart';
+import 'inspector_params.dart';
 
 // RPCError code emitted by vm_service when the WebSocket connection drops.
 const _kConnectionClosedCode = 100;
@@ -71,9 +72,14 @@ class VmServiceRuntime implements FlutterRuntime {
   /// Wraps a VM service call and converts disconnect-class errors to
   /// [RuntimeConnectionLostError] so the tool layer can return a structured,
   /// recoverable [GlintErrorKind.connectionLost] response.
-  Future<T> _guard<T>(Future<T> Function() fn) async {
+  /// Longest a single VM service call may take before it is reported as [RuntimeUnresponsiveError].
+  static const callTimeout = Duration(seconds: 10);
+
+  Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call'}) async {
     try {
-      return await fn();
+      return await fn().timeout(callTimeout);
+    } on TimeoutException {
+      throw RuntimeUnresponsiveError(op, callTimeout);
     } on StateError catch (e) {
       throw RuntimeConnectionLostError(e);
     } on RPCError catch (e) {
@@ -103,12 +109,12 @@ class VmServiceRuntime implements FlutterRuntime {
     final resp = await _guard(() => _vm.service.callServiceExtension(
       'ext.flutter.inspector.getRootWidgetTree',
       isolateId: flutterIsolateId,
-      args: {
-        'groupName': groupName,
-        'isSummaryTree': isSummaryTree.toString(),
-        'withPreviews': withPreviews.toString(),
-        'fullDetails': fullDetails.toString(),
-      },
+      args: InspectorParams.rootWidgetTree(
+        groupName: groupName,
+        isSummaryTree: isSummaryTree,
+        withPreviews: withPreviews,
+        fullDetails: fullDetails,
+      ),
     ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
@@ -129,11 +135,11 @@ class VmServiceRuntime implements FlutterRuntime {
     final resp = await _guard(() => _vm.service.callServiceExtension(
       'ext.flutter.inspector.getDetailsSubtree',
       isolateId: flutterIsolateId,
-      args: {
-        'arg': inspectorId,
-        'objectGroup': groupName,
-        'subtreeDepth': subtreeDepth.toString(),
-      },
+      args: InspectorParams.detailsSubtree(
+        inspectorId: inspectorId,
+        groupName: groupName,
+        subtreeDepth: subtreeDepth,
+      ),
     ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
@@ -153,7 +159,8 @@ class VmServiceRuntime implements FlutterRuntime {
     await _vm.service.callServiceExtension(
       'ext.flutter.inspector.setSelectionById',
       isolateId: flutterIsolateId,
-      args: {'arg': inspectorId, 'objectGroup': groupName},
+      args: InspectorParams.selectionById(
+          inspectorId: inspectorId, groupName: groupName),
     );
   }
 
@@ -163,11 +170,39 @@ class VmServiceRuntime implements FlutterRuntime {
       await _vm.service.callServiceExtension(
         'ext.flutter.inspector.disposeGroup',
         isolateId: flutterIsolateId,
-        args: {'groupName': groupName},
+        args: InspectorParams.disposeGroup(groupName),
       );
     } on Object {
       // best-effort
     }
+  }
+
+  @override
+  Future<String?> appRootDirectory() async {
+    final root = rootLibraryUri;
+    if (root == null) return null;
+    try {
+      final resolved =
+          await _vm.service.lookupResolvedPackageUris(flutterIsolateId, [root]);
+      final uris = resolved.uris;
+      if (uris == null || uris.isEmpty) return null;
+      return appRootFromMainScript(uris.first);
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> setPubRootDirectories(List<String> dirs) async {
+    if (dirs.isEmpty) return;
+    await _guard(
+      () => _vm.service.callServiceExtension(
+        'ext.flutter.inspector.addPubRootDirectories',
+        isolateId: flutterIsolateId,
+        args: InspectorParams.pubRootDirectories(dirs),
+      ),
+      op: 'addPubRootDirectories',
+    );
   }
 
   // ── evaluation ────────────────────────────────────────────────────
@@ -182,6 +217,7 @@ class VmServiceRuntime implements FlutterRuntime {
     try {
       raw = await _guard(
         () => _vm.service.evaluate(flutterIsolateId, rootLib, expression),
+        op: 'evaluate',
       );
     } on RPCError catch (e) {
       // Code 113 = expression compilation error (e.g. platform view context).
