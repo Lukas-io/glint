@@ -18,6 +18,7 @@ class ScrollToFindTool extends GlintTool {
         name: 'scroll_to_find',
         description:
             'Scroll a direction until a target appears and is hittable. '
+            'Needs a Flutter app (device mode: errorKind flutterModeRequired). '
             'Match by targetGlintId (exact stable id from get_scene) OR '
             'targetTextContent (substring match against any text node). '
             'Returns ok:true and the found glintId when the target is hittable. '

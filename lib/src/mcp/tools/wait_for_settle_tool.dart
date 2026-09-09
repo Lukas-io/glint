@@ -16,7 +16,8 @@ class WaitForSettleTool extends GlintTool {
         description:
             'Block until the screen is visually stable: no scheduled frames '
             'AND no loading spinners (CircularProgressIndicator, '
-            'LinearProgressIndicator, RefreshIndicator). '
+            'LinearProgressIndicator, RefreshIndicator). Needs a Flutter app '
+            '(device mode: errorKind flutterModeRequired). '
             'Use after an action that triggers async work (network call, '
             'animation, route transition) before reading the scene again. '
             'ceilingMs: hard timeout (default 5000). '
