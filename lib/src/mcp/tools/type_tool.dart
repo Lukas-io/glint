@@ -23,7 +23,9 @@ class TypeTool extends GlintTool {
             'Returns structuredContent with: ok (bool), changed (bool), '
             'changeCategory. '
             'errorKind: unresolvedTarget (focus glintId not found), '
-            'targetNeverReady (focus field never became hittable within ceilingMs).',
+            'targetNeverReady (focus field never became hittable within ceilingMs). '
+            'Device mode: types into whatever the OS has focused, with no '
+            'change signal; focus: needs a Flutter app.',
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(description: 'Printable-ASCII text to type.'),
@@ -64,6 +66,7 @@ class TypeTool extends GlintTool {
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
     final t = readTargetedArgs(args, session.config);
+    if (session.isDeviceMode) return _typeInDeviceMode(session, text, focus);
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -125,5 +128,40 @@ class TypeTool extends GlintTool {
     } finally {
       await action.dispose();
     }
+  }
+
+  /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focus.
+  Future<StructuredResponse> _typeInDeviceMode(
+      GlintSession session, String text, String? focus) async {
+    if (focus != null) {
+      return StructuredResponse.error(
+        summary: 'focus:$focus needs a Flutter app; this session is in device mode',
+        errorKind: GlintErrorKind.invalidArgument,
+        detail: 'device mode has no widget tree to resolve a glintId against',
+        nextSteps: const [
+          'tap x,y on the field first (screenshot pixels), then type without focus',
+        ],
+      );
+    }
+    try {
+      await session.backend.typeText(text);
+    } on UnsupportedBackendAction catch (e) {
+      return StructuredResponse.error(
+        summary: '${session.backend.label}: typing not supported',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: e.detail,
+      );
+    } on Object catch (e) {
+      return StructuredResponse.error(
+        summary: 'typing failed in device mode',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '$e',
+      );
+    }
+    return StructuredResponse(
+      summary: 'typed ${text.length} chars (device mode: no change signal)',
+      data: {'ok': true, 'mode': 'device', 'chars': text.length},
+      nextSteps: const ['device op:screenshot to confirm the text landed'],
+    );
   }
 }

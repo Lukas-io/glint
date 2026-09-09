@@ -73,11 +73,12 @@ const _recovery = '''
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady` — never hittable; dismiss the cover or raise `readyTimeoutMs`.
-- `targetNotFound` — `scroll_to_find` miss; `detail` lists the text on screen: wrong screen or wrong words.
+- `targetNotFound` — `scroll_to_find` miss; `detail` lists on-screen text.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped (hot restart?). `attach` again.
 - `appUnresponsive` — app suspended (locked device / breakpoint). Unlock or reopen, retry.
 - `deviceGone` — the simulator was closed; `attach device:"<id>"` boots + relaunches.
+- `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
 - `unknownApp` — `app:` matched none/several attached apps; pick from the list.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — app behind a native surface. `hardware_button home` or dismiss it, retry.
@@ -95,7 +96,6 @@ const _gotchas = '''
 - **Overlay:** dialog ids live under `--- dialog ---`. Never tap base-screen nodes while a dialog is up.
 - **`type` needs focus:** `focus:<id>` taps the field first.
 - **Scroll is content-relative:** `scroll down` moves content down (finger swipes up). `scroll_to_find text:"…"` matches case-insensitively.
-- **iOS hardware buttons:** `lock`, `unlock`, `home`.
 ''';
 
 const _toolSurface = '''

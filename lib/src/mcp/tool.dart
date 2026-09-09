@@ -99,19 +99,22 @@ abstract class GlintTool {
       }
     } on SessionNotAttachedError catch (e) {
       final pooled = session.apps;
-      response = StructuredResponse.error(
-        summary: pooled.isEmpty
-            ? 'glint is not attached to a Flutter app yet'
-            : 'no active app — ${pooled.length} attached app(s) to pick from',
-        errorKind: GlintErrorKind.sessionNotAttached,
-        detail: e.toString(),
-        nextSteps: pooled.isEmpty
-            ? const ['call `attach` (no args) to discover and connect the running app']
-            : [
-                for (final a in pooled)
-                  'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
-              ],
-      );
+      final active = session.active;
+      response = active != null && active.deviceMode
+          ? flutterModeRequiredResponse(definition.name, active, e)
+          : StructuredResponse.error(
+              summary: pooled.isEmpty
+                  ? 'glint is not attached to a Flutter app yet'
+                  : 'no active app — ${pooled.length} attached app(s) to pick from',
+              errorKind: GlintErrorKind.sessionNotAttached,
+              detail: e.toString(),
+              nextSteps: pooled.isEmpty
+                  ? const ['call `attach` (no args) to discover and connect the running app']
+                  : [
+                      for (final a in pooled)
+                        'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
+                    ],
+            );
     } on RuntimeConnectionLostError catch (e) {
       response = StructuredResponse.error(
         summary: 'VM service connection lost — the app may have hot-restarted '
@@ -161,6 +164,24 @@ abstract class GlintTool {
               'if a debugger paused it, resume it',
           'attach again if the app was restarted',
         ],
+      ],
+    );
+  }
+
+  /// The session is attached, but in device mode: say what the tool is missing and what works without a Flutter tree.
+  static StructuredResponse flutterModeRequiredResponse(
+      String tool, AppSession app, SessionNotAttachedError cause) {
+    return StructuredResponse.error(
+      summary: '`$tool` needs a Flutter app; this session is in device mode '
+          'on ${app.deviceName ?? app.id}',
+      errorKind: GlintErrorKind.flutterModeRequired,
+      detail: 'device mode drives the simulator with no Flutter widget tree, '
+          'so the ${cause.missing} is unavailable',
+      nextSteps: const [
+        'once the app is running, attach without mode:"device" '
+            '(attach app:"<name>" or attach vmUri:<uri>)',
+        'in device mode use tap / long_press / swipe / drag with x,y '
+            '(screenshot pixels), type, hardware_button, device op:screenshot',
       ],
     );
   }
