@@ -65,7 +65,7 @@ class DragTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final durationMs = (args['durationMs'] as int?) ?? 800;
+    final durationMs = argInt(args, 'durationMs') ?? 800;
     final t = readTargetedArgs(args, session.config);
 
     final seg = readSegment(args);

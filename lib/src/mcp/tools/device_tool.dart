@@ -6,6 +6,7 @@ import '../../../interaction.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `device` — inspect or configure an iOS simulator. Defaults to the attached
 /// device; pass `udid` to target another booted sim. ops: status (default) |
@@ -124,7 +125,7 @@ class DeviceTool extends GlintTool {
       case 'screenshot':
         final app = session.active;
         if (app != null && (args['udid'] as String?) == null) {
-          final latest = (args['latest'] as bool?) ?? false;
+          final latest = argBool(args, 'latest') ?? false;
           final capture = latest
               ? (app.captures.newest ?? await app.captureNow('explicit'))
               : await app.captureNow('explicit');

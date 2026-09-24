@@ -1,3 +1,5 @@
+import 'loose_value.dart';
+
 /// Runtime-tunable defaults. Tools that have a baked-in constant
 /// (poll cadences, ceilings, ring capacities) consult this instead,
 /// so the agent can adjust them via the `config` MCP tool without
@@ -122,7 +124,7 @@ class GlintConfig {
         if (v == null) return 'scrollMaxScrolls must be a positive int';
         scrollMaxScrolls = v;
       case 'scrollAmountFraction':
-        final v = (value is num) ? value.toDouble() : null;
+        final v = looseNum(value);
         if (v == null || v <= 0 || v > 1) {
           return 'scrollAmountFraction must be in (0, 1]';
         }
@@ -148,7 +150,7 @@ class GlintConfig {
         if (v == null) return 'sceneLineBudget must be a positive int';
         sceneLineBudget = v;
       case 'devHints':
-        final v = value is bool ? value : (value == 'true' ? true : value == 'false' ? false : null);
+        final v = looseBool(value);
         if (v == null) return 'devHints must be true or false';
         devHints = v;
       case 'captureSettleMs':
@@ -162,10 +164,7 @@ class GlintConfig {
   }
 
   static int? _asPositiveInt(Object value) {
-    if (value is int && value > 0) return value;
-    if (value is num && value > 0 && value == value.toInt()) {
-      return value.toInt();
-    }
-    return null;
+    final v = looseInt(value);
+    return v != null && v > 0 ? v : null;
   }
 }

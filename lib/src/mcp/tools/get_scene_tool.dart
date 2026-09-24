@@ -7,6 +7,7 @@ import '../../../semantic.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `get_scene` — the semantic scene for the current screen. Text by
 /// default, JSON on request.
@@ -56,7 +57,7 @@ class GetSceneTool extends GlintTool {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
     final glintId = args['glintId'] as String?;
-    final depth = args['depth'] as int?;
+    final depth = argInt(args, 'depth');
 
     // Validate format up front — before the scene read + VM-eval enrichers,
     // so a bad arg fails cheaply instead of after the round-trips.

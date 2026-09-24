@@ -5,6 +5,7 @@ import '../batch_runner.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `batch` — run an ordered list of gesture steps server-side in one call.
 /// Each step settles like a normal call; the batch stops at the first error
@@ -52,8 +53,8 @@ class BatchTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final stopOnNoChange = (args['stopOnNoChange'] as bool?) ?? true;
-    final returnScene = (args['returnScene'] as bool?) ?? true;
+    final stopOnNoChange = argBool(args, 'stopOnNoChange') ?? true;
+    final returnScene = argBool(args, 'returnScene') ?? true;
 
     final parsed = parseBatchSteps(args['steps'], maxSteps: _maxSteps);
     if (parsed.error != null) return parsed.error!;

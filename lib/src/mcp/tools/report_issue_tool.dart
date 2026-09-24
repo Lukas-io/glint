@@ -8,6 +8,7 @@ import '../../../observability.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 const String _kRepo = 'Lukas-io/glint';
 const String _kIssueNewBase = 'https://github.com/Lukas-io/glint/issues/new';
@@ -68,8 +69,8 @@ class ReportIssueTool extends GlintTool {
     final type = args['type']! as String;
     final titleRaw = args['title']! as String;
     final bodyRaw = args['body']! as String;
-    final includeContext = (args['includeContext'] as bool?) ?? true;
-    final dryRun = (args['dryRun'] as bool?) ?? false;
+    final includeContext = argBool(args, 'includeContext') ?? true;
+    final dryRun = argBool(args, 'dryRun') ?? false;
 
     if (!const {'bug', 'ux', 'feature'}.contains(type)) {
       return StructuredResponse.error(

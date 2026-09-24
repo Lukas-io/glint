@@ -59,7 +59,7 @@ class LongPressTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final durationMs = (args['durationMs'] as int?) ?? 500;
+    final durationMs = argInt(args, 'durationMs') ?? 500;
     final t = readTargetedArgs(args, session.config);
 
     final pt = readPoint(args);
