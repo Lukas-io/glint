@@ -9,7 +9,8 @@ class _FakeRuntime implements FlutterRuntime {
   Future<void> setInspectorSelection(
           {required String inspectorId, required String groupName}) async {}
   @override
-  Future<String?> evaluateString(String expression) async =>
+  Future<String?> evaluateString(String expression,
+          {bool rethrowErrors = false}) async =>
       '{"gx":100,"gy":200,"bx":0,"by":0,"bw":40,"bh":40,"dpr":2,'
       '"vw":400,"vh":800,"op":1.0,"vis":true,"hit":true}';
   @override
