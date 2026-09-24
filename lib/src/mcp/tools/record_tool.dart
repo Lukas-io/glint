@@ -54,10 +54,10 @@ class RecordTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final durationMs = (args['durationMs'] as int?) ?? 400;
-    final everyMs = (args['everyMs'] as int?) ?? 50;
-    final distinctOnly = (args['distinctOnly'] as bool?) ?? true;
-    final maxFrames = (args['maxFrames'] as int?) ?? 12;
+    final durationMs = argInt(args, 'durationMs') ?? 400;
+    final everyMs = argInt(args, 'everyMs') ?? 50;
+    final distinctOnly = argBool(args, 'distinctOnly') ?? true;
+    final maxFrames = argInt(args, 'maxFrames') ?? 12;
 
     if (durationMs < 0 || durationMs > 30000) {
       return _bad('durationMs must be 0-30000');
@@ -178,7 +178,7 @@ class RecordTool extends GlintTool {
         ? (session.device as IosSimulator).bridgePath
         : resolveIosBridgePath(null);
     final extraction = await FrameExtractor(bridgePath: bridge).extract(
-      video: video!,
+      video: video,
       outDir: '${dir.path}/frames',
       everyMs: everyMs,
       maxFrames: maxFrames,

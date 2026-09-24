@@ -5,6 +5,7 @@ export 'src/observability/action_log.dart';
 export 'src/observability/app_log_buffer.dart';
 export 'src/observability/glint_config.dart';
 export 'src/observability/log_renderer.dart';
+export 'src/observability/loose_value.dart';
 export 'src/observability/sessions.dart';
 export 'src/observability/state_observer.dart';
 export 'src/observability/telemetry/audit_log.dart';

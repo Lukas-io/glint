@@ -9,6 +9,7 @@ import '../../../semantic.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
@@ -123,9 +124,9 @@ class AttachTool extends GlintTool {
     if (adbResolved == null && platformArg == 'android') {
       return _adbMissing();
     }
-    final returnScene = (args['returnScene'] as bool?) ?? false;
-    final dryRun = (args['dryRun'] as bool?) ?? false;
-    final awaitSettle = (args['awaitSettle'] as bool?) ?? false;
+    final returnScene = argBool(args, 'returnScene') ?? false;
+    final dryRun = argBool(args, 'dryRun') ?? false;
+    final awaitSettle = argBool(args, 'awaitSettle') ?? false;
     final discovery = DeviceDiscovery(adbPath: adbPath);
 
     // One scan powers discovery + identity + the correlation fallback.
@@ -718,12 +719,13 @@ class AttachTool extends GlintTool {
         );
     }
 
-    await session.attachDevice(device: device);
+    final bound = await session.attachDevice(device: device);
 
     final caps = session.backend.capabilities;
     final simStatus = target.platform == DevicePlatform.ios
         ? await const SimControl().status(target.id)
         : null;
+    bound.deviceName = simStatus?.name ?? target.name;
 
     return StructuredResponse(
       summary: 'attached (device mode) to ${simStatus?.name ?? target.name} '

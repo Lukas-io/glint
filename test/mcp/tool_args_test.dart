@@ -1,68 +1,76 @@
-import 'package:glint/glint.dart';
+import 'package:dart_mcp/server.dart';
+import 'package:glint/observability.dart';
+import 'package:glint/src/mcp/tool.dart';
 import 'package:glint/src/mcp/tool_args.dart';
 import 'package:test/test.dart';
 
-enum _Dir { up, down }
-
 void main() {
-  group('enumByName', () {
-    test('matches by name, null on miss or null input', () {
-      expect(enumByName(_Dir.values, 'down'), _Dir.down);
-      expect(enumByName(_Dir.values, 'sideways'), isNull);
-      expect(enumByName(_Dir.values, null), isNull);
+  group('argInt', () {
+    test('reads ints, whole doubles and numeric strings', () {
+      final args = <String, Object?>{'a': 15000, 'b': 15000.0, 'c': '15000', 'd': ' 7 '};
+      expect([for (final k in ['a', 'b', 'c', 'd']) argInt(args, k)],
+          [15000, 15000, 15000, 7]);
+    });
+
+    test('absent is null; a fraction or text is an ArgTypeError naming the key', () {
+      expect(argInt(const {}, 'x'), isNull);
+      expect(() => argInt({'x': 1.5}, 'x'), throwsA(isA<ArgTypeError>()));
+      expect(
+          () => argInt({'x': 'soon'}, 'x'),
+          throwsA(isA<ArgTypeError>().having(
+              (e) => e.toString(), 'text', 'x must be a whole number, got "soon"')));
     });
   });
 
-  group('readPoint', () {
-    test('reads x,y as doubles from ints or nums', () {
-      final p = readPoint(const {'x': 10, 'y': 20.5});
-      expect(p, isNotNull);
-      expect(p!.x, 10.0);
-      expect(p.y, 20.5);
+  test('argNum and argBool accept their string forms', () {
+    expect(argNum({'f': '0.5'}, 'f'), 0.5);
+    expect(argBool({'b': 'true'}, 'b'), isTrue);
+    expect(argBool({'b': false}, 'b'), isFalse);
+    expect(() => argBool({'b': 'yes'}, 'b'), throwsA(isA<ArgTypeError>()));
+  });
+
+  group('GlintConfig.set', () {
+    test('accepts 15000, 15000.0 and "15000" for an int key', () {
+      for (final v in <Object>[15000, 15000.0, '15000']) {
+        final cfg = GlintConfig();
+        expect(cfg.set('attachProbeTimeoutMs', v), isNull, reason: '$v');
+        expect(cfg.attachProbeTimeoutMs, 15000);
+      }
     });
 
-    test('null when either coordinate is absent', () {
-      expect(readPoint(const {'x': 10}), isNull);
-      expect(readPoint(const {'y': 20}), isNull);
-      expect(readPoint(const {}), isNull);
+    test('still refuses zero, negatives and fractions', () {
+      for (final v in <Object>[0, -5, 1.5, 'abc']) {
+        expect(GlintConfig().set('attachProbeTimeoutMs', v), isNotNull, reason: '$v');
+      }
     });
   });
 
-  group('readSegment', () {
-    test('reads all four corners', () {
-      final s = readSegment(const {'x1': 1, 'y1': 2, 'x2': 3, 'y2': 4});
-      expect(s, isNotNull);
-      expect([s!.x1, s.y1, s.x2, s.y2], [1.0, 2.0, 3.0, 4.0]);
+  group('checkArguments', () {
+    final tool = Tool(
+      name: 't',
+      inputSchema: ObjectSchema(
+        properties: {'n': Schema.int(), 'on': Schema.bool(), 's': Schema.string()},
+        required: ['s'],
+      ),
+    );
+    CallToolRequest req(Map<String, Object?> a) =>
+        CallToolRequest(name: 't', arguments: {...a});
+
+    test('numeric and bool strings are coerced in place', () {
+      final r = req({'n': '300', 'on': 'true', 's': 'x'});
+      expect(GlintTool.checkArguments(tool, r), isNull);
+      expect(r.arguments, {'n': 300, 'on': true, 's': 'x'});
     });
 
-    test('null when any corner is missing', () {
-      expect(readSegment(const {'x1': 1, 'y1': 2, 'x2': 3}), isNull);
-    });
-  });
-
-  group('readTargetedArgs', () {
-    test('applies defaults from config when args are absent', () {
-      final t = readTargetedArgs(const {}, GlintConfig(readyTimeoutMs: 7000));
-      expect(t.awaitReady, isFalse);
-      expect(t.readyTimeoutMs, 7000);
-      expect(t.returnScene, isTrue);
-      expect(t.fetchScene, isFalse);
-      expect(t.detail, isFalse);
-    });
-
-    test('reads provided values, overriding the config default', () {
-      final t = readTargetedArgs(const {
-        'awaitReady': true,
-        'readyTimeoutMs': 250,
-        'returnScene': false,
-        'fetchScene': true,
-        'detail': true,
-      }, GlintConfig());
-      expect(t.awaitReady, isTrue);
-      expect(t.readyTimeoutMs, 250);
-      expect(t.returnScene, isFalse);
-      expect(t.fetchScene, isTrue);
-      expect(t.detail, isTrue);
+    test('a wrong type or a missing required field is invalidArgument', () {
+      for (final a in [
+        {'n': 'soon', 's': 'x'},
+        {'n': 1},
+      ]) {
+        final res = GlintTool.checkArguments(tool, req(a));
+        expect(res?.data?['errorKind'], 'invalidArgument', reason: '$a');
+        expect(res?.nextSteps.single, contains('n, on, s'));
+      }
     });
   });
 }

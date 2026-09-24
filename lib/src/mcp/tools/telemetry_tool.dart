@@ -5,6 +5,7 @@ import '../../../observability.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// Inspect or trigger glint's telemetry pipeline:
 ///   status — opt-out + recorder + store + watermark state
@@ -133,8 +134,8 @@ class TelemetryTool extends GlintTool {
   }
 
   StructuredResponse _report(GlintSession session, Map<String, Object?> args) {
-    final sinceId = (args['sinceId'] as int?) ?? 0;
-    final limit = (args['limit'] as int?) ?? 15;
+    final sinceId = argInt(args, 'sinceId') ?? 0;
+    final limit = argInt(args, 'limit') ?? 15;
     final rows = session.usage.eventsAfterId(sinceId);
     if (rows.isEmpty) {
       return StructuredResponse(
@@ -177,8 +178,8 @@ class TelemetryTool extends GlintTool {
       .join(' ');
 
   StructuredResponse _tokenUsage(GlintSession session, Map<String, Object?> args) {
-    final sinceId = (args['sinceId'] as int?) ?? 0;
-    final topN = (args['limit'] as int?) ?? 10;
+    final sinceId = argInt(args, 'sinceId') ?? 0;
+    final topN = argInt(args, 'limit') ?? 10;
     final rows = session.usage.eventsAfterId(sinceId);
     if (rows.isEmpty) {
       return StructuredResponse(
@@ -257,7 +258,7 @@ class TelemetryTool extends GlintTool {
   }
 
   StructuredResponse _auditShow(String dataDir, Map<String, Object?> args) {
-    final limit = (args['limit'] as int?) ?? 20;
+    final limit = argInt(args, 'limit') ?? 20;
     final entries = AuditLog.readAll(dataDir).whereType<AuditEntry>().toList();
     final tail = entries.length > limit
         ? entries.sublist(entries.length - limit)
