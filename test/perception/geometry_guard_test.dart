@@ -11,7 +11,8 @@ class _ProseRuntime implements FlutterRuntime {
           {required String inspectorId, required String groupName}) async {}
 
   @override
-  Future<String?> evaluateString(String expression) async => reply;
+  Future<String?> evaluateString(String expression,
+          {bool rethrowErrors = false}) async => reply;
 
   @override
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();

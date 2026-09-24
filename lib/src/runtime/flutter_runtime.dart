@@ -76,16 +76,17 @@ abstract class FlutterRuntime {
 
   // ── evaluation ────────────────────────────────────────────────────
 
-  /// Evaluates [expression] against the Flutter isolate's root library.
+  /// Evaluates [expression] in a library with the Flutter widgets API in scope (framework first, then the app's own).
   /// Returns the raw [InstanceRef] for the caller to crack open by type.
   /// Throws [RuntimeEvalError] on compilation error or ErrorRef return.
   Future<InstanceRef> evaluate(String expression);
 
   /// Evaluates [expression] and returns its `valueAsString`, transparently
   /// refetching via `getObject` when the value is truncated past the
-  /// 128-char preview. Returns null when the expression returned a
-  /// non-string (different type, ErrorRef converted to null, etc.).
-  Future<String?> evaluateString(String expression);
+  /// 128-char preview. Returns null for a non-string result, and for an eval
+  /// error unless [rethrowErrors], which rethrows the [RuntimeEvalError].
+  Future<String?> evaluateString(String expression,
+      {bool rethrowErrors = false});
 
   /// Sets the inspector selection to [inspectorId] in [groupName], then
   /// evaluates [expression] against the root library. Returns null on any eval
