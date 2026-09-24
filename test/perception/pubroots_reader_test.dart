@@ -67,7 +67,8 @@ class _StubRuntime implements FlutterRuntime {
   @override
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
   @override
-  Future<String?> evaluateString(String expression) async => null;
+  Future<String?> evaluateString(String expression,
+          {bool rethrowErrors = false}) async => null;
   @override
   VmService get rawService => throw UnimplementedError();
   @override

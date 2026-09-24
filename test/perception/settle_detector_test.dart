@@ -10,7 +10,8 @@ class _FakeRuntime implements FlutterRuntime {
   int calls = 0;
 
   @override
-  Future<String?> evaluateString(String expression) async {
+  Future<String?> evaluateString(String expression,
+          {bool rethrowErrors = false}) async {
     final i = calls < phases.length ? calls : phases.length - 1;
     calls++;
     return 'SchedulerPhase.${phases[i]}';
@@ -127,7 +128,8 @@ class _NoGeometryRuntime implements FlutterRuntime {
   Future<void> setInspectorSelection(
           {required String inspectorId, required String groupName}) async {}
   @override
-  Future<String?> evaluateString(String expression) async =>
+  Future<String?> evaluateString(String expression,
+          {bool rethrowErrors = false}) async =>
       '{"gx":1,"gy":1,"bx":0,"by":0,"bw":1,"bh":1,"dpr":1,"vw":1,"vh":1,'
       '"op":1.0,"vis":true,"hit":true}';
   @override

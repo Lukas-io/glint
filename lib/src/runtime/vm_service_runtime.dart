@@ -29,7 +29,21 @@ class VmServiceRuntime implements FlutterRuntime {
   @override
   String get flutterIsolateId => _vm.flutterIsolateId;
 
-  String? get _rootLibId => _vm.flutterIsolate.rootLib?.id;
+  String? _evalLibId;
+  String? _evalLibIsolateId;
+
+  /// Framework libraries whose imports cover every glint expression; tried before the app's own so an app entry that never imports Flutter still works.
+  static const frameworkEvalLibraries = [
+    'package:flutter/src/material/text_field.dart',
+    'package:flutter/src/cupertino/text_field.dart',
+    'package:flutter/src/widgets/widget_inspector.dart',
+  ];
+
+  /// Compiles only where every Flutter name glint's expressions use is in scope.
+  static const scopeCanary = '[WidgetsBinding, WidgetInspectorService, View, '
+      'FocusManager, EditableText, EditableTextState, ModalRoute, Offstage, '
+      'Visibility, Opacity, AbsorbPointer, IgnorePointer, Icon, RichText, '
+      'TextSpan, Offset].length.toString()';
 
   /// Root library URI of the Flutter isolate, e.g. `package:acme_pay/main.dart`.
   /// The package segment is the app's pubspec name — the surest "which app".
@@ -207,16 +221,45 @@ class VmServiceRuntime implements FlutterRuntime {
 
   // ── evaluation ────────────────────────────────────────────────────
 
+  /// The library glint evaluates in, found once per isolate by [scopeCanary].
+  Future<String> _evalLibrary() async {
+    final isolateId = flutterIsolateId;
+    final cached = _evalLibId;
+    if (cached != null && _evalLibIsolateId == isolateId) return cached;
+    final candidates = evalLibraryCandidates(
+      libraries: _vm.flutterIsolate.libraries ?? const [],
+      rootLib: _vm.flutterIsolate.rootLib,
+    );
+    String? lastError;
+    for (final id in candidates) {
+      try {
+        final raw = await _guard(
+          () => _vm.service.evaluate(isolateId, id, scopeCanary),
+          op: 'evaluate',
+        );
+        if (raw is InstanceRef && raw.valueAsString != null) {
+          _evalLibId = id;
+          _evalLibIsolateId = isolateId;
+          return id;
+        }
+      } on RPCError catch (e) {
+        lastError = e.message;
+      }
+    }
+    throw RuntimeEvalError(
+      scopeCanary,
+      'no loaded library has the Flutter widgets API in scope '
+      '(${candidates.length} tried)${lastError == null ? '' : ': $lastError'}',
+    );
+  }
+
   @override
   Future<InstanceRef> evaluate(String expression) async {
-    final rootLib = _rootLibId;
-    if (rootLib == null) {
-      throw RuntimeEvalError(expression, 'flutter isolate has no rootLib');
-    }
+    final library = await _evalLibrary();
     final Object raw;
     try {
       raw = await _guard(
-        () => _vm.service.evaluate(flutterIsolateId, rootLib, expression),
+        () => _vm.service.evaluate(flutterIsolateId, library, expression),
         op: 'evaluate',
       );
     } on RPCError catch (e) {
@@ -250,11 +293,13 @@ class VmServiceRuntime implements FlutterRuntime {
   }
 
   @override
-  Future<String?> evaluateString(String expression) async {
+  Future<String?> evaluateString(String expression,
+      {bool rethrowErrors = false}) async {
     final InstanceRef raw;
     try {
       raw = await evaluate(expression);
     } on RuntimeEvalError {
+      if (rethrowErrors) rethrow;
       return null;
     }
     final s = raw.valueAsString;
@@ -281,4 +326,29 @@ class VmServiceRuntime implements FlutterRuntime {
 
   @override
   Stream<Event> get loggingEvents => _vm.service.onLoggingEvent;
+}
+
+/// Eval library ids in preference order: Flutter framework libraries, then the root library, then the rest of the app's package.
+List<String> evalLibraryCandidates({
+  required List<LibraryRef> libraries,
+  required LibraryRef? rootLib,
+}) {
+  final byUri = {
+    for (final l in libraries)
+      if (l.uri != null && l.id != null) l.uri!: l.id!,
+  };
+  final ordered = <String>[
+    for (final uri in VmServiceRuntime.frameworkEvalLibraries)
+      if (byUri[uri] != null) byUri[uri]!,
+    if (rootLib?.id != null) rootLib!.id!,
+  ];
+  final rootUri = rootLib?.uri;
+  if (rootUri != null && rootUri.startsWith('package:')) {
+    final prefix = rootUri.substring(0, rootUri.indexOf('/') + 1);
+    ordered.addAll(byUri.entries
+        .where((e) => e.key.startsWith(prefix))
+        .map((e) => e.value)
+        .take(20));
+  }
+  return ordered.toSet().toList();
 }
