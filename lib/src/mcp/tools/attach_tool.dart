@@ -1057,7 +1057,10 @@ class AttachTool extends GlintTool {
       nextSteps: [
         if (running != null)
           for (final r in running)
-            r.label != null
+            r.label != null &&
+                    running.where((o) => o.label == r.label).length > 1
+                ? 'attach vmUri:"${r.vmUri}"  (${r.label} on ${r.deviceName ?? r.deviceId ?? "device unknown"})'
+                : r.label != null
                 ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
                 : r.deviceId != null
                     ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
