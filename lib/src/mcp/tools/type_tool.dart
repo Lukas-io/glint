@@ -72,7 +72,7 @@ class TypeTool extends GlintTool {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
-    final clear = (args['clear'] as bool?) ?? false;
+    final clear = argBool(args, 'clear') ?? false;
     final t = readTargetedArgs(args, session.config);
     if (session.isDeviceMode) return _typeInDeviceMode(session, text, focus, clear);
 

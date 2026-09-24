@@ -100,7 +100,7 @@ class TapTool extends GlintTool {
         ],
       );
     }
-    final refuse = (args['refuseNotHittable'] as bool?) ?? false;
+    final refuse = argBool(args, 'refuseNotHittable') ?? false;
 
     final arming = await maybeAwaitReady(
       session: session,

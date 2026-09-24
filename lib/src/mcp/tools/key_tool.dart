@@ -65,7 +65,7 @@ class KeyTool extends GlintTool {
         nextSteps: ['use one of: ${KeyName.values.map((k) => k.name).join(', ')}'],
       );
     }
-    final count = (args['count'] as int?) ?? 1;
+    final count = argInt(args, 'count') ?? 1;
     if (count < 1 || count > 50) {
       return StructuredResponse.error(
         summary: 'count $count out of range',

@@ -4,6 +4,7 @@ import '../../../perception.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// §8.4: poll frame quiescence + loading affordances, return when the
 /// screen is stable or the ceiling is reached.
@@ -47,10 +48,10 @@ class WaitForSettleTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final ceilingMs =
-        (args['ceilingMs'] as int?) ?? session.config.settleCeilingMs;
+        argInt(args, 'ceilingMs') ?? session.config.settleCeilingMs;
     final quietFrames =
-        (args['quietFrames'] as int?) ?? session.config.settleQuietFrames;
-    final checkAffordances = (args['checkLoadingAffordances'] as bool?) ?? true;
+        argInt(args, 'quietFrames') ?? session.config.settleQuietFrames;
+    final checkAffordances = argBool(args, 'checkLoadingAffordances') ?? true;
 
     final result = await session.settleDetector.awaitSettle(
       ceilingMs: ceilingMs,

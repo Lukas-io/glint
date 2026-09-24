@@ -68,7 +68,7 @@ class SwipeTool extends GlintTool {
     // Coordinate swipe — bypasses scene resolution; the only path in device mode.
     final seg = readSegment(args);
     if (seg != null) {
-      final durationMs = (args['durationMs'] as int?) ?? 300;
+      final durationMs = argInt(args, 'durationMs') ?? 300;
       return withCoordinateChange(
         session,
         () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs),

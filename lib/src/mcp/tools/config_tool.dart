@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
@@ -66,13 +68,18 @@ class ConfigTool extends GlintTool {
           return StructuredResponse.error(
             summary: err,
             errorKind: GlintErrorKind.invalidArgument,
-            nextSteps: ['keys: $keys'],
+            detail: 'received ${jsonEncode(value)} (${value.runtimeType})',
+            nextSteps: [
+              'config op:get shows each key with its current value and type',
+              'keys: $keys',
+            ],
           );
         }
+        final stored = cfg.toJson()[key];
         // Echo only the changed setting — `config op:get` returns the full map.
         return StructuredResponse(
-          summary: '$key = $value',
-          data: {'key': key, 'value': value},
+          summary: '$key = $stored',
+          data: {'key': key, 'value': stored},
         );
       default:
         return StructuredResponse.error(

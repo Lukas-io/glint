@@ -4,6 +4,7 @@ import '../../../observability.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// Query the action log. Every tool call is recorded automatically
 /// (success or failure) with timestamp + args + summary + elapsedMs.
@@ -42,10 +43,10 @@ class LogsTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
-    final limit = (args['limit'] as int?) ?? 50;
+    final limit = argInt(args, 'limit') ?? 50;
     final toolFilter = args['tool'] as String?;
-    final failuresOnly = args['failuresOnly'] as bool?;
-    final sinceSeq = args['sinceSeq'] as int?;
+    final failuresOnly = argBool(args, 'failuresOnly');
+    final sinceSeq = argInt(args, 'sinceSeq');
 
     // Note: this tool's own log entry hasn't been recorded yet (logging
     // happens after handle returns), so we won't recursively surface it.
