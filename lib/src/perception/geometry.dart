@@ -38,7 +38,8 @@ class ResolvedCoord {
     // logicalBounds is node-local. Translate to global via the relationship
     // globalOrigin = logicalCenter - bounds.center. Exact for axis-aligned
     // non-transformed boxes.
-    final globalLeft = logicalCenter.x - (logicalBounds.x + logicalBounds.w / 2);
+    final globalLeft =
+        logicalCenter.x - (logicalBounds.x + logicalBounds.w / 2);
     final globalTop = logicalCenter.y - (logicalBounds.y + logicalBounds.h / 2);
     final globalRight = globalLeft + logicalBounds.w;
     final globalBottom = globalTop + logicalBounds.h;
@@ -120,7 +121,9 @@ class CoordinateResolver {
   Future<({double dpr, double w, double h})> resolveViewportNodeFree() async {
     final String? json;
     try {
-      json = await _runtime.evaluateString(GeometryExpr.buildImplicitViewProbe());
+      json = await _runtime.evaluateString(
+          GeometryExpr.buildImplicitViewProbe(),
+          rethrowErrors: true);
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(implicitView) failed: ${e.message}');
     }
@@ -155,7 +158,8 @@ class CoordinateResolver {
     }
     final String? json;
     try {
-      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe());
+      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe(),
+          rethrowErrors: true);
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(viewProbe) failed: ${e.message}');
     }
@@ -189,7 +193,8 @@ class CoordinateResolver {
 
     final String? json;
     try {
-      json = await _runtime.evaluateString(GeometryExpr.build());
+      json = await _runtime.evaluateString(GeometryExpr.build(),
+          rethrowErrors: true);
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
     }
@@ -208,9 +213,8 @@ class CoordinateResolver {
     // scene already detected: a base-tree node under a barrier is not hittable.
     final evalHittable = decoded['hit'] as bool;
     final id = node.glintId;
-    final blockedByBarrier = scene.hasBarrierOverlay &&
-        id != null &&
-        !scene.isInOverlay(id);
+    final blockedByBarrier =
+        scene.hasBarrierOverlay && id != null && !scene.isInOverlay(id);
     return ResolvedCoord(
       glintId: node.glintId!,
       logicalCenter: (
