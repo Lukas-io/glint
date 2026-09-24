@@ -5,6 +5,7 @@ import '../../../observability.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// Query the app-side log buffer — FlutterError exceptions, developer.log
 /// messages, anything the running Flutter app wrote to stderr or logging.
@@ -44,11 +45,11 @@ class AppLogsTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final limit = (args['limit'] as int?) ?? 50;
-    final errorsOnly = (args['errorsOnly'] as bool?) ?? false;
+    final limit = argInt(args, 'limit') ?? 50;
+    final errorsOnly = argBool(args, 'errorsOnly') ?? false;
     final asJson = (args['format'] as String?) == 'json';
     final streamName = args['stream'] as String?;
-    final sinceSeq = args['sinceSeq'] as int?;
+    final sinceSeq = argInt(args, 'sinceSeq');
 
     AppLogStream? streamFilter;
     if (streamName != null) {
@@ -74,11 +75,12 @@ class AppLogsTool extends GlintTool {
         .toList();
 
     final summary = entries.isEmpty
-        ? '(no entries)'
+        ? '(no entries)${_whyEmpty(session)}'
         : entries.map(_renderEntry).join('\n');
 
     return StructuredResponse(
       summary: summary,
+      nextSteps: entries.isEmpty ? _emptyNextSteps(session) : const [],
       data: {
         'count': entries.length,
         'capacity': session.appLogs.capacity,
@@ -88,6 +90,26 @@ class AppLogsTool extends GlintTool {
         if (asJson) 'entries': entries.map((e) => e.toJson()).toList(),
       },
     );
+  }
+
+  /// Logs come from the VM connection, which device mode and an unattached session do not have.
+  String _whyEmpty(GlintSession session) {
+    final active = session.active;
+    if (active == null) return ': not attached, so no app logs are collected';
+    if (active.deviceMode) {
+      return ': device mode has no VM connection, so app logs are not collected';
+    }
+    return '';
+  }
+
+  List<String> _emptyNextSteps(GlintSession session) {
+    final active = session.active;
+    if (active == null) return const ['attach (no args) to start collecting app logs'];
+    if (!active.deviceMode) return const [];
+    return const [
+      'once the Flutter app runs in debug mode, attach without mode:"device" to collect its logs',
+      'until then read logs where the app was launched (the flutter run output)',
+    ];
   }
 
   String _renderEntry(AppLogEntry e) {

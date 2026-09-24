@@ -34,6 +34,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
       registerTool(
         tool.registeredDefinition,
         (req) => tool.invoke(session, req),
+        validateArguments: false,
       );
     }
     return result;

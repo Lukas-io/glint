@@ -59,13 +59,13 @@ class SessionTool extends GlintTool {
             run == null
                 ? 'no named run open'
                 : 'run "${run.name}" open since seq=${run.firstSeq}',
-            '${seq - 1} tool call(s) logged this process',
+            '$seq tool call(s) logged this process',
           ].join('\n'),
           data: {
             'attached': session.appsJson(),
             'activeApp': active?.id,
             'run': run?.toJson(),
-            'calls': seq - 1,
+            'calls': seq,
             if (session.reconnectCount > 0)
               'reconnectCount': session.reconnectCount,
           },

@@ -65,6 +65,43 @@ abstract class GlintTool {
     });
   }
 
+  /// Coerces numeric and true/false strings in typed top-level fields in place, then checks top-level fields against [tool]'s schema (nested shapes are the tool's own to explain); null when valid.
+  static StructuredResponse? checkArguments(
+      Tool tool, CallToolRequest request) {
+    final args = request.arguments;
+    final props = tool.inputSchema.properties ?? const {};
+    if (args != null) {
+      for (final MapEntry(:key, value: schema) in props.entries) {
+        final raw = args[key];
+        if (raw is! String) continue;
+        final coerced = switch (schema.type) {
+          JsonType.int => looseInt(raw),
+          JsonType.num => looseNum(raw),
+          JsonType.bool => looseBool(raw),
+          _ => null,
+        };
+        if (coerced != null) args[key] = coerced;
+      }
+    }
+    final errors = tool.inputSchema
+        .validate(args ?? const {})
+        .where((e) => e.path.length <= 1)
+        .toList();
+    if (errors.isEmpty) return null;
+    return StructuredResponse.error(
+      summary: '${tool.name}: invalid arguments',
+      errorKind: GlintErrorKind.invalidArgument,
+      detail: errors
+          .map((e) =>
+              '${e.path.isEmpty ? 'arguments' : e.path.join('.')}: ${e.details ?? e.error.name}')
+          .join('\n'),
+      nextSteps: [
+        'fix the arguments named in detail; accepted fields: '
+            '${props.keys.join(", ")}',
+      ],
+    );
+  }
+
   FutureOr<StructuredResponse> handle(
     GlintSession session,
     CallToolRequest request,
@@ -82,6 +119,11 @@ abstract class GlintTool {
     CallToolRequest request,
   ) async {
     final start = DateTime.now();
+    final invalid = checkArguments(registeredDefinition, request);
+    if (invalid != null) {
+      logCall(session, request, invalid, start);
+      return invalid.toCallResult();
+    }
     StructuredResponse response;
     final target =
         routesByApp ? (request.arguments?['app'] as String?) : null;
@@ -129,6 +171,12 @@ abstract class GlintTool {
       );
     } on RuntimeUnresponsiveError catch (e) {
       response = await _unresponsiveResponse(session, e);
+    } on ArgTypeError catch (e) {
+      response = StructuredResponse.error(
+        summary: '${definition.name}: $e',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: ['pass ${e.key} as ${e.expected}'],
+      );
     } catch (e, st) {
       response = StructuredResponse.error(
         summary: '${definition.name} failed',

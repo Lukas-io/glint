@@ -4,6 +4,7 @@ import '../../../interaction.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `shutdown_sim` — shut down a simulator/emulator, or all booted ones.
 class ShutdownSimTool extends GlintTool {
@@ -33,7 +34,7 @@ class ShutdownSimTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final all = (args['all'] as bool?) ?? false;
+    final all = argBool(args, 'all') ?? false;
     final attachedDevice = session.active?.device;
     final adbPath = attachedDevice is AndroidDevice
         ? attachedDevice.adbPath

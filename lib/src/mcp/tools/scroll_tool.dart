@@ -56,11 +56,11 @@ class ScrollTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final dirName = args['direction']! as String;
-    final amount = ((args['amountFraction'] as num?) ??
+    final amount = (argNum(args, 'amountFraction') ??
             session.config.scrollAmountFraction)
         .toDouble();
-    final returnScene = (args['returnScene'] as bool?) ?? true;
-    final fetchScene = (args['fetchScene'] as bool?) ?? false;
+    final returnScene = argBool(args, 'returnScene') ?? true;
+    final fetchScene = argBool(args, 'fetchScene') ?? false;
 
     final dir = enumByName(ScrollDirection.values, dirName);
     if (dir == null) {
