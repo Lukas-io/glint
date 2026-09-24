@@ -6,8 +6,8 @@ import '../vm/vm_client.dart';
 import 'flutter_runtime.dart';
 import 'inspector_params.dart';
 
-// RPCError code emitted by vm_service when the WebSocket connection drops.
-const _kConnectionClosedCode = 100;
+/// RPCError code vm_service uses when the WebSocket connection is disposed.
+const _kConnectionClosedCode = -32010;
 
 /// The default [FlutterRuntime] backed by `package:vm_service`. Owns one
 /// [VmClient] and centralises every `ext.flutter.inspector.*` and
@@ -90,8 +90,16 @@ class VmServiceRuntime implements FlutterRuntime {
   static const callTimeout = Duration(seconds: 10);
 
   Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call'}) async {
+    await _vm.ready();
     try {
-      return await fn().timeout(callTimeout);
+      try {
+        return await fn().timeout(callTimeout);
+      } on SentinelException {
+        await _reselectIsolate(op);
+        return await fn().timeout(callTimeout);
+      }
+    } on SentinelException catch (e) {
+      throw RuntimeConnectionLostError(e);
     } on TimeoutException {
       throw RuntimeUnresponsiveError(op, callTimeout);
     } on StateError catch (e) {
@@ -108,6 +116,15 @@ class VmServiceRuntime implements FlutterRuntime {
         throw RuntimeConnectionLostError(e);
       }
       rethrow;
+    }
+  }
+
+  /// A hot restart collects the isolate: pick the new one, or report the connection lost when none comes up.
+  Future<void> _reselectIsolate(String op) async {
+    try {
+      await _vm.reselect();
+    } on StateError catch (e) {
+      throw RuntimeConnectionLostError('$op: the Flutter isolate is gone ($e)');
     }
   }
 
@@ -170,11 +187,14 @@ class VmServiceRuntime implements FlutterRuntime {
     required String inspectorId,
     required String groupName,
   }) async {
-    await _vm.service.callServiceExtension(
-      'ext.flutter.inspector.setSelectionById',
-      isolateId: flutterIsolateId,
-      args: InspectorParams.selectionById(
-          inspectorId: inspectorId, groupName: groupName),
+    await _guard(
+      () => _vm.service.callServiceExtension(
+        'ext.flutter.inspector.setSelectionById',
+        isolateId: flutterIsolateId,
+        args: InspectorParams.selectionById(
+            inspectorId: inspectorId, groupName: groupName),
+      ),
+      op: 'setSelectionById',
     );
   }
 
@@ -259,7 +279,12 @@ class VmServiceRuntime implements FlutterRuntime {
     final Object raw;
     try {
       raw = await _guard(
-        () => _vm.service.evaluate(flutterIsolateId, library, expression),
+        () async => _vm.service.evaluate(
+            flutterIsolateId,
+            _evalLibIsolateId == flutterIsolateId
+                ? library
+                : await _evalLibrary(),
+            expression),
         op: 'evaluate',
       );
     } on RPCError catch (e) {

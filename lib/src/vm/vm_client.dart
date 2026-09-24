@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -6,6 +8,8 @@ class VmClient {
   VmService? _service;
   Uri? _connectedUri;
   Isolate? _flutterIsolate;
+  Future<void>? _reselecting;
+  StreamSubscription<Event>? _isolateEvents;
 
   bool get isConnected => _service != null;
   Uri? get connectedUri => _connectedUri;
@@ -36,14 +40,59 @@ class VmClient {
     _service = svc;
     _connectedUri = vmServiceUri;
     await _selectFlutterIsolate();
+    _isolateEvents = svc.onIsolateEvent.listen(_onIsolateEvent);
+    try {
+      await svc.streamListen(EventStreams.kIsolate);
+    } on Object {
+      // already subscribed or unsupported; the sentinel retry still re-selects
+    }
   }
 
-  Future<void> _selectFlutterIsolate() async {
+  /// Resolves once any in-flight isolate re-selection has finished.
+  Future<void> ready() => _reselecting ?? Future.value();
+
+  /// Picks the Flutter isolate again, e.g. after a hot restart replaced it; concurrent callers share one attempt.
+  Future<void> reselect() => _reselecting ??=
+      _reselectUntilFound(exclude: _flutterIsolate?.id)
+          .whenComplete(() => _reselecting = null);
+
+  Future<void> _reselectUntilFound({String? exclude}) async {
+    final deadline = DateTime.now().add(reselectTimeout);
+    while (true) {
+      try {
+        await _selectFlutterIsolate(exclude: exclude);
+        return;
+      } on StateError {
+        if (_service == null || DateTime.now().isAfter(deadline)) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+  }
+
+  /// Longest a hot restart may take to bring up a new Flutter isolate.
+  static const reselectTimeout = Duration(seconds: 5);
+
+  void _onIsolateEvent(Event e) {
+    final id = e.isolate?.id;
+    final current = _flutterIsolate?.id;
+    final replaced = e.kind == EventKind.kIsolateExit && id == current;
+    final newFlutter = e.kind == EventKind.kServiceExtensionAdded &&
+        id != current &&
+        (e.extensionRPC ?? '').startsWith('ext.flutter.inspector.');
+    if (replaced || newFlutter) unawaited(reselect().catchError((_) {}));
+  }
+
+  Future<void> _selectFlutterIsolate({String? exclude}) async {
     final vm = await service.getVM();
     for (final ref in vm.isolates ?? const <IsolateRef>[]) {
       final id = ref.id;
-      if (id == null) continue;
-      final iso = await service.getIsolate(id);
+      if (id == null || id == exclude) continue;
+      final Isolate iso;
+      try {
+        iso = await service.getIsolate(id);
+      } on SentinelException {
+        continue;
+      }
       final rpcs = iso.extensionRPCs ?? const <String>[];
       if (rpcs.any((e) => e.startsWith('ext.flutter.'))) {
         _flutterIsolate = iso;
@@ -59,6 +108,8 @@ class VmClient {
   Future<void> disconnect() async {
     final svc = _service;
     _service = null;
+    await _isolateEvents?.cancel();
+    _isolateEvents = null;
     _flutterIsolate = null;
     _connectedUri = null;
     if (svc != null) await svc.dispose();

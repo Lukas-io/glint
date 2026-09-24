@@ -112,4 +112,24 @@ void main() {
       expect(resolveAdbPath(null, const {'PATH': '/nonexistent', 'HOME': '/nonexistent'}), isNull);
     });
   });
+
+  group('collapseSameApp', () {
+    RunningApp app(int port, {String? device = 'sim', String? bundle = 'com.x'}) =>
+        RunningApp(
+          vmUri: Uri.parse('http://127.0.0.1:$port/t=/'),
+          deviceId: device,
+          bundleId: bundle,
+        );
+
+    test('one bundle on one device collapses to the first URI', () {
+      final out = collapseSameApp([app(1), app(2), app(3, device: 'other')]);
+      expect(out.map((a) => a.vmUri.port), [1, 3]);
+    });
+
+    test('entries without device or bundle are never merged', () {
+      final out = collapseSameApp(
+          [app(1, bundle: null), app(2, bundle: null), app(3, device: null), app(4, device: null)]);
+      expect(out, hasLength(4));
+    });
+  });
 }

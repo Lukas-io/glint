@@ -290,7 +290,7 @@ class DeviceDiscovery {
         appName: link?.appName,
       ));
     }
-    return out;
+    return collapseSameApp(out);
   }
 
   Future<AppDeviceLink?> correlate(Uri vmUri, DevicePlatform platform) async {
@@ -540,4 +540,16 @@ class DeviceDiscovery {
     }
     return out;
   }
+}
+
+/// Drops later entries for the same bundle on the same device: one app can surface under two URIs (its DDS and the raw VM, or a helper process quoting it).
+List<RunningApp> collapseSameApp(List<RunningApp> apps) {
+  final seen = <String>{};
+  return [
+    for (final a in apps)
+      if (a.deviceId == null ||
+          a.bundleId == null ||
+          seen.add('${a.deviceId}|${a.bundleId}'))
+        a,
+  ];
 }

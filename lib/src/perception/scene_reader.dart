@@ -15,7 +15,15 @@ class SceneReader {
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
 
-  bool _ensuredPubRoots = false;
+  String? _pubRootsIsolate;
+
+  String _currentIsolate() {
+    try {
+      return _runtime.flutterIsolateId;
+    } on Object {
+      return '';
+    }
+  }
 
   /// User-code tree — the agent's reading surface. The full tree is also read
   /// to extract overlay/dialog content, appended to the summary root so
@@ -45,10 +53,11 @@ class SceneReader {
     );
   }
 
-  /// Registers the app's own package root once per session, so the inspector's local-project filter keeps the app's widgets even when it runs from a path (e.g. under packages/flutter/) the default heuristic misreads.
+  /// Registers the app's own package root once per isolate (a hot restart starts a fresh inspector), so the inspector's local-project filter keeps the app's widgets even when it runs from a path (e.g. under packages/flutter/) the default heuristic misreads.
   Future<void> _ensurePubRoots() async {
-    if (_ensuredPubRoots) return;
-    _ensuredPubRoots = true;
+    final isolate = _currentIsolate();
+    if (_pubRootsIsolate == isolate) return;
+    _pubRootsIsolate = isolate;
     try {
       final dir = await _runtime.appRootDirectory();
       if (dir != null) await _runtime.setPubRootDirectories([dir]);
