@@ -273,13 +273,18 @@ class AppSession {
   /// read right after a native dialog closes does not report a stale mode.
   Future<void> refreshSceneMode() => _pollLifecycle();
 
+  /// A suspended app (device locked, backgrounded) never answers; a live one answers well inside this.
+  static const lifecycleProbeTimeout = Duration(seconds: 2);
+
   Future<void> _pollLifecycle() async {
     final rt = runtime;
     if (rt == null || nativeReader == null) return;
     try {
-      final state = await rt.evaluateString(
-        'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
-      );
+      final state = await rt
+          .evaluateString(
+            'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
+          )
+          .timeout(lifecycleProbeTimeout);
       sceneMode = (state == null || state == 'resumed')
           ? SceneMode.flutter
           : SceneMode.native;

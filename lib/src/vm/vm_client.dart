@@ -42,7 +42,7 @@ class VmClient {
     await _selectFlutterIsolate();
     _isolateEvents = svc.onIsolateEvent.listen(_onIsolateEvent);
     try {
-      await svc.streamListen(EventStreams.kIsolate);
+      await svc.streamListen(EventStreams.kIsolate).timeout(readTimeout);
     } on Object {
       // already subscribed or unsupported; the sentinel retry still re-selects
     }
@@ -82,14 +82,17 @@ class VmClient {
     if (replaced || newFlutter) unawaited(reselect().catchError((_) {}));
   }
 
+  /// Longest one VM read may take during attach; a suspended app (device locked) never answers.
+  static const readTimeout = Duration(seconds: 8);
+
   Future<void> _selectFlutterIsolate({String? exclude}) async {
-    final vm = await service.getVM();
+    final vm = await service.getVM().timeout(readTimeout);
     for (final ref in vm.isolates ?? const <IsolateRef>[]) {
       final id = ref.id;
       if (id == null || id == exclude) continue;
       final Isolate iso;
       try {
-        iso = await service.getIsolate(id);
+        iso = await service.getIsolate(id).timeout(readTimeout);
       } on SentinelException {
         continue;
       }

@@ -29,7 +29,7 @@ class IosSimBackend implements InteractionBackend {
   String get label => 'ios-sim(${_shortPath(udid)})';
 
   // Lock:   IndigoHIDMessageForButton code 1 (verified Xcode 26).
-  // Home:   bottom-edge swipe up; the sim reads any swipe starting in the home-indicator strip as a home press.
+  // Home:   IndigoHID button code 0 (verified iOS 26.5); a bottom-edge swipe reaches the app as a scroll instead.
   // Unlock: Darwin notification `com.apple.BiometricKit_Sim.pearl.match` (Face ID auth) then a bottom-edge swipe past the authenticated-lock-screen state.
   //         From the Simulator.app binary: Pearl = Face ID, Oyster = Touch ID; default Pearl since modern test targets are Face ID.
   // Back:   left-edge swipe, the iOS back gesture (there is no back button on iPhone).
@@ -152,7 +152,7 @@ class IosSimBackend implements InteractionBackend {
       case HardwareButton.lock:
         return _lock();
       case HardwareButton.home:
-        return _bottomEdgeSwipeUp();
+        return _run(_BridgeCommand.probeButton, [udid, '0']);
       case HardwareButton.unlock:
         return _unlockFaceID();
       case HardwareButton.back:
@@ -193,19 +193,56 @@ class IosSimBackend implements InteractionBackend {
     ]);
   }
 
-  /// Raw IndigoHID code 1 is Lock on Face ID devices (probe-button takes the raw int, dodging the bridge's older SimButton naming); waits for SpringBoard to report the lock.
+  /// Raw IndigoHID code 1 is Lock on Face ID devices (probe-button takes the raw int, dodging the bridge's older SimButton naming); waits for SpringBoard to report the lock and the dark display.
   Future<void> _lock() async {
     await _run(_BridgeCommand.probeButton, [udid, '1']);
     await _awaitLockState(true);
+    // Settle into display-off so unlock knows to wake it; the flag trails the display.
+    await _awaitSpringboardFlag('hasBlankedScreen', true,
+        within: const Duration(seconds: 6));
   }
 
-  /// Face ID match Darwin notification authenticates; after about a second the bottom-edge swipe moves past the authenticated lock screen. Retried once when SpringBoard still reports locked.
+  /// Face ID match Darwin notification authenticates; after about a second the bottom-edge swipe moves past the authenticated lock screen. Each round re-reads lock and display state, waking a dark display first, since matching behind a dark display unlocks without lighting it.
   Future<void> _unlockFaceID() async {
-    for (var attempt = 0; attempt < 2; attempt++) {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final locked = await lockState();
+      final blanked = await _displayBlanked();
+      if (locked == false && blanked == false) {
+        if (attempt > 0) await Future<void>.delayed(unlockSettle);
+        return;
+      }
+      if (locked == false) {
+        // Unlocked behind a dark display: a side press only flashes it, so lock it cleanly and unlock from there.
+        await _lock();
+        continue;
+      }
+      if (blanked == true) {
+        await _run(_BridgeCommand.probeButton, [udid, '1']);
+        await _awaitSpringboardFlag('hasBlankedScreen', false);
+        // A just-woken lock screen ignores a Face ID match for about a second.
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
       await _postFaceIdMatch();
-      await Future<void>.delayed(Duration(milliseconds: attempt == 0 ? 1000 : 1500));
+      await Future<void>.delayed(const Duration(seconds: 1));
       await _bottomEdgeSwipeUp();
-      if (await _awaitLockState(false) != true) return;
+      await _awaitLockState(false);
+    }
+    await Future<void>.delayed(unlockSettle);
+  }
+
+  /// SpringBoard reports unlocked while the lock screen is still sliding away; a touch in that window strands it half-dismissed.
+  static const unlockSettle = Duration(milliseconds: 700);
+
+  /// SpringBoard's `com.apple.springboard.hasBlankedScreen`: true while the display is off. It trails the display by a second or more.
+  Future<bool?> _displayBlanked() => _springboardFlag('hasBlankedScreen');
+
+  /// Polls a SpringBoard flag until it reads [value] or [within] passes.
+  Future<void> _awaitSpringboardFlag(String name, bool value,
+      {Duration within = const Duration(seconds: 2)}) async {
+    final deadline = DateTime.now().add(within);
+    while (DateTime.now().isBefore(deadline)) {
+      if (await _springboardFlag(name) == value) return;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
     }
   }
 
@@ -226,12 +263,15 @@ class IosSimBackend implements InteractionBackend {
 
   /// SpringBoard's `com.apple.springboard.lockstate` inside the simulator: 1 locked, 0 unlocked.
   @override
-  Future<bool?> lockState() async {
+  Future<bool?> lockState() => _springboardFlag('lockstate');
+
+  /// Reads `com.apple.springboard.<name>` inside the simulator: true when non-zero, null when unreadable.
+  Future<bool?> _springboardFlag(String name) async {
     final result = await Process.run('xcrun', [
-      'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.lockstate',
+      'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.$name',
     ]);
     if (result.exitCode != 0) return null;
-    final m = RegExp(r'lockstate\s+(\d+)').firstMatch((result.stdout as String?) ?? '');
+    final m = RegExp('$name\\s+(\\d+)').firstMatch((result.stdout as String?) ?? '');
     return m == null ? null : m.group(1) != '0';
   }
 
