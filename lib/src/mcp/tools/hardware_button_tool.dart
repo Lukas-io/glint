@@ -112,6 +112,7 @@ class HardwareButtonTool extends GlintTool {
   Future<StructuredResponse> _pressBack(GlintSession session) async {
     const button = HardwareButton.back;
     final pre = await snapshotPreAction(session);
+    final keyboardUp = await _keyboardVisible(session);
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(
@@ -120,10 +121,50 @@ class HardwareButtonTool extends GlintTool {
       );
       var response = StructuredResponse.fromActionResult(result);
       if (response.isError) return response;
+      // Back with the keyboard up only closes the keyboard; pressing again would pop the route or leave the app.
+      if (keyboardUp) {
+        return response.copyWith(
+          summary: 'press back closed the on-screen keyboard',
+          data: {...?response.data, 'changed': true, 'changeCategory': 'keyboardDismissed'},
+          nextSteps: const ['hardware_button back again to go back a screen'],
+        );
+      }
+      final lifecycle = await _quickLifecycle(session);
+      if (lifecycle != null && lifecycle != 'resumed') {
+        return response.copyWith(
+          summary: 'press back left the app (lifecycle: $lifecycle)',
+          data: {...?response.data, 'changed': true, 'changeCategory': 'leftApp', 'lifecycle': lifecycle},
+          nextSteps: const [
+            'the app was on its first screen, so back closed it; reopen the app, then get_scene',
+          ],
+        );
+      }
       response = await _backOutcome(session, scene, response, pre);
       return await _withOutcome(session, button, response);
     } finally {
       await scene.dispose();
+    }
+  }
+
+  Future<bool> _keyboardVisible(GlintSession session) async {
+    try {
+      return (await session.uiState().timeout(const Duration(seconds: 2)))
+              .keyboardBottomPx >
+          0;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// The lifecycle a moment after the press, or 'suspended' when a backgrounded app no longer answers; bounded so a closed app costs two seconds, not a string of ten-second timeouts.
+  Future<String?> _quickLifecycle(GlintSession session) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    try {
+      return await session.lifecycleState().timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      return 'suspended';
+    } on Object {
+      return null;
     }
   }
 
