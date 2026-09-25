@@ -2,6 +2,9 @@
 /// agent reads instead of the raw SceneNode tree.
 library;
 
+/// Marks an obscured field's value as `<prefix><length>`; plain text never starts with it.
+const obscuredValuePrefix = '<<glint-obscured:';
+
 enum SemanticRole {
   page,
   appBar,
@@ -161,8 +164,30 @@ class SemanticInput extends SemanticNode {
   /// exposes none.
   String? hint;
 
-  /// Live text in the field. Populated by [InputEnricher].
+  /// Live text in the field. Populated by [InputEnricher]; always null for an obscured field.
   String? currentValue;
+
+  /// True when the field hides its text (obscureText); only [valueLength] is known.
+  bool obscured = false;
+
+  /// Characters in an obscured field; null otherwise.
+  int? valueLength;
+
+  /// Stores what [InputEnricher] read, splitting an obscured field's marker into [obscured] and [valueLength].
+  void setReadValue(String? raw) {
+    if (raw != null && raw.startsWith(obscuredValuePrefix)) {
+      obscured = true;
+      currentValue = null;
+      valueLength =
+          int.tryParse(raw.substring(obscuredValuePrefix.length)) ?? 0;
+      return;
+    }
+    currentValue = raw;
+  }
+
+  /// True when the field holds any text, obscured or not.
+  bool get hasValue =>
+      (currentValue?.isNotEmpty ?? false) || (valueLength ?? 0) > 0;
 
   /// Current validation error (InputDecoration.errorText), populated by
   /// [InputEnricher]; null when the field is valid or shows no error.
@@ -177,6 +202,8 @@ class SemanticInput extends SemanticNode {
     if (hint != null && hint!.isNotEmpty) parts.add('($hint)');
     if (currentValue != null && currentValue!.isNotEmpty) {
       parts.add('"$currentValue"');
+    } else if (obscured) {
+      parts.add('[hidden, ${valueLength ?? 0} chars]');
     }
     if (error != null && error!.isNotEmpty) parts.add('⚠ $error');
     return parts.isEmpty ? 'input' : parts.join(' ');
@@ -186,6 +213,8 @@ class SemanticInput extends SemanticNode {
   Map<String, Object?> _extraJson() => {
         if (hint != null) 'hint': hint,
         if (currentValue != null) 'value': currentValue,
+        if (obscured) 'obscured': true,
+        if (obscured) 'valueLength': valueLength ?? 0,
         if (error != null) 'error': error,
       };
 }

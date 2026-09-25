@@ -62,11 +62,9 @@ class TypeText extends Action {
   /// Gap between keys in ms; null keeps the backend default.
   final int? keyDelayMs;
 
+  /// Names the length, never the text: labels land in replies, the action log and issue reports.
   @override
-  String get label {
-    final preview = text.length <= 32 ? text : '${text.substring(0, 31)}…';
-    return 'type "$preview"';
-  }
+  String get label => 'type ${text.length} chars';
 }
 
 /// Each backend declares its supported subset via BackendCapabilities.
