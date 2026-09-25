@@ -258,18 +258,26 @@ class TypeTool extends GlintTool {
     final needsKeyboard = session.device.platform == DevicePlatform.android;
     final deadline = DateTime.now().add(const Duration(seconds: 2));
     double? lastInset;
+    DateTime? focusedAt;
     while (DateTime.now().isBefore(deadline)) {
       try {
         final focused = await session.focusedFieldText() != null;
         if (focused && !needsKeyboard) return true;
         if (focused) {
+          focusedAt ??= DateTime.now();
           // The inset turns non-zero as the keyboard starts sliding in; it takes keys once it stops moving.
           final inset = (await session.uiState()).keyboardBottomPx;
           if (inset > 0 && inset == lastInset) return true;
+          // No soft keyboard at all (a hardware keyboard is attached): focus is enough.
+          if (inset == 0 &&
+              DateTime.now().difference(focusedAt) >
+                  const Duration(milliseconds: 600)) {
+            return true;
+          }
           lastInset = inset;
         }
       } on Object {
-        return false;
+        return true;
       }
       await Future<void>.delayed(const Duration(milliseconds: 120));
     }
