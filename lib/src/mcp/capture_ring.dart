@@ -14,7 +14,7 @@ class Capture {
   final String path;
   final DateTime takenAt;
 
-  /// `lifecycle` (the app left resumed) or `explicit` (device op:screenshot).
+  /// `lifecycle` (the app left resumed), `scene` (get_scene), `action` (after a gesture) or `explicit` (device op:screenshot).
   final String trigger;
 
   /// App lifecycle at capture time, when known.

@@ -319,7 +319,7 @@ class GetSceneTool extends GlintTool {
     final app = session.active;
     final lifecycle = app?.lastLifecycle ?? await _safeLifecycle(session);
     final overlay = lifecycleIsOverlay(lifecycle);
-    final capture = app?.captures.newest ?? await app?.captureNow('lifecycle');
+    final capture = await app?.captureNow('scene') ?? app?.captures.newest;
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
     final dpr = session.device.devicePixelRatio;
@@ -330,8 +330,13 @@ class GetSceneTool extends GlintTool {
         if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
         if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
       ].join('\n'),
+      warnings: [
+        if (capture != null && capture.trigger != 'scene')
+          'fresh screenshot failed; this one is ${capture.describe()}, so the screen may have changed',
+      ],
       nextSteps: [
         if (capture != null) 'read the screenshot to see what is on top',
+        if (capture == null) '`device op:screenshot` to see what is on top',
         if (overlay)
           'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
         if (overlay) 'or wait: some sheets dismiss on their own, then get_scene again',
