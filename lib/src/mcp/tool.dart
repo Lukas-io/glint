@@ -185,6 +185,7 @@ abstract class GlintTool {
       );
     }
     response = await _checkDeviceGone(session, app, response);
+    response = explainMissingBridge(response);
     logCall(session, request, response, start);
     return response.toCallResult();
   }
@@ -232,6 +233,24 @@ abstract class GlintTool {
             '(attach app:"<name>" or attach vmUri:<uri>)',
         'in device mode use tap / long_press / swipe / drag with x,y '
             '(screenshot pixels), type, hardware_button, device op:screenshot',
+      ],
+    );
+  }
+
+  /// A gesture that failed because the glint-iossim binary is not built: say how to build it.
+  static StructuredResponse explainMissingBridge(StructuredResponse response) {
+    final detail = response.data?['detail'];
+    if (!response.isError ||
+        detail is! String ||
+        !detail.contains('glint-iossim') ||
+        !detail.contains('No such file')) {
+      return response;
+    }
+    return response.copyWith(
+      summary: '${response.summary}: the glint-iossim bridge is not built',
+      nextSteps: [
+        'build it: cd native/ios_sim_bridge && swift build (inside the glint checkout)',
+        'or re-attach with iosBridgePath pointing at a built glint-iossim',
       ],
     );
   }
