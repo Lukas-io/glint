@@ -25,9 +25,12 @@ enum SimButton: String, CaseIterable {
     }
 }
 
+/// Bumped whenever a command's arguments or output change; glint checks it before driving the bridge.
+let bridgeProtocol = 1
+
 let args = CommandLine.arguments
 if args.count < 2 {
-    print("usage: glint-iossim <list|dump-*|tap|long-press|swipe|button|probe-button|type> ...")
+    print("usage: glint-iossim <version|list|dump-*|tap|long-press|swipe|button|probe-button|type> ...")
     exit(2)
 }
 
@@ -40,6 +43,8 @@ let command = args[1]
 
 do {
     switch command {
+    case "version":
+        print("glint-iossim \(bridgeProtocol)")
     case "list":
         for d in try SimBridge.bootedDevices() {
             print("\(d.udid)\t\(d.name)")

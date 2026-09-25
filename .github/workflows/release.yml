@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     permissions:
       contents: write
     steps:
@@ -27,7 +27,23 @@ jobs:
         run: dart test
         env:
           GLINT_NO_TELEMETRY: 'true'
+      - name: Build the universal glint-iossim bridge
+        working-directory: native/ios_sim_bridge
+        run: |
+          swift build -c release --arch arm64 --arch x86_64
+          bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/glint-iossim"
+          lipo "$bin" -verify_arch arm64 x86_64
+          codesign --force --sign - "$bin"
+          codesign --verify "$bin"
+          "$bin" version
+          mkdir -p "$RUNNER_TEMP/assets"
+          cp "$bin" "$RUNNER_TEMP/assets/glint-iossim-macos"
+          cd "$RUNNER_TEMP/assets"
+          shasum -a 256 glint-iossim-macos > glint-iossim-macos.sha256
+          cat glint-iossim-macos.sha256
       - name: Publish the GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md \
+            "$RUNNER_TEMP/assets/glint-iossim-macos" "$RUNNER_TEMP/assets/glint-iossim-macos.sha256"
         env:
           GH_TOKEN: ${{ github.token }}

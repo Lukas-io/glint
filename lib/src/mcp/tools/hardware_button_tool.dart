@@ -94,6 +94,8 @@ class HardwareButtonTool extends GlintTool {
       return null;
     } on SessionNotAttachedError {
       rethrow;
+    } on IosToolchainBlocked catch (e) {
+      return StructuredResponse.toolchainBlocked(e);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: ${button.name} not supported',

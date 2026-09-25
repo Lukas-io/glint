@@ -313,6 +313,7 @@ class AttachTool extends GlintTool {
       // ── 6. Build the device target (+ iOS bridge preflight, viewport) ─────
       final warnings = <String>[];
       final DeviceTarget device;
+      IosToolchain? toolchain;
       switch (platform) {
         case DevicePlatform.android:
           // Probe the viewport for the real DPR — raw x,y gestures pass logical
@@ -339,15 +340,9 @@ class AttachTool extends GlintTool {
             devicePixelRatio: vp?.dpr ?? 1.0,
           );
         case DevicePlatform.ios:
-          final bridgePath =
-              resolveIosBridgePath(args['iosBridgePath'] as String?);
-          if (!File(bridgePath).existsSync()) {
-            warnings.add(
-              'glint-iossim bridge not found at $bridgePath — tap / swipe / '
-              'long_press / type will fail until it is built '
-              '(cd native/ios_sim_bridge && swift build), or pass iosBridgePath',
-            );
-          }
+          toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
+              onPhase: (phase) => onProgress?.call(0, phase));
+          warnings.addAll(toolchain.warnings);
           // A freshly launched app's inspector lags the VM URI by a few seconds;
           // an already-running app probes on the first try so the ceiling is free.
           final baseMs = session.config.attachProbeTimeoutMs;
@@ -369,7 +364,8 @@ class AttachTool extends GlintTool {
             logicalWidth: vp.w,
             logicalHeight: vp.h,
             devicePixelRatio: vp.dpr,
-            bridgePath: bridgePath,
+            bridgePath: toolchain.bridge.path,
+            toolchain: toolchain,
           );
       }
 
@@ -512,6 +508,7 @@ class AttachTool extends GlintTool {
             'correlated': link != null,
           },
           'screen': screen,
+          if (toolchain != null) 'toolchain': toolchain.toJson(),
           if (settleData != null) 'settle': settleData,
           if (sceneText != null) 'scene': sceneText,
           'apps': session.appsJson(),
@@ -717,17 +714,12 @@ class AttachTool extends GlintTool {
 
     final warnings = <String>[];
     final DeviceTarget device;
+    IosToolchain? toolchain;
     switch (target.platform) {
       case DevicePlatform.ios:
-        final bridgePath =
-            resolveIosBridgePath(args['iosBridgePath'] as String?);
-        if (!File(bridgePath).existsSync()) {
-          warnings.add(
-            'glint-iossim bridge not found at $bridgePath — tap / swipe / '
-            'long_press / type will fail until it is built '
-            '(cd native/ios_sim_bridge && swift build), or pass iosBridgePath',
-          );
-        }
+        toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
+            onPhase: (phase) => onProgress?.call(0, phase));
+        warnings.addAll(toolchain.warnings);
         // iOS taps inject a ratio of the size, so the size is required.
         if (screen == null) {
           return StructuredResponse.error(
@@ -741,7 +733,8 @@ class AttachTool extends GlintTool {
           logicalWidth: shot.width!.toDouble(),
           logicalHeight: shot.height!.toDouble(),
           devicePixelRatio: 1.0,
-          bridgePath: bridgePath,
+          bridgePath: toolchain.bridge.path,
+          toolchain: toolchain,
         );
       case DevicePlatform.android:
         // Android taps take raw pixels; the size only enables center scroll.
@@ -783,6 +776,7 @@ class AttachTool extends GlintTool {
         'mode': 'device',
         'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
         if (screen != null) 'screen': screen,
+        if (toolchain != null) 'toolchain': toolchain.toJson(),
       },
     );
   }

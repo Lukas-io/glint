@@ -4,6 +4,8 @@ import 'action.dart';
 enum GlintErrorKind {
   // interaction-layer failures
   unsupportedBackendAction,
+  /// The iOS bridge is missing, or the selected Xcode is a major glint has not verified.
+  unsupportedToolchain,
   backendToolError,
   unresolvedTarget,
   notHittable,

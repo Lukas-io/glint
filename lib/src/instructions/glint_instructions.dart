@@ -76,14 +76,14 @@ const _recovery = '''
 - `targetNotFound` — `scroll_to_find` miss; `detail` lists on-screen text.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped (hot restart?). `attach` again.
-- `appUnresponsive` — app suspended (locked device / breakpoint). Unlock or reopen, retry.
-- `deviceGone` — the simulator was closed; `attach device:"<id>"` boots + relaunches.
+- `appUnresponsive` — suspended (locked / breakpoint). Unlock or reopen, retry.
+- `deviceGone` — sim closed; `attach device:"<id>"` boots + relaunches.
 - `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
-- `unknownApp` — `app:` matched none/several attached apps; pick from the list.
+- `unknownApp` — `app:` matched none/several apps; pick from the list.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — app behind a native surface. `hardware_button home` or dismiss it, retry.
-- `geometryResolveError` — eval failed; retry after `wait_for_settle`; else re-`attach`.
-- `unsupportedBackendAction` / `backendToolError` — platform gap or native tool failed; read `detail`.
+- `geometryResolveError` — eval failed; `wait_for_settle`, retry; else re-`attach`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` — platform gap, tool failed, iOS bridge/Xcode; read `detail`.
 - `invalidArgument` — fix per tool description.
 - `internal` — glint bug. `report_issue` with the user's OK.
 

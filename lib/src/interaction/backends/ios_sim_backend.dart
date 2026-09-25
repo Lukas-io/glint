@@ -3,6 +3,7 @@ import 'dart:io';
 import '../action.dart';
 import '../backend.dart';
 import '../image_size.dart';
+import '../ios_toolchain.dart';
 import '../key_codes.dart';
 import '../screen_recording.dart';
 
@@ -15,6 +16,7 @@ class IosSimBackend implements InteractionBackend {
     required this.deviceLogicalHeight,
     required this.devicePixelRatio,
     required this.binaryPath,
+    this.toolchain,
     this.run = Process.run,
   });
 
@@ -24,6 +26,9 @@ class IosSimBackend implements InteractionBackend {
   final double deviceLogicalHeight;
   final double devicePixelRatio;
   final String binaryPath;
+
+  /// Attach's toolchain check; when it names a blocker, bridge commands are refused.
+  final IosToolchain? toolchain;
 
   @override
   String get label => 'ios-sim(${_shortPath(udid)})';
@@ -294,6 +299,10 @@ class IosSimBackend implements InteractionBackend {
       );
 
   Future<void> _run(_BridgeCommand cmd, List<String> args) async {
+    final blocker = toolchain?.blocker;
+    if (blocker != null) {
+      throw IosToolchainBlocked(label, blocker, toolchain!.nextSteps);
+    }
     final argv = [cmd.cliName, ...args];
     final result = await run(binaryPath, argv);
     if (result.exitCode != 0) {

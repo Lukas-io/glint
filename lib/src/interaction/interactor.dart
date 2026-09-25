@@ -1,6 +1,7 @@
 import '../../perception.dart';
 import 'action.dart';
 import 'backend.dart';
+import 'ios_toolchain.dart';
 import 'result.dart';
 import 'target.dart';
 
@@ -18,6 +19,14 @@ class Interactor {
   Future<ActionResult> run(Scene scene, Action action) async {
     try {
       return await _dispatch(scene, action);
+    } on IosToolchainBlocked catch (e) {
+      return ActionResult.failure(
+        action: action,
+        summary: 'refused ${action.label}: ${e.detail}',
+        error: e.detail,
+        errorKind: GlintErrorKind.unsupportedToolchain,
+        nextSteps: e.nextSteps,
+      );
     } on UnsupportedBackendAction catch (e) {
       return ActionResult.failure(
         action: action,
