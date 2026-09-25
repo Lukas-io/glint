@@ -42,11 +42,11 @@ void main() {
   group('appInfoForProject', () {
     test('reads bundle id + display name from the built sim app', () async {
       _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.sangatechnologies.eat', displayName: 'Sanga Eats');
+          bundleId: 'com.example.eats', displayName: 'Example Eats');
       final info = await discovery.appInfoForProject(tmp.path);
       expect(info, isNotNull);
-      expect(info!.$1, 'com.sangatechnologies.eat');
-      expect(info.$2, 'Sanga Eats');
+      expect(info!.$1, 'com.example.eats');
+      expect(info.$2, 'Example Eats');
     });
 
     test('falls back to CFBundleName when no display name', () async {
@@ -73,11 +73,11 @@ void main() {
       final other = Directory.systemTemp.createTempSync('glint_appinfo2_');
       addTearDown(() => other.deleteSync(recursive: true));
       _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.sangatechnologies.eat', displayName: 'Sanga Eats');
+          bundleId: 'com.example.eats', displayName: 'Example Eats');
       _writeBuiltApp(other.path, 'iphonesimulator',
           bundleId: 'com.gskinner.flutter.wonders', displayName: 'Wonderous');
       expect((await discovery.appInfoForProject(tmp.path))!.$1,
-          'com.sangatechnologies.eat');
+          'com.example.eats');
       expect((await discovery.appInfoForProject(other.path))!.$1,
           'com.gskinner.flutter.wonders');
     });

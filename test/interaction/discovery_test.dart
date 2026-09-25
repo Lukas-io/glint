@@ -28,7 +28,7 @@ void main() {
 
     test('two distinct apps on one sim → ambiguous (two paths)', () {
       final out = [
-        appLine('AAAA-1111', 'Sanga'),
+        appLine('AAAA-1111', 'Eats'),
         appLine('BBBB-2222', 'Wonderous'),
       ].join('\n');
       expect(DeviceDiscovery.appBundlePathsForDevice(out, udid), hasLength(2));
@@ -37,13 +37,13 @@ void main() {
     test('apps on OTHER devices are ignored', () {
       const other = '11111111-2222-3333-4444-555555555555';
       final out = [
-        appLine('AAAA-1111', 'Sanga'),
+        appLine('AAAA-1111', 'Eats'),
         '/Users/x/Library/Developer/CoreSimulator/Devices/$other/data/'
             'Containers/Bundle/Application/CCCC/Other.app/Other',
       ].join('\n');
       final paths = DeviceDiscovery.appBundlePathsForDevice(out, udid);
       expect(paths, hasLength(1));
-      expect(paths.single, contains('Sanga.app'));
+      expect(paths.single, contains('Eats.app'));
     });
 
     test('no matching app → empty', () {

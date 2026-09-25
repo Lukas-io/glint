@@ -4,7 +4,7 @@
 
 You tell an agent what you want done — "sign in as test@example.com, find the order from yesterday, and cancel it" — and it taps, scrolls, and types its way through your app on a simulator until it's done. The app doesn't need to be modified. No package to add. No init code. Glint reads your running app from the outside and drives it through native input.
 
-> **Status:** v1 in development. Not ready to use yet. Source-of-truth is [`source-of-truth.md`](./source-of-truth.md).
+> **Status:** pre-1.0 and in daily use. Tool names and arguments can still change between versions. Design notes live in [`source-of-truth.md`](./source-of-truth.md).
 
 ---
 
@@ -18,13 +18,13 @@ Today, if you want an agent to drive a Flutter app, your options are bad:
 
 Glint is the third option, done for you, and built so the agent runs as fast as a person — sometimes faster.
 
-It works by reading the **live state of your running app** (via the Dart VM service in debug mode) and sending **real OS-level taps** to the simulator. So the agent always knows what's actually on screen, what's actually tappable, and where it is in your navigation stack. And because we read what *could* appear on the next screen alongside what *is* on the current screen, the agent can declare its next move ahead of time — and we fire it the instant the screen is ready, with no waiting.
+It works by reading the **live state of your running app** (via the Dart VM service in debug mode) and sending **real OS-level taps** to the simulator. So the agent always knows what's actually on screen, what's actually tappable, and where it is in your navigation stack. The agent can also arm its next move against a target that isn't on screen yet, and glint fires it as soon as the target appears and can take the tap.
 
 ## What it does (today's scope)
 
 - **Drives any Flutter app** on the iOS Simulator or Android Emulator. No modification to the app required.
 - **Acts**: tap, long press, double tap, swipe, drag, scroll, type text, key events, and hardware buttons (home, lock, volume, back).
-- **Sees**: every element on screen with two truths — `painted` (is a human looking at it?) and `hittable` (would a tap actually land on it?). These diverge in real apps.
+- **Sees**: every element on screen with two truths: `painted` (is a human looking at it?) and `hittable` (is nothing above it blocking taps, such as an `IgnorePointer` or `AbsorbPointer`?). An opaque sibling drawn on top is not detected yet.
 - **Orients**: knows the navigation stack, including dialogs and bottom sheets, not just routes.
 - **Describes**: gives the agent a compact plain-language scene, not a coordinate dump.
 - **Scrolls to find**: virtualized lists only build what's near the viewport — glint will scroll to bring an off-screen item into the tree as a first-class action.
@@ -35,7 +35,7 @@ Most agent loops look like: act, wait for screen to settle, model wakes up, read
 
 1. The agent reads the screen *and* peeks at the widget tree (what's about to appear).
 2. It declares its next move ahead of time — even against a target that isn't on screen yet.
-3. Glint holds the intent. The moment the target appears *and* passes a real hit test, the action fires automatically.
+3. Glint holds the intent and checks the scene every 100 ms. As soon as the target is present and nothing above it blocks taps, the action fires.
 4. If the prediction was wrong, a structured "catch" wakes the agent with the actual state.
 
 The agent only spends thinking time on (a) deciding what's next and (b) handling catches. When the prediction holds, the flow runs at server speed.
@@ -63,7 +63,7 @@ Four modules behind an MCP server (stdio transport for v1):
 
 Built in Dart on top of `package:dart_mcp`, `package:vm_service`, and `package:dtd` — porting hardened patterns from [flutter_network_mcp](https://github.com/Lukas-io/flutter_network_mcp) where they apply (DTD discovery, structured response shapes, AOT install flow).
 
-Supported Flutter: latest stable + one before (currently 3.27+). Floor moves up with new stable releases.
+Tested on Flutter 3.47 (Dart 3.13), debug builds. Older Flutter versions are not tested yet; a version matrix in CI is planned.
 
 ## Roadmap
 
@@ -79,9 +79,32 @@ v1 focuses on **discovery-mode task execution** — making the first run through
 
 Full roadmap: [`source-of-truth.md`](./source-of-truth.md) §11.
 
-## Install / use
+## Install
 
-Not ready yet. v1 is in development. Check back, or read the [source-of-truth](./source-of-truth.md) to follow along.
+glint is not on pub.dev yet; install it from source.
+
+```bash
+git clone https://github.com/Lukas-io/glint.git
+cd glint && dart pub get
+
+# iOS Simulator support (macOS with Xcode 26):
+(cd native/ios_sim_bridge && swift build)
+
+# Add it to your agent, for example Claude Code:
+claude mcp add glint -- dart run "$PWD/bin/glint.dart"
+```
+
+Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with `flutter run` on a simulator or emulator and ask the agent to call `attach` with no arguments; glint finds the app and the device.
+
+## Limits today
+
+- **Debug and profile builds only.** glint reads the app through the Dart VM service, which release builds don't have.
+- **iOS needs a Mac with Xcode 26.** The simulator bridge uses private simulator APIs, and only Xcode 26 is supported so far.
+- **Android runs over adb.** Tested on macOS hosts; Linux hosts are not tested yet.
+- **Typing is ASCII only** on both platforms.
+- **No Flutter web or desktop yet.**
+- **Password fields show their length, never their text**, in scenes and logs.
+- **Call tools one at a time when several apps are attached.** Parallel calls can act on the wrong app; per-app serialization is planned.
 
 ## Privacy
 
@@ -93,4 +116,4 @@ glint records tool usage locally and sends nothing unless you set `GLINT_TELEMET
 
 ## Contributing
 
-Pre-v1, so contribution shape is still settling. If you're interested, read [`source-of-truth.md`](./source-of-truth.md) first — every architectural decision lives there.
+Pre-1.0, so the contribution process is still settling. Read [`source-of-truth.md`](./source-of-truth.md) first; the architectural decisions live there. Report security problems privately, as described in [SECURITY.md](./SECURITY.md).

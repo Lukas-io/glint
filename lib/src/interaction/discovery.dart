@@ -43,10 +43,10 @@ class AppDeviceLink {
   /// `.app` bundle folder name (iOS) — usually the generic "Runner".
   final String? appName;
 
-  /// CFBundleIdentifier, e.g. `com.app.aetrust`.
+  /// CFBundleIdentifier, e.g. `com.example.acmepay`.
   final String? bundleId;
 
-  /// CFBundleDisplayName / CFBundleName, e.g. `Aetrust`.
+  /// CFBundleDisplayName / CFBundleName, e.g. `Acme Pay`.
   final String? displayName;
 }
 
