@@ -55,14 +55,19 @@ class VmServiceRuntime implements FlutterRuntime {
 
   @override
   Future<void> attach(Uri vmServiceUri) async {
-    await _vm.attach(vmServiceUri);
+    try {
+      await _vm.attach(vmServiceUri);
+    } on TimeoutException {
+      await _vm.disconnect();
+      throw RuntimeUnresponsiveError('attach', VmClient.readTimeout);
+    }
     for (final stream in const [
       EventStreams.kStderr,
       EventStreams.kStdout,
       EventStreams.kLogging,
     ]) {
       try {
-        await _vm.service.streamListen(stream);
+        await _vm.service.streamListen(stream).timeout(VmClient.readTimeout);
       } on Object {}
     }
     // Wire disconnect signal: fires once when the WebSocket closes.
@@ -198,14 +203,19 @@ class VmServiceRuntime implements FlutterRuntime {
     );
   }
 
+  /// Cleanup is not worth blocking a reply on: a suspended app (device locked) never answers.
+  static const disposeTimeout = Duration(seconds: 2);
+
   @override
   Future<void> disposeInspectorGroup(String groupName) async {
     try {
-      await _vm.service.callServiceExtension(
-        'ext.flutter.inspector.disposeGroup',
-        isolateId: flutterIsolateId,
-        args: InspectorParams.disposeGroup(groupName),
-      );
+      await _vm.service
+          .callServiceExtension(
+            'ext.flutter.inspector.disposeGroup',
+            isolateId: flutterIsolateId,
+            args: InspectorParams.disposeGroup(groupName),
+          )
+          .timeout(disposeTimeout);
     } on Object {
       // best-effort
     }
@@ -217,7 +227,9 @@ class VmServiceRuntime implements FlutterRuntime {
     if (root == null) return null;
     try {
       final resolved =
-          await _vm.service.lookupResolvedPackageUris(flutterIsolateId, [root]);
+          await _vm.service
+              .lookupResolvedPackageUris(flutterIsolateId, [root])
+              .timeout(callTimeout);
       final uris = resolved.uris;
       if (uris == null || uris.isEmpty) return null;
       return appRootFromMainScript(uris.first);

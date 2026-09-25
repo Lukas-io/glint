@@ -39,6 +39,11 @@ void main() {
       expect(calls.single, ['/bin/glint-iossim', 'key', 'UDID', '4', '1', '8']);
     });
 
+    test('home is the HID home button (code 0), not an edge swipe', () async {
+      await backend().pressHardwareButton(HardwareButton.home);
+      expect(calls.single, ['/bin/glint-iossim', 'probe-button', 'UDID', '0']);
+    });
+
     test('tapSequence is one taps call in logical points', () async {
       await backend().tapSequence([(x: 300, y: 600), (x: 600, y: 900)],
           intervalMs: 120);

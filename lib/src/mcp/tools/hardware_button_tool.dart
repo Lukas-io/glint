@@ -19,8 +19,7 @@ class HardwareButtonTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'hardware_button',
-        description:
-            'Press a physical hardware button. iOS Sim: lock + unlock '
+        description: 'Press a physical hardware button. iOS Sim: lock + unlock '
             '(Face ID auth via Darwin notification + bottom-edge swipe) + '
             'home (Face ID gesture) + back (the left-edge back gesture, since '
             'iPhone has no back button) all work on Xcode 26. Returns the app '
@@ -58,35 +57,61 @@ class HardwareButtonTool extends GlintTool {
     // Device mode: hardware buttons are OS-level — go straight to the backend
     // (no Flutter scene / interactor available).
     if (session.isDeviceMode) {
-      try {
-        await session.backend.pressHardwareButton(button);
-      } on UnsupportedBackendAction catch (e) {
-        return StructuredResponse.error(
-          summary: '${session.backend.label}: ${button.name} not supported',
-          errorKind: GlintErrorKind.unsupportedBackendAction,
-          detail: e.detail,
-        );
-      } on Object catch (e) {
-        return StructuredResponse.error(
-          summary: 'hardware button ${button.name} failed',
-          errorKind: GlintErrorKind.backendToolError,
-          detail: '$e',
-        );
-      }
+      final failed = await _press(session, button);
+      if (failed != null) return failed;
       final locked = await _lockStateFor(session, button);
       return StructuredResponse(
         summary: locked == null
             ? 'pressed ${button.name}'
             : 'pressed ${button.name}, device ${locked ? 'locked' : 'unlocked'}',
-        data: {'ok': true, 'mode': 'device', if (locked != null) 'locked': locked},
+        data: {
+          'ok': true,
+          'mode': 'device',
+          if (locked != null) 'locked': locked
+        },
         warnings: [
           if (button == HardwareButton.unlock && locked == true) _stillLocked,
         ],
       );
     }
 
-    final pre =
-        button == HardwareButton.back ? await snapshotPreAction(session) : null;
+    // Only back reads the screen: lock / unlock / home must work while a locked device keeps the app suspended.
+    if (button == HardwareButton.back) return _pressBack(session);
+    final failed = await _press(session, button);
+    if (failed != null) return failed;
+    return _withOutcome(
+        session,
+        button,
+        StructuredResponse(
+            summary: 'press ${button.name}', data: const {'ok': true}));
+  }
+
+  /// Presses [button] on the backend; the error envelope, or null when it went through.
+  Future<StructuredResponse?> _press(
+      GlintSession session, HardwareButton button) async {
+    try {
+      await session.backend.pressHardwareButton(button);
+      return null;
+    } on SessionNotAttachedError {
+      rethrow;
+    } on UnsupportedBackendAction catch (e) {
+      return StructuredResponse.error(
+        summary: '${session.backend.label}: ${button.name} not supported',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: e.detail,
+      );
+    } on Object catch (e) {
+      return StructuredResponse.error(
+        summary: 'hardware button ${button.name} failed',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '$e',
+      );
+    }
+  }
+
+  Future<StructuredResponse> _pressBack(GlintSession session) async {
+    const button = HardwareButton.back;
+    final pre = await snapshotPreAction(session);
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(
@@ -94,67 +119,70 @@ class HardwareButtonTool extends GlintTool {
         PressHardwareButton(button),
       );
       var response = StructuredResponse.fromActionResult(result);
-      if (!response.isError && button == HardwareButton.back) {
-        response = await _backOutcome(session, scene, response, pre);
-      }
-      if (!response.isError) {
-        // The "what happened" for a hardware button is a lifecycle change, not
-        // a scene diff. Read it best-effort (home may background the app and
-        // make the eval fail — that itself signals it took).
-        final lifecycle = await _settledLifecycle(session, button);
-        final locked = await _lockStateFor(session, button);
-        final stuck = switch (button) {
-          HardwareButton.home => lifecycle == 'resumed',
-          HardwareButton.lock =>
-            locked == false || (locked == null && lifecycle == 'resumed'),
-          _ => false,
-        };
-        final stillLocked = button == HardwareButton.unlock && locked == true;
-        final backMissed =
-            button == HardwareButton.back && response.data?['changed'] == false;
-        final summary = StringBuffer(response.summary);
-        if (lifecycle != null) summary.write(', app is $lifecycle');
-        if (locked != null) summary.write(', device ${locked ? 'locked' : 'unlocked'}');
-        return response.copyWith(
-          summary: summary.toString(),
-          data: {
-            ...?response.data,
-            if (lifecycle != null) 'lifecycle': lifecycle,
-            if (locked != null) 'locked': locked,
-          },
-          warnings: [
-            if (stuck)
-              'the ${button.name} press may not have registered: the app never '
-                  'left the foreground; try once more or use `device op:screenshot`',
-            if (stillLocked) _stillLocked,
-            if (backMissed)
-              'the back gesture changed nothing after two tries: there may be '
-                  'no route to pop, or a PopScope refused',
-          ],
-          nextSteps: [
-            if (stillLocked)
-              'hardware_button unlock once more; if it stays locked, '
-                  '`device op:screenshot` shows what the lock screen is waiting for'
-            else if (button == HardwareButton.unlock && lifecycle != 'resumed')
-              'the app is still $lifecycle: wait a moment, then get_scene; '
-                  'if it stays paused, `hardware_button home` and reopen it'
-            else if (button == HardwareButton.unlock)
-              'call get_scene to read the screen after unlock'
-            else if (button == HardwareButton.home && !stuck)
-              'the app is now backgrounded: reopen it then call get_scene'
-            else if (button == HardwareButton.lock && !stuck)
-              'device is locked: call hardware_button with unlock to resume'
-            else if (backMissed)
-              'get_scene to see where you are; if a dialog is up, dismiss it first'
-            else if (button == HardwareButton.back)
-              'call get_scene to read the screen you went back to',
-          ],
-        );
-      }
-      return response;
+      if (response.isError) return response;
+      response = await _backOutcome(session, scene, response, pre);
+      return await _withOutcome(session, button, response);
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// Adds what the press did (lifecycle, lock state) and the matching warnings and next steps.
+  Future<StructuredResponse> _withOutcome(GlintSession session,
+      HardwareButton button, StructuredResponse response) async {
+    // The "what happened" for a hardware button is a lifecycle change, not
+    // a scene diff. Read it best-effort (home may background the app and
+    // make the eval fail — that itself signals it took).
+    final lifecycle = await _settledLifecycle(session, button);
+    final locked = await _lockStateFor(session, button);
+    final stuck = switch (button) {
+      HardwareButton.home => lifecycle == 'resumed',
+      HardwareButton.lock =>
+        locked == false || (locked == null && lifecycle == 'resumed'),
+      _ => false,
+    };
+    final stillLocked = button == HardwareButton.unlock && locked == true;
+    final backMissed =
+        button == HardwareButton.back && response.data?['changed'] == false;
+    final summary = StringBuffer(response.summary);
+    if (lifecycle != null) summary.write(', app is $lifecycle');
+    if (locked != null)
+      summary.write(', device ${locked ? 'locked' : 'unlocked'}');
+    return response.copyWith(
+      summary: summary.toString(),
+      data: {
+        ...?response.data,
+        if (lifecycle != null) 'lifecycle': lifecycle,
+        if (locked != null) 'locked': locked,
+      },
+      warnings: [
+        if (stuck)
+          'the ${button.name} press may not have registered: the app never '
+              'left the foreground; try once more or use `device op:screenshot`',
+        if (stillLocked) _stillLocked,
+        if (backMissed)
+          'the back gesture changed nothing after two tries: there may be '
+              'no route to pop, or a PopScope refused',
+      ],
+      nextSteps: [
+        if (stillLocked)
+          'hardware_button unlock once more; if it stays locked, '
+              '`device op:screenshot` shows what the lock screen is waiting for'
+        else if (button == HardwareButton.unlock && lifecycle != 'resumed')
+          'the app is still $lifecycle: wait a moment, then get_scene; '
+              'if it stays paused, `hardware_button home` and reopen it'
+        else if (button == HardwareButton.unlock)
+          'call get_scene to read the screen after unlock'
+        else if (button == HardwareButton.home && !stuck)
+          'the app is now backgrounded: reopen it then call get_scene'
+        else if (button == HardwareButton.lock && !stuck)
+          'device is locked: call hardware_button with unlock to resume'
+        else if (backMissed)
+          'get_scene to see where you are; if a dialog is up, dismiss it first'
+        else if (button == HardwareButton.back)
+          'call get_scene to read the screen you went back to',
+      ],
+    );
   }
 
   /// A back gesture is a route change or nothing: read `changed` like a tap does, and give the gesture one more try when the first missed.
@@ -174,7 +202,8 @@ class HardwareButtonTool extends GlintTool {
       'the device still reports itself locked after the unlock sequence';
 
   /// SpringBoard's lock state after a lock / unlock press; null for other buttons or when the backend cannot tell.
-  Future<bool?> _lockStateFor(GlintSession session, HardwareButton button) async {
+  Future<bool?> _lockStateFor(
+      GlintSession session, HardwareButton button) async {
     if (button != HardwareButton.lock && button != HardwareButton.unlock) {
       return null;
     }
@@ -196,9 +225,8 @@ class HardwareButtonTool extends GlintTool {
     String? last;
     for (var i = 0; i < (expectsChange ? 6 : 1); i++) {
       try {
-        last = await session
-            .lifecycleState()
-            .timeout(const Duration(seconds: 1));
+        last =
+            await session.lifecycleState().timeout(const Duration(seconds: 1));
       } on TimeoutException {
         return wantsResumed ? last : 'suspended';
       } on Object {
