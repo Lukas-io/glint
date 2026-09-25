@@ -85,7 +85,7 @@ const _recovery = '''
 - `geometryResolveError` — eval failed; retry after `wait_for_settle`; else re-`attach`.
 - `unsupportedBackendAction` / `backendToolError` — platform gap or native tool failed; read `detail`.
 - `invalidArgument` — fix per tool description.
-- `internal` — glint bug. Surface `detail` via `report_issue`.
+- `internal` — glint bug. `report_issue` with the user's OK.
 
 `hittable=false` warns by default; `refuseNotHittable: true` fails loud.
 ''';
