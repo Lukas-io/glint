@@ -53,9 +53,10 @@ class Interactor {
         devicePixelRatio: e.devicePixelRatio,
         painted: false,
         hittable: false,
-        nextSteps: const [
-          'the target is scrolled out of the viewport — use scroll_to_find '
-              'with its glintId to bring it on-screen first',
+        nextSteps: [
+          'the target is scrolled out of the viewport: bring it on-screen with '
+              'scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", '
+              'then retry',
         ],
       );
     } on NotHittableRefused catch (e) {
@@ -135,7 +136,7 @@ class Interactor {
         );
 
       case TypeText():
-        await backend.typeText(action.text);
+        await backend.typeText(action.text, keyDelayMs: action.keyDelayMs);
         return ActionResult.success(action: action, summary: action.label);
 
       case PressKey():
@@ -251,4 +252,14 @@ class NotHittableRefused implements Exception {
   final ({int x, int y})? physicalCenter;
   final double? devicePixelRatio;
   final bool? painted;
+}
+
+/// The glintId an action aims at, when it targets one node symbolically.
+String? _glintIdOf(Action action) {
+  final target = switch (action) {
+    Tap(:final target) || LongPress(:final target) || DoubleTap(:final target) =>
+      target,
+    _ => null,
+  };
+  return target is SymbolicTarget ? target.glintId : null;
 }

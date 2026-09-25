@@ -31,6 +31,11 @@ class TypeTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(description: 'Printable-ASCII text to type.'),
+            'keyDelayMs': Schema.int(
+              description: 'Gap between keys, 0-1000 ms. Default 18. Raise it '
+                  '(e.g. 80) when a formatted field (phone, card, amount) '
+                  'drops characters.',
+            ),
             'clear': Schema.bool(
               description:
                   'Empty the focused field before typing (select-all + '
@@ -73,8 +78,18 @@ class TypeTool extends GlintTool {
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
     final clear = argBool(args, 'clear') ?? false;
+    final keyDelayMs = argInt(args, 'keyDelayMs');
+    if (keyDelayMs != null && (keyDelayMs < 0 || keyDelayMs > 1000)) {
+      return StructuredResponse.error(
+        summary: 'keyDelayMs must be between 0 and 1000',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['try keyDelayMs:80 for a field that drops characters'],
+      );
+    }
     final t = readTargetedArgs(args, session.config);
-    if (session.isDeviceMode) return _typeInDeviceMode(session, text, focus, clear);
+    if (session.isDeviceMode) {
+      return _typeInDeviceMode(session, text, focus, clear, keyDelayMs);
+    }
 
     final warnings = <String>[];
     ArmingReady? focusArming;
@@ -117,7 +132,8 @@ class TypeTool extends GlintTool {
         warnings.addAll(cleared.warnings);
       }
 
-      final result = await session.interactor.run(scene, TypeText(text));
+      final result = await session.interactor
+          .run(scene, TypeText(text, keyDelayMs: keyDelayMs));
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail)
               .addWarnings(warnings);
@@ -153,7 +169,8 @@ class TypeTool extends GlintTool {
 
   /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focused. clear does a blind select-all + backspace first.
   Future<StructuredResponse> _typeInDeviceMode(
-      GlintSession session, String text, String? focus, bool clear) async {
+      GlintSession session, String text, String? focus, bool clear,
+      int? keyDelayMs) async {
     if (focus != null) {
       return StructuredResponse.error(
         summary: 'focus:$focus needs a Flutter app; this session is in device mode',
@@ -169,7 +186,7 @@ class TypeTool extends GlintTool {
         await session.backend.selectAll();
         await session.backend.pressKey(KeyName.backspace);
       }
-      await session.backend.typeText(text);
+      await session.backend.typeText(text, keyDelayMs: keyDelayMs);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: typing not supported',

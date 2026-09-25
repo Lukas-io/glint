@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
 
@@ -15,6 +16,7 @@ class StructuredResponse {
     this.data,
     this.isError = false,
     this.textOnly = false,
+    this.imagePaths = const [],
   });
 
   factory StructuredResponse.error({
@@ -71,6 +73,9 @@ class StructuredResponse {
   /// reaches the agent once and unescaped instead of as JSON-encoded text.
   final bool textOnly;
 
+  /// PNG files shipped inline as image content, so the agent sees them without a second read.
+  final List<String> imagePaths;
+
   /// Returns a copy with the given fields replaced — so callers augmenting a
   /// response don't re-list all five fields by hand.
   StructuredResponse copyWith({
@@ -80,6 +85,7 @@ class StructuredResponse {
     Map<String, Object?>? data,
     bool? isError,
     bool? textOnly,
+    List<String>? imagePaths,
   }) =>
       StructuredResponse(
         summary: summary ?? this.summary,
@@ -88,6 +94,7 @@ class StructuredResponse {
         data: data ?? this.data,
         isError: isError ?? this.isError,
         textOnly: textOnly ?? this.textOnly,
+        imagePaths: imagePaths ?? this.imagePaths,
       );
 
   /// Bytes the client receives: the structured payload, or the text alone.
@@ -145,9 +152,22 @@ class StructuredResponse {
 
   CallToolResult toCallResult() {
     return CallToolResult(
-      content: [Content.text(text: renderText())],
+      content: [
+        Content.text(text: renderText()),
+        for (final path in imagePaths)
+          if (_base64File(path) case final data?)
+            Content.image(data: data, mimeType: 'image/png'),
+      ],
       structuredContent: textOnly ? null : toStructuredContent(),
       isError: isError,
     );
+  }
+}
+
+String? _base64File(String path) {
+  try {
+    return base64Encode(File(path).readAsBytesSync());
+  } on Object {
+    return null;
   }
 }

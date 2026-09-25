@@ -27,9 +27,15 @@ abstract class InteractionBackend {
     required int physicalX2,
     required int physicalY2,
     required int durationMs,
+    int holdMs = 0,
   });
 
-  Future<void> typeText(String text);
+  /// Taps each physical point in order with [intervalMs] between taps.
+  Future<void> tapSequence(List<({int x, int y})> points,
+      {required int intervalMs});
+
+  /// Types [text]; [keyDelayMs] widens the gap between keys for fields whose formatter drops fast input.
+  Future<void> typeText(String text, {int? keyDelayMs});
 
   Future<void> pressHardwareButton(HardwareButton button);
 
@@ -105,4 +111,15 @@ class BackendToolError implements Exception {
   @override
   String toString() =>
       'BackendToolError($backend, $command, exit=$exitCode): $stderr';
+}
+
+/// [InteractionBackend.tapSequence] as one tap call per point, for backends with no batched form.
+Future<void> tapEachInTurn(InteractionBackend backend,
+    List<({int x, int y})> points, int intervalMs) async {
+  for (var i = 0; i < points.length; i++) {
+    await backend.tap(physicalX: points[i].x, physicalY: points[i].y);
+    if (i < points.length - 1 && intervalMs > 0) {
+      await Future<void>.delayed(Duration(milliseconds: intervalMs));
+    }
+  }
 }

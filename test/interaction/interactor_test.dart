@@ -135,6 +135,7 @@ class _FakeBackend implements InteractionBackend {
     required int physicalX2,
     required int physicalY2,
     required int durationMs,
+    int holdMs = 0,
   }) async {
     swipes.add((physicalX1, physicalY1, physicalX2, physicalY2));
   }
@@ -143,7 +144,12 @@ class _FakeBackend implements InteractionBackend {
   var selectAllCalls = 0;
 
   @override
-  Future<void> typeText(String text) async {}
+  Future<void> typeText(String text, {int? keyDelayMs}) async {}
+
+  @override
+  Future<void> tapSequence(List<({int x, int y})> points,
+          {required int intervalMs}) =>
+      tapEachInTurn(this, points, intervalMs);
 
   @override
   Future<void> pressKey(KeyName key,
