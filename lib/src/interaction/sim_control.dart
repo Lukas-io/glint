@@ -14,6 +14,7 @@ class SimStatus {
     this.deviceType,
     this.appearance,
     this.contentSize,
+    this.biometricEnrolled,
   });
 
   final String udid;
@@ -24,6 +25,9 @@ class SimStatus {
   final String? appearance; // light | dark
   final String? contentSize; // text-size category
 
+  /// Face ID / Touch ID enrolment; null when it could not be read.
+  final bool? biometricEnrolled;
+
   Map<String, Object?> toJson() => {
         'udid': udid,
         'name': name,
@@ -32,11 +36,12 @@ class SimStatus {
         if (deviceType != null) 'deviceType': deviceType,
         if (appearance != null) 'appearance': appearance,
         if (contentSize != null) 'contentSize': contentSize,
+        if (biometricEnrolled != null) 'biometricEnrolled': biometricEnrolled,
       };
 }
 
 /// Status + lightweight control of an iOS simulator over `xcrun simctl`.
-/// Heavier control (location, biometrics, push, status-bar) is roadmapped.
+/// Heavier control (location, push, status-bar) is roadmapped.
 class SimControl {
   const SimControl();
 
@@ -58,8 +63,44 @@ class SimControl {
       deviceType: _prettyDeviceType(json['deviceTypeIdentifier'] as String?),
       appearance: await _ui(target, 'appearance'),
       contentSize: await _ui(target, 'content_size'),
+      biometricEnrolled: await biometricEnrolled(target),
     );
   }
+
+  static const _enrollmentKey = 'com.apple.BiometricKit.enrollmentChanged';
+
+  /// The enrolment the Simulator's Features > Face ID menu toggles; null when unreadable.
+  Future<bool?> biometricEnrolled(String udid) async {
+    try {
+      final res = await Process.run(
+          'xcrun', ['simctl', 'spawn', udid, 'notifyutil', '-g', _enrollmentKey]);
+      if (res.exitCode != 0) return null;
+      return switch ((res.stdout as String).trim().split(' ').last) {
+        '1' => true,
+        '0' => false,
+        _ => null,
+      };
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Enrols or unenrols Face ID / Touch ID (one flag covers both), then posts the change so running apps see it.
+  Future<String?> setBiometricEnrolled(String udid, bool enrolled) async =>
+      await _run(['spawn', udid, 'notifyutil', '-s', _enrollmentKey, enrolled ? '1' : '0']) ??
+      await _run(['spawn', udid, 'notifyutil', '-p', _enrollmentKey]);
+
+  /// Answers a pending biometric prompt with a matching or non-matching face ([touch] false) or finger.
+  Future<String?> biometricAttempt(String udid,
+          {required bool match, required bool touch}) =>
+      _run([
+        'spawn',
+        udid,
+        'notifyutil',
+        '-p',
+        'com.apple.BiometricKit_Sim.${touch ? 'fingerTouch' : 'pearl'}'
+            '.${match ? 'match' : 'nomatch'}',
+      ]);
 
   /// Set the simulator appearance. [mode] is `light` or `dark`.
   Future<String?> setAppearance(String udid, String mode) =>
