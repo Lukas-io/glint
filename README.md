@@ -85,9 +85,7 @@ Not ready yet. v1 is in development. Check back, or read the [source-of-truth](.
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](./LICENSE).
-
-You can use, modify, study, and contribute to glint for any noncommercial purpose — personal projects, research, education, internal evaluation, non-profit work. **Selling glint, hosting it as a paid service, or any commercial use requires written authorization from the author.** Reach out if that's what you want; commercial licensing is on the table.
+[Apache License 2.0](./LICENSE). You can use, modify, and ship glint in personal and commercial work. See [NOTICE](./NOTICE).
 
 ## Contributing
 
