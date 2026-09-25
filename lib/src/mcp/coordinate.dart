@@ -72,6 +72,7 @@ Future<StructuredResponse> coordinateSwipe(
   double y2,
   int durationMs, {
   String verb = 'swiped',
+  int holdMs = 0,
 }) async {
   final dpr = session.device.devicePixelRatio;
   try {
@@ -81,6 +82,7 @@ Future<StructuredResponse> coordinateSwipe(
       physicalX2: (x2 * dpr).round(),
       physicalY2: (y2 * dpr).round(),
       durationMs: durationMs,
+      holdMs: holdMs,
     );
   } on Object catch (e) {
     return _failed(verb, '($x1,$y1)->($x2,$y2)', e);

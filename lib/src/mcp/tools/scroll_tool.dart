@@ -11,6 +11,9 @@ import '../tool_args.dart';
 
 enum ScrollDirection { up, down, left, right }
 
+/// Rest at the end of a scroll swipe so the list stops where the finger does instead of flinging on.
+const scrollHoldMs = 120;
+
 class ScrollTool extends GlintTool {
   const ScrollTool();
 
@@ -88,7 +91,7 @@ class ScrollTool extends GlintTool {
       final line = _swipeLine(dir, amount, size.w.toDouble(), size.h.toDouble());
       return coordinateSwipe(
           session, line.fromX, line.fromY, line.toX, line.toY, 300,
-          verb: 'scrolled');
+          verb: 'scrolled', holdMs: scrollHoldMs);
     }
 
     final horizontal =
@@ -115,7 +118,7 @@ class ScrollTool extends GlintTool {
       final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
       var response = await coordinateSwipe(
           session, line.fromX, line.fromY, line.toX, line.toY, 300,
-          verb: 'scrolled');
+          verb: 'scrolled', holdMs: scrollHoldMs);
       if (returnScene && !response.isError) {
         final post = await readPostActionState(session, action.pre,
             includeSceneText: fetchScene,

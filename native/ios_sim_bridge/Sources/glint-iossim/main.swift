@@ -140,6 +140,27 @@ do {
         try proxy.tap(x: p.x, y: p.y, deviceLogicalSize: p.size)
         print("OK tap \(args[2]) (\(p.x),\(p.y)) of (\(p.size.width)x\(p.size.height))")
 
+    case "taps":
+        // Several taps from one process: glint's tap sequence (PIN pads, keypads).
+        guard args.count >= 8, (args.count - 6) % 2 == 0,
+            let dw = Double(args[3]), let dh = Double(args[4]),
+            let intervalMs = Int(args[5]), intervalMs >= 0, intervalMs <= 2000
+        else {
+            die("usage: glint-iossim taps <UDID> <dev_w> <dev_h> <interval_ms 0-2000> <x1> <y1> [<x2> <y2> …]")
+        }
+        var points: [CGPoint] = []
+        var i = 6
+        while i < args.count {
+            guard let x = Double(args[i]), let y = Double(args[i + 1]) else {
+                die("taps: point \((i - 6) / 2 + 1) is not a number pair")
+            }
+            points.append(CGPoint(x: x, y: y))
+            i += 2
+        }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        try proxy.taps(points, deviceLogicalSize: CGSize(width: dw, height: dh), intervalMs: intervalMs)
+        print("OK taps \(args[2]) \(points.count) points")
+
     case "long-press":
         guard args.count == 8 else {
             die("usage: glint-iossim long-press <UDID> <dev_w> <dev_h> <x> <y> <duration_ms>")
@@ -151,8 +172,13 @@ do {
         print("OK long-press \(args[2]) (\(p.x),\(p.y)) hold=\(dur)ms")
 
     case "swipe":
-        guard args.count == 10 else {
-            die("usage: glint-iossim swipe <UDID> <dev_w> <dev_h> <x1> <y1> <x2> <y2> <duration_ms>")
+        guard args.count == 10 || args.count == 11 else {
+            die("usage: glint-iossim swipe <UDID> <dev_w> <dev_h> <x1> <y1> <x2> <y2> <duration_ms> [hold_ms 0-2000]")
+        }
+        var holdMs = 0
+        if args.count == 11 {
+            guard let h = Int(args[10]), h >= 0, h <= 2000 else { die("hold_ms must be an integer 0-2000") }
+            holdMs = h
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
         let size = try _Point.parseSize(args[3], args[4])
@@ -166,6 +192,7 @@ do {
             to: CGPoint(x: x2, y: y2),
             deviceLogicalSize: size,
             durationMs: dur,
+            holdMs: holdMs,
         )
         print("OK swipe \(args[2]) (\(x1),\(y1)) -> (\(x2),\(y2)) dur=\(dur)ms")
 
@@ -191,9 +218,19 @@ do {
         print("OK probe-button \(args[2]) code=\(code)")
 
     case "type":
-        guard args.count == 4 else { die("usage: glint-iossim type <UDID> <text>") }
+        // Optional per-key gap for fields whose formatter needs longer than the default.
+        guard args.count == 4 || args.count == 5 else {
+            die("usage: glint-iossim type <UDID> <text> [gapMs 0-1000]")
+        }
+        var gap = SimDeviceProxy.interKeyGap
+        if args.count == 5 {
+            guard let ms = Int(args[4]), ms >= 0, ms <= 1000 else {
+                die("gapMs must be an integer 0-1000")
+            }
+            gap = Double(ms) / 1000
+        }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.typeText(args[3])
+        try proxy.typeText(args[3], gapSeconds: gap)
         print("OK type \(args[2]) \(args[3].count) chars")
 
     case "key":

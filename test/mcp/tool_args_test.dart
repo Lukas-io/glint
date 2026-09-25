@@ -86,4 +86,27 @@ void main() {
     expect(r.summary, endsWith('the glint-iossim bridge is not built'));
     expect(r.nextSteps.first, contains('swift build'));
   });
+
+  group('unknown arguments', () {
+    final tool = Tool(
+      name: 'scroll_to_find',
+      inputSchema: ObjectSchema(properties: {
+        'targetGlintId': Schema.string(),
+        'direction': Schema.string(),
+      }),
+    );
+
+    test('are refused with the likely intended name', () {
+      final r = GlintTool.checkArguments(tool,
+          CallToolRequest(name: 'scroll_to_find', arguments: {'glintId': 'x'}));
+      expect(r?.summary, 'scroll_to_find: unknown argument glintId');
+      expect(r?.nextSteps.first, 'use targetGlintId instead of glintId');
+    });
+
+    test('closestArgName tries containment, then edit distance', () {
+      expect(GlintTool.closestArgName('glintId', ['targetGlintId']), 'targetGlintId');
+      expect(GlintTool.closestArgName('direciton', ['direction']), 'direction');
+      expect(GlintTool.closestArgName('zzz', ['direction']), isNull);
+    });
+  });
 }
