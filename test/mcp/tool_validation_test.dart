@@ -291,4 +291,18 @@ void main() {
       expect(props.containsKey('app'), isTrue);
     });
   });
+
+  group('device biometric', () {
+    Future<Map<String, Object?>> call(Map<String, Object?> args) async =>
+        _structured(await const DeviceTool().invoke(session,
+            CallToolRequest(name: 'device', arguments: {'udid': 'U', ...args})));
+
+    test('an unknown action or type → invalidArgument naming the choices', () async {
+      final a = await call({'op': 'biometric', 'action': 'maybe'});
+      expect(a['errorKind'], 'invalidArgument');
+      expect(a['summary'], contains('enrol | unenrol | match | nomatch'));
+      final t = await call({'op': 'biometric', 'action': 'match', 'type': 'iris'});
+      expect(t['summary'], 'op=biometric type must be face or touch');
+    });
+  });
 }
