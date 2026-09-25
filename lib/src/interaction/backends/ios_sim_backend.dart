@@ -211,6 +211,7 @@ class IosSimBackend implements InteractionBackend {
         if (attempt > 0) await Future<void>.delayed(unlockSettle);
         return;
       }
+      if (locked == false && blanked == null) return;
       if (locked == false) {
         // Unlocked behind a dark display: a side press only flashes it, so lock it cleanly and unlock from there.
         await _lock();
