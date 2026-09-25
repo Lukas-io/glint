@@ -18,6 +18,7 @@ void main() {
       FailureEntry() => entry.args,
     };
     expect(args?['text'], '<9 chars>');
+    expect(const TypeText('hunter2!!').label, 'type 9 chars');
     expect(const LogRenderer().render([entry]), isNot(contains('hunter2')));
   });
 
