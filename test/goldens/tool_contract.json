@@ -1,0 +1,714 @@
+{
+  "attach": {
+    "type": "object",
+    "properties": {
+      "app": {
+        "type": "string",
+        "description": "App to attach or switch to: display name, package, bundle id, or the simulator name it runs on. Matches running apps and already-attached ones."
+      },
+      "vmUri": {
+        "type": "string",
+        "description": "VM service URI, e.g. ws://127.0.0.1:1234/abc=/ws. Omit to auto-discover the running app."
+      },
+      "platform": {
+        "type": "string",
+        "description": "ios | android. Omit to derive from the VM."
+      },
+      "mode": {
+        "type": "string",
+        "description": "flutter | device | auto (default). device = drive the sim with no Flutter app."
+      },
+      "device": {
+        "type": "string",
+        "description": "iOS simulator UDID or Android serial. Omit to auto-correlate to the app's real device. When nothing is running, passing a device from the \"no app running\" list starts its app there."
+      },
+      "launch": {
+        "type": "string",
+        "description": "Path to a Flutter project root to run when it is not in history. Usually you pass a device from the no-app-running list instead."
+      },
+      "iosBridgePath": {
+        "type": "string",
+        "description": "Path to compiled `glint-iossim` binary. iOS only."
+      },
+      "adbPath": {
+        "type": "string",
+        "description": "adb executable path. Android only."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "Include the first get_scene render. Default false."
+      },
+      "dryRun": {
+        "type": "boolean",
+        "description": "List attachable apps + devices without attaching. Default false."
+      },
+      "awaitSettle": {
+        "type": "boolean",
+        "description": "Wait until the UI settles before returning. Default false."
+      }
+    }
+  },
+  "device": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "status (default) | appearance | openurl | screenshot | privacy | biometric"
+      },
+      "udid": {
+        "type": "string",
+        "description": "Target simulator UDID. Defaults to the attached device."
+      },
+      "inline": {
+        "type": "boolean",
+        "description": "op=screenshot: also return the PNG as image content, so no separate read is needed. Default false."
+      },
+      "latest": {
+        "type": "boolean",
+        "description": "screenshot only: return the newest background capture (taken when the app left the foreground) instead of taking a new one. Default false."
+      },
+      "value": {
+        "type": "string",
+        "description": "appearance: light|dark. openurl: the URL."
+      },
+      "action": {
+        "type": "string",
+        "description": "privacy: grant | revoke | reset. biometric: enrol | unenrol | match | nomatch (match/nomatch answer a Face ID / Touch ID prompt that is showing)."
+      },
+      "type": {
+        "type": "string",
+        "description": "biometric: face (default) | touch."
+      },
+      "service": {
+        "type": "string",
+        "description": "privacy: photos | camera | location | contacts | …"
+      },
+      "bundleId": {
+        "type": "string",
+        "description": "privacy: target app bundle id (grant/revoke)."
+      }
+    }
+  },
+  "kill_app": {
+    "type": "object",
+    "properties": {
+      "device": {
+        "type": "string",
+        "description": "Device id. Defaults to the attached device."
+      },
+      "appId": {
+        "type": "string",
+        "description": "Bundle id (iOS) / package (Android) to terminate."
+      }
+    }
+  },
+  "shutdown_sim": {
+    "type": "object",
+    "properties": {
+      "device": {
+        "type": "string",
+        "description": "Device id. Defaults to the attached device."
+      },
+      "all": {
+        "type": "boolean",
+        "description": "Shut down every booted device. Default false."
+      }
+    }
+  },
+  "get_scene": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "type": "string",
+        "description": "text (default). Leave unset."
+      },
+      "glintId": {
+        "type": "string",
+        "description": "Only this node and its descendants. Use to drill into one container or list instead of re-reading the whole screen."
+      },
+      "depth": {
+        "type": "integer",
+        "description": "With glintId: levels below it to include (0 = the node only). Default: all, up to the renderer's cap."
+      }
+    }
+  },
+  "resolve": {
+    "type": "object",
+    "properties": {
+      "glintId": {
+        "type": "string",
+        "description": "Stable id from `get_scene`."
+      }
+    },
+    "required": [
+      "glintId"
+    ]
+  },
+  "tap": {
+    "type": "object",
+    "properties": {
+      "glintId": {
+        "type": "string",
+        "description": "Stable id from `get_scene`, e.g. floating_action_button"
+      },
+      "x": {
+        "type": "number",
+        "description": "Raw x coordinate (with y). Device mode: screenshot pixels; flutter mode: logical points. Bypasses glintId."
+      },
+      "y": {
+        "type": "number",
+        "description": "Raw y coordinate (with x)."
+      },
+      "sequence": {
+        "type": "array",
+        "description": "Several taps in one call, fired back to back: [{glintId}|{x,y}, …], up to 50. For PIN pads, OTP keypads, amounts, repeated backspace. glintIds resolve from one scene read before the first tap; changed is read once at the end.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "glintId": {
+              "type": "string"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "intervalMs": {
+        "type": "integer",
+        "description": "Pause between sequence taps, 0-2000 ms. Default 120."
+      },
+      "refuseNotHittable": {
+        "type": "boolean",
+        "description": "When true, a non-hittable target produces an error (errorKind=notHittable) instead of a warning. Default false."
+      },
+      "awaitReady": {
+        "type": "boolean",
+        "description": "Arm the tap: block until the target is in the scene AND passes a hit test, then fire. Default false."
+      },
+      "readyTimeoutMs": {
+        "type": "integer",
+        "description": "Ceiling for `awaitReady`. Default 5000."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After the tap, settle and return the new scene plus changed (bool) and changeCategory. Collapses tap → wait_for_settle → get_scene into one call. Default true."
+      },
+      "detail": {
+        "type": "boolean",
+        "description": "When true: include full geometry (painted, hittable, physicalCenter) in structuredContent. Default false (ok-only — saves tokens)."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: include the full rendered scene text as postScene in structuredContent. Collapses returnScene + get_scene into one call. Default false."
+      }
+    }
+  },
+  "long_press": {
+    "type": "object",
+    "properties": {
+      "glintId": {
+        "type": "string",
+        "description": "Stable id from get_scene."
+      },
+      "x": {
+        "type": "number",
+        "description": "Raw x (with y). Bypasses glintId."
+      },
+      "y": {
+        "type": "number",
+        "description": "Raw y (with x)."
+      },
+      "durationMs": {
+        "type": "integer",
+        "description": "Hold time in ms. Default 500."
+      },
+      "awaitReady": {
+        "type": "boolean",
+        "description": "Block until the target is in the scene and hittable, then fire."
+      },
+      "readyTimeoutMs": {
+        "type": "integer",
+        "description": "Ceiling for awaitReady. Default 5000."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After the press, settle and return changed (bool) and changeCategory. Default true."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: also include the full rendered scene text as postScene. Default false."
+      }
+    }
+  },
+  "swipe": {
+    "type": "object",
+    "properties": {
+      "fromGlintId": {
+        "type": "string",
+        "description": "Start point — stable id from get_scene."
+      },
+      "toGlintId": {
+        "type": "string",
+        "description": "End point — stable id from get_scene."
+      },
+      "x1": {
+        "type": "number",
+        "description": "Raw start x (with y1,x2,y2)."
+      },
+      "y1": {
+        "type": "number",
+        "description": "Raw start y."
+      },
+      "x2": {
+        "type": "number",
+        "description": "Raw end x."
+      },
+      "y2": {
+        "type": "number",
+        "description": "Raw end y."
+      },
+      "durationMs": {
+        "type": "integer",
+        "description": "Coordinate swipe duration. Default 300."
+      },
+      "awaitReady": {
+        "type": "boolean",
+        "description": "Block until fromGlintId is in the scene and hittable, then fire."
+      },
+      "readyTimeoutMs": {
+        "type": "integer",
+        "description": "Ceiling for awaitReady. Default 5000."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After the swipe, settle and return changed (bool) and changeCategory. Default true."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: also include the full rendered scene text as postScene. Default false."
+      }
+    }
+  },
+  "drag": {
+    "type": "object",
+    "properties": {
+      "fromGlintId": {
+        "type": "string",
+        "description": "Start point — stable id from get_scene."
+      },
+      "toGlintId": {
+        "type": "string",
+        "description": "End point — stable id from get_scene."
+      },
+      "x1": {
+        "type": "number",
+        "description": "Raw start x (with y1,x2,y2)."
+      },
+      "y1": {
+        "type": "number",
+        "description": "Raw start y."
+      },
+      "x2": {
+        "type": "number",
+        "description": "Raw end x."
+      },
+      "y2": {
+        "type": "number",
+        "description": "Raw end y."
+      },
+      "durationMs": {
+        "type": "integer",
+        "description": "Hold time in ms. Default 800."
+      },
+      "awaitReady": {
+        "type": "boolean",
+        "description": "Block until fromGlintId is in the scene and hittable, then fire."
+      },
+      "readyTimeoutMs": {
+        "type": "integer",
+        "description": "Ceiling for awaitReady. Default 5000."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After the drag, settle and return changed (bool) and changeCategory. Default true."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: also include the full rendered scene text as postScene. Default false."
+      }
+    }
+  },
+  "scroll": {
+    "type": "object",
+    "properties": {
+      "direction": {
+        "type": "string",
+        "description": "One of: up, down, left, right"
+      },
+      "amountFraction": {
+        "type": "number",
+        "description": "Fraction of viewport to travel (0.0–1.0). Default 0.6."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After the scroll, settle and return changed (bool) and changeCategory. Default true."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: also include the full rendered scene text as postScene. Default false."
+      }
+    },
+    "required": [
+      "direction"
+    ]
+  },
+  "scroll_to_find": {
+    "type": "object",
+    "properties": {
+      "targetGlintId": {
+        "type": "string",
+        "description": "Stable id to find. Mutually exclusive with `targetTextContent`."
+      },
+      "targetTextContent": {
+        "type": "string",
+        "description": "Case-insensitive substring to match against any text node's content. Useful when the compact renderer collapsed the id you wanted."
+      },
+      "text": {
+        "type": "string",
+        "description": "Alias of targetTextContent."
+      },
+      "direction": {
+        "type": "string",
+        "description": "One of: up, down, left, right. Default down."
+      },
+      "maxScrolls": {
+        "type": "integer",
+        "description": "Attempt ceiling. Default 8."
+      },
+      "amountFraction": {
+        "type": "number",
+        "description": "Scroll size per step. Default 0.6."
+      }
+    }
+  },
+  "type": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "Printable-ASCII text to type."
+      },
+      "keyDelayMs": {
+        "type": "integer",
+        "description": "Gap between keys, 0-1000 ms. Default 18. Raise it (e.g. 80) when a formatted field (phone, card, amount) drops characters."
+      },
+      "clear": {
+        "type": "boolean",
+        "description": "Empty the focused field before typing (select-all + backspace, then a per-char backspace fallback). Default false."
+      },
+      "focus": {
+        "type": "string",
+        "description": "Optional glintId of an input to tap before typing."
+      },
+      "awaitReady": {
+        "type": "boolean",
+        "description": "Only meaningful with `focus`: block until the focus target is hittable."
+      },
+      "readyTimeoutMs": {
+        "type": "integer",
+        "description": "Ceiling for `awaitReady` on the focus field. Default 5000."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "After typing, settle and return the new scene plus changed (bool) and changeCategory. Default true."
+      },
+      "detail": {
+        "type": "boolean",
+        "description": "When true: include full geometry in structuredContent. Default false."
+      },
+      "fetchScene": {
+        "type": "boolean",
+        "description": "When true: include the full rendered scene text as postScene. Default false."
+      }
+    },
+    "required": [
+      "text"
+    ]
+  },
+  "key": {
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "One of: backspace, delete, enter, tab, escape, space, up, down, left, right."
+      },
+      "count": {
+        "type": "integer",
+        "description": "Times to press it (1-50). Default 1."
+      },
+      "modifiers": {
+        "type": "array",
+        "description": "Held around the key: cmd, shift, ctrl, alt.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "Read the post-press scene for changed. Default true."
+      }
+    },
+    "required": [
+      "key"
+    ]
+  },
+  "hardware_button": {
+    "type": "object",
+    "properties": {
+      "button": {
+        "type": "string",
+        "description": "Button name. One of: home, back, lock, unlock, volumeUp, volumeDown, appSwitcher."
+      }
+    },
+    "required": [
+      "button"
+    ]
+  },
+  "wait_for_settle": {
+    "type": "object",
+    "properties": {
+      "ceilingMs": {
+        "type": "integer",
+        "description": "Hard cap on wait time. Default 5000."
+      },
+      "quietFrames": {
+        "type": "integer",
+        "description": "Consecutive quiet polls required to declare settled. Default 3."
+      },
+      "checkLoadingAffordances": {
+        "type": "boolean",
+        "description": "When true, frame-quiet still polls if any CircularProgressIndicator / LinearProgressIndicator / RefreshIndicator is in the scene. Default true."
+      }
+    }
+  },
+  "batch": {
+    "type": "object",
+    "properties": {
+      "steps": {
+        "type": "array",
+        "description": "Ordered steps, each {tool: \"<name>\", args: {…}} with the same args the tool takes on its own. Max 20.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string",
+              "description": "Step tool name."
+            },
+            "args": {
+              "type": "object",
+              "description": "That tool's arguments.",
+              "properties": {}
+            }
+          },
+          "required": [
+            "tool"
+          ]
+        }
+      },
+      "stopOnNoChange": {
+        "type": "boolean",
+        "description": "Stop when a step reports changed:false. Default true."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "Append the final scene text. Default true."
+      }
+    },
+    "required": [
+      "steps"
+    ]
+  },
+  "record": {
+    "type": "object",
+    "properties": {
+      "steps": {
+        "type": "array",
+        "description": "Optional steps to run while recording. Max 20.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tool": {
+              "type": "string",
+              "description": "Step tool name."
+            },
+            "args": {
+              "type": "object",
+              "description": "That tool's arguments.",
+              "properties": {}
+            }
+          },
+          "required": [
+            "tool"
+          ]
+        }
+      },
+      "durationMs": {
+        "type": "integer",
+        "description": "Passive capture with no steps, or the tail after them (0-30000). Default 400."
+      },
+      "everyMs": {
+        "type": "integer",
+        "description": "Sample interval in ms (16-1000). Default 50."
+      },
+      "distinctOnly": {
+        "type": "boolean",
+        "description": "Keep only frames that differ. Default true."
+      },
+      "maxFrames": {
+        "type": "integer",
+        "description": "Max frames returned (1-60). Default 12."
+      }
+    }
+  },
+  "logs": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "type": "string",
+        "description": "text (default) or json"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max entries to return. Default 50."
+      },
+      "tool": {
+        "type": "string",
+        "description": "Filter by tool name (exact match)."
+      },
+      "failuresOnly": {
+        "type": "boolean",
+        "description": "Only entries that failed (had an errorKind)."
+      },
+      "sinceSeq": {
+        "type": "integer",
+        "description": "Return entries with sequence >= sinceSeq."
+      }
+    }
+  },
+  "app_logs": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "description": "Max entries. Default 50."
+      },
+      "errorsOnly": {
+        "type": "boolean",
+        "description": "Only entries that look like exceptions / stack traces."
+      },
+      "format": {
+        "type": "string",
+        "description": "text (default, rendered) or json (structured entries — pass this to get the entries array)."
+      },
+      "stream": {
+        "type": "string",
+        "description": "Filter: stderr or logging."
+      },
+      "sinceSeq": {
+        "type": "integer",
+        "description": "Return entries with sequence >= sinceSeq."
+      }
+    }
+  },
+  "session": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "status (default) | open | close | note | list | export"
+      },
+      "name": {
+        "type": "string",
+        "description": "Session name (required for op=open)."
+      },
+      "text": {
+        "type": "string",
+        "description": "Annotation text (required for op=note)."
+      },
+      "sessionId": {
+        "type": "string",
+        "description": "Target session (optional for export; defaults to active)."
+      }
+    }
+  },
+  "config": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "get | set"
+      },
+      "key": {
+        "type": "string",
+        "description": "Config key to set, e.g. scrollMaxScrolls (required for set; `get` lists all keys + current values)."
+      },
+      "value": {
+        "description": "New value for `key` (required for set). Type matches the key: int (scrollMaxScrolls), double (scrollAmountFraction), or bool."
+      }
+    },
+    "required": [
+      "op"
+    ]
+  },
+  "report_issue": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "description": "bug | ux | feature"
+      },
+      "title": {
+        "type": "string",
+        "description": "One-line summary. Redacted before submission."
+      },
+      "body": {
+        "type": "string",
+        "description": "What happened, what you expected, repro steps. Redacted before submission."
+      },
+      "includeContext": {
+        "type": "boolean",
+        "description": "Attach the recent action log (tools, targets, outcomes). Default false."
+      },
+      "dryRun": {
+        "type": "boolean",
+        "description": "Compose and return the redacted issue without filing. Use it to show the user exactly what would be posted."
+      }
+    },
+    "required": [
+      "type",
+      "title",
+      "body"
+    ]
+  },
+  "telemetry": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "status (default) | report | ship | dryRun | token_usage | audit_show | audit_verify"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "For audit_show / token_usage / report: max entries to return (default 20 / 10 / 15)."
+      },
+      "sinceId": {
+        "type": "integer",
+        "description": "For token_usage / report: only count events with id > sinceId (default 0 = everything recorded)."
+      }
+    }
+  }
+}

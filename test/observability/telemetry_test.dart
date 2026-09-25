@@ -162,7 +162,7 @@ void main() {
 
     test('ship returns no-new-events when recorder is empty', () async {
       final r = UsageRecorder.config(enabled: true);
-      final reporter = UsageReporter(r);
+      final reporter = UsageReporter(r, env: const {});
       final res = await reporter.ship(dataDir: tmp.path);
       expect(res.shipped, false);
       expect(res.events, 0);
@@ -177,7 +177,7 @@ void main() {
         durationMs: 12,
         resultBytes: 100,
       );
-      final reporter = UsageReporter(r);
+      final reporter = UsageReporter(r, env: const {});
       final res =
           await reporter.ship(dataDir: tmp.path, dryRun: true);
       expect(res.shipped, false);
@@ -268,7 +268,7 @@ void main() {
       final earlier = UsageRecorder.config(enabled: true, dataDir: tmp.path);
       earlier.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
       final later = UsageRecorder.config(enabled: true, dataDir: tmp.path);
-      final res = await UsageReporter(later).ship(dataDir: tmp.path, dryRun: true);
+      final res = await UsageReporter(later, env: const {}).ship(dataDir: tmp.path, dryRun: true);
       expect(res.events, 1);
     });
 
@@ -277,7 +277,7 @@ void main() {
       r.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
       File('${tmp.path}/usage-ship-state.json')
           .writeAsStringSync('{"lastShippedEventId": 999, "shipCount": 1}');
-      final reporter = UsageReporter(r);
+      final reporter = UsageReporter(r, env: const {});
       expect(reporter.unshippedCount(dataDir: tmp.path), 1);
       final res = await reporter.ship(dataDir: tmp.path, dryRun: true);
       expect(res.events, 1);
@@ -285,7 +285,7 @@ void main() {
 
     test('shipOnExit is a no-op with nothing unshipped', () async {
       final r = UsageRecorder.config(enabled: true, dataDir: tmp.path);
-      await UsageReporter(r).shipOnExit(dataDir: tmp.path);
+      await UsageReporter(r, env: const {}).shipOnExit(dataDir: tmp.path);
       expect(File('${tmp.path}/${AuditLog.fileName}').existsSync(), false);
     });
   });
