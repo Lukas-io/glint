@@ -96,8 +96,7 @@ class AdbBackend implements InteractionBackend {
           {required int intervalMs}) =>
       tapEachInTurn(this, points, intervalMs);
 
-  // `input text` treats `%s` as space and chokes on quote / backtick.
-  // Latin only — non-ASCII would need an IME via `am broadcast` (v2).
+  /// Latin only; non-ASCII would need an IME via `am broadcast`.
   @override
   Future<void> typeText(String text, {int? keyDelayMs}) async {
     if (keyDelayMs == null || text.length < 2) return _inputText(text);
@@ -110,18 +109,16 @@ class AdbBackend implements InteractionBackend {
     }
   }
 
-  Future<void> _inputText(String text) {
-    final escaped = text
-        .replaceAll('\\', '\\\\')
-        .replaceAll('"', '\\"')
-        .replaceAll('`', '\\`')
-        .replaceAll(' ', '%s');
-    return _shell(['input', 'text', escaped]);
+  Future<void> _inputText(String text) async {
+    for (final chunk in splitLiteralPercentS(text)) {
+      await _shell(
+          ['input', 'text', quoteForDeviceShell(chunk.replaceAll(' ', '%s'))]);
+    }
   }
 
   @override
-  Future<ScreenRecording> startRecording(String path) =>
-      AdbRecording.start(adbPath: adbPath, serial: deviceSerial, localPath: path);
+  Future<ScreenRecording> startRecording(String path) => AdbRecording.start(
+      adbPath: adbPath, serial: deviceSerial, localPath: path);
 
   /// Not read on Android yet; callers fall back to the app lifecycle.
   @override
@@ -203,4 +200,21 @@ class AdbBackend implements InteractionBackend {
       );
     }
   }
+}
+
+/// adb joins shell arguments into one command line for the device's `sh`, so text is single-quoted to arrive as one literal argument.
+String quoteForDeviceShell(String arg) => "'${arg.replaceAll("'", "'\\''")}'";
+
+/// `input text` turns `%s` into a space, so text is split between `%` and `s` to keep a literal `%s`.
+List<String> splitLiteralPercentS(String text) {
+  final chunks = <String>[];
+  var start = 0;
+  for (var i = 0; i < text.length - 1; i++) {
+    if (text[i] == '%' && text[i + 1] == 's') {
+      chunks.add(text.substring(start, i + 1));
+      start = i + 1;
+    }
+  }
+  chunks.add(text.substring(start));
+  return chunks.where((c) => c.isNotEmpty).toList();
 }
