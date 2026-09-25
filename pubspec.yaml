@@ -1,6 +1,6 @@
 name: glint
 description: MCP server that lets AI agents drive Flutter apps on simulators — zero app modification, render-tree perception, native input.
-version: 0.0.1
+version: 0.1.0
 publish_to: none
 repository: https://github.com/Lukas-io/glint
 homepage: https://github.com/Lukas-io/glint

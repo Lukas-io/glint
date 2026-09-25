@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-25
+
 First tagged release. glint lets an AI agent drive a running Flutter app on an iOS Simulator or Android emulator, with nothing added to the app.
 
 ### What it does
