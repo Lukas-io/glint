@@ -3,19 +3,32 @@
 /// and the same collector contract.
 library;
 
-import 'dart:convert';
 import 'dart:io' as io;
-
-import 'package:crypto/crypto.dart';
+import 'dart:math';
 
 import 'constants.dart';
 
-/// `HMAC-SHA256(dataDir, kPublicSalt)[:24]`. One-way per-machine id: the
-/// collector can dedupe installs without learning a value it could
-/// reverse to the user.
-String machineHash(String dataDir) {
-  final hmac = Hmac(sha256, utf8.encode(kPublicSalt));
-  return hmac.convert(utf8.encode(dataDir)).toString().substring(0, 24);
+/// A random id created once per install in [dataDir]; unlike a hash of the path, it reveals nothing about the user or the machine.
+String installId(String dataDir) {
+  final file = io.File('$dataDir/install-id');
+  try {
+    final existing = file.readAsStringSync().trim();
+    if (RegExp(r'^[0-9a-f]{24}$').hasMatch(existing)) return existing;
+  } on Object {
+    // Not created yet.
+  }
+  final rnd = Random.secure();
+  final id = [
+    for (var i = 0; i < 12; i++)
+      rnd.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ].join();
+  try {
+    io.Directory(dataDir).createSync(recursive: true);
+    file.writeAsStringSync(id);
+  } on Object {
+    // Unwritable data dir: the id lives for this run only.
+  }
+  return id;
 }
 
 /// `"macos 14.6"`. Long Linux version strings (kernel + distro + build)
@@ -53,18 +66,33 @@ Future<int> postTelemetry(String jsonStr) async {
   }
 }
 
-/// True when telemetry is globally disabled via `GLINT_NO_TELEMETRY`.
-/// Layered on top of this: `GLINT_NO_USAGE` disables only usage rollups.
+/// True when `GLINT_NO_TELEMETRY` turns off local usage recording and sharing alike.
 bool telemetryDisabled([Map<String, String>? env]) {
   final e = env ?? io.Platform.environment;
   return truthyEnv(e['GLINT_NO_TELEMETRY']);
 }
 
-/// True when usage telemetry specifically is disabled.
+/// True when local usage recording is off (`GLINT_NO_TELEMETRY` or `GLINT_NO_USAGE`).
 bool usageDisabled([Map<String, String>? env]) {
   final e = env ?? io.Platform.environment;
   return telemetryDisabled(env) || truthyEnv(e['GLINT_NO_USAGE']);
 }
+
+/// Why usage stats are not shared, or null when the user opted in with `GLINT_TELEMETRY=on` and nothing overrides it.
+String? sharingOffReason([Map<String, String>? env]) {
+  final e = env ?? io.Platform.environment;
+  if (truthyEnv(e['GLINT_NO_TELEMETRY'])) return 'GLINT_NO_TELEMETRY is set';
+  if (truthyEnv(e['GLINT_NO_USAGE'])) return 'GLINT_NO_USAGE is set';
+  if (truthyEnv(e['DO_NOT_TRACK'])) return 'DO_NOT_TRACK is set';
+  if (!truthyEnv(e['GLINT_TELEMETRY'])) {
+    return 'off by default; set GLINT_TELEMETRY=on to share anonymous usage stats';
+  }
+  return null;
+}
+
+/// True only when the user opted in to sharing usage stats.
+bool sharingEnabled([Map<String, String>? env]) =>
+    sharingOffReason(env) == null;
 
 /// Treats `true` / `1` / `yes` / `on` (case-insensitive, trimmed) as true.
 bool truthyEnv(String? v) {
