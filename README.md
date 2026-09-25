@@ -83,6 +83,10 @@ Full roadmap: [`source-of-truth.md`](./source-of-truth.md) §11.
 
 Not ready yet. v1 is in development. Check back, or read the [source-of-truth](./source-of-truth.md) to follow along.
 
+## Privacy
+
+glint records tool usage locally and sends nothing unless you set `GLINT_TELEMETRY=on`. See [TELEMETRY.md](./TELEMETRY.md) for exactly what is recorded and what would be sent.
+
 ## License
 
 [Apache License 2.0](./LICENSE). You can use, modify, and ship glint in personal and commercial work. See [NOTICE](./NOTICE).
