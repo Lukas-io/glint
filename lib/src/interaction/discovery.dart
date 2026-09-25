@@ -147,6 +147,20 @@ class DeviceDiscovery {
 
   /// Whether [deviceId] is still booted / connected — the cheap check behind
   /// `deviceGone`, so a closed simulator is named instead of guessed at.
+  /// The package in front on Android device [serial] (e.g. the launcher), or null when adb cannot tell.
+  Future<String?> foregroundPackage(String serial) async {
+    try {
+      final res = await Process.run(adbPath,
+              ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
+          .timeout(const Duration(seconds: 3));
+      final m = RegExp(r'topResumedActivity=ActivityRecord\{\S+ \S+ ([\w.]+)/')
+          .firstMatch(res.stdout as String);
+      return m?.group(1);
+    } on Object {
+      return null;
+    }
+  }
+
   Future<bool> isDevicePresent(String deviceId, DevicePlatform platform) async {
     final devices = platform == DevicePlatform.ios
         ? await _bootedIosSims()

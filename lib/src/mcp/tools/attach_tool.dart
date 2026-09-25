@@ -223,7 +223,7 @@ class AttachTool extends GlintTool {
     try {
       await probe.attach(vmUri);
     } on RuntimeUnresponsiveError catch (e) {
-      return _unresponsiveApp(scan, vmUri, e);
+      return _unresponsiveApp(scan, vmUri, e, adbPath);
     } on Object catch (e) {
       return StructuredResponse.error(
         summary: 'could not connect to VM service at $vmUri',
@@ -571,22 +571,32 @@ class AttachTool extends GlintTool {
   }
 
   /// The VM took the connection but the app never answered: most often a locked simulator keeping it suspended.
-  Future<StructuredResponse> _unresponsiveApp(
-      DiscoveryResult scan, Uri vmUri, RuntimeUnresponsiveError e) async {
+  Future<StructuredResponse> _unresponsiveApp(DiscoveryResult scan, Uri vmUri,
+      RuntimeUnresponsiveError e, String adbPath) async {
     final locked = <BootedDevice>[
       for (final d in scan.devicesFor(DevicePlatform.ios))
         if (await const SimControl().isLocked(d.id) == true) d,
     ];
+    final android = scan.devicesFor(DevicePlatform.android);
+    final front = android.length == 1
+        ? await DeviceDiscovery(adbPath: adbPath)
+            .foregroundPackage(android.single.id)
+        : null;
     return StructuredResponse.error(
-      summary: locked.isEmpty
-          ? 'the app at $vmUri is not answering: it is suspended, paused in a debugger, or frozen'
-          : '${locked.map((d) => d.name).join(", ")} is locked, so the app is suspended and cannot be attached',
+      summary: locked.isNotEmpty
+          ? '${locked.map((d) => d.name).join(", ")} is locked, so the app is suspended and cannot be attached'
+          : front != null
+              ? 'the app at $vmUri is not answering; $front is in the foreground, so the app is probably in the background or closed'
+              : 'the app at $vmUri is not answering: it is suspended, paused in a debugger, or frozen',
       errorKind: GlintErrorKind.appUnresponsive,
       detail: e.toString(),
       nextSteps: [
         if (locked.isNotEmpty) ...[
           'attach mode:"device" device:"${locked.first.id}", then hardware_button unlock',
           'then attach again',
+        ] else if (front != null) ...[
+          'bring the app back to the foreground (reopen it from the launcher), then attach again',
+          'if back closed it on its first screen, relaunch it with attach device:"${android.single.id}"',
         ] else ...[
           'attach mode:"device", then device op:screenshot to see what is in front',
           'if a debugger paused the app, resume it, then attach again',

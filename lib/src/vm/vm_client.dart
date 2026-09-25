@@ -24,13 +24,21 @@ class VmClient {
 
   Future<void> attach(Uri vmServiceUri) async {
     if (_service != null) await disconnect();
-    final svc = await vmServiceConnectUri(_toWs(vmServiceUri));
+    final pending = vmServiceConnectUri(_toWs(vmServiceUri));
+    final VmService svc;
+    try {
+      svc = await pending.timeout(readTimeout);
+    } on TimeoutException {
+      // A backgrounded or suspended app can leave the WebSocket upgrade unanswered; drop the socket if it ever opens.
+      unawaited(pending.then((s) => s.dispose(), onError: (_) {}));
+      rethrow;
+    }
     // Zombie-DDS probe: a stale DDS accepts the WS upgrade but never answers
     // RPCs. 5s deadline fails fast with a clear error.
     try {
       await svc.getVersion().timeout(const Duration(seconds: 5));
     } on Object {
-      await svc.dispose();
+      await svc.dispose().timeout(const Duration(seconds: 2), onTimeout: () {});
       throw StateError(
         'VM service at $vmServiceUri accepted the connection but did not '
         'respond to getVersion() within 5s. The DDS instance is likely '
