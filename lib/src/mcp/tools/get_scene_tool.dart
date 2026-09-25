@@ -319,6 +319,7 @@ class GetSceneTool extends GlintTool {
     final app = session.active;
     final lifecycle = app?.lastLifecycle ?? await _safeLifecycle(session);
     final overlay = lifecycleIsOverlay(lifecycle);
+    final locked = overlay ? null : await _lockState(session);
     final capture = await app?.captureNow('scene') ?? app?.captures.newest;
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
@@ -326,7 +327,9 @@ class GetSceneTool extends GlintTool {
     return StructuredResponse(
       summary: [
         '--- native surface active ---',
-        '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
+        locked == true
+            ? 'the device is locked, so your app is suspended (lifecycle: ${lifecycle ?? "unknown"})'
+            : '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
         if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
         if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
       ].join('\n'),
@@ -340,8 +343,9 @@ class GetSceneTool extends GlintTool {
         if (overlay)
           'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
         if (overlay) 'or wait: some sheets dismiss on their own, then get_scene again',
-        if (!overlay) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
-        if (!overlay) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+        if (locked == true) 'hardware_button unlock, then get_scene',
+        if (!overlay && locked != true) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
+        if (!overlay && locked != true) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
       ],
       data: {
         'format': format,
@@ -350,9 +354,18 @@ class GetSceneTool extends GlintTool {
         'sceneMode': 'native',
         if (lifecycle != null) 'lifecycle': lifecycle,
         'overlay': overlay,
+        if (locked != null) 'locked': locked,
         if (capture != null) 'screenshot': capture.toJson(),
         'devicePixelRatio': dpr,
       },
     );
+  }
+
+  Future<bool?> _lockState(GlintSession session) async {
+    try {
+      return await session.backend.lockState();
+    } on Object {
+      return null;
+    }
   }
 }

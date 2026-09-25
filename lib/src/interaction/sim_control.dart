@@ -67,6 +67,23 @@ class SimControl {
     );
   }
 
+  /// SpringBoard's lock state: true locked, false unlocked, null when unreadable.
+  Future<bool?> isLocked(String udid) async {
+    try {
+      final res = await Process.run('xcrun', [
+        'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.lockstate',
+      ]);
+      if (res.exitCode != 0) return null;
+      return switch ((res.stdout as String).trim().split(' ').last) {
+        '0' => false,
+        '' => null,
+        _ => true,
+      };
+    } on Object {
+      return null;
+    }
+  }
+
   static const _enrollmentKey = 'com.apple.BiometricKit.enrollmentChanged';
 
   /// The enrolment the Simulator's Features > Face ID menu toggles; null when unreadable.
