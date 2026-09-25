@@ -36,7 +36,7 @@ class DeviceTool extends GlintTool {
             'op': Schema.string(
               description:
                   'status (default) | appearance | openurl | screenshot | '
-                  'privacy',
+                  'privacy | biometric',
             ),
             'udid': Schema.string(
               description:
@@ -56,7 +56,12 @@ class DeviceTool extends GlintTool {
               description: 'appearance: light|dark. openurl: the URL.',
             ),
             'action': Schema.string(
-              description: 'privacy: grant | revoke | reset',
+              description: 'privacy: grant | revoke | reset. biometric: '
+                  'enrol | unenrol | match | nomatch (match/nomatch answer a '
+                  'Face ID / Touch ID prompt that is showing).',
+            ),
+            'type': Schema.string(
+              description: 'biometric: face (default) | touch.',
             ),
             'service': Schema.string(
               description: 'privacy: photos | camera | location | contacts | …',
@@ -106,6 +111,11 @@ class DeviceTool extends GlintTool {
             'state:      ${status.state}',
             'appearance: ${status.appearance ?? "?"}',
             'textSize:   ${status.contentSize ?? "?"}',
+            'biometrics: ${switch (status.biometricEnrolled) {
+              true => "enrolled",
+              false => "not enrolled",
+              null => "?",
+            }}',
           ].join('\n'),
           data: {'status': status.toJson()},
         );
@@ -181,6 +191,9 @@ class DeviceTool extends GlintTool {
           imagePaths: [if (inline) shot.path!],
         );
 
+      case 'biometric':
+        return _biometric(sim, udid, args);
+
       case 'privacy':
         final action = args['action'] as String?;
         final service = args['service'] as String?;
@@ -232,5 +245,49 @@ class DeviceTool extends GlintTool {
     }
     final dpr = session.device.devicePixelRatio;
     return 'tap x,y in logical points: image pixel ÷ $dpr$w';
+  }
+
+  Future<StructuredResponse> _biometric(
+      SimControl sim, String udid, Map<String, Object?> args) async {
+    final action = args['action'] as String?;
+    final type = (args['type'] as String?) ?? 'face';
+    if (type != 'face' && type != 'touch') {
+      return _bad('op=biometric type must be face or touch');
+    }
+    final label = type == 'face' ? 'Face ID' : 'Touch ID';
+    switch (action) {
+      case 'enrol' || 'unenrol':
+        final enrol = action == 'enrol';
+        final err = await sim.setBiometricEnrolled(udid, enrol);
+        if (err != null) return _result(err, '');
+        return StructuredResponse(
+          summary: '$udid biometrics ${enrol ? "enrolled" : "unenrolled"}',
+          data: {'ok': true, 'biometricEnrolled': enrol},
+          nextSteps: [
+            if (enrol)
+              'trigger the app\'s $label prompt, then device op:biometric action:match (or nomatch)',
+          ],
+        );
+      case 'match' || 'nomatch':
+        final enrolled = await sim.biometricEnrolled(udid);
+        final err = await sim.biometricAttempt(udid,
+            match: action == 'match', touch: type == 'touch');
+        if (err != null) return _result(err, '');
+        return StructuredResponse(
+          summary: 'sent a ${action == 'match' ? "matching" : "non-matching"} '
+              '${type == 'face' ? "face" : "finger"} to $udid',
+          warnings: [
+            if (enrolled == false)
+              'biometrics are not enrolled, so no $label prompt can succeed; '
+                  'device op:biometric action:enrol first',
+          ],
+          nextSteps: const [
+            'read the screen: the prompt only reacts if it was showing when this was sent',
+          ],
+          data: {'ok': true, if (enrolled != null) 'enrolled': enrolled},
+        );
+      default:
+        return _bad('op=biometric requires action: enrol | unenrol | match | nomatch');
+    }
   }
 }
