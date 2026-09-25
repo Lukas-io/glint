@@ -17,10 +17,11 @@ import 'constants.dart';
 import 'env.dart';
 import 'summarize.dart';
 import 'usage_recorder.dart';
+import '../../version.dart';
 
 const String _kStateFileName = 'usage-ship-state.json';
 const Duration _kAutoShipMinInterval = Duration(hours: 24);
-const String kGlintVersion = 'glint/0.0.1';
+const String kGlintVersion = 'glint/$glintVersion';
 
 class UsageReporter {
   UsageReporter(this.recorder, {Map<String, String>? env}) : _env = env;

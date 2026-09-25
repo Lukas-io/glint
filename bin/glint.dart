@@ -10,8 +10,6 @@ import 'package:args/args.dart';
 import 'package:dart_mcp/stdio.dart';
 import 'package:glint/glint.dart';
 
-const String version = '0.0.1';
-
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addFlag('version', negatable: false, help: 'Print version and exit.')
@@ -33,7 +31,7 @@ Future<void> main(List<String> args) async {
     return;
   }
   if (opts.flag('version')) {
-    stdout.writeln('glint $version');
+    stdout.writeln('glint $glintVersion');
     return;
   }
 

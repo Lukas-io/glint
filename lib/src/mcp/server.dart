@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_mcp/server.dart';
 
 import '../instructions/glint_instructions.dart';
+import '../version.dart';
 import 'session.dart';
 import 'tool.dart';
 
@@ -16,13 +17,11 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
   })  : session = session ?? GlintSession(),
         _tools = tools,
         super.fromStreamChannel(
-          implementation: Implementation(name: 'glint', version: _version),
+          implementation: Implementation(name: 'glint', version: glintVersion),
           instructions: kGlintInstructions,
         ) {
     this.session.progressNotifier = notifyProgress;
   }
-
-  static const _version = '0.0.1';
 
   final GlintSession session;
   final List<GlintTool> _tools;
