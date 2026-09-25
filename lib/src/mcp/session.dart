@@ -407,14 +407,14 @@ class GlintSession {
     }
   }
 
-  /// [probeScrollAnchor] against a scene + semantic view the caller holds.
+  /// [probeScrollAnchor] against a scene + semantic view the caller holds; the anchor is scrolled content, never the viewport itself, whose center stays put.
   Future<({String glintId, double x, double y})?> scrollAnchorIn(
       Scene scene, SemanticScene semantic) async {
     final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
     if (list == null) return null;
     for (final n in list.walk()) {
       final id = n.glintId;
-      if (id == null) continue;
+      if (id == null || identical(n, list)) continue;
       try {
         final c = await resolver.resolve(scene, id);
         if (c.hasNonZeroBounds) {

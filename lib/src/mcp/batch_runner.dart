@@ -174,21 +174,26 @@ Future<BatchRun> runBatchSteps(
   for (var i = 0; i < steps.length; i++) {
     final step = steps[i];
     onStepStart?.call(i + 1, step.tool);
+    final tool = kBatchStepTools[step.tool]!;
+    final start = DateTime.now();
+    final own = CallToolRequest(
+        name: step.tool, arguments: {...step.args}..remove('app'));
+    final invalid = GlintTool.checkArguments(tool.definition, own);
     final stepArgs = {
-      ...step.args,
+      ...?own.arguments,
       if (kTargetedSteps.contains(step.tool) &&
           !step.args.containsKey('awaitReady'))
         'awaitReady': true,
-      if (step.tool != 'hardware_button' && step.tool != 'wait_for_settle')
+      if (step.tool != 'hardware_button' &&
+          step.tool != 'wait_for_settle' &&
+          !step.args.containsKey('returnScene'))
         'returnScene': true,
       'fetchScene': false,
-    }..remove('app');
-    final tool = kBatchStepTools[step.tool]!;
-    final start = DateTime.now();
+    };
+    final request = CallToolRequest(name: step.tool, arguments: stepArgs);
     StructuredResponse r;
     try {
-      r = await tool.handle(
-          session, CallToolRequest(name: step.tool, arguments: stepArgs));
+      r = invalid ?? await tool.handle(session, request);
     } on SessionNotAttachedError {
       rethrow;
     } on Object catch (e) {
@@ -198,8 +203,7 @@ Future<BatchRun> runBatchSteps(
         detail: '$e',
       );
     }
-    tool.logCall(session,
-        CallToolRequest(name: step.tool, arguments: stepArgs), r, start);
+    tool.logCall(session, request, r, start);
     outcomes.add(StepOutcome(
       index: i + 1,
       tool: step.tool,

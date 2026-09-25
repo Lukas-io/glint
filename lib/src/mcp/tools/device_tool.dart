@@ -42,6 +42,10 @@ class DeviceTool extends GlintTool {
               description:
                   'Target simulator UDID. Defaults to the attached device.',
             ),
+            'inline': Schema.bool(
+              description: 'op=screenshot: also return the PNG as image '
+                  'content, so no separate read is needed. Default false.',
+            ),
             'latest': Schema.bool(
               description:
                   'screenshot only: return the newest background capture '
@@ -123,6 +127,7 @@ class DeviceTool extends GlintTool {
         return _result(err, 'opened $url on $udid');
 
       case 'screenshot':
+        final inline = argBool(args, 'inline') ?? false;
         final app = session.active;
         if (app != null && (args['udid'] as String?) == null) {
           final latest = argBool(args, 'latest') ?? false;
@@ -138,12 +143,16 @@ class DeviceTool extends GlintTool {
           return StructuredResponse(
             summary: 'screenshot ${latest ? "(newest capture)" : "saved"}: '
                 '${capture.path} (${capture.describe()})',
-            nextSteps: ['read the image at ${capture.path} to see the screen'],
+            nextSteps: [
+              if (!inline) 'read the image at ${capture.path} to see the screen',
+            ],
             data: {
               'ok': true,
               ...capture.toJson(),
               'captures': app.captures.length,
+              if (inline) 'coordinates': _coordinateNote(session, capture.width),
             },
+            imagePaths: [if (inline) capture.path],
           );
         }
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
@@ -160,13 +169,16 @@ class DeviceTool extends GlintTool {
             : '';
         return StructuredResponse(
           summary: 'screenshot saved: ${shot.path}$dims',
-          nextSteps: ['read the image at ${shot.path} to see the screen'],
+          nextSteps: [
+            if (!inline) 'read the image at ${shot.path} to see the screen',
+          ],
           data: {
             'ok': true,
             'path': shot.path,
             if (shot.width != null) 'width': shot.width,
             if (shot.height != null) 'height': shot.height,
           },
+          imagePaths: [if (inline) shot.path!],
         );
 
       case 'privacy':
@@ -211,4 +223,14 @@ class DeviceTool extends GlintTool {
         summary: msg,
         errorKind: GlintErrorKind.invalidArgument,
       );
+
+  /// Which space tap x,y uses relative to this image, since a viewer may show it scaled.
+  String _coordinateNote(GlintSession session, int? width) {
+    final w = width == null ? '' : ' (image is $width px wide)';
+    if (session.isDeviceMode) {
+      return 'tap x,y in this image\'s own pixels$w; scale up if your viewer shows it smaller';
+    }
+    final dpr = session.device.devicePixelRatio;
+    return 'tap x,y in logical points: image pixel ÷ $dpr$w';
+  }
 }

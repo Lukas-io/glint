@@ -292,6 +292,20 @@ struct SimDeviceProxy {
         try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
     }
 
+    /// Taps [points] in order from one HID client, pausing [intervalMs] between taps.
+    func taps(_ points: [CGPoint], deviceLogicalSize: CGSize, intervalMs: Int) throws {
+        let client = try makeHidClient()
+        for (i, p) in points.enumerated() {
+            let ratio = _ratio(x: p.x, y: p.y, in: deviceLogicalSize)
+            try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
+            Thread.sleep(forTimeInterval: 0.05)
+            try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
+            if i < points.count - 1 {
+                Thread.sleep(forTimeInterval: Double(intervalMs) / 1000.0)
+            }
+        }
+    }
+
     func longPress(
         x: Double,
         y: Double,
@@ -310,6 +324,7 @@ struct SimDeviceProxy {
         to: CGPoint,
         deviceLogicalSize: CGSize,
         durationMs: Int,
+        holdMs: Int = 0,
     ) throws {
         let steps = max(8, durationMs / 16)
         let perStepMs = max(1, durationMs / steps)
@@ -325,6 +340,13 @@ struct SimDeviceProxy {
             )
             try sendTouch(client: client, ratio: r, direction: .down, marker: .move)
             Thread.sleep(forTimeInterval: Double(perStepMs) / 1000.0)
+        }
+        // Resting at the end point drains the velocity tracker, so the lift starts no fling.
+        var held = 0
+        while held < holdMs {
+            try sendTouch(client: client, ratio: r2, direction: .down, marker: .move)
+            Thread.sleep(forTimeInterval: 0.016)
+            held += 16
         }
         try sendTouch(client: client, ratio: r2, direction: .up, marker: .end)
     }
@@ -344,9 +366,9 @@ struct SimDeviceProxy {
     // rebuild — keys get dropped (e.g. a phone field turning "8012345678" into
     // "801238"). ~18ms lets the framework commit each edit before the next key.
     private static let keyDwell = 0.006
-    private static let interKeyGap = 0.018
+    static let interKeyGap = 0.018
 
-    func typeText(_ text: String) throws {
+    func typeText(_ text: String, gapSeconds: Double = interKeyGap) throws {
         let client = try makeHidClient()
         let scalars = Array(text.unicodeScalars)
         for (i, scalar) in scalars.enumerated() {
@@ -366,7 +388,7 @@ struct SimDeviceProxy {
             }
             // Let a formatter-driven rebuild settle before the next key.
             if i < scalars.count - 1 {
-                Thread.sleep(forTimeInterval: Self.interKeyGap)
+                Thread.sleep(forTimeInterval: gapSeconds)
             }
         }
     }

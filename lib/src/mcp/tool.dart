@@ -4,6 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import '../../observability.dart';
+import '../../perception.dart' show suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
@@ -83,6 +84,23 @@ abstract class GlintTool {
         if (coerced != null) args[key] = coerced;
       }
     }
+    final unknown = [
+      for (final k in args?.keys ?? const <String>[])
+        if (!props.containsKey(k)) k,
+    ];
+    if (unknown.isNotEmpty) {
+      return StructuredResponse.error(
+        summary: '${tool.name}: unknown argument${unknown.length == 1 ? '' : 's'} '
+            '${unknown.join(", ")}',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: [
+          for (final k in unknown)
+            if (closestArgName(k, props.keys) case final near?)
+              'use $near instead of $k',
+          'accepted fields: ${props.keys.join(", ")}',
+        ],
+      );
+    }
     final errors = tool.inputSchema
         .validate(args ?? const {})
         .where((e) => e.path.length <= 1)
@@ -100,6 +118,17 @@ abstract class GlintTool {
             '${props.keys.join(", ")}',
       ],
     );
+  }
+
+  /// The accepted argument name an unknown [name] most likely meant: containment first (glintId → targetGlintId), then a small edit distance.
+  static String? closestArgName(String name, Iterable<String> accepted) {
+    final lower = name.toLowerCase();
+    for (final a in accepted) {
+      final l = a.toLowerCase();
+      if (l.contains(lower) || lower.contains(l)) return a;
+    }
+    final near = suggestIds(accepted, name, max: 1);
+    return near.isEmpty ? null : near.single;
   }
 
   FutureOr<StructuredResponse> handle(
