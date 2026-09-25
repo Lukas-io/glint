@@ -71,9 +71,7 @@ class GlintConfig {
   int captureSettleMs;
 
   /// All known keys → string of current value, for the `config get` view.
-  /// Telemetry is env-controlled now (GLINT_NO_TELEMETRY, GLINT_NO_USAGE);
-  /// not exposed here so the agent can't accidentally re-enable telemetry
-  /// a user disabled at the env level.
+  /// Telemetry is env-controlled (GLINT_TELEMETRY, DO_NOT_TRACK, GLINT_NO_TELEMETRY), never agent-controlled.
   Map<String, Object> toJson() => {
         'readyTimeoutMs': readyTimeoutMs,
         'attachProbeTimeoutMs': attachProbeTimeoutMs,

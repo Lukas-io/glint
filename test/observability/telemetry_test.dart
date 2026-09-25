@@ -204,7 +204,7 @@ void main() {
         durationMs: 1,
         resultBytes: 0,
       );
-      final reporter = UsageReporter(r);
+      final reporter = UsageReporter(r, env: const {'GLINT_TELEMETRY': 'on'});
       // Use a dead endpoint so POST fails fast.
       final res = await reporter.ship(
         dataDir: tmp.path,
@@ -226,7 +226,7 @@ void main() {
         durationMs: 1,
         resultBytes: 0,
       );
-      final reporter = UsageReporter(r);
+      final reporter = UsageReporter(r, env: const {'GLINT_TELEMETRY': 'on'});
       final first = await reporter.ship(
         dataDir: tmp.path,
         endpointOverride: 'http://127.0.0.1:1/v1/telemetry',

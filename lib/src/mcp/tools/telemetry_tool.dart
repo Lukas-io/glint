@@ -15,7 +15,7 @@ import '../tool_args.dart';
 ///   token_usage  — estimated agent-side token cost per tool
 ///   audit_show   — pretty-print recent audit entries
 ///   audit_verify — walk the hash chain
-/// Telemetry is ON by default; set GLINT_NO_TELEMETRY=true to disable.
+/// Usage is recorded locally; nothing is sent unless the user sets GLINT_TELEMETRY=on.
 class TelemetryTool extends GlintTool {
   const TelemetryTool();
 
@@ -26,9 +26,10 @@ class TelemetryTool extends GlintTool {
             'Glint telemetry control + transparency. ops: status (default), '
             'report, ship, dryRun, token_usage, audit_show, audit_verify. '
             'report = local usage rollup (per-tool counts, error kinds, latency, '
-            'transitions) with nothing sent anywhere. Telemetry is ON by '
-            'default; opt out via env: GLINT_NO_TELEMETRY=true (everything) or '
-            'GLINT_NO_USAGE=true (usage only).',
+            'transitions) with nothing sent anywhere. Usage stats are recorded '
+            'locally and sent only if the user sets GLINT_TELEMETRY=on; '
+            'DO_NOT_TRACK, GLINT_NO_TELEMETRY and GLINT_NO_USAGE always turn '
+            'sharing off. ship sends nothing unless sharing is on.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
@@ -107,20 +108,23 @@ class TelemetryTool extends GlintTool {
   StructuredResponse _status(GlintSession session, String dataDir) {
     final disabled = telemetryDisabled();
     final usageOff = usageDisabled();
+    final sharingOff = sharingOffReason();
     final store = session.usage.store;
     final unshipped =
         usageOff ? 0 : session.usageReporter.unshippedCount(dataDir: dataDir);
     return StructuredResponse(
       summary: [
-        'telemetry: ${disabled ? "DISABLED (GLINT_NO_TELEMETRY)" : "enabled"}',
-        'usage:     ${usageOff ? "DISABLED" : "enabled"}',
+        'sharing:   ${sharingOff == null ? "on (GLINT_TELEMETRY=on)" : "off ($sharingOff)"}',
+        'recording: ${usageOff ? "off" : "on, local only"}',
         'this run:  ${session.usage.length} event(s); nextId=${session.usage.nextId}',
         'store:     ${store == null ? "(memory only)" : "${store.path} (${store.count()} persisted)"}',
-        'unshipped: $unshipped event(s) — ships daily at startup and on exit',
+        'unshipped: $unshipped event(s)${sharingOff == null ? ", sent daily at startup and on exit" : ", kept local"}',
         'collector: $kCollectorEndpoint',
       ].join('\n'),
       data: {
         'telemetryDisabled': disabled,
+        'sharingEnabled': sharingOff == null,
+        if (sharingOff != null) 'sharingOffReason': sharingOff,
         'usageDisabled': usageOff,
         'recorderEvents': session.usage.length,
         'recorderNextId': session.usage.nextId,
@@ -139,7 +143,8 @@ class TelemetryTool extends GlintTool {
     final rows = session.usage.eventsAfterId(sinceId);
     if (rows.isEmpty) {
       return StructuredResponse(
-        summary: 'no tool calls recorded${sinceId > 0 ? " after id=$sinceId" : ""}',
+        summary:
+            'no tool calls recorded${sinceId > 0 ? " after id=$sinceId" : ""}',
         data: {'totalEvents': 0, 'sinceId': sinceId},
       );
     }
@@ -147,9 +152,9 @@ class TelemetryTool extends GlintTool {
     final tools = (stats['tools'] as List).cast<Map<String, Object?>>();
     final transitions =
         (stats['transitions'] as List).cast<Map<String, Object?>>();
-    final selfCorr = (stats['selfCorrection'] as List?)
-            ?.cast<Map<String, Object?>>() ??
-        const [];
+    final selfCorr =
+        (stats['selfCorrection'] as List?)?.cast<Map<String, Object?>>() ??
+            const [];
     final lines = <String>[
       '${stats['totalEvents']} call(s) over ${stats['totalTurns']} turn(s)'
           '${stats['totalEstimatedTokens'] != null ? ", ~${stats['totalEstimatedTokens']} tokens returned" : ""}',
@@ -173,11 +178,11 @@ class TelemetryTool extends GlintTool {
     );
   }
 
-  String _kinds(Map kinds) => kinds.entries
-      .map((e) => '${e.key}×${e.value}')
-      .join(' ');
+  String _kinds(Map kinds) =>
+      kinds.entries.map((e) => '${e.key}×${e.value}').join(' ');
 
-  StructuredResponse _tokenUsage(GlintSession session, Map<String, Object?> args) {
+  StructuredResponse _tokenUsage(
+      GlintSession session, Map<String, Object?> args) {
     final sinceId = argInt(args, 'sinceId') ?? 0;
     final topN = argInt(args, 'limit') ?? 10;
     final rows = session.usage.eventsAfterId(sinceId);
@@ -224,15 +229,15 @@ class TelemetryTool extends GlintTool {
 
     final perToolList = perTool.values.map((a) => a.toJson()).toList()
       ..sort(
-        (a, b) =>
-            (b['totalTokens'] as int).compareTo(a['totalTokens'] as int),
+        (a, b) => (b['totalTokens'] as int).compareTo(a['totalTokens'] as int),
       );
 
-    final topToolLines = perToolList.take(5).map((t) =>
-        '  ${(t['tool'] as String).padRight(18)} '
-        '${(t['count'] as int).toString().padLeft(4)}x  '
-        '${(t['totalTokens'] as int).toString().padLeft(7)} tok  '
-        '(avg ${t['avgTokens']}, max ${t['maxTokens']})');
+    final topToolLines = perToolList
+        .take(5)
+        .map((t) => '  ${(t['tool'] as String).padRight(18)} '
+            '${(t['count'] as int).toString().padLeft(4)}x  '
+            '${(t['totalTokens'] as int).toString().padLeft(7)} tok  '
+            '(avg ${t['avgTokens']}, max ${t['maxTokens']})');
 
     return StructuredResponse(
       summary: [
@@ -246,9 +251,8 @@ class TelemetryTool extends GlintTool {
         'totalEstimatedTokens': totalTokens,
         'sinceId': sinceId,
         'charsPerToken': kCharsPerToken,
-        'estimationNote':
-            'tokens estimated as resultBytes / $kCharsPerToken; '
-                'real model tokenization will differ.',
+        'estimationNote': 'tokens estimated as resultBytes / $kCharsPerToken; '
+            'real model tokenization will differ.',
         'perTool': perToolList,
         'topResponses': topList,
         'recorderEvents': session.usage.length,
@@ -263,9 +267,9 @@ class TelemetryTool extends GlintTool {
     final tail = entries.length > limit
         ? entries.sublist(entries.length - limit)
         : entries;
-    final lines = tail.map((e) =>
-        '${e.ts.toIso8601String()} ${e.thisHash.substring(0, 12)} '
-        '(${e.payloadB64.length}b payload)');
+    final lines = tail
+        .map((e) => '${e.ts.toIso8601String()} ${e.thisHash.substring(0, 12)} '
+            '(${e.payloadB64.length}b payload)');
     return StructuredResponse(
       summary: tail.isEmpty
           ? '(no audit entries at $dataDir/telemetry-audit.log)'
@@ -300,7 +304,8 @@ class TelemetryTool extends GlintTool {
         'totalEntries': result.totalEntries,
         if (result.brokenAtIndex != null) 'brokenAtIndex': result.brokenAtIndex,
         if (result.brokenReason != null) 'brokenReason': result.brokenReason,
-        if (result.firstTs != null) 'firstTs': result.firstTs!.toIso8601String(),
+        if (result.firstTs != null)
+          'firstTs': result.firstTs!.toIso8601String(),
         if (result.lastTs != null) 'lastTs': result.lastTs!.toIso8601String(),
       },
     );
