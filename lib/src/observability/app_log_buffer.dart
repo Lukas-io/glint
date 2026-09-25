@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:vm_service/vm_service.dart';
 
 import '../runtime/flutter_runtime.dart';
+import '../runtime/instance_text.dart';
 
 /// Where a log entry came from. `stderr` captures direct stderr writes,
 /// `stdout` captures FlutterError dumps + print() (Flutter routes
@@ -60,12 +61,19 @@ class AppLogBuffer {
   StreamSubscription<Event>? _stderrSub;
   StreamSubscription<Event>? _stdoutSub;
   StreamSubscription<Event>? _logSub;
+  VmService? _service;
+  Future<void> _logQueue = Future.value();
 
   int get length => _entries.length;
   int get nextSequence => _seq;
 
   Future<void> subscribe(FlutterRuntime runtime) async {
     await unsubscribe();
+    try {
+      _service = runtime.rawService;
+    } on Object {
+      _service = null;
+    }
     _stderrSub = runtime.stderrEvents.listen(_onStderr);
     _stdoutSub = runtime.stdoutEvents.listen(_onStdout);
     _logSub = runtime.loggingEvents.listen(_onLog);
@@ -97,16 +105,37 @@ class AppLogBuffer {
     _append(stream: AppLogStream.stdout, content: text);
   }
 
+  /// Queued so records keep their order while long values are fetched.
   void _onLog(Event event) {
     final rec = event.logRecord;
     if (rec == null) return;
-    final msg = rec.message?.valueAsString ?? '';
-    final loggerName = rec.loggerName?.valueAsString;
+    final receivedAt = DateTime.now();
+    _logQueue = _logQueue.then((_) => _appendLog(rec, event.isolate?.id, receivedAt));
+  }
+
+  Future<void> _appendLog(
+      LogRecord rec, String? isolateId, DateTime receivedAt) async {
+    Future<String?> text(InstanceRef? ref) {
+      final service = _service;
+      if (service == null || isolateId == null) {
+        return Future.value(ref?.kind == InstanceKind.kNull ? null : ref?.valueAsString);
+      }
+      return instanceText(service, isolateId, ref);
+    }
+
+    final msg = await text(rec.message) ?? '';
+    final error = await text(rec.error);
+    final stack = await text(rec.stackTrace);
     _append(
       stream: AppLogStream.logging,
-      content: msg,
-      loggerName: loggerName,
+      content: [
+        msg,
+        if (error != null && error.isNotEmpty) 'error: $error',
+        if (stack != null && stack.trim().isNotEmpty) stack.trimRight(),
+      ].join('\n'),
+      loggerName: await text(rec.loggerName),
       level: rec.level,
+      timestamp: receivedAt,
     );
   }
 
@@ -115,11 +144,12 @@ class AppLogBuffer {
     required String content,
     String? loggerName,
     int? level,
+    DateTime? timestamp,
   }) {
     if (content.trim().isEmpty) return;
     _entries.add(AppLogEntry(
       sequence: _seq++,
-      timestamp: DateTime.now(),
+      timestamp: timestamp ?? DateTime.now(),
       stream: stream,
       content: content,
       loggerName: loggerName,
