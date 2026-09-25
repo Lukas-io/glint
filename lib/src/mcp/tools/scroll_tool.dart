@@ -22,7 +22,7 @@ class ScrollTool extends GlintTool {
         name: 'scroll',
         description:
             'Scroll the screen in a direction (up/down/left/right). '
-            'Direction is content-relative: "down" moves content down (finger swipes up). '
+            'Direction is content-relative: "down" shows what is below (finger swipes up). '
             'Anchors the swipe at viewport center. amountFraction controls how far '
             '(0.0–1.0, default 0.6 = 60% of viewport per scroll). '
             'For finding off-screen items, prefer scroll_to_find which loops until '
