@@ -16,10 +16,7 @@ const String _kIssueNewBase = 'https://github.com/Lukas-io/glint/issues/new';
 /// Longest body the pre-filled GitHub URL carries; the full text is saved to a file past this.
 const int kDeepLinkBodyMax = 6000;
 
-/// File a bug / UX / feature note into glint's GitHub repo via the local `gh`
-/// CLI, falling back to a pre-filled GitHub deep link when `gh` is missing or
-/// fails. Titles, bodies, and auto-attached context are path-redacted before
-/// they leave the machine (`/Users/<name>/...` → `<home>/...` or `<project:foo>/...`).
+/// Files a bug / UX / feature note into glint's public GitHub repo via the local `gh` CLI, or a pre-filled deep link; everything is path- and secret-redacted first.
 class ReportIssueTool extends GlintTool {
   const ReportIssueTool({this.run = Process.run});
 
@@ -29,33 +26,33 @@ class ReportIssueTool extends GlintTool {
   Tool get definition => Tool(
         name: 'report_issue',
         description:
-            'File a glint bug / ux / feature note. Auto-attaches the last '
-            '~30 action-log entries and recent app errors as context. Uses '
-            '`gh issue create` when available (labels the repo lacks are '
-            'skipped, never a reason not to file); falls back to a pre-filled '
-            'GitHub deep-link URL with the full body saved to a file. Title + '
-            'body + context are path-redacted before submission.',
+            'File a glint bug / ux / feature note in the PUBLIC glint GitHub '
+            'repo. Only with the user\'s go-ahead: call with dryRun:true '
+            'first, show the user the composed issue, and file only after '
+            'they approve. includeContext:true (off by default) attaches the '
+            'last ~30 action-log entries; typed text is never logged. Uses '
+            '`gh issue create` when available, else a pre-filled GitHub URL. '
+            'Paths and secrets (tokens, keys, passwords) are redacted.',
         inputSchema: ObjectSchema(
           properties: {
             'type': Schema.string(
               description: 'bug | ux | feature',
             ),
             'title': Schema.string(
-              description: 'One-line summary. Path-redacted before submission.',
+              description: 'One-line summary. Redacted before submission.',
             ),
             'body': Schema.string(
-              description:
-                  'What happened, what you expected, repro steps. '
-                  'Path-redacted before submission.',
+              description: 'What happened, what you expected, repro steps. '
+                  'Redacted before submission.',
             ),
             'includeContext': Schema.bool(
               description:
-                  'Attach the recent action log + app errors. Default true.',
+                  'Attach the recent action log (tools, targets, outcomes). Default false.',
             ),
             'dryRun': Schema.bool(
               description:
-                  'Compose + return the redacted body without filing. '
-                  'Useful for previewing.',
+                  'Compose and return the redacted issue without filing. '
+                  'Use it to show the user exactly what would be posted.',
             ),
           },
           required: ['type', 'title', 'body'],
@@ -69,7 +66,7 @@ class ReportIssueTool extends GlintTool {
     final type = args['type']! as String;
     final titleRaw = args['title']! as String;
     final bodyRaw = args['body']! as String;
-    final includeContext = argBool(args, 'includeContext') ?? true;
+    final includeContext = argBool(args, 'includeContext') ?? false;
     final dryRun = argBool(args, 'dryRun') ?? false;
 
     if (!const {'bug', 'ux', 'feature'}.contains(type)) {
@@ -80,8 +77,8 @@ class ReportIssueTool extends GlintTool {
       );
     }
 
-    final title = redactPath(titleRaw);
-    final fullBody = redactPath(
+    final title = redactForSharing(titleRaw);
+    final fullBody = redactForSharing(
       _composeBody(
         session: session,
         body: bodyRaw,
@@ -253,7 +250,9 @@ Future<GhFiling> fileWithGh({
         return GhFiling(url: out, applied: applied, droppedLabels: dropped);
       }
       return GhFiling(
-          reason: 'exited 0 without a URL', applied: applied, droppedLabels: dropped);
+          reason: 'exited 0 without a URL',
+          applied: applied,
+          droppedLabels: dropped);
     }
     final stderr = ((result.stderr as String?) ?? '').trim();
     return GhFiling(
@@ -286,8 +285,8 @@ Future<ProcessResult> _ghIssueCreate(ProcessRunner run, String repo,
 /// The repo's label names via `gh label list`; null when the lookup fails, so the caller keeps its retry as the safety net.
 Future<Set<String>?> existingLabels(ProcessRunner run, String repo) async {
   try {
-    final r = await run('gh',
-        ['label', 'list', '--repo', repo, '--json', 'name', '-L', '200']);
+    final r = await run(
+        'gh', ['label', 'list', '--repo', repo, '--json', 'name', '-L', '200']);
     if (r.exitCode != 0) return null;
     final decoded = jsonDecode((r.stdout as String?) ?? '');
     if (decoded is! List) return null;

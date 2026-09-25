@@ -90,6 +90,7 @@ class SceneSnapshot {
         if (n is SemanticText) mix(n.content);
         if (n is SemanticInput) {
           mix(n.currentValue ?? '');
+          mix(n.obscured ? '${n.valueLength ?? 0}' : '');
           mix(n.hint ?? '');
           mix(n.error ?? '');
         }

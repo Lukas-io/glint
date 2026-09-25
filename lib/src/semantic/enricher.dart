@@ -62,9 +62,10 @@ class OverlayEnricher implements SemanticEnricher {
     for (final root in roots) {
       final semantic = semanticizer.classifyNode(root);
       // Flatten pass-through Unknown roots: surface children directly.
-      final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty)
-          ? semantic.children
-          : [semantic];
+      final nodes =
+          (semantic is SemanticUnknown && semantic.children.isNotEmpty)
+              ? semantic.children
+              : [semantic];
       // Skip entirely-unknown layers (e.g. MouseRegion / Focus plumbing
       // overlays in debug mode) — no content, just `--- dialog ---` noise.
       if (!_hasContent(nodes)) continue;
@@ -88,7 +89,8 @@ class OverlayEnricher implements SemanticEnricher {
   static String _inferKind(SceneNode root) {
     for (final n in root.walk()) {
       final l = n.label;
-      if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
+      if (l.contains('BottomSheet') || l.contains('Sheet'))
+        return 'bottomSheet';
       // Transient messages ride in an OverlayEntry too — flag them as such so
       // the agent reads the message but doesn't treat it as a blocking modal.
       if (l.contains('SnackBar')) return 'snackbar';
@@ -165,7 +167,8 @@ class IconEnricher implements SemanticEnricher {
   Future<void> _enrichOne(
       SceneNode source, String groupName, SemanticIcon target) async {
     final raw = await runtime.evaluateWithSelection(
-      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
+      expression:
+          '(WidgetInspectorService.instance.selection.currentElement!.widget'
           ' as Icon).icon?.codePoint ?? -1',
       inspectorId: source.inspectorId,
       groupName: groupName,
@@ -344,7 +347,7 @@ class InputEnricher implements SemanticEnricher {
       // best-effort
     }
     try {
-      target.currentValue = await _readCurrentValue(scene, subtree);
+      target.setReadValue(await _readCurrentValue(scene, subtree));
     } on Object {
       // best-effort
     }
@@ -370,13 +373,20 @@ class InputEnricher implements SemanticEnricher {
     if (editableId == null) return null;
 
     final v = await runtime.evaluateWithSelection(
-      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
-          ' as EditableText).controller.text',
+      expression: _currentValueExpr,
       inspectorId: editableId,
       groupName: scene.groupName,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
+
+  static const _editable =
+      '(WidgetInspectorService.instance.selection.currentElement!.widget as EditableText)';
+
+  /// A field with obscureText set returns only [obscuredValuePrefix] and its length, so its text never leaves the app.
+  static const _currentValueExpr = '$_editable.obscureText'
+      ' ? \'$obscuredValuePrefix\' + $_editable.controller.text.length.toString()'
+      ' : $_editable.controller.text';
 
   /// First subtree node whose widget type is in [types], returning its valueId.
   String? _findWidgetId(Map<String, Object?> node, Set<String> types) {

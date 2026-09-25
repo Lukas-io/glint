@@ -18,7 +18,7 @@ String structuralSignature(SemanticNode node) {
     case SemanticInput i:
       b
         ..write(i.hint != null ? ':H' : ':')
-        ..write((i.currentValue?.isNotEmpty ?? false) ? 'V' : '')
+        ..write(i.hasValue ? 'V' : '')
         ..write(i.error != null ? 'E' : '');
     case SemanticUnknown u:
       b.write(':${u.label}');

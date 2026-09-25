@@ -506,6 +506,30 @@ void main() {
       expect(out, contains('> input email_field (email) "a@b"'));
     });
 
+    test('an obscured input shows its length, never its text', () {
+      final input = SemanticInput(glintId: 'password_field')
+        ..hint = 'Password'
+        ..setReadValue('${obscuredValuePrefix}8');
+      final scene = SemanticScene(
+        sourceScene: _FakeScene(),
+        root: SemanticPage(body: [input]),
+      );
+      final out = const PlainTextSceneRenderer().render(scene);
+      expect(out, contains('> input password_field (Password) [hidden, 8 chars]'));
+      expect(input.currentValue, isNull);
+      expect(input.hasValue, isTrue);
+      final json = input.toJson();
+      expect(json.containsKey('value'), isFalse);
+      expect(json['obscured'], isTrue);
+      expect(json['valueLength'], 8);
+    });
+
+    test('a plain value is stored as typed', () {
+      final input = SemanticInput(glintId: 'email_field')..setReadValue('a@b');
+      expect(input.currentValue, 'a@b');
+      expect(input.obscured, isFalse);
+    });
+
     test('multiline label renders on one line', () {
       final scene = SemanticScene(
         sourceScene: _FakeScene(),
