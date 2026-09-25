@@ -20,8 +20,10 @@ class TapTool extends GlintTool {
             'Tap a node by its glintId from get_scene, or pass x,y for raw '
             'coordinates (device mode: screenshot pixels; flutter mode: logical '
             'points). Returns changed + changeCategory (routeChanged / '
-            'overlayAppeared / overlayDismissed / contentChanged / nothing) so '
-            'you know if the screen reacted; pass detail:true for geometry. '
+            'overlayAppeared / overlayDismissed / contentChanged / nothing, or '
+            'nativeSurface with a fresh screenshot / nativeDismissed around '
+            'system dialogs) so you know if the screen reacted; pass '
+            'detail:true for geometry. '
             'awaitReady:true blocks until the target exists AND is hittable '
             'before firing — use across screen transitions '
             '(readyTimeoutMs, default 5000).',
