@@ -112,7 +112,9 @@ class HardwareButtonTool extends GlintTool {
   Future<StructuredResponse> _pressBack(GlintSession session) async {
     const button = HardwareButton.back;
     final pre = await snapshotPreAction(session);
-    final keyboardUp = await _keyboardVisible(session);
+    // Android back closes the keyboard first; the iOS edge swipe pops the route regardless.
+    final keyboardUp = session.device.platform == DevicePlatform.android &&
+        await _keyboardVisible(session);
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(
@@ -121,7 +123,6 @@ class HardwareButtonTool extends GlintTool {
       );
       var response = StructuredResponse.fromActionResult(result);
       if (response.isError) return response;
-      // Back with the keyboard up only closes the keyboard; pressing again would pop the route or leave the app.
       if (keyboardUp) {
         return response.copyWith(
           summary: 'press back closed the on-screen keyboard',

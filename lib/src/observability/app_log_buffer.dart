@@ -110,11 +110,14 @@ class AppLogBuffer {
     final rec = event.logRecord;
     if (rec == null) return;
     final receivedAt = DateTime.now();
-    _logQueue = _logQueue.then((_) => _appendLog(rec, event.isolate?.id, receivedAt));
+    // Values are fetched as the record arrives; only the append waits its turn, and a failed record never blocks later ones.
+    final values = _fetchValues(rec, event.isolate?.id);
+    _logQueue = _logQueue
+        .then((_) async => _appendLog(rec, await values, receivedAt))
+        .catchError((Object _) {});
   }
 
-  Future<void> _appendLog(
-      LogRecord rec, String? isolateId, DateTime receivedAt) async {
+  Future<List<String?>> _fetchValues(LogRecord rec, String? isolateId) {
     Future<String?> text(InstanceRef? ref) {
       final service = _service;
       if (service == null || isolateId == null) {
@@ -123,17 +126,24 @@ class AppLogBuffer {
       return instanceText(service, isolateId, ref);
     }
 
-    final msg = await text(rec.message) ?? '';
-    final error = await text(rec.error);
-    final stack = await text(rec.stackTrace);
+    return Future.wait([
+      text(rec.message),
+      text(rec.error),
+      text(rec.stackTrace),
+      text(rec.loggerName),
+    ]);
+  }
+
+  void _appendLog(LogRecord rec, List<String?> values, DateTime receivedAt) {
+    final [msg, error, stack, logger] = values;
     _append(
       stream: AppLogStream.logging,
       content: [
-        msg,
+        msg ?? '',
         if (error != null && error.isNotEmpty) 'error: $error',
         if (stack != null && stack.trim().isNotEmpty) stack.trimRight(),
       ].join('\n'),
-      loggerName: await text(rec.loggerName),
+      loggerName: logger,
       level: rec.level,
       timestamp: receivedAt,
     );
