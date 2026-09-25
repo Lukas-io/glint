@@ -124,6 +124,10 @@ class TypeTool extends GlintTool {
           );
         }
         warnings.addAll(focusResult.warnings);
+        if (!await _awaitReadyToType(session)) {
+          warnings.add('$focus did not report focus within 2s after the tap; '
+              'typed anyway');
+        }
       }
 
       _ClearOutcome? cleared;
@@ -247,6 +251,29 @@ class TypeTool extends GlintTool {
         'remaining': remaining,
       },
     );
+  }
+
+  /// Keys sent before the tapped field takes focus are lost, and on Android `input text` also needs the soft keyboard fully shown; waits up to 2s for both.
+  Future<bool> _awaitReadyToType(GlintSession session) async {
+    final needsKeyboard = session.device.platform == DevicePlatform.android;
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    double? lastInset;
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final focused = await session.focusedFieldText() != null;
+        if (focused && !needsKeyboard) return true;
+        if (focused) {
+          // The inset turns non-zero as the keyboard starts sliding in; it takes keys once it stops moving.
+          final inset = (await session.uiState()).keyboardBottomPx;
+          if (inset > 0 && inset == lastInset) return true;
+          lastInset = inset;
+        }
+      } on Object {
+        return false;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+    }
+    return false;
   }
 }
 
