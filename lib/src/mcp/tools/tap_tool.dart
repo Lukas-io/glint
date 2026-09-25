@@ -7,6 +7,7 @@ import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
+import '../tap_sequence.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
@@ -40,6 +41,21 @@ class TapTool extends GlintTool {
             ),
             'y': Schema.num(
               description: 'Raw y coordinate (with x).',
+            ),
+            'sequence': Schema.list(
+              description: 'Several taps in one call, fired back to back: '
+                  '[{glintId}|{x,y}, …], up to $maxSequenceTaps. For PIN pads, '
+                  'OTP keypads, amounts, repeated backspace. glintIds resolve '
+                  'from one scene read before the first tap; changed is read '
+                  'once at the end.',
+              items: ObjectSchema(properties: {
+                'glintId': Schema.string(),
+                'x': Schema.num(),
+                'y': Schema.num(),
+              }),
+            ),
+            'intervalMs': Schema.int(
+              description: 'Pause between sequence taps, 0-2000 ms. Default 120.',
             ),
             'refuseNotHittable': Schema.bool(
               description:
@@ -78,6 +94,22 @@ class TapTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final t = readTargetedArgs(args, session.config);
+    if (args['sequence'] != null) {
+      final parsed = parseTapSequence(args['sequence']);
+      if (parsed.error != null) return parsed.error!;
+      final intervalMs = argInt(args, 'intervalMs') ?? 120;
+      if (intervalMs < 0 || intervalMs > 2000) {
+        return StructuredResponse.error(
+          summary: 'intervalMs must be between 0 and 2000',
+          errorKind: GlintErrorKind.invalidArgument,
+          nextSteps: const ['omit it for the 120 ms default'],
+        );
+      }
+      return runTapSequence(session, parsed.steps!,
+          intervalMs: intervalMs,
+          returnScene: t.returnScene,
+          fetchScene: t.fetchScene);
+    }
 
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
     // In Flutter mode it still gets a changed-signal so raw x,y taps aren't

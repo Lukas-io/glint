@@ -39,6 +39,25 @@ void main() {
       expect(calls.single, ['/bin/glint-iossim', 'key', 'UDID', '4', '1', '8']);
     });
 
+    test('tapSequence is one taps call in logical points', () async {
+      await backend().tapSequence([(x: 300, y: 600), (x: 600, y: 900)],
+          intervalMs: 120);
+      expect(calls.single, [
+        '/bin/glint-iossim', 'taps', 'UDID', '402.0', '874.0', '120',
+        '100.0', '200.0', '200.0', '300.0',
+      ]);
+    });
+
+    test('typeText passes keyDelayMs as the gap, and omits it by default', () async {
+      final b = backend();
+      await b.typeText('07', keyDelayMs: 80);
+      await b.typeText('07');
+      expect(calls, [
+        ['/bin/glint-iossim', 'type', 'UDID', '07', '80'],
+        ['/bin/glint-iossim', 'type', 'UDID', '07'],
+      ]);
+    });
+
     test('a non-zero exit throws BackendToolError', () async {
       final b = IosSimBackend(
         udid: 'U',

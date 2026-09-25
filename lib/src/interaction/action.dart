@@ -56,8 +56,11 @@ class Swipe extends Action {
 }
 
 class TypeText extends Action {
-  const TypeText(this.text);
+  const TypeText(this.text, {this.keyDelayMs});
   final String text;
+
+  /// Gap between keys in ms; null keeps the backend default.
+  final int? keyDelayMs;
 
   @override
   String get label {

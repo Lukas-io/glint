@@ -78,7 +78,9 @@ class AdbBackend implements InteractionBackend {
     required int physicalX2,
     required int physicalY2,
     required int durationMs,
+    int holdMs = 0,
   }) =>
+      // `input swipe` cannot rest at the end; spreading the hold over the move lowers the lift velocity instead.
       _shell([
         'input',
         'swipe',
@@ -86,13 +88,29 @@ class AdbBackend implements InteractionBackend {
         '$physicalY1',
         '$physicalX2',
         '$physicalY2',
-        '$durationMs',
+        '${durationMs + holdMs}',
       ]);
+
+  @override
+  Future<void> tapSequence(List<({int x, int y})> points,
+          {required int intervalMs}) =>
+      tapEachInTurn(this, points, intervalMs);
 
   // `input text` treats `%s` as space and chokes on quote / backtick.
   // Latin only — non-ASCII would need an IME via `am broadcast` (v2).
   @override
-  Future<void> typeText(String text) {
+  Future<void> typeText(String text, {int? keyDelayMs}) async {
+    if (keyDelayMs == null || text.length < 2) return _inputText(text);
+    final chars = text.split('');
+    for (var i = 0; i < chars.length; i++) {
+      await _inputText(chars[i]);
+      if (i < chars.length - 1) {
+        await Future<void>.delayed(Duration(milliseconds: keyDelayMs));
+      }
+    }
+  }
+
+  Future<void> _inputText(String text) {
     final escaped = text
         .replaceAll('\\', '\\\\')
         .replaceAll('"', '\\"')

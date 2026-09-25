@@ -59,6 +59,21 @@ class IosSimBackend implements InteractionBackend {
   }
 
   @override
+  Future<void> tapSequence(List<({int x, int y})> points,
+      {required int intervalMs}) {
+    return _run(_BridgeCommand.taps, [
+      udid,
+      '$deviceLogicalWidth',
+      '$deviceLogicalHeight',
+      '$intervalMs',
+      for (final pt in points) ...() {
+        final p = _logical(pt.x, pt.y);
+        return ['${p.x}', '${p.y}'];
+      }(),
+    ]);
+  }
+
+  @override
   Future<void> longPress({
     required int physicalX,
     required int physicalY,
@@ -82,6 +97,7 @@ class IosSimBackend implements InteractionBackend {
     required int physicalX2,
     required int physicalY2,
     required int durationMs,
+    int holdMs = 0,
   }) {
     final from = _logical(physicalX1, physicalY1);
     final to = _logical(physicalX2, physicalY2);
@@ -92,12 +108,13 @@ class IosSimBackend implements InteractionBackend {
       '${from.x}', '${from.y}',
       '${to.x}', '${to.y}',
       '$durationMs',
+      if (holdMs > 0) '$holdMs',
     ]);
   }
 
   @override
-  Future<void> typeText(String text) =>
-      _run(_BridgeCommand.type, [udid, text]);
+  Future<void> typeText(String text, {int? keyDelayMs}) => _run(
+      _BridgeCommand.type, [udid, text, if (keyDelayMs != null) '$keyDelayMs']);
 
   @override
   Future<void> pressKey(KeyName key,
@@ -257,6 +274,7 @@ class IosSimBackend implements InteractionBackend {
 /// Subcommands exposed by the `glint-iossim` Swift binary.
 enum _BridgeCommand {
   tap('tap'),
+  taps('taps'),
   longPress('long-press'),
   swipe('swipe'),
   type('type'),
