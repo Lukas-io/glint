@@ -419,10 +419,16 @@ abstract class GlintTool {
     return '${s.substring(0, max - 1)}…';
   }
 
+  /// Drops the VM URI and keeps only the length of typed text, so the action log never holds what the agent typed.
   Map<String, Object?>? _scrubArgs(Map<String, Object?>? args) {
     if (args == null) return null;
-    // Drop the vmUri — long and sensitive-ish.
-    return {for (final e in args.entries) if (e.key != 'vmUri') e.key: e.value};
+    return {
+      for (final e in args.entries)
+        if (e.key != 'vmUri')
+          e.key: definition.name == 'type' && e.key == 'text' && e.value is String
+              ? '<${(e.value as String).length} chars>'
+              : e.value,
+    };
   }
 }
 
