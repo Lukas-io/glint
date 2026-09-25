@@ -3,14 +3,6 @@
 /// does by inspecting this file (or `glint telemetry audit show`).
 library;
 
-/// Public HMAC salt — every glint install uses this same value to compute its
-/// `machineHash`, so the collector dedupes machines without learning anything
-/// identifying. Shared with flutter_network_mcp (one identity scheme for both).
-/// Generated via `openssl rand -hex 32`; DO NOT change without a coordinated
-/// collector update.
-const String kPublicSalt =
-    '761d2c3db2b2719c04ad002499704b7e094048c57046457c545105be31de8d11';
-
 /// Collector POST endpoint. The same Cloudflare Worker + D1 that backs
 /// flutter_network_mcp — it routes by payload `kind` and dedupes products
 /// via the `version` field (`glint/<v>` vs `flutter_network_mcp/<v>`).

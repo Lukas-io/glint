@@ -23,16 +23,19 @@ const Duration _kAutoShipMinInterval = Duration(hours: 24);
 const String kGlintVersion = 'glint/0.0.1';
 
 class UsageReporter {
-  UsageReporter(this.recorder);
+  UsageReporter(this.recorder, {Map<String, String>? env}) : _env = env;
 
   final UsageRecorder recorder;
+
+  /// Environment the sharing switches are read from; null reads the process environment.
+  final Map<String, String>? _env;
 
   /// Fire-and-forget startup hook. Daily-gated. Never throws — safe to
   /// `unawaited(...)` from server bootstrap. Ships what earlier processes
   /// persisted but did not get to ship.
   Future<void> maybeAutoShip() async {
     try {
-      if (usageDisabled()) return;
+      if (!sharingEnabled(_env)) return;
       final dir = resolveDataDir();
       final state = _readState(dir);
       final last = state.lastShippedAtMs;
@@ -51,10 +54,11 @@ class UsageReporter {
   /// [kTelemetryTimeout] so exit is never held hostage. Never throws.
   Future<void> shipOnExit({String? dataDir}) async {
     try {
-      if (usageDisabled()) return;
+      if (!sharingEnabled(_env)) return;
       final dir = dataDir ?? resolveDataDir();
       if (unshippedCount(dataDir: dir) == 0) return;
-      await ship(dataDir: dir).timeout(kTelemetryTimeout + const Duration(seconds: 1));
+      await ship(dataDir: dir)
+          .timeout(kTelemetryTimeout + const Duration(seconds: 1));
     } on Object {
       // Best-effort; the events stay persisted for the next startup ship.
     }
@@ -82,10 +86,18 @@ class UsageReporter {
     String? endpointOverride,
   }) async {
     final dir = dataDir ?? resolveDataDir();
-    if (usageDisabled()) {
+    if (usageDisabled(_env)) {
       return const UsageShipResult(
         shipped: false,
-        message: 'usage telemetry disabled (GLINT_NO_TELEMETRY / NO_USAGE)',
+        message: 'usage recording is off (GLINT_NO_TELEMETRY / GLINT_NO_USAGE)',
+      );
+    }
+    final offReason = sharingOffReason(_env);
+    if (!dryRun && offReason != null) {
+      return UsageShipResult(
+        shipped: false,
+        message:
+            'not sent: sharing is $offReason. dryRun shows what would be sent.',
       );
     }
 
@@ -129,7 +141,8 @@ class UsageReporter {
     final endpoint = endpointOverride ?? kCollectorEndpoint;
     if (endpoint.isNotEmpty) {
       try {
-        final status = await _postTo(endpoint, jsonStr).timeout(kTelemetryTimeout);
+        final status =
+            await _postTo(endpoint, jsonStr).timeout(kTelemetryTimeout);
         posted = status >= 200 && status < 300;
       } on Object {
         // Best-effort: the audit log already holds the rollup.
@@ -172,7 +185,8 @@ class UsageReporter {
       ..connectionTimeout = kTelemetryTimeout
       ..userAgent = kTelemetryUserAgent;
     try {
-      final request = await client.postUrl(Uri.parse(endpoint)).timeout(kTelemetryTimeout);
+      final request =
+          await client.postUrl(Uri.parse(endpoint)).timeout(kTelemetryTimeout);
       request.headers.contentType = io.ContentType.json;
       request.write(jsonStr);
       final response = await request.close().timeout(kTelemetryTimeout);
@@ -213,7 +227,7 @@ class UsageReporter {
 }
 
 /// Builds the rollup payload. Visible for testing.
-/// IN: package version, host OS + Dart version, the HMAC machineHash, the
+/// IN: package version, host OS + Dart version, a random install id (sent as machineHash), the
 /// event-id + timestamp window, and the [summarizeUsage] aggregate.
 /// NOT IN: arg values, glintIds, app names, paths, or any per-event row.
 Map<String, Object?> buildUsagePayload({
@@ -246,7 +260,7 @@ Map<String, Object?> buildUsagePayload({
     'version': kGlintVersion,
     'os': osDescriptor(),
     'dart': dartVersion(),
-    'machineHash': machineHash(dataDir),
+    'machineHash': installId(dataDir),
     'window': {
       'firstEventMs': firstMs,
       'lastEventMs': lastMs,
