@@ -1,0 +1,82 @@
+name: Device check
+
+on:
+  workflow_dispatch:
+    inputs:
+      flutter-channel:
+        description: Flutter channel to build the fixture with
+        default: stable
+        type: choice
+        options: [stable, beta]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: ${{ inputs.flutter-channel }}
+      - run: dart pub get
+      - run: flutter pub get
+        working-directory: fixtures/counter_app
+      - uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: tool/ci/run_device_check.sh android emulator-5554
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-logs
+          path: device-check-flutter-run.log
+
+  ios:
+    name: iOS simulator
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: ${{ inputs.flutter-channel }}
+      - run: dart pub get
+      - run: flutter pub get
+        working-directory: fixtures/counter_app
+      - name: Build the simulator bridge
+        run: swift build
+        working-directory: native/ios_sim_bridge
+      - name: Boot a simulator
+        id: sim
+        run: |
+          xcodebuild -version
+          runtime=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; rs=[r for r in json.load(sys.stdin)['runtimes'] if r['platform']=='iOS' and r['isAvailable']]; print(rs[-1]['identifier'] if rs else '')")
+          if [ -z "$runtime" ]; then echo "no iOS simulator runtime on this runner"; xcrun simctl list runtimes; exit 1; fi
+          device=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; ts=[t['identifier'] for t in json.load(sys.stdin)['devicetypes'] if t['name'].startswith('iPhone') and 'Pro' not in t['name'] and 'Plus' not in t['name'] and 'Max' not in t['name'] and 'SE' not in t['name']]; print(ts[-1])")
+          udid=$(xcrun simctl create glint-ci "$device" "$runtime")
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Run the device check
+        run: tool/ci/run_device_check.sh ios ${{ steps.sim.outputs.udid }}
+      - if: failure()
+        run: xcrun simctl io ${{ steps.sim.outputs.udid }} screenshot ios-failure.png || true
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ios-logs
+          path: |
+            device-check-flutter-run.log
+            ios-failure.png
