@@ -289,6 +289,18 @@ class AppSession {
           ? SceneMode.flutter
           : SceneMode.native;
       _onLifecycle(state ?? 'resumed');
+    } on TimeoutException {
+      // Slow is not suspended (the first eval also resolves the eval library); only a locked device settles it.
+      bool? locked;
+      try {
+        locked = await backend.lockState();
+      } on Object {
+        locked = null;
+      }
+      if (locked == true) {
+        sceneMode = SceneMode.native;
+        _onLifecycle('paused');
+      }
     } on Object {
       // Eval failure means the isolate is paused (native surface active).
       sceneMode = SceneMode.native;

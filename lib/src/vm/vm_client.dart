@@ -87,7 +87,21 @@ class VmClient {
     final newFlutter = e.kind == EventKind.kServiceExtensionAdded &&
         id != current &&
         (e.extensionRPC ?? '').startsWith('ext.flutter.inspector.');
-    if (replaced || newFlutter) unawaited(reselect().catchError((_) {}));
+    if (replaced) unawaited(reselect().catchError((_) {}));
+    // A background engine (push or workmanager handler) registers the same extensions; only follow it once the UI isolate is gone.
+    if (newFlutter) unawaited(_reselectIfCurrentGone());
+  }
+
+  Future<void> _reselectIfCurrentGone() async {
+    final current = _flutterIsolate?.id;
+    if (current == null || _service == null) return;
+    try {
+      await service.getIsolate(current).timeout(const Duration(seconds: 2));
+    } on SentinelException {
+      await reselect().catchError((_) {});
+    } on Object {
+      // still there, or unreachable for now: keep it
+    }
   }
 
   /// Longest one VM read may take during attach; a suspended app (device locked) never answers.
@@ -95,6 +109,7 @@ class VmClient {
 
   Future<void> _selectFlutterIsolate({String? exclude}) async {
     final vm = await service.getVM().timeout(readTimeout);
+    final candidates = <Isolate>[];
     for (final ref in vm.isolates ?? const <IsolateRef>[]) {
       final id = ref.id;
       if (id == null || id == exclude) continue;
@@ -105,10 +120,13 @@ class VmClient {
         continue;
       }
       final rpcs = iso.extensionRPCs ?? const <String>[];
-      if (rpcs.any((e) => e.startsWith('ext.flutter.'))) {
-        _flutterIsolate = iso;
-        return;
-      }
+      if (rpcs.any((e) => e.startsWith('ext.flutter.'))) candidates.add(iso);
+    }
+    if (candidates.isNotEmpty) {
+      // The UI isolate is named main; background engines get other names.
+      _flutterIsolate = candidates.firstWhere((i) => i.name == 'main',
+          orElse: () => candidates.first);
+      return;
     }
     throw StateError(
       'No isolate exposes ext.flutter.* extensions. Is the target a Flutter '
