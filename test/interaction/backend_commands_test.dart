@@ -25,13 +25,15 @@ void main() {
 
     test('pressKey sends usage, count and mask=0', () async {
       await backend().pressKey(KeyName.backspace, count: 3);
-      expect(calls.single, ['/bin/glint-iossim', 'key', 'UDID', '42', '3', '0']);
+      expect(
+          calls.single, ['/bin/glint-iossim', 'key', 'UDID', '42', '3', '0']);
     });
 
     test('modifiers become the mask', () async {
       await backend()
           .pressKey(KeyName.left, modifiers: const {KeyModifier.shift});
-      expect(calls.single, ['/bin/glint-iossim', 'key', 'UDID', '80', '1', '2']);
+      expect(
+          calls.single, ['/bin/glint-iossim', 'key', 'UDID', '80', '1', '2']);
     });
 
     test('selectAll is cmd+A', () async {
@@ -45,15 +47,24 @@ void main() {
     });
 
     test('tapSequence is one taps call in logical points', () async {
-      await backend().tapSequence([(x: 300, y: 600), (x: 600, y: 900)],
-          intervalMs: 120);
+      await backend()
+          .tapSequence([(x: 300, y: 600), (x: 600, y: 900)], intervalMs: 120);
       expect(calls.single, [
-        '/bin/glint-iossim', 'taps', 'UDID', '402.0', '874.0', '120',
-        '100.0', '200.0', '200.0', '300.0',
+        '/bin/glint-iossim',
+        'taps',
+        'UDID',
+        '402.0',
+        '874.0',
+        '120',
+        '100.0',
+        '200.0',
+        '200.0',
+        '300.0',
       ]);
     });
 
-    test('typeText passes keyDelayMs as the gap, and omits it by default', () async {
+    test('typeText passes keyDelayMs as the gap, and omits it by default',
+        () async {
       final b = backend();
       await b.typeText('07', keyDelayMs: 80);
       await b.typeText('07');
@@ -90,24 +101,87 @@ void main() {
       );
     }
 
-    test('pressKey with no modifiers repeats the keycode in one call', () async {
+    test('pressKey with no modifiers repeats the keycode in one call',
+        () async {
       await backend().pressKey(KeyName.backspace, count: 3);
-      expect(calls.single,
-          ['adb', '-s', 'emu-1', 'shell', 'input', 'keyevent', '67', '67', '67']);
+      expect(calls.single, [
+        'adb',
+        '-s',
+        'emu-1',
+        'shell',
+        'input',
+        'keyevent',
+        '67',
+        '67',
+        '67'
+      ]);
     });
 
     test('modifiers use keycombination, once per count', () async {
-      await backend()
-          .pressKey(KeyName.enter, count: 2, modifiers: const {KeyModifier.ctrl});
+      await backend().pressKey(KeyName.enter,
+          count: 2, modifiers: const {KeyModifier.ctrl});
       expect(calls, hasLength(2));
-      expect(calls.first,
-          ['adb', '-s', 'emu-1', 'shell', 'input', 'keycombination', '113', '66']);
+      expect(calls.first, [
+        'adb',
+        '-s',
+        'emu-1',
+        'shell',
+        'input',
+        'keycombination',
+        '113',
+        '66'
+      ]);
     });
 
     test('selectAll is ctrl+A', () async {
       await backend().selectAll();
-      expect(calls.single,
-          ['adb', '-s', 'emu-1', 'shell', 'input', 'keycombination', '113', '29']);
+      expect(calls.single, [
+        'adb',
+        '-s',
+        'emu-1',
+        'shell',
+        'input',
+        'keycombination',
+        '113',
+        '29'
+      ]);
     });
+
+    test('typed text is one single-quoted argument with spaces as %s',
+        () async {
+      await backend().typeText("it's a;reboot");
+      expect(calls.single, [
+        'adb',
+        '-s',
+        'emu-1',
+        'shell',
+        'input',
+        'text',
+        "'it'\\''s%sa;reboot'"
+      ]);
+    });
+
+    test('a literal %s is sent in two pieces', () async {
+      await backend().typeText('50%sale');
+      expect(calls.map((c) => c.last), ["'50%'", "'sale'"]);
+    });
+  });
+
+  group('device shell quoting', () {
+    const samples = [
+      r'p@$$w0rd!',
+      "it's",
+      'a;reboot',
+      r'x & y | z > /tmp/q',
+      r'$(whoami) `id` "quoted" \back',
+      '(parens) <angles> *glob* ?q #hash ~home',
+    ];
+    for (final sample in samples) {
+      test('the device shell sees $sample literally', () async {
+        final r = await Process.run(
+            '/bin/sh', ['-c', 'printf %s ${quoteForDeviceShell(sample)}']);
+        expect(r.stdout, sample);
+      }, testOn: 'mac-os || linux');
+    }
   });
 }
