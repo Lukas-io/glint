@@ -158,14 +158,15 @@ class PostActionState {
     this.screenshot,
   });
 
-  final bool changed;
+  /// Null when a native surface was up before and after: a screenshot alone cannot say.
+  final bool? changed;
   final String changeCategory;
 
   /// `loaded` / `loading` / `error` from [StateObserver], or `native` when a
   /// native layer took the foreground after the action.
   final String state;
 
-  /// Newest background screenshot when [state] is `native`.
+  /// A capture taken after the action when [state] is `native`.
   final String? screenshot;
 
   /// Set only when the caller passed `includeSceneText: true`; null otherwise
@@ -176,7 +177,7 @@ class PostActionState {
   final double? scrolledPx;
 
   Map<String, Object?> toData() => {
-        'changed': changed,
+        if (changed != null) 'changed': changed,
         'changeCategory': changeCategory,
         if (state != 'loaded') 'state': state,
         if (screenshot != null) 'screenshot': screenshot,
@@ -213,6 +214,9 @@ Future<PostActionState?> readPostActionState(
   ScrollAnchor? scrollAnchor,
   bool horizontalScroll = false,
 }) async {
+  final app = session.active;
+  final watchesNative = app != null && app.nativeReader != null;
+  final wasNative = watchesNative && app.sceneMode == SceneMode.native;
   try {
     try {
       // A route push/pop animation starts a frame or two AFTER the tap; poll
@@ -245,16 +249,25 @@ Future<PostActionState?> readPostActionState(
           },
           detail: includeSceneText ? SceneDetail.full : SceneDetail.interactive,
         );
-    final app = session.active;
-    if (app != null && app.nativeReader != null) {
+    if (watchesNative) {
       await app.refreshSceneMode();
+      if (wasNative) await _awaitNativeGone(app);
       if (app.sceneMode == SceneMode.native) {
-        final capture = app.captures.newest ?? await app.captureNow('lifecycle');
+        final capture = await app.captureNow('action');
         return PostActionState(
-          changed: true,
+          changed: wasNative ? null : true,
           changeCategory: 'nativeSurface',
           state: 'native',
           screenshot: capture?.path,
+        );
+      }
+      if (wasNative) {
+        final state = await readOnce();
+        return PostActionState(
+          changed: true,
+          changeCategory: 'nativeDismissed',
+          state: state.state,
+          sceneText: state.sceneText,
         );
       }
     }
@@ -266,6 +279,15 @@ Future<PostActionState?> readPostActionState(
     return state;
   } on Object {
     return null;
+  }
+}
+
+/// A dismissed system dialog animates out before iOS resumes the app: poll the lifecycle briefly so the tap that closed it is reported as such.
+Future<void> _awaitNativeGone(AppSession app) async {
+  final deadline = DateTime.now().add(const Duration(milliseconds: 1500));
+  while (app.sceneMode == SceneMode.native && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await app.refreshSceneMode();
   }
 }
 

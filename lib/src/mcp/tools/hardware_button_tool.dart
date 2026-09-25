@@ -161,7 +161,7 @@ class HardwareButtonTool extends GlintTool {
   Future<StructuredResponse> _backOutcome(GlintSession session, Scene scene,
       StructuredResponse response, SceneSnapshot? pre) async {
     var post = await readPostActionState(session, pre, includeSceneText: false);
-    if (post != null && !post.changed) {
+    if (post != null && post.changed == false) {
       final again = StructuredResponse.fromActionResult(await session.interactor
           .run(scene, PressHardwareButton(HardwareButton.back)));
       if (again.isError) return again;

@@ -1,5 +1,7 @@
 import 'package:dart_mcp/server.dart';
 import 'package:glint/observability.dart';
+import 'package:glint/interaction.dart' show GlintErrorKind;
+import 'package:glint/src/mcp/envelope.dart';
 import 'package:glint/src/mcp/tool.dart';
 import 'package:glint/src/mcp/tool_args.dart';
 import 'package:test/test.dart';
@@ -72,5 +74,16 @@ void main() {
         expect(res?.nextSteps.single, contains('n, on, s'));
       }
     });
+  });
+
+  test('a missing glint-iossim binary gets build next steps', () {
+    final r = GlintTool.explainMissingBridge(StructuredResponse.error(
+      summary: 'swiped failed at (1,2)->(3,4)',
+      errorKind: GlintErrorKind.backendToolError,
+      detail: 'ProcessException: No such file or directory\n  Command: '
+          'native/ios_sim_bridge/.build/debug/glint-iossim swipe',
+    ));
+    expect(r.summary, endsWith('the glint-iossim bridge is not built'));
+    expect(r.nextSteps.first, contains('swift build'));
   });
 }
