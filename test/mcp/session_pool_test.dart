@@ -64,10 +64,10 @@ void main() {
     test('attaching two apps pools both; the latest is active', () async {
       final a = await session.attach(
           vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      a.displayName = 'Sanga Eats';
+      a.displayName = 'Example Eats';
       final b = await session.attach(
           vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
-      b.displayName = 'AeTrust';
+      b.displayName = 'Acme Pay';
       expect(session.apps.length, 2);
       expect(session.active, same(b));
       expect(session.device.id, 'B');
@@ -101,18 +101,18 @@ void main() {
       final a = await session.attach(
           vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
       a
-        ..displayName = 'Sanga Eats'
-        ..package = 'sanga_mobile'
+        ..displayName = 'Example Eats'
+        ..package = 'eats_mobile'
         ..deviceName = 'iPhone Air';
       final b = await session.attach(
           vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
       b
-        ..displayName = 'AeTrust'
-        ..package = 'aetrust'
+        ..displayName = 'Acme Pay'
+        ..package = 'acme_pay'
         ..deviceName = 'iPhone 17';
       expect(session.findApp('A'), same(a));
-      expect(session.findApp('sanga eats'), same(a));
-      expect(session.findApp('aetrust'), same(b));
+      expect(session.findApp('example eats'), same(a));
+      expect(session.findApp('acme_pay'), same(b));
       expect(session.findApp('iphone 1'), same(b));
       expect(session.findApp('iphone'), isNull, reason: 'ambiguous prefix');
       expect(session.matchApps('iphone').length, 2);
@@ -145,7 +145,7 @@ void main() {
     test('the app arg routes a tool call and rejects unknown names', () async {
       final a = await session.attach(
           vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      a.displayName = 'Sanga Eats';
+      a.displayName = 'Example Eats';
       final result = await const HardwareButtonTool().invoke(
         session,
         CallToolRequest(name: 'hardware_button', arguments: const {
@@ -155,7 +155,7 @@ void main() {
       );
       final s = result.structuredContent as Map<String, Object?>;
       expect(s['errorKind'], 'unknownApp');
-      expect((s['nextSteps'] as List).join(), contains('Sanga Eats'));
+      expect((s['nextSteps'] as List).join(), contains('Example Eats'));
     });
 
     test('every routed tool schema carries the app property', () {
@@ -175,7 +175,7 @@ void deviceGoneMain() {
     final session = GlintSession();
     final app = AppSession.bindDevice(
         device: AndroidDevice(serial: 'emulator-5554', adbPath: 'adb'))
-      ..displayName = 'AeTrust'
+      ..displayName = 'Acme Pay'
       ..deviceName = 'Pixel 8';
     final r = GlintTool.deviceGoneResponse(session, app);
     expect(r.isError, isTrue);

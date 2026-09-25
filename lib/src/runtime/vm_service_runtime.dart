@@ -45,7 +45,7 @@ class VmServiceRuntime implements FlutterRuntime {
       'Visibility, Opacity, AbsorbPointer, IgnorePointer, Icon, RichText, '
       'TextSpan, Offset].length.toString()';
 
-  /// Root library URI of the Flutter isolate, e.g. `package:aetrust/main.dart`.
+  /// Root library URI of the Flutter isolate, e.g. `package:acme_pay/main.dart`.
   /// The package segment is the app's pubspec name — the surest "which app".
   String? get rootLibraryUri => _vm.flutterIsolate.rootLib?.uri;
 

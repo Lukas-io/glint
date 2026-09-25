@@ -42,18 +42,18 @@ void main() {
   });
 
   test('record persists and round-trips', () {
-    history.record(_rec('aetrust', 'udid-1'));
+    history.record(_rec('acme_pay', 'udid-1'));
     final loaded = history.load();
     expect(loaded, hasLength(1));
-    expect(loaded.single.appKey, 'aetrust');
+    expect(loaded.single.appKey, 'acme_pay');
     expect(loaded.single.launchable, isTrue);
   });
 
   test('re-record same (app,device) bumps count, keeps firstSeen', () {
     final t1 = DateTime(2026, 6, 21, 10);
     final t2 = DateTime(2026, 6, 21, 12);
-    history.record(_rec('aetrust', 'udid-1', at: t1));
-    history.record(_rec('aetrust', 'udid-1', at: t2));
+    history.record(_rec('acme_pay', 'udid-1', at: t1));
+    history.record(_rec('acme_pay', 'udid-1', at: t2));
     final loaded = history.load();
     expect(loaded, hasLength(1));
     expect(loaded.single.attachCount, 2);
@@ -62,8 +62,8 @@ void main() {
   });
 
   test('same app on a different device is a separate record', () {
-    history.record(_rec('aetrust', 'udid-1'));
-    history.record(_rec('aetrust', 'udid-2'));
+    history.record(_rec('acme_pay', 'udid-1'));
+    history.record(_rec('acme_pay', 'udid-2'));
     expect(history.load(), hasLength(2));
   });
 
@@ -84,21 +84,21 @@ void main() {
   });
 
   test('find: null/true/last → most recent; appKey → exact; basename → path', () {
-    history.record(_rec('aetrust', 'd1',
-        projectDir: '/Users/x/StudioProjects/aetrust',
+    history.record(_rec('acme_pay', 'd1',
+        projectDir: '/Users/x/StudioProjects/acme_pay',
         at: DateTime(2026, 6, 21, 9)));
-    history.record(_rec('sanga', 'd2',
-        projectDir: '/Users/x/StudioProjects/sanga_mobile',
+    history.record(_rec('eats', 'd2',
+        projectDir: '/Users/x/StudioProjects/eats_mobile',
         at: DateTime(2026, 6, 21, 11)));
-    expect(history.find(null)?.appKey, 'sanga');
-    expect(history.find('true')?.appKey, 'sanga');
-    expect(history.find('aetrust')?.appKey, 'aetrust');
-    expect(history.find('sanga_mobile')?.appKey, 'sanga'); // projectDir basename
+    expect(history.find(null)?.appKey, 'eats');
+    expect(history.find('true')?.appKey, 'eats');
+    expect(history.find('acme_pay')?.appKey, 'acme_pay');
+    expect(history.find('eats_mobile')?.appKey, 'eats'); // projectDir basename
     expect(history.find('nope'), isNull);
   });
 
   test('record with no projectDir is not launchable', () {
-    history.record(_rec('aetrust', 'd1', projectDir: null));
+    history.record(_rec('acme_pay', 'd1', projectDir: null));
     expect(history.load().single.launchable, isFalse);
   });
 }

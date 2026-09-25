@@ -1121,7 +1121,7 @@ class AttachTool extends GlintTool {
     );
   }
 
-  /// `package:aetrust/main.dart` → `aetrust`. Null for non-package URIs.
+  /// `package:acme_pay/main.dart` → `acme_pay`. Null for non-package URIs.
   String? _packageName(String? rootLibUri) {
     final u = rootLibUri == null ? null : Uri.tryParse(rootLibUri);
     return (u?.scheme == 'package' && u!.pathSegments.isNotEmpty)

@@ -95,7 +95,7 @@ const _gotchas = '''
 
 - **Overlay:** dialog ids live under `--- dialog ---`. Never tap base-screen nodes while a dialog is up.
 - **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it; `key` sends backspace/enter/arrows.
-- **Scroll is content-relative:** `scroll down` moves content down (finger swipes up). `scroll_to_find text:"…"` matches case-insensitively.
+- **Scroll is content-relative:** `scroll down` shows what is below (finger swipes up). `scroll_to_find text:"…"` matches case-insensitively.
 ''';
 
 const _toolSurface = '''
@@ -112,7 +112,7 @@ tap glintId=floating_action_button                → changed:true · routeChang
 type text="user@example.com" focus="email_field"
 scroll_to_find text="Password" direction="down"
 get_scene glintId="list_view_in_orders"           # drill into one list
-attach app:"AeTrust"
+attach app:"Acme Pay"
 ```
 ''';
 

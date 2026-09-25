@@ -263,10 +263,10 @@ void main() {
 
     test('GestureDetector around plain caption stays a leaf button', () {
       final root = classifyTree(_n('Scaffold', children: [
-        _n('GestureDetector', children: [_n('Text', textPreview: 'AeTrust')]),
+        _n('GestureDetector', children: [_n('Text', textPreview: 'Acme Pay')]),
       ]));
       final btn = root.walk().whereType<SemanticButton>().first;
-      expect(btn.label, 'AeTrust');
+      expect(btn.label, 'Acme Pay');
       expect(btn.children, isEmpty);
     });
 
