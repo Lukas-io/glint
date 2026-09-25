@@ -186,7 +186,7 @@ void main() {
       final payload =
           jsonDecode(res.payloadJson!) as Map<String, Object?>;
       expect(payload['kind'], 'usage_rollup');
-      expect(payload['version'], 'glint/0.0.1');
+      expect(payload['version'], 'glint/$glintVersion');
       final tools = payload['tools'] as List;
       expect(tools.length, 1);
       expect((tools.first as Map)['tool'], 'tap');
