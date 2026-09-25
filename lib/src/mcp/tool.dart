@@ -200,6 +200,8 @@ abstract class GlintTool {
       );
     } on RuntimeUnresponsiveError catch (e) {
       response = await _unresponsiveResponse(session, e);
+    } on IosToolchainBlocked catch (e) {
+      response = StructuredResponse.toolchainBlocked(e);
     } on ArgTypeError catch (e) {
       response = StructuredResponse.error(
         summary: '${definition.name}: $e',
@@ -278,8 +280,8 @@ abstract class GlintTool {
     return response.copyWith(
       summary: '${response.summary}: the glint-iossim bridge is not built',
       nextSteps: [
-        'build it: cd native/ios_sim_bridge && swift build (inside the glint checkout)',
-        'or re-attach with iosBridgePath pointing at a built glint-iossim',
+        'build it: cd <glint>/native/ios_sim_bridge && swift build -c release',
+        'or point $bridgePathEnv at a glint-iossim binary and attach again',
       ],
     );
   }

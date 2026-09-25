@@ -32,7 +32,9 @@ Future<void> main(List<String> args) async {
       if (opts['platform'] != null) 'platform': opts['platform'],
       if (opts['device'] != null) 'device': opts['device'],
       if (opts['adb-path'] != null) 'adbPath': opts['adb-path'],
-    }, (_, text) => text.contains('attached'));
+    }, (r, text) =>
+        text.contains('attached') &&
+        (opts['platform'] != 'ios' || (_data(r)['toolchain'] as Map?)?['actionsAllowed'] == true));
     if (failed) exit(1);
 
     var scene = '';

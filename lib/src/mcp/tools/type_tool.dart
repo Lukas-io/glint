@@ -191,6 +191,8 @@ class TypeTool extends GlintTool {
         await session.backend.pressKey(KeyName.backspace);
       }
       await session.backend.typeText(text, keyDelayMs: keyDelayMs);
+    } on IosToolchainBlocked catch (e) {
+      return StructuredResponse.toolchainBlocked(e);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: typing not supported',

@@ -94,8 +94,10 @@ Future<StructuredResponse> coordinateSwipe(
 }
 
 StructuredResponse _failed(String what, String where, Object e) =>
-    StructuredResponse.error(
-      summary: '$what failed at $where',
-      errorKind: GlintErrorKind.backendToolError,
-      detail: '$e',
-    );
+    e is IosToolchainBlocked
+        ? StructuredResponse.toolchainBlocked(e)
+        : StructuredResponse.error(
+            summary: '$what failed at $where',
+            errorKind: GlintErrorKind.backendToolError,
+            detail: '$e',
+          );

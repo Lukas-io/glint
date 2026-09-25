@@ -1,6 +1,7 @@
 import 'backend.dart';
 import 'backends/adb_backend.dart';
 import 'backends/ios_sim_backend.dart';
+import 'ios_toolchain.dart';
 
 /// One device glint can drive; hides the [AdbBackend] / [IosSimBackend] choice and the per-platform coordinate math.
 sealed class DeviceTarget {
@@ -69,6 +70,7 @@ class IosSimulator extends DeviceTarget {
     required this.logicalHeight,
     required this.devicePixelRatio,
     required this.bridgePath,
+    this.toolchain,
   });
 
   final String udid;
@@ -82,6 +84,8 @@ class IosSimulator extends DeviceTarget {
 
   /// Path to the compiled `glint-iossim` Swift binary.
   final String bridgePath;
+
+  final IosToolchain? toolchain;
 
   @override
   DevicePlatform get platform => DevicePlatform.ios;
@@ -99,5 +103,6 @@ class IosSimulator extends DeviceTarget {
         deviceLogicalHeight: logicalHeight,
         devicePixelRatio: devicePixelRatio,
         binaryPath: bridgePath,
+        toolchain: toolchain,
       );
 }

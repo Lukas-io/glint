@@ -100,6 +100,8 @@ class KeyTool extends GlintTool {
       try {
         await session.backend
             .pressKey(key, count: count, modifiers: modifiers);
+      } on IosToolchainBlocked catch (e) {
+        return StructuredResponse.toolchainBlocked(e);
       } on UnsupportedBackendAction catch (e) {
         return StructuredResponse.error(
           summary: '${session.backend.label}: key not supported',

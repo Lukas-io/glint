@@ -87,19 +87,23 @@ glint is not on pub.dev yet; install it from source.
 git clone https://github.com/Lukas-io/glint.git
 cd glint && dart pub get
 
-# iOS Simulator support (macOS with Xcode 26):
-(cd native/ios_sim_bridge && swift build)
+# iOS Simulator support (macOS with Xcode 26). Optional: without a local
+# build, glint downloads the release's prebuilt bridge on the first iOS attach.
+(cd native/ios_sim_bridge && swift build -c release)
 
 # Add it to your agent, for example Claude Code:
 claude mcp add glint -- dart run "$PWD/bin/glint.dart"
 ```
+
+On iOS, `attach` reports the Xcode version and which bridge it found. It looks for `GLINT_IOS_BRIDGE`, then a build inside the glint checkout, then `~/.glint/bin/glint-iossim-<version>`, and otherwise downloads the bridge attached to the matching GitHub Release, checked against its published sha256 (`GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off).
 
 Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with `flutter run` on a simulator or emulator and ask the agent to call `attach` with no arguments; glint finds the app and the device.
 
 ## Limits today
 
 - **Debug and profile builds only.** glint reads the app through the Dart VM service, which release builds don't have.
-- **iOS needs a Mac with Xcode 26.** The simulator bridge uses private simulator APIs, and only Xcode 26 is supported so far.
+- **iOS needs a Mac with Xcode 26.** The simulator bridge uses private simulator APIs, and only Xcode 26 is supported so far. On another Xcode major, `attach` warns and taps, swipes and typing are refused with `errorKind: unsupportedToolchain`; set `GLINT_ALLOW_UNTESTED_XCODE=true` to try anyway.
+- **The prebuilt bridge is ad-hoc signed, not notarized.** Build it yourself if your machine requires notarized binaries.
 - **Android runs over adb.** Tested on macOS hosts; Linux hosts are not tested yet.
 - **Typing is ASCII only** on both platforms.
 - **No Flutter web or desktop yet.**

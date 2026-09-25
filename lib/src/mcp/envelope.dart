@@ -36,6 +36,15 @@ class StructuredResponse {
     );
   }
 
+  /// A bridge action refused by the iOS toolchain check.
+  factory StructuredResponse.toolchainBlocked(IosToolchainBlocked e) =>
+      StructuredResponse.error(
+        summary: 'refused: ${e.detail}',
+        errorKind: GlintErrorKind.unsupportedToolchain,
+        detail: e.detail,
+        nextSteps: e.nextSteps,
+      );
+
   /// Builds a response from an [ActionResult]. The envelope already carries
   /// `summary`/`warnings`/`nextSteps` at the top level, so those are dropped
   /// from `data` rather than duplicated. Geometry (painted, hittable,
