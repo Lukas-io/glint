@@ -1,117 +1,73 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dart_mcp/server.dart';
 import 'package:glint_network/src/tools/report_issue.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('labelsForType', () {
     test('bug → [network, bug, agent-filed]', () {
-      expect(labelsForTypeForTest('bug'), ['network', 'bug', 'agent-filed']);
+      expect(labelsForType('bug'), ['network', 'bug', 'agent-filed']);
     });
 
     test('ux → [network, ux-friction, agent-filed]', () {
-      expect(labelsForTypeForTest('ux'), ['network', 'ux-friction', 'agent-filed']);
+      expect(labelsForType('ux'), ['network', 'ux-friction', 'agent-filed']);
     });
 
     test('unknown type → [network, agent-filed]', () {
-      expect(labelsForTypeForTest('weird'), ['network', 'agent-filed']);
+      expect(labelsForType('weird'), ['network', 'agent-filed']);
     });
   });
 
-  group('selectApplicableLabels (#42)', () {
-    test('keeps only labels the repo actually has', () {
-      // Real case: repo has `bug` but not `agent-filed`.
-      expect(
-        selectApplicableLabels(['bug', 'agent-filed'], {'bug', 'enhancement'}),
-        ['bug'],
-      );
+  group('reportIssue', () {
+    final calls = <List<String>>[];
+    setUp(calls.clear);
+
+    Future<Map<String, Object?>> report(Map<String, Object?> args,
+        Future<ProcessResult> Function(String, List<String>) run) async {
+      final result = await reportIssue(CallToolRequest(name: 'report_issue', arguments: args), run: run);
+      final text = result.content.whereType<TextContent>().map((c) => c.text).join();
+      return jsonDecode(text) as Map<String, Object?>;
+    }
+
+    Future<ProcessResult> gh(String exe, List<String> args) async {
+      calls.add(args);
+      if (args.first == 'label') return ProcessResult(0, 0, '[{"name":"network"},{"name":"bug"}]', '');
+      return ProcessResult(0, 0, 'https://github.com/Lukas-io/glint/issues/1\n', '');
+    }
+
+    test('auto:false only drafts, without calling gh', () async {
+      final r = await report({'type': 'bug', 'title': 't', 'body': 'b', 'auto': false}, gh);
+      expect(r['filed'], isFalse);
+      expect(calls, isEmpty);
+      expect((r['nextSteps'] as List).first, contains('auto:true'));
     });
 
-    test('drops all when none exist (filing proceeds label-less)', () {
-      expect(
-        selectApplicableLabels(['ux-friction', 'agent-filed'], {'bug'}),
-        isEmpty,
-      );
+    test('files through gh with the labels the repo has', () async {
+      final r = await report({'type': 'bug', 'title': 't', 'body': 'b'}, gh);
+      expect(r['filed'], isTrue);
+      expect(r['labels'], ['network', 'bug']);
+      expect(r['droppedLabels'], ['agent-filed']);
     });
 
-    test('null existing (lookup failed) passes desired through unchanged', () {
-      expect(
-        selectApplicableLabels(['bug', 'agent-filed'], null),
-        ['bug', 'agent-filed'],
-      );
+    test('without gh it hands back a pre-filled URL and how to install gh', () async {
+      final r = await report({'type': 'ux', 'title': 't', 'body': 'b'},
+          (exe, args) async => throw const ProcessException('gh', [], 'not found'));
+      expect(r['method'], 'paste-ready');
+      expect(r['url'], startsWith('https://github.com/Lukas-io/glint/issues/new?'));
+      expect(r['warnings'], isEmpty);
+      expect((r['nextSteps'] as List).last, contains('Install `gh`'));
     });
 
-    test('preserves desired order', () {
-      expect(
-        selectApplicableLabels(['a', 'b', 'c'], {'c', 'a', 'b'}),
-        ['a', 'b', 'c'],
-      );
-    });
-  });
-
-  group('isMissingLabelError (#42)', () {
-    test('detects the real gh "label not found" stderr', () {
-      expect(
-        isMissingLabelError("could not add label: 'agent-filed' not found"),
-        isTrue,
-      );
-    });
-
-    test('case-insensitive', () {
-      expect(isMissingLabelError("Label 'X' NOT FOUND"), isTrue);
-    });
-
-    test('unrelated errors do not trigger a label retry', () {
-      expect(isMissingLabelError('HTTP 401: Bad credentials'), isFalse);
-      expect(isMissingLabelError('could not connect to host'), isFalse);
-    });
-  });
-
-  group('composeIssueDeepLink', () {
-    test('basic title + body + labels url-encoded into query params', () {
-      final url = composeIssueDeepLinkForTest(
-        title: 'crash on attach',
-        body: 'StateError thrown',
-        labels: ['bug', 'agent-filed'],
-      );
-      expect(
-        url,
-        startsWith('https://github.com/Lukas-io/glint/issues/new?'),
-      );
-      expect(url, contains('title=crash+on+attach'));
-      expect(url, contains('body=StateError+thrown'));
-      expect(url, contains('labels=bug%2Cagent-filed'));
-    });
-
-    test('special characters encoded safely', () {
-      final url = composeIssueDeepLinkForTest(
-        title: 'token & query: failed',
-        body: '```dart\nthrow Error("oops");\n```',
-        labels: ['bug'],
-      );
-      expect(url, contains('token+%26+query'));
-      expect(url, contains('%3A'),
-          reason: ': must be percent-encoded');
-      expect(url, contains('%60%60%60'),
-          reason: 'triple backtick must be percent-encoded');
-      expect(url, contains('throw+Error%28%22oops%22%29%3B'));
-    });
-
-    test('empty labels list omits labels param', () {
-      final url = composeIssueDeepLinkForTest(
-        title: 't',
-        body: 'b',
-        labels: [],
-      );
-      expect(url, isNot(contains('labels=')));
-      expect(url, contains('title=t'));
-    });
-
-    test('newlines in body encoded as %0A', () {
-      final url = composeIssueDeepLinkForTest(
-        title: 't',
-        body: 'line 1\nline 2',
-        labels: [],
-      );
-      expect(url, contains('%0A'));
+    test('a long body is cut in the URL and saved whole', () async {
+      final long = 'x' * 7000;
+      final r = await report({'type': 'bug', 'title': 't', 'body': long, 'auto': false}, gh);
+      final saved = File(r['fullBodyPath']! as String);
+      addTearDown(() => saved.deleteSync());
+      expect(saved.readAsStringSync(), long);
+      expect(Uri.parse(r['url']! as String).queryParameters['body']!.length, lessThan(long.length));
+      expect((r['warnings'] as List).single, contains('first 6000 chars'));
     });
   });
 }
