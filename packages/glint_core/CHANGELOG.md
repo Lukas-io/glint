@@ -4,6 +4,10 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- Usage rollups: `summarizeUsage`, `buildUsagePayload`, `UsageShipper` (watermark, audit log first, then the collector; daily auto-ship and ship-on-exit), the `UsageEventSource` interface each package's store implements, `TurnTracker`, `usageOutcome`, `usageArgKeys` and `estimateTokens`.
+
 ## [0.1.0] - 2026-09-26
 
 ### Added

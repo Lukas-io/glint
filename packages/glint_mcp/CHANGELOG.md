@@ -20,6 +20,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- Usage rollups come from glint_core. `telemetry op:"report"` also shows `avgEstimatedTokens`, `degraded` counts, and error kinds sorted by frequency.
 - `attach` suggests `glint-network__network_attach` for HTTP monitoring, the network toolset's new name.
 
 - On an Xcode major glint has not been verified on, bridge actions are refused with the new `errorKind: unsupportedToolchain` and steps to fix it; `GLINT_ALLOW_UNTESTED_XCODE=true` lets them run. A missing bridge now fails the same way instead of with a raw process error.
