@@ -24,14 +24,5 @@ String currentEnvName(String name) => '$envPrefix${name.substring(legacyEnvPrefi
 List<String> legacyEnvNames(Map<String, String> source) =>
     source.keys.where((k) => k.startsWith(legacyEnvPrefix)).toList()..sort();
 
-/// One warning naming every legacy variable in [source] and its new name; null when none is set.
-String? legacyEnvWarning(Map<String, String> source) {
-  final legacy = legacyEnvNames(source);
-  if (legacy.isEmpty) return null;
-  return 'deprecated env var${legacy.length == 1 ? '' : 's'} '
-      '${legacy.map((n) => '$n (now ${currentEnvName(n)})').join(', ')}; '
-      'the old names still work but will be removed in a later release';
-}
-
 /// The process environment with legacy names mapped; read this instead of `Platform.environment`.
 final Map<String, String> networkEnv = withLegacyNames(io.Platform.environment);

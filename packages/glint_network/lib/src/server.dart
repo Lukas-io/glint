@@ -62,6 +62,13 @@ import 'tools/usage_stats.dart';
 import 'tools/ws_get.dart';
 import 'tools/ws_list.dart';
 import 'util/network_env.dart';
+import 'util/legacy_install.dart';
+
+/// A notice the agent passes to the user while this install still uses the flutter_network_mcp names.
+String _legacyInstructions() {
+  final notice = legacyUse.notice;
+  return notice == null ? '' : 'TELL THE USER, once and early: $notice\n\n';
+}
 
 /// MCP server exposing Flutter DevTools data via DTD + VM service, with
 /// persistent capture sessions in SQLite, full-text search, proactive alerts,
@@ -76,7 +83,7 @@ base class FlutterNetworkMcpServer extends MCPServer
             name: 'glint_network',
             version: packageVersion,
           ),
-          instructions:
+          instructions: '${_legacyInstructions()}'
               'Read HTTP, sockets, and logs from a running Flutter/Dart app, '
               'live or from history. Start with network_status; it reports '
               'what is reachable and its nextSteps tell you what to call next. '

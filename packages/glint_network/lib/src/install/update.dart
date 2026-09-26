@@ -25,7 +25,7 @@ Future<void> runUpdate(List<String> args) async {
   try {
     activate = await io.Process.start(
       'dart',
-      ['pub', 'global', 'activate', '-s', 'git', repo, '--git-path', packageGitPath],
+      activateArgs(repo),
       mode: io.ProcessStartMode.inheritStdio,
     );
   } on io.ProcessException catch (e) {
@@ -46,6 +46,8 @@ Future<void> runUpdate(List<String> args) async {
     io.exitCode = activateCode;
     return;
   }
+
+  await _retireLegacyPackage();
 
   if (wantsAotAfterUpdate()) {
     io.stderr.writeln(
@@ -68,4 +70,23 @@ Future<void> runUpdate(List<String> args) async {
     'glint_network update: done. Restart your MCP host to load '
     'the new version.',
   );
+}
+
+/// `--overwrite` lets glint_network take over the `flutter_network_mcp` command still owned by the old package.
+List<String> activateArgs(String repo) =>
+    ['pub', 'global', 'activate', '-s', 'git', repo, '--git-path', packageGitPath, '--overwrite'];
+
+/// Deactivates the old flutter_network_mcp package once glint_network owns both commands.
+Future<void> _retireLegacyPackage() async {
+  try {
+    final list = await io.Process.run('dart', ['pub', 'global', 'list']);
+    if (!'${list.stdout}'.split('\n').any((l) => l.startsWith('$legacyName '))) return;
+    final r = await io.Process.run('dart', ['pub', 'global', 'deactivate', legacyName]);
+    io.stderr.writeln(r.exitCode == 0
+        ? 'glint_network update: removed the old $legacyName package; the $legacyName command now runs glint_network.'
+        : 'glint_network update: could not remove the old $legacyName package (${'${r.stderr}'.trim()}); '
+            'run `dart pub global deactivate $legacyName` yourself.');
+  } on io.ProcessException {
+    return;
+  }
 }
