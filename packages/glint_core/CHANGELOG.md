@@ -6,6 +6,7 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ### Added
 
+- Agent-filed issues: `fileWithGh` (keeps only labels the repo has, retries once without labels), `issueLabels`, `composeIssueDeepLink`, `capDeepLinkBody`, `saveFullIssueBody`, `existingLabels`, `selectApplicableLabels`, `isMissingLabelError`, and the `issueRepo` all packages file into.
 - Usage rollups: `summarizeUsage`, `buildUsagePayload`, `UsageShipper` (watermark, audit log first, then the collector; daily auto-ship and ship-on-exit), the `UsageEventSource` interface each package's store implements, `TurnTracker`, `usageOutcome`, `usageArgKeys` and `estimateTokens`.
 
 ## [0.1.0] - 2026-09-26

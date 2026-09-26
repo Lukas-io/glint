@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `report_issue` no longer builds a pre-filled URL too long to open: past 6000 characters the URL carries the start of the body, and the full report is saved to a file the reply names (`fullBodyPath`). The draft (`auto:false`) now says to get the user's go-ahead before filing.
 - `glint_network audit verify` no longer calls a log broken when two servers once appended at the same moment; it reports the chain intact and how many entries were written that way. New entries can't fork any more.
 
 ### Changed
