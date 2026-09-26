@@ -9,7 +9,10 @@ labels: ux-friction
 > gap, something that *worked* but felt clumsy — open this template and submit.
 > Three fields, no environment needed. Filed friction is a gift to the maintainer.
 
-## `glint` version
+## Package
+<!-- glint (screen, input, attach) or glint_network (HTTP, sockets, logs). -->
+
+## Version
 <!-- e.g. 0.0.1. The agent can read it from `telemetry op:"status"`, or run
      `dart pub global list | grep glint`. Tells us whether the friction still
      exists on the latest release. -->

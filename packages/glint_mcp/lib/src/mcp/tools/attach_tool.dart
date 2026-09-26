@@ -484,7 +484,7 @@ class AttachTool extends GlintTool {
           if (others.isNotEmpty)
             'switch with attach app:"<name>", or target once with app:"<name>" '
                 'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',
-          'call flutter-network__network_attach vmServiceUri:"$vmUri" for HTTP '
+          'call glint-network__network_attach vmServiceUri:"$vmUri" for HTTP '
               'monitoring — same URI, separate connection, no conflict',
         ],
         data: {

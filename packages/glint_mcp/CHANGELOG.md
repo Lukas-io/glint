@@ -18,6 +18,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- `attach` suggests `glint-network__network_attach` for HTTP monitoring, the network toolset's new name.
+
 - On an Xcode major glint has not been verified on, bridge actions are refused with the new `errorKind: unsupportedToolchain` and steps to fix it; `GLINT_ALLOW_UNTESTED_XCODE=true` lets them run. A missing bridge now fails the same way instead of with a raw process error.
 
 ## [0.1.0] - 2026-09-25

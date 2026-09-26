@@ -61,7 +61,7 @@ Four modules behind an MCP server (stdio transport for v1):
 | **C — Semantic layer** *(understanding)* | Plain-language scene the agent reads | Derived from render primitives, zero-config |
 | **D — Instruction layer** *(grammar)* | Tool grammar + worked examples + gotchas | Treated as first-class; an MCP tool is only as good as the instructions shipped with it |
 
-Built in Dart on top of `package:dart_mcp`, `package:vm_service`, and `package:dtd` — porting hardened patterns from [flutter_network_mcp](https://github.com/Lukas-io/flutter_network_mcp) where they apply (DTD discovery, structured response shapes, AOT install flow).
+Built in Dart on top of `package:dart_mcp`, `package:vm_service`, and `package:dtd` — sharing hardened patterns with [glint_network](./packages/glint_network) where they apply (DTD discovery, structured response shapes, AOT install flow).
 
 Tested on Flutter 3.47 (Dart 3.13), debug builds. Older Flutter versions are not tested yet; a version matrix in CI is planned.
 
@@ -125,7 +125,7 @@ This repository holds the glint packages, each versioned and released on its own
 | Package | What it is |
 | --- | --- |
 | [`glint_mcp`](./packages/glint_mcp) | The glint MCP server: reads the screen and drives the app. |
-| [`flutter_network_mcp`](./packages/flutter_network_mcp) | The network toolset: HTTP, WebSocket and log capture from the same running app. |
+| [`glint_network`](./packages/glint_network) | The network toolset: HTTP, WebSocket and log capture from the same running app. |
 
 ## Contributing
 

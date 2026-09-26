@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: A capability glint doesn't have yet
+about: A capability glint or glint_network doesn't have yet
 labels: enhancement
 ---
 
@@ -8,7 +8,10 @@ labels: enhancement
 > glint can't yet drive (a missing gesture, a sensor we don't expose, a platform
 > not supported), submit a draft and the maintainer will scope it.
 
-## `glint` version
+## Package
+<!-- glint (screen, input, attach) or glint_network (HTTP, sockets, logs). -->
+
+## Version
 <!-- e.g. 0.0.1. -->
 
 ## What you want to do

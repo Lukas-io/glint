@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: A glint tool returned wrong output, crashed, or didn't do what it said
+about: A glint or glint_network tool returned wrong output, crashed, or didn't do what it said
 labels: bug
 ---
 
@@ -11,10 +11,14 @@ labels: bug
 
 ## Quick report (required — ~30 seconds)
 
-**`glint` version**
-<!-- e.g. 0.0.1. The agent can read it from `telemetry op:"status"`, or run
-     `dart pub global list | grep glint`. Without it we can't tell whether
-     your bug was already fixed in a later release. -->
+**Package**
+<!-- glint (screen, input, attach) or glint_network (HTTP, sockets, logs).
+     Add the matching label, `glint` or `network`, if you can. -->
+
+**Version**
+<!-- e.g. 0.1.0. glint reports it in `telemetry op:"status"`, glint_network in
+     `network_status` (mcp.version). Without it we can't tell whether your bug
+     was already fixed in a later release. -->
 
 **What broke**
 <!-- One sentence. What did you (or the agent) expect, what actually happened? -->
@@ -25,8 +29,9 @@ labels: bug
 **Platform / device**
 <!-- ios / android, plus the simulator UDID or emulator serial. -->
 
-**`session` response**
-<!-- Paste the structuredContent from a recent `session` call.
+**`session` or `network_status` response**
+<!-- glint: paste the structuredContent from a recent `session` call.
+     glint_network: paste a recent `network_status` reply.
      If `session` itself is what's broken, write "n/a — session broken". -->
 
 ---

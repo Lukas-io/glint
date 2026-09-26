@@ -1,0 +1,36 @@
+name: glint_network
+description: The glint network toolset. An MCP server that gives AI agents a running Flutter app's HTTP, WebSocket and log traffic through the Dart VM service.
+version: 0.11.0
+publish_to: none
+repository: https://github.com/Lukas-io/glint/tree/main/packages/glint_network
+homepage: https://github.com/Lukas-io/glint
+issue_tracker: https://github.com/Lukas-io/glint/issues
+topics:
+  - mcp
+  - flutter
+  - devtools
+  - debugging
+  - http
+
+environment:
+  sdk: ^3.6.0
+
+resolution: workspace
+
+executables:
+  glint_network:
+  flutter_network_mcp: glint_network
+
+dependencies:
+  dart_mcp: ^0.5.1
+  dtd: ^4.0.0
+  vm_service: ^15.0.0
+  args: ^2.5.0
+  crypto: ^3.0.0
+  sqlite3: ^3.0.0
+  path: ^1.9.0
+  pointycastle: ^4.0.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.24.0
