@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:vm_service/vm_service.dart';
 
 import '../runtime/flutter_runtime.dart';
-import '../runtime/instance_text.dart';
+import 'package:glint_core/glint_core.dart' show instanceText;
 
 /// Where a log entry came from. `stderr` captures direct stderr writes,
 /// `stdout` captures FlutterError dumps + print() (Flutter routes

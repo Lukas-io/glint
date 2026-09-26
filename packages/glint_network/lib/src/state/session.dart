@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart' show canonicalVmServiceUri;
 import 'dart:async' show Timer, unawaited;
 import 'dart:io' as io;
 
@@ -10,7 +11,6 @@ import '../vm/log_stream.dart';
 import '../vm/native_log_source.dart';
 import '../vm/vm_client.dart';
 import 'log_buffer.dart';
-import '../vm/vm_uri.dart';
 
 /// Process-lifetime singleton owning the DTD connection and exposing
 /// backwards-compat getters for the per-attach resources that have moved
