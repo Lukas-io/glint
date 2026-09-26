@@ -91,14 +91,14 @@ void main() {
     });
 
     test('an untested Xcode major blocks and says how to override', () {
-      final t = _toolchain('27.0');
-      expect(t.blocker, contains('Xcode 27.0 is untested'));
+      final t = _toolchain('28.0');
+      expect(t.blocker, contains('Xcode 28.0 is untested'));
       expect(t.nextSteps.join(' '), contains('$allowUntestedXcodeEnv=true'));
       expect(t.toJson()['actionsAllowed'], isFalse);
     });
 
     test('the override lets it run with a warning', () {
-      final t = _toolchain('27.0', allow: true);
+      final t = _toolchain('28.0', allow: true);
       expect(t.blocker, isNull);
       expect(t.warnings.single, contains('may misbehave'));
     });
@@ -132,7 +132,7 @@ void main() {
       deviceLogicalHeight: 800,
       devicePixelRatio: 2,
       binaryPath: '/bridge',
-      toolchain: _toolchain('27.0'),
+      toolchain: _toolchain('28.0'),
       run: (exe, args) async {
         calls.add(exe);
         return _ok('');
@@ -145,7 +145,7 @@ void main() {
 
   test('a blocked action maps to unsupportedToolchain with nextSteps', () {
     final r = StructuredResponse.toolchainBlocked(
-        IosToolchainBlocked('ios-sim', 'Xcode 27.0 is untested', ['switch']));
+        IosToolchainBlocked('ios-sim', 'Xcode 28.0 is untested', ['switch']));
     expect(r.isError, isTrue);
     expect(r.data!['errorKind'], 'unsupportedToolchain');
     expect(r.nextSteps, ['switch']);

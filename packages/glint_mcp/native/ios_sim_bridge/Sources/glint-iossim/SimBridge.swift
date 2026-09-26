@@ -699,6 +699,8 @@ extension SimBridge {
                       "/Applications/Xcode.app/Contents/Developer") as String
         for path in [
             "\(devDir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit",
+            // Xcode 27 moved SimulatorKit out of the developer dir into Contents/SharedFrameworks.
+            "\(devDir)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit",
             "/Library/Developer/PrivateFrameworks/SimulatorKit.framework/SimulatorKit",
         ] {
             if FileManager.default.fileExists(atPath: path),

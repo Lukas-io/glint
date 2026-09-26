@@ -6,6 +6,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Xcode 27 support. Xcode 27 moved SimulatorKit to `Contents/SharedFrameworks`; the bridge now loads it from there, and every bridge action (tap, tap sequences, long press, swipe, typing, keys, lock, unlock, home, back, recording) is verified on Xcode 27.0.
 - iOS `attach` checks the toolchain and reports it under `toolchain`: the Xcode version, where the bridge came from, and its protocol number.
 - Each release attaches a universal (Apple Silicon and Intel) `glint-iossim-macos` bridge with a sha256. glint downloads it on the first iOS attach when no local build exists, into `~/.glint/bin`. `GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off.
 - `GLINT_IOS_BRIDGE` points glint at a bridge binary.
