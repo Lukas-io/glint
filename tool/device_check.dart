@@ -85,7 +85,7 @@ class _Server {
   var _nextId = 1;
 
   static Future<_Server> start() async {
-    final proc = await Process.start(Platform.resolvedExecutable, ['run', 'bin/glint.dart'],
+    final proc = await Process.start(Platform.resolvedExecutable, ['run', 'packages/glint_mcp/bin/glint.dart'],
         environment: {'GLINT_NO_TELEMETRY': 'true', 'GLINT_NO_UPDATE_CHECK': 'true'});
     unawaited(proc.stderr.transform(utf8.decoder).forEach(stderr.write));
     final replies = proc.stdout

@@ -2,7 +2,9 @@
 Thanks for sending a PR! Quick notes:
 
 - Keep one concern per PR — easier to review, easier to revert.
-- Run `dart analyze` + `dart test` locally before pushing.
+- Start the title with the package: `glint_mcp: ...`, `glint_network: ...`, `glint_core: ...`, or `repo: ...`.
+- Run `dart analyze` + `dart test` in each package you changed before pushing.
+- Add a line under `## [Unreleased]` in the package's CHANGELOG.md for anything users will notice.
 - The `agent-filed` label is reserved for issues filed by MCP agents.
 -->
 

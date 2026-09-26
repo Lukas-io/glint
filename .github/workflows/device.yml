@@ -60,7 +60,7 @@ jobs:
         working-directory: fixtures/counter_app
       - name: Build the simulator bridge
         run: swift build
-        working-directory: native/ios_sim_bridge
+        working-directory: packages/glint_mcp/native/ios_sim_bridge
       - name: Boot a simulator
         id: sim
         run: |
