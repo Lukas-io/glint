@@ -14,8 +14,8 @@ jobs:
       contents: write
     env:
       GLINT_NO_TELEMETRY: 'true'
-      FLUTTER_NETWORK_MCP_NO_TELEMETRY: 'true'
-      FLUTTER_NETWORK_MCP_NO_UPDATE_CHECK: 'true'
+      GLINT_NETWORK_NO_TELEMETRY: 'true'
+      GLINT_NETWORK_NO_UPDATE_CHECK: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
