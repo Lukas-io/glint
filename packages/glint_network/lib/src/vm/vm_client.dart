@@ -1,7 +1,7 @@
+import 'package:glint_core/glint_core.dart' show connectVmService;
 import 'dart:async';
 
 import 'package:vm_service/vm_service.dart';
-import 'package:vm_service/vm_service_io.dart';
 import '../util/network_env.dart';
 
 /// Thrown when a VM service RPC does not respond within the configured
@@ -139,17 +139,7 @@ class VmClient {
 
   Future<void> connect(Uri vmServiceUri) async {
     if (_service != null) await disconnect();
-    final svc = await vmServiceConnectUri(_toWsUri(vmServiceUri));
-    try {
-      await svc.getVersion().timeout(const Duration(seconds: 5));
-    } on Object catch (_) {
-      await svc.dispose();
-      throw StateError(
-        'VM service at $vmServiceUri accepted the connection but did not '
-        'respond to getVersion() within 5s. The DTD/DDS instance is likely '
-        'stale — restart the Flutter app to spawn a fresh one.',
-      );
-    }
+    final svc = await connectVmService(vmServiceUri);
     _service = svc;
     _connectedUri = vmServiceUri;
     _deliberateDisconnect = false;
@@ -394,19 +384,4 @@ class VmClient {
     return _isolates.keys.first;
   }
 
-  /// Normalizes a VM service URI to a ws:// path ending in `/ws`.
-  static String _toWsUri(Uri uri) {
-    if (uri.scheme == 'ws' || uri.scheme == 'wss') {
-      return uri.toString();
-    }
-    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    final segments = [...uri.pathSegments.where((s) => s.isNotEmpty)];
-    if (segments.isEmpty || segments.last != 'ws') segments.add('ws');
-    return Uri(
-      scheme: scheme,
-      host: uri.host,
-      port: uri.port,
-      pathSegments: segments,
-    ).toString();
-  }
 }

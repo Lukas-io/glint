@@ -1,4 +1,4 @@
-import 'package:glint_network/src/vm/vm_uri.dart';
+import 'package:glint_core/glint_core.dart';
 import 'package:test/test.dart';
 
 void main() {

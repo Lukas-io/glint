@@ -20,6 +20,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- A log value the VM can't expand now says how much was cut (`… [cut by the VM at 128 of 4000 chars]`) instead of silently showing the preview.
 - Usage rollups come from glint_core. `telemetry op:"report"` also shows `avgEstimatedTokens`, `degraded` counts, and error kinds sorted by frequency.
 - `attach` suggests `glint-network__network_attach` for HTTP monitoring, the network toolset's new name.
 

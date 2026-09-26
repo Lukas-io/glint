@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart' show instanceText;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
@@ -9,7 +10,6 @@ import '../alerts/alert_detector.dart';
 import '../config/capabilities.dart';
 import '../state/log_buffer.dart';
 import '../storage/captures_db.dart';
-import 'instance_text.dart';
 
 /// Subscribes to the VM service Logging/Stdout/Stderr streams and forwards
 /// records into the in-memory [LogBuffer] AND (when [sessionIdProvider]

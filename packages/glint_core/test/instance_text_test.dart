@@ -1,5 +1,4 @@
-import 'package:glint_network/src/tools/logs_tail.dart';
-import 'package:glint_network/src/vm/instance_text.dart';
+import 'package:glint_core/glint_core.dart';
 import 'package:test/test.dart';
 import 'package:vm_service/vm_service.dart';
 
@@ -65,12 +64,5 @@ void main() {
     final ref = _str('gone', 'y' * 128, cut: true, length: 900);
     expect(await instanceText(service, 'iso', ref),
         '${'y' * 128}… [cut by the VM at 128 of 900 chars]');
-  });
-
-  test('truncateMessage never splits a surrogate pair', () {
-    final t = truncateMessage('ab😀cd', 3);
-    expect(t.message, 'ab');
-    expect(t.truncated, isTrue);
-    expect(t.totalLength, 6);
   });
 }

@@ -1,6 +1,6 @@
+import 'package:glint_core/glint_core.dart' show canonicalVmServiceUri;
 import 'package:dtd/dtd.dart';
 
-import 'vm_uri.dart';
 
 /// Thin wrapper around `package:dtd`. Holds an active DTD connection and
 /// exposes the few calls Phase 1 needs.
