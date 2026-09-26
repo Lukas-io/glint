@@ -8,6 +8,7 @@ const corePackage = 'glint_core';
 
 /// Per package, the files holding its version (relative to the package) and the pattern whose first group is the version.
 final packageVersionFiles = <String, Map<String, RegExp>>{
+  'glint_core': {'pubspec.yaml': _pubspecVersion},
   'glint_network': {
     'pubspec.yaml': _pubspecVersion,
     'lib/src/version.dart': RegExp(r"^const String packageVersion = '([^']+)';$", multiLine: true),
@@ -66,7 +67,8 @@ Future<void> _prepare(String package, String version) async {
         entry.value, (m) => m[0]!.replaceFirst(m[1]!, version)));
   }
   changelog.writeAsStringSync(dated);
-  await _git(['add', changelog.path, for (final f in files.keys) '${packageDir(package)}/$f']);
+  final dependents = package == corePackage ? _raiseCoreConstraints(version) : const <String>[];
+  await _git(['add', changelog.path, for (final f in files.keys) '${packageDir(package)}/$f', ...dependents]);
   await _git(['commit', '-m', 'Release $package $version']);
   stdout.writeln('Committed "Release $package $version" on release/$tag. Open a PR; after it merges, run: '
       'dart run tool/release.dart tag $package');
@@ -85,6 +87,25 @@ Future<void> _tag(String package) async {
   await _git(['push', 'origin', tag]);
   stdout.writeln('Pushed $tag; the release workflow publishes the GitHub Release.');
 }
+
+/// Raises every package's `glint_core` constraint to `^[version]`, so the workspace still resolves; returns the pubspecs it changed.
+List<String> _raiseCoreConstraints(String version, {String root = '.'}) {
+  final changed = <String>[];
+  for (final package in packageVersionFiles.keys) {
+    if (package == corePackage) continue;
+    final file = File('$root/${packageDir(package)}/pubspec.yaml');
+    final before = file.readAsStringSync();
+    final after = withCoreConstraint(before, version);
+    if (after == before) continue;
+    file.writeAsStringSync(after);
+    changed.add(file.path);
+  }
+  return changed;
+}
+
+/// [pubspec] with its `glint_core` dependency set to `^[version]`; unchanged when it has none.
+String withCoreConstraint(String pubspec, String version) => pubspec.replaceFirst(
+    RegExp('^  $corePackage: .*\$', multiLine: true), '  $corePackage: ^$version');
 
 /// Why [package] cannot be released yet: it depends on [corePackage] while core has unreleased changes.
 String? coreBlocker(String package, {String root = '.'}) {

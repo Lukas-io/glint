@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -5,8 +6,6 @@ import 'package:crypto/crypto.dart';
 
 import '../util/data_dir.dart';
 import '../version.dart';
-import 'audit_log.dart';
-import 'path_redactor.dart';
 import 'telemetry_constants.dart';
 import 'telemetry_env.dart';
 

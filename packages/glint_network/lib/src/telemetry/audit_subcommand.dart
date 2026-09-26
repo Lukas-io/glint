@@ -1,10 +1,10 @@
+import 'package:glint_core/glint_core.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:args/args.dart';
 
 import '../util/data_dir.dart';
-import 'audit_log.dart';
 
 /// `glint_network audit ...` — the user-facing surface for the
 /// tamper-evident telemetry audit log.

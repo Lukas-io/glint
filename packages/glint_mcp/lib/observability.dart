@@ -8,10 +8,10 @@ export 'src/observability/log_renderer.dart';
 export 'src/observability/loose_value.dart';
 export 'src/observability/sessions.dart';
 export 'src/observability/state_observer.dart';
-export 'src/observability/telemetry/audit_log.dart';
 export 'src/observability/telemetry/constants.dart';
 export 'src/observability/telemetry/env.dart';
-export 'src/observability/telemetry/path_redactor.dart';
 export 'src/observability/telemetry/summarize.dart';
 export 'src/observability/telemetry/usage_recorder.dart';
 export 'src/observability/telemetry/usage_reporter.dart';
+export 'package:glint_core/glint_core.dart'
+    show AuditEntry, AuditLog, AuditVerifyResult, redactForSharing, redactPath, redactSecrets, redactStackHead;

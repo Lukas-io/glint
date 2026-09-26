@@ -23,6 +23,7 @@ executables:
 
 dependencies:
   dart_mcp: ^0.5.1
+  glint_core: ^0.0.0
   dtd: ^4.0.0
   vm_service: ^15.0.0
   args: ^2.5.0

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:glint_network/src/storage/captures_db.dart';
 import 'package:glint_network/src/storage/database.dart';
-import 'package:glint_network/src/telemetry/audit_log.dart';
+import 'package:glint_core/glint_core.dart' show AuditLog;
 import 'package:glint_network/src/telemetry/telemetry_env.dart';
 import 'package:glint_network/src/telemetry/usage_reporter.dart';
 import 'package:test/test.dart';

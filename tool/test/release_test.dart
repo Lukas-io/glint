@@ -70,4 +70,11 @@ void main() {
   test('the notes command finds sections written with an em dash too', () {
     expect(changelogSection('## [0.10.0] — 2026-07-02\n\n- Shipped.\n', '0.10.0'), '- Shipped.\n');
   });
+
+  test('releasing core raises the glint_core constraint in dependents', () {
+    const pubspec = 'name: app\ndependencies:\n  dart_mcp: ^0.5.1\n  glint_core: ^0.0.0\n  path: ^1.9.0\n';
+    expect(withCoreConstraint(pubspec, '0.1.0'),
+        'name: app\ndependencies:\n  dart_mcp: ^0.5.1\n  glint_core: ^0.1.0\n  path: ^1.9.0\n');
+    expect(withCoreConstraint('name: other\n', '0.1.0'), 'name: other\n');
+  });
 }

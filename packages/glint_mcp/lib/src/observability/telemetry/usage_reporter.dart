@@ -12,7 +12,7 @@ import 'dart:io' as io;
 
 import 'package:path/path.dart' as p;
 
-import 'audit_log.dart';
+import 'package:glint_core/glint_core.dart' show AuditLog;
 import 'constants.dart';
 import 'env.dart';
 import 'summarize.dart';

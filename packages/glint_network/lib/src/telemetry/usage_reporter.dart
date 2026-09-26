@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart';
 import 'dart:convert';
 import 'dart:io' as io;
 
@@ -8,7 +9,6 @@ import '../storage/database.dart';
 import '../tools/usage_stats.dart' show summarizeUsage;
 import '../util/data_dir.dart';
 import '../version.dart';
-import 'audit_log.dart';
 import 'telemetry_constants.dart';
 import 'telemetry_env.dart';
 import '../util/network_env.dart';

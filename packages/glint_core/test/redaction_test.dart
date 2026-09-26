@@ -1,5 +1,4 @@
-import 'package:glint_network/src/telemetry/path_redactor.dart';
-import 'package:glint_network/src/util/secret_redactor.dart';
+import 'package:glint_core/glint_core.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -110,5 +109,11 @@ void main() {
       expect(out[1], contains('<project>/lib/util.dart'));
       expect(out.any((s) => s.contains('lukasio')), isFalse);
     });
+  });
+
+  test('OAuth token assignments are masked, including inside braces', () {
+    expect(redactSecrets('access_token=abc123def refresh_token: "xyz789"'),
+        'access_token=<redacted> refresh_token: "<redacted>"');
+    expect(redactSecrets('{token=abc123}'), '{token=<redacted>}');
   });
 }

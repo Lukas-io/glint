@@ -3,16 +3,7 @@
 /// does by inspecting this file (or `glint telemetry audit show`).
 library;
 
-/// Collector POST endpoint. The same Cloudflare Worker + D1 that backs
-/// flutter_network_mcp — it routes by payload `kind` and dedupes products
-/// via the `version` field (`glint/<v>` vs `flutter_network_mcp/<v>`).
-const String kCollectorEndpoint =
-    'https://flutter-network-telemetry.wisdomiyamu.workers.dev/v1/telemetry';
-
-/// Wire deadline for the POST attempt. Best-effort: a 3s budget covers
-/// healthy networks and leaves shutdown free to exit if the collector
-/// is unreachable.
-const Duration kTelemetryTimeout = Duration(seconds: 3);
+export 'package:glint_core/glint_core.dart' show kCollectorEndpoint, kTelemetryTimeout;
 
 /// Max chars in the `errorMessage` field for crash payloads.
 const int kErrorMessageMaxChars = 200;
