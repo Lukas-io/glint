@@ -6,6 +6,7 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ### Added
 
+- `editDistance`, the Levenshtein distance both packages' suggestions use.
 - Dart VM connection: `connectVmService` (connect timeout, then a `getVersion` probe that fails fast on a stale DDS), `vmServiceWsUri`, `canonicalVmServiceUri`, and `instanceText` (refetches strings the VM cut at 128 characters, asks other objects for `toString()`, and says how much was cut when it can't).
 - Agent-filed issues: `fileWithGh` (keeps only labels the repo has, retries once without labels), `issueLabels`, `composeIssueDeepLink`, `capDeepLinkBody`, `saveFullIssueBody`, `existingLabels`, `selectApplicableLabels`, `isMissingLabelError`, and the `issueRepo` all packages file into.
 - Usage rollups: `summarizeUsage`, `buildUsagePayload`, `UsageShipper` (watermark, audit log first, then the collector; daily auto-ship and ship-on-exit), the `UsageEventSource` interface each package's store implements, `TurnTracker`, `usageOutcome`, `usageArgKeys` and `estimateTokens`.
