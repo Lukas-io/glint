@@ -125,6 +125,7 @@ This repository holds the glint packages, each versioned and released on its own
 | Package | What it is |
 | --- | --- |
 | [`glint_mcp`](./packages/glint_mcp) | The glint MCP server: reads the screen and drives the app. |
+| [`flutter_network_mcp`](./packages/flutter_network_mcp) | The network toolset: HTTP, WebSocket and log capture from the same running app. |
 
 ## Contributing
 

@@ -8,6 +8,10 @@ const corePackage = 'glint_core';
 
 /// Per package, the files holding its version (relative to the package) and the pattern whose first group is the version.
 final packageVersionFiles = <String, Map<String, RegExp>>{
+  'flutter_network_mcp': {
+    'pubspec.yaml': _pubspecVersion,
+    'lib/src/version.dart': RegExp(r"^const String packageVersion = '([^']+)';$", multiLine: true),
+  },
   'glint_mcp': {
     'pubspec.yaml': _pubspecVersion,
     'lib/src/version.dart': RegExp(r"^const String glintVersion = '([^']+)';$", multiLine: true),
