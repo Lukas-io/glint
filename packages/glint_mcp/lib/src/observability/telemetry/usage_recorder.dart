@@ -8,8 +8,8 @@ library;
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' as io;
-import 'dart:math';
 
+import 'package:glint_core/glint_core.dart';
 import 'package:path/path.dart' as p;
 
 import 'env.dart';
@@ -82,7 +82,7 @@ class ToolEvent {
 /// Bounded ring of [ToolEvent]s with FNM-style correlation IDs, backed by
 /// [UsageEventStore] when a data dir is configured. One process-wide
 /// instance; tool handlers call [record] post-call.
-class UsageRecorder {
+class UsageRecorder implements UsageEventSource {
   UsageRecorder.config({
     required this.enabled,
     this.gapMs = 60000,
@@ -120,10 +120,7 @@ class UsageRecorder {
 
   final Queue<ToolEvent> _events = Queue();
   late int _nextId;
-  final String _procToken = _randomToken();
-  int _turnSeq = 0;
-  int _lastEventMs = 0;
-  String _correlationId = '';
+  late final TurnTracker _turns = TurnTracker(gapMs: gapMs);
 
   int get length => _events.length;
   int get nextId => _nextId;
@@ -134,14 +131,7 @@ class UsageRecorder {
   bool get persists => store != null;
 
   /// Rolls over after the idle gap. Public so it's unit-testable.
-  String correlationIdFor(int nowMs) {
-    if (_correlationId.isEmpty || nowMs - _lastEventMs > gapMs) {
-      _turnSeq++;
-      _correlationId = '$_procToken-$_turnSeq';
-    }
-    _lastEventMs = nowMs;
-    return _correlationId;
-  }
+  String correlationIdFor(int nowMs) => _turns.correlationIdFor(nowMs);
 
   void record({
     required String tool,
@@ -186,37 +176,27 @@ class UsageRecorder {
   }
 
   /// Sorted arg keys — never values.
-  static List<String> argKeysFrom(Map<String, Object?>? args) {
-    if (args == null || args.isEmpty) return const [];
-    return args.keys.toList()..sort();
-  }
+  @override
+  List<Map<String, Object?>> eventsAfter(int afterId, {required int limit}) =>
+      eventsAfterId(afterId, limit: limit);
+
+  @override
+  int get maxEventId => maxId;
+
+  static List<String> argKeysFrom(Map<String, Object?>? args) => usageArgKeys(args);
 
   static ToolOutcome outcomeFrom({
     required bool isError,
     Map<String, Object?>? structured,
-  }) {
-    if (isError) return ToolOutcome.error;
-    if (structured != null && structured['count'] == 0) {
-      return ToolOutcome.empty;
-    }
-    return ToolOutcome.ok;
-  }
+  }) =>
+      ToolOutcome.values.byName(usageOutcome(isError: isError, structured: structured));
 
   void clearForTest() {
     _events.clear();
     _nextId = 1;
-    _correlationId = '';
-    _turnSeq = 0;
-    _lastEventMs = 0;
+    _turns.reset();
   }
 
-  static String _randomToken() {
-    final r = Random.secure();
-    return List.generate(
-      4,
-      (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-  }
 }
 
 /// Append-only JSONL store at `<dataDir>/usage-events.jsonl`, one event per

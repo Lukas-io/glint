@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `glint_network audit verify` no longer calls a log broken when two servers once appended at the same moment; it reports the chain intact and how many entries were written that way. New entries can't fork any more.
 
+### Changed
+
+- Usage rollups come from glint_core. Rows recorded before token estimates were stored now count toward `avgEstimatedTokens`/`totalEstimatedTokens` (estimated from result size) instead of being left out, and the rollup carries `totalEstimatedTokens` at the top level. A ship after the event store was reset starts from the first event instead of skipping everything below the old watermark.
+
 ## [0.12.0] - 2026-09-26
 
 ### Added: the move from flutter_network_mcp is guided

@@ -52,7 +52,7 @@ void main() {
     tearDown(() => dataDir.deleteSync(recursive: true));
 
     test('carries kind, version, machineHash, window, aggregates', () {
-      final p = buildUsagePayload(rows: sampleRows(), dataDir: dataDir.path);
+      final p = buildUsagePayload(rows: sampleRows(), dataDir: dataDir.path, identity: networkUsageIdentity());
       expect(p['kind'], 'usage_rollup');
       expect(p['version'], isA<String>());
       expect((p['machineHash'] as String).length, 24);
@@ -70,7 +70,7 @@ void main() {
       final s = sampleRows();
       final shuffled = [s[2], s[0], s[1]];
       final w =
-          buildUsagePayload(rows: shuffled, dataDir: dataDir.path)['window']
+          buildUsagePayload(rows: shuffled, dataDir: dataDir.path, identity: networkUsageIdentity())['window']
               as Map<String, Object?>;
       expect(w['toEventId'], 3);
       expect(w['firstEventMs'], 1000);
@@ -78,7 +78,7 @@ void main() {
     });
 
     test('raw correlation ids never leak into the payload', () {
-      final p = buildUsagePayload(rows: sampleRows(), dataDir: dataDir.path);
+      final p = buildUsagePayload(rows: sampleRows(), dataDir: dataDir.path, identity: networkUsageIdentity());
       final json = jsonEncode(p);
       expect(json, isNot(contains('corrOne')));
       expect(json, isNot(contains('corrTwo')));

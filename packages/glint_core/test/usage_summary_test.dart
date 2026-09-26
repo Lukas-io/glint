@@ -1,4 +1,4 @@
-import 'package:glint_network/src/tools/usage_stats.dart';
+import 'package:glint_core/glint_core.dart';
 import 'package:test/test.dart';
 
 /// #79 Phase 2: per-tool aggregation + the consecutive tool->next-tool

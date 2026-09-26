@@ -1048,6 +1048,10 @@ class CapturesDao {
         .toList();
   }
 
+  /// The highest `tool_events.id`; 0 when the table is empty.
+  int maxToolEventId() =>
+      (_db.select('SELECT COALESCE(MAX(id), 0) AS m FROM tool_events').first['m'] as int?) ?? 0;
+
   /// Inserts or merges an alert.
   ///
   /// Dedup happens by [signature]: if a pending (non-drained) alert with

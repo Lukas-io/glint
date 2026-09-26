@@ -1,11 +1,12 @@
 import 'dart:io' as io;
-import 'dart:math';
 
 import 'package:dart_mcp/server.dart';
+import 'package:glint_core/glint_core.dart';
 
 import '../storage/captures_db.dart';
 import '../storage/database.dart';
 import '../util/network_env.dart';
+import 'telemetry_env.dart';
 
 /// Records tool-usage events (issue #79, Phase 1). Privacy-safe by
 /// construction: only the tool NAME, the arg KEYS the agent passed (never
@@ -38,8 +39,7 @@ class UsageRecorder {
 
   static UsageRecorder _fromEnv() {
     final env = networkEnv;
-    final off = _truthy(env['GLINT_NETWORK_NO_TELEMETRY']) ||
-        _truthy(env['GLINT_NETWORK_NO_USAGE']);
+    final off = networkSwitches.usageDisabled(env);
     final gapRaw = int.tryParse(env['GLINT_NETWORK_USAGE_GAP_MS'] ?? '');
     final gap = (gapRaw == null || gapRaw < 1000) ? 60000 : gapRaw;
     return UsageRecorder.config(enabled: !off, gapMs: gap);
@@ -48,21 +48,11 @@ class UsageRecorder {
   final bool enabled;
   final int _gapMs;
 
-  final String _procToken = _randomToken();
-  int _turnSeq = 0;
-  int _lastEventMs = 0;
-  String _correlationId = '';
+  late final TurnTracker _turns = TurnTracker(gapMs: _gapMs);
 
   /// Correlation id for an event at [nowMs]. Rolls over after the idle gap.
   /// Stateful + exposed so the rollover logic is unit-testable.
-  String correlationIdFor(int nowMs) {
-    if (_correlationId.isEmpty || nowMs - _lastEventMs > _gapMs) {
-      _turnSeq++;
-      _correlationId = '$_procToken-$_turnSeq';
-    }
-    _lastEventMs = nowMs;
-    return _correlationId;
-  }
+  String correlationIdFor(int nowMs) => _turns.correlationIdFor(nowMs);
 
   /// Records one tool call. NEVER throws: a recording failure must not break
   /// the tool call it is measuring. [result] is null when the handler threw.
@@ -99,10 +89,7 @@ class UsageRecorder {
   }
 
   /// Sorted parameter NAMES the agent passed. Keys only, never values.
-  static List<String> argKeysFrom(Map<String, Object?>? args) {
-    if (args == null || args.isEmpty) return const [];
-    return args.keys.toList()..sort();
-  }
+  static List<String> argKeysFrom(Map<String, Object?>? args) => usageArgKeys(args);
 
   /// `ok | error | empty`. `error` = the handler threw or returned isError.
   /// `empty` is a best-effort heuristic (a top-level `count: 0` in the
@@ -111,11 +98,8 @@ class UsageRecorder {
     required bool threw,
     required bool isError,
     Map<String, Object?>? structured,
-  }) {
-    if (threw || isError) return 'error';
-    if (structured != null && structured['count'] == 0) return 'empty';
-    return 'ok';
-  }
+  }) =>
+      usageOutcome(isError: threw || isError, structured: structured);
 
   static int resultBytesOf(CallToolResult? result) {
     if (result == null) return 0;
@@ -130,20 +114,9 @@ class UsageRecorder {
   /// Null when the result is empty or null so the DB column stays NULL rather
   /// than storing a meaningless 0.
   static int? _estimateTokens(CallToolResult? result) {
-    final bytes = resultBytesOf(result);
-    return bytes > 0 ? (bytes / 4).round() : null;
+    final tokens = estimateTokens(resultBytesOf(result));
+    return tokens > 0 ? tokens : null;
   }
 
-  static String _randomToken() {
-    final r = Random();
-    return List.generate(
-      4,
-      (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
-  }
 
-  static bool _truthy(String? v) {
-    final s = v?.trim().toLowerCase();
-    return s == 'true' || s == '1' || s == 'yes' || s == 'on';
-  }
 }
