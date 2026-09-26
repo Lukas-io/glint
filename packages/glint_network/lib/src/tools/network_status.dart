@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart' show canonicalVmServiceUri;
 import 'dart:async';
 
 import 'package:dart_mcp/server.dart';
@@ -17,7 +18,6 @@ import '../vm/dtd_probe.dart';
 import 'network_attach.dart' as attach_helper;
 import '../util/suggest.dart';
 import 'result.dart';
-import '../vm/vm_uri.dart';
 import '../util/legacy_install.dart';
 
 /// Per-session entry for `network_status.attached[]`. Carries structured

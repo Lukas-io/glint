@@ -1,7 +1,7 @@
+import 'package:glint_core/glint_core.dart' show connectVmService;
 import 'dart:async';
 
 import 'package:vm_service/vm_service.dart';
-import 'package:vm_service/vm_service_io.dart';
 
 /// VM-service connection scoped to the first Flutter isolate.
 class VmClient {
@@ -24,27 +24,7 @@ class VmClient {
 
   Future<void> attach(Uri vmServiceUri) async {
     if (_service != null) await disconnect();
-    final pending = vmServiceConnectUri(_toWs(vmServiceUri));
-    final VmService svc;
-    try {
-      svc = await pending.timeout(readTimeout);
-    } on TimeoutException {
-      // A backgrounded or suspended app can leave the WebSocket upgrade unanswered; drop the socket if it ever opens.
-      unawaited(pending.then((s) => s.dispose(), onError: (_) {}));
-      rethrow;
-    }
-    // Zombie-DDS probe: a stale DDS accepts the WS upgrade but never answers
-    // RPCs. 5s deadline fails fast with a clear error.
-    try {
-      await svc.getVersion().timeout(const Duration(seconds: 5));
-    } on Object {
-      await svc.dispose().timeout(const Duration(seconds: 2), onTimeout: () {});
-      throw StateError(
-        'VM service at $vmServiceUri accepted the connection but did not '
-        'respond to getVersion() within 5s. The DDS instance is likely '
-        'stale — restart the Flutter app to spawn a fresh one.',
-      );
-    }
+    final svc = await connectVmService(vmServiceUri, connectTimeout: readTimeout);
     _service = svc;
     _connectedUri = vmServiceUri;
     await _selectFlutterIsolate();
@@ -144,16 +124,4 @@ class VmClient {
     if (svc != null) await svc.dispose();
   }
 
-  static String _toWs(Uri uri) {
-    if (uri.scheme == 'ws' || uri.scheme == 'wss') return uri.toString();
-    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    final segments = [...uri.pathSegments.where((s) => s.isNotEmpty)];
-    if (segments.isEmpty || segments.last != 'ws') segments.add('ws');
-    return Uri(
-      scheme: scheme,
-      host: uri.host,
-      port: uri.port,
-      pathSegments: segments,
-    ).toString();
-  }
 }

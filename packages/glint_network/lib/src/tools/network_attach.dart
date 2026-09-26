@@ -1,3 +1,4 @@
+import 'package:glint_core/glint_core.dart' show canonicalVmServiceUri;
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -17,7 +18,6 @@ import '../vm/native_log_source.dart';
 import '../vm/vm_client.dart';
 import 'error_kind.dart';
 import 'result.dart';
-import '../vm/vm_uri.dart';
 import '../util/network_env.dart';
 
 /// One connected app flattened out of a [DtdProbe] listing, tagged with the

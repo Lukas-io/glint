@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:glint_mcp/src/observability/app_log_buffer.dart';
 import 'package:glint_mcp/src/runtime/flutter_runtime.dart';
-import 'package:glint_mcp/src/runtime/instance_text.dart';
+import 'package:glint_core/glint_core.dart' show instanceText;
 import 'package:test/test.dart';
 import 'package:vm_service/vm_service.dart';
 
