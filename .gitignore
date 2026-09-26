@@ -22,3 +22,6 @@ fixtures/**/android/.gradle/
 
 # Dead-end standalone telemetry worker (replaced by FNM collector)
 cloudflare/telemetry-worker/
+
+# Local run logs
+device-check-flutter-run.log

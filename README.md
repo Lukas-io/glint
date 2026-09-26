@@ -4,7 +4,7 @@
 
 You tell an agent what you want done — "sign in as test@example.com, find the order from yesterday, and cancel it" — and it taps, scrolls, and types its way through your app on a simulator until it's done. The app doesn't need to be modified. No package to add. No init code. Glint reads your running app from the outside and drives it through native input.
 
-> **Status:** pre-1.0 and in daily use. Tool names and arguments can still change between versions. Design notes live in [`source-of-truth.md`](./source-of-truth.md).
+> **Status:** pre-1.0 and in daily use. Tool names and arguments can still change between versions. Design notes live in [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md).
 
 ---
 
@@ -48,7 +48,7 @@ The agent only spends thinking time on (a) deciding what's next and (b) handling
 - **No real devices.** Simulators and emulators only, debug mode only.
 - **No CLI for humans.** Agent-first; a human-driven interface is future work.
 
-Full scope and non-goals: see [`source-of-truth.md`](./source-of-truth.md) §4–§5.
+Full scope and non-goals: see [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §4–§5.
 
 ## Technical sketch
 
@@ -77,7 +77,7 @@ v1 focuses on **discovery-mode task execution** — making the first run through
 - **Real device support.** Constrained by native input injection paths.
 - **Non-MCP interface.** CLI / UI for humans driving the same capabilities directly.
 
-Full roadmap: [`source-of-truth.md`](./source-of-truth.md) §11.
+Full roadmap: [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §11.
 
 ## Install
 
@@ -89,10 +89,10 @@ cd glint && dart pub get
 
 # iOS Simulator support (macOS with Xcode 26). Optional: without a local
 # build, glint downloads the release's prebuilt bridge on the first iOS attach.
-(cd native/ios_sim_bridge && swift build -c release)
+(cd packages/glint_mcp/native/ios_sim_bridge && swift build -c release)
 
 # Add it to your agent, for example Claude Code:
-claude mcp add glint -- dart run "$PWD/bin/glint.dart"
+claude mcp add glint -- dart run "$PWD/packages/glint_mcp/bin/glint.dart"
 ```
 
 On iOS, `attach` reports the Xcode version and which bridge it found. It looks for `GLINT_IOS_BRIDGE`, then a build inside the glint checkout, then `~/.glint/bin/glint-iossim-<version>`, and otherwise downloads the bridge attached to the matching GitHub Release, checked against its published sha256 (`GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off).
@@ -118,6 +118,14 @@ glint records tool usage locally and sends nothing unless you set `GLINT_TELEMET
 
 [Apache License 2.0](./LICENSE). You can use, modify, and ship glint in personal and commercial work. See [NOTICE](./NOTICE).
 
+## Repository
+
+This repository holds the glint packages, each versioned and released on its own:
+
+| Package | What it is |
+| --- | --- |
+| [`glint_mcp`](./packages/glint_mcp) | The glint MCP server: reads the screen and drives the app. |
+
 ## Contributing
 
-Pre-1.0, so the contribution process is still settling. Read [`source-of-truth.md`](./source-of-truth.md) first; the architectural decisions live there. Report security problems privately, as described in [SECURITY.md](./SECURITY.md).
+Start with [CONTRIBUTING.md](./CONTRIBUTING.md). How changes, CI and releases work is in [MAINTAINING.md](./MAINTAINING.md), and the architectural decisions are in [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md). Report security problems privately, as described in [SECURITY.md](./SECURITY.md).

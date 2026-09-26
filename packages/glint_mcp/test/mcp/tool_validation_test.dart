@@ -1,0 +1,308 @@
+// Per-tool input-validation tests. We run each tool's `invoke` with an
+// argument it should reject, against a bare (un-attached) GlintSession,
+// and verify the envelope shape. No live VM required.
+
+import 'package:dart_mcp/server.dart';
+import 'package:glint_mcp/glint.dart';
+import 'package:test/test.dart';
+
+Map<String, Object?> _structured(dynamic callResult) {
+  return (callResult as CallToolResult).structuredContent
+      as Map<String, Object?>;
+}
+
+void main() {
+  final session = GlintSession();
+
+  group('attach', () {
+    test('unknown platform → invalidArgument', () async {
+      const tool = AttachTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'attach', arguments: const {
+          'vmUri': 'ws://0:0/ws',
+          'platform': 'symbian',
+          'device': 'x',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+  });
+
+  group('hardware_button', () {
+    test('unknown button → invalidArgument', () async {
+      const tool = HardwareButtonTool();
+      // session not attached, but invalidArgument is checked BEFORE
+      // session access, so it fires first.
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'hardware_button', arguments: const {
+          'button': 'fingerprint',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+  });
+
+  group('scroll', () {
+    test('unknown direction → invalidArgument', () async {
+      const tool = ScrollTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll', arguments: const {
+          'direction': 'sideways',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+  });
+
+  group('scroll_to_find', () {
+    test('unknown direction → invalidArgument', () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {
+          'targetGlintId': 'x',
+          'direction': 'inward',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+
+    test('neither targetGlintId nor targetTextContent → invalidArgument',
+        () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+
+    test('both targetGlintId AND targetTextContent → invalidArgument',
+        () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {
+          'targetGlintId': 'x',
+          'targetTextContent': 'y',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'invalidArgument');
+    });
+  });
+
+  group('tap (unattached session)', () {
+    test('falls through to sessionNotAttached envelope', () async {
+      const tool = TapTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'tap', arguments: const {'glintId': 'fab'}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('get_scene (unattached session)', () {
+    test('text format default falls through to sessionNotAttached', () async {
+      const tool = GetSceneTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'get_scene', arguments: const {}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('resolve (unattached session)', () {
+    test('falls through to sessionNotAttached, not internal', () async {
+      const tool = ResolveTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'resolve', arguments: const {'glintId': 'x'}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('scroll_to_find text alias + session status default', () {
+    test('text alone passes argument validation', () async {
+      const tool = ScrollToFindTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'scroll_to_find', arguments: const {
+          'text': 'Orders',
+        }),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], 'sessionNotAttached',
+          reason: 'validation passed; the unattached session is the next wall');
+    });
+
+    test('session with no op reports status instead of erroring', () async {
+      const tool = SessionTool();
+      final result = await tool.invoke(
+        session,
+        CallToolRequest(name: 'session', arguments: const {}),
+      );
+      final s = _structured(result);
+      expect(s['errorKind'], isNull);
+      expect(s['summary'], contains('not attached'));
+    });
+  });
+
+  group('device mode', () {
+    Future<GlintSession> deviceSession() async {
+      final s = GlintSession();
+      await s.attachDevice(
+          device: AndroidDevice(serial: 'emulator-0', adbPath: '/usr/bin/true'));
+      return s;
+    }
+
+    test('type reaches the backend instead of the scene reader', () async {
+      final s = await deviceSession();
+      final r = _structured(await const TypeTool().invoke(
+          s, CallToolRequest(name: 'type', arguments: const {'text': 'abc'})));
+      expect(r['ok'], isTrue);
+      expect(r['mode'], 'device');
+      expect(r['summary'], contains('device mode'));
+    });
+
+    test('type with focus is refused with a reason', () async {
+      final s = await deviceSession();
+      final r = _structured(await const TypeTool().invoke(
+          s,
+          CallToolRequest(
+              name: 'type', arguments: const {'text': 'abc', 'focus': 'f'})));
+      expect(r['errorKind'], 'invalidArgument');
+      expect(r['summary'], contains('device mode'));
+    });
+
+    test('a scene-needing tool says flutterModeRequired, not "not attached"', () async {
+      final s = await deviceSession();
+      final r = _structured(await const ScrollToFindTool().invoke(
+          s,
+          CallToolRequest(
+              name: 'scroll_to_find',
+              arguments: const {'targetTextContent': 'x'})));
+      expect(r['errorKind'], 'flutterModeRequired');
+      expect(r['summary'], contains('device mode'));
+      expect((r['nextSteps'] as List).join(' '), contains('attach'));
+    });
+  });
+
+  group('key', () {
+    const tool = KeyTool();
+    test('unknown key name -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'key', arguments: const {'key': 'hyper'})));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('count out of range -> invalidArgument', () async {
+      for (final c in [0, 51]) {
+        final r = _structured(await tool.invoke(
+            session,
+            CallToolRequest(
+                name: 'key', arguments: {'key': 'backspace', 'count': c})));
+        expect(r['errorKind'], 'invalidArgument', reason: 'count $c');
+      }
+    });
+
+    test('unknown modifier -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(
+          session,
+          CallToolRequest(name: 'key', arguments: const {
+            'key': 'left',
+            'modifiers': ['hyper'],
+          })));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('valid args but unattached -> sessionNotAttached', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'key', arguments: const {'key': 'enter'})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('type clear', () {
+    test('valid clear:true but unattached -> sessionNotAttached', () async {
+      final r = _structured(await const TypeTool().invoke(
+          session,
+          CallToolRequest(
+              name: 'type', arguments: const {'text': 'x', 'clear': true})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+  });
+
+  group('record', () {
+    const tool = RecordTool();
+    test('bad ranges -> invalidArgument', () async {
+      for (final a in [
+        {'everyMs': 5},
+        {'maxFrames': 0},
+        {'durationMs': 60000},
+      ]) {
+        final r = _structured(await tool.invoke(
+            session, CallToolRequest(name: 'record', arguments: a)));
+        expect(r['errorKind'], 'invalidArgument', reason: '$a');
+      }
+    });
+
+    test('an unknown step tool -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(
+          session,
+          CallToolRequest(name: 'record', arguments: const {
+            'steps': [
+              {'tool': 'attach', 'args': {}},
+            ],
+          })));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('no steps and durationMs:0 -> invalidArgument', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'record', arguments: const {'durationMs': 0})));
+      expect(r['errorKind'], 'invalidArgument');
+    });
+
+    test('valid but unattached -> sessionNotAttached', () async {
+      final r = _structured(await tool.invoke(session,
+          CallToolRequest(name: 'record', arguments: const {'durationMs': 400})));
+      expect(r['errorKind'], 'sessionNotAttached');
+    });
+
+    test('registered with the app routing arg', () {
+      final def = tool.registeredDefinition as Map<String, Object?>;
+      final props = (def['inputSchema'] as Map)['properties'] as Map;
+      expect(props.containsKey('steps'), isTrue);
+      expect(props.containsKey('app'), isTrue);
+    });
+  });
+
+  group('device biometric', () {
+    Future<Map<String, Object?>> call(Map<String, Object?> args) async =>
+        _structured(await const DeviceTool().invoke(session,
+            CallToolRequest(name: 'device', arguments: {'udid': 'U', ...args})));
+
+    test('an unknown action or type → invalidArgument naming the choices', () async {
+      final a = await call({'op': 'biometric', 'action': 'maybe'});
+      expect(a['errorKind'], 'invalidArgument');
+      expect(a['summary'], contains('enrol | unenrol | match | nomatch'));
+      final t = await call({'op': 'biometric', 'action': 'match', 'type': 'iris'});
+      expect(t['summary'], 'op=biometric type must be face or touch');
+    });
+  });
+}

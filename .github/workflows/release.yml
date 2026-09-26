@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags: ['*-v[0-9]+.[0-9]+.[0-9]+']
 
 permissions:
   contents: read
@@ -12,6 +12,10 @@ jobs:
     runs-on: macos-26
     permissions:
       contents: write
+    env:
+      GLINT_NO_TELEMETRY: 'true'
+      FLUTTER_NETWORK_MCP_NO_TELEMETRY: 'true'
+      FLUTTER_NETWORK_MCP_NO_UPDATE_CHECK: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
@@ -19,16 +23,20 @@ jobs:
           sdk: stable
       - run: dart pub get
       - name: Check the tag matches the code
+        id: tag
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          grep -qx "version: $version" pubspec.yaml || { echo "pubspec.yaml is not at $version"; exit 1; }
-          dart run tool/release.dart notes "$version" > release-notes.md
+          package="${GITHUB_REF_NAME%-v*}"
+          version="${GITHUB_REF_NAME##*-v}"
+          [ -d "packages/$package" ] || { echo "no package named $package"; exit 1; }
+          grep -qx "version: $version" "packages/$package/pubspec.yaml" || { echo "packages/$package/pubspec.yaml is not at $version"; exit 1; }
+          dart run tool/release.dart notes "$package" "$version" > "$RUNNER_TEMP/release-notes.md"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
       - name: Test
+        working-directory: packages/${{ steps.tag.outputs.package }}
         run: dart test
-        env:
-          GLINT_NO_TELEMETRY: 'true'
       - name: Build the universal glint-iossim bridge
-        working-directory: native/ios_sim_bridge
+        if: steps.tag.outputs.package == 'glint_mcp'
+        working-directory: packages/glint_mcp/native/ios_sim_bridge
         run: |
           swift build -c release --arch arm64 --arch x86_64
           bin="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/glint-iossim"
@@ -43,7 +51,9 @@ jobs:
           cat glint-iossim-macos.sha256
       - name: Publish the GitHub Release
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md \
-            "$RUNNER_TEMP/assets/glint-iossim-macos" "$RUNNER_TEMP/assets/glint-iossim-macos.sha256"
+          shopt -s nullglob
+          assets=("$RUNNER_TEMP"/assets/*)
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" "${assets[@]}"
         env:
           GH_TOKEN: ${{ github.token }}

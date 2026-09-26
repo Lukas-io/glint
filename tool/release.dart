@@ -1,70 +1,110 @@
 import 'dart:io';
 
-/// Release helper: `prepare <x.y.z>` bumps versions and dates the changelog on release/v<x.y.z>, `tag` tags the merged release, `notes <x.y.z>` prints its changelog section.
+/// Release helper for one package: `prepare <package> <x.y.z>` bumps it on release/<package>-v<x.y.z>, `tag <package>` tags the merged release, `notes <package> <x.y.z>` prints its changelog section.
 const defaultBranch = 'main';
 
-/// Files holding the version, with the pattern whose first group is the version.
-final versionFiles = <String, RegExp>{
-  'pubspec.yaml': RegExp(r'^version: (\S+)$', multiLine: true),
-  'lib/src/version.dart': RegExp(r"^const String glintVersion = '([^']+)';$", multiLine: true),
+/// The shared package; a package that depends on it is released only after it.
+const corePackage = 'glint_core';
+
+/// Per package, the files holding its version (relative to the package) and the pattern whose first group is the version.
+final packageVersionFiles = <String, Map<String, RegExp>>{
+  'glint_mcp': {
+    'pubspec.yaml': _pubspecVersion,
+    'lib/src/version.dart': RegExp(r"^const String glintVersion = '([^']+)';$", multiLine: true),
+  },
 };
 
+final _pubspecVersion = RegExp(r'^version: (\S+)$', multiLine: true);
+
+const _usage = 'usage: prepare <package> <x.y.z> | tag <package> | notes <package> <x.y.z>\n'
+    'packages: ';
+
 Future<void> main(List<String> args) async {
-  if (args.isEmpty) _fail('usage: prepare <x.y.z> | tag | notes <x.y.z>');
+  final usage = '$_usage${packageVersionFiles.keys.join(', ')}';
+  if (args.length < 2 || !packageVersionFiles.containsKey(args[1])) _fail(usage);
+  final package = args[1];
   switch (args.first) {
-    case 'prepare' when args.length == 2:
-      await _prepare(args[1]);
-    case 'tag':
-      await _tag();
-    case 'notes' when args.length == 2:
-      stdout.write(changelogSection(File('CHANGELOG.md').readAsStringSync(), args[1]) ??
-          _fail('CHANGELOG.md has no section for ${args[1]}'));
+    case 'prepare' when args.length == 3:
+      await _prepare(package, args[2]);
+    case 'tag' when args.length == 2:
+      await _tag(package);
+    case 'notes' when args.length == 3:
+      stdout.write(changelogSection(_changelog(package).readAsStringSync(), args[2]) ??
+          _fail('$package CHANGELOG.md has no section for ${args[2]}'));
     default:
-      _fail('usage: prepare <x.y.z> | tag | notes <x.y.z>');
+      _fail(usage);
   }
 }
 
-Future<void> _prepare(String version) async {
+/// The git tag of [package] at [version].
+String releaseTag(String package, String version) => '$package-v$version';
+
+String packageDir(String package) => 'packages/$package';
+
+File _changelog(String package) => File('${packageDir(package)}/CHANGELOG.md');
+
+Future<void> _prepare(String package, String version) async {
   if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(version)) _fail('version must look like 1.2.3');
   await _requireCleanDefaultBranch();
-  final current = currentVersion();
+  final blocker = coreBlocker(package);
+  if (blocker != null) _fail(blocker);
+  final current = currentVersion(package);
   if (!isNewer(version, current)) _fail('$version is not newer than $current');
-  final changelog = File('CHANGELOG.md');
+  final changelog = _changelog(package);
   final dated = datedChangelog(changelog.readAsStringSync(), version, DateTime.now());
-  if (dated == null) _fail('CHANGELOG.md has no entries under ## [Unreleased]');
-  await _git(['checkout', '-b', 'release/v$version']);
-  for (final entry in versionFiles.entries) {
-    final file = File(entry.key);
+  if (dated == null) _fail('${changelog.path} has no entries under ## [Unreleased]');
+  final tag = releaseTag(package, version);
+  await _git(['checkout', '-b', 'release/$tag']);
+  final files = packageVersionFiles[package]!;
+  for (final entry in files.entries) {
+    final file = File('${packageDir(package)}/${entry.key}');
     file.writeAsStringSync(file.readAsStringSync().replaceFirstMapped(
         entry.value, (m) => m[0]!.replaceFirst(m[1]!, version)));
   }
   changelog.writeAsStringSync(dated);
-  await _git(['add', 'CHANGELOG.md', ...versionFiles.keys]);
-  await _git(['commit', '-m', 'Release $version']);
-  stdout.writeln('Committed "Release $version" on release/v$version. Open a PR; after it merges, run: dart run tool/release.dart tag');
+  await _git(['add', changelog.path, for (final f in files.keys) '${packageDir(package)}/$f']);
+  await _git(['commit', '-m', 'Release $package $version']);
+  stdout.writeln('Committed "Release $package $version" on release/$tag. Open a PR; after it merges, run: '
+      'dart run tool/release.dart tag $package');
 }
 
-Future<void> _tag() async {
+Future<void> _tag(String package) async {
   await _requireCleanDefaultBranch();
-  final version = currentVersion();
-  if (changelogSection(File('CHANGELOG.md').readAsStringSync(), version) == null) {
-    _fail('CHANGELOG.md has no section for $version; run prepare first');
+  final version = currentVersion(package);
+  if (changelogSection(_changelog(package).readAsStringSync(), version) == null) {
+    _fail('$package CHANGELOG.md has no section for $version; run prepare first');
   }
-  final existing = await Process.run('git', ['tag', '--list', 'v$version']);
-  if ((existing.stdout as String).trim().isNotEmpty) _fail('tag v$version already exists');
-  await _git(['tag', '-a', 'v$version', '-m', 'Release $version']);
-  await _git(['push', 'origin', 'v$version']);
-  stdout.writeln('Pushed v$version; the release workflow publishes the GitHub Release.');
+  final tag = releaseTag(package, version);
+  final existing = await Process.run('git', ['tag', '--list', tag]);
+  if ((existing.stdout as String).trim().isNotEmpty) _fail('tag $tag already exists');
+  await _git(['tag', '-a', tag, '-m', 'Release $package $version']);
+  await _git(['push', 'origin', tag]);
+  stdout.writeln('Pushed $tag; the release workflow publishes the GitHub Release.');
 }
 
-/// The version every version file agrees on.
-String currentVersion() {
+/// Why [package] cannot be released yet: it depends on [corePackage] while core has unreleased changes.
+String? coreBlocker(String package, {String root = '.'}) {
+  if (package == corePackage) return null;
+  final pubspec = File('$root/${packageDir(package)}/pubspec.yaml').readAsStringSync();
+  if (!RegExp('^  $corePackage:', multiLine: true).hasMatch(pubspec)) return null;
+  final coreLog = File('$root/${packageDir(corePackage)}/CHANGELOG.md');
+  if (!coreLog.existsSync()) return null;
+  final unreleased = datedChangelog(coreLog.readAsStringSync(), '0.0.0', DateTime(2000));
+  return unreleased == null
+      ? null
+      : '$corePackage has unreleased changes; release $corePackage first, then bump the '
+          'constraint in $package';
+}
+
+/// The version every version file of [package] agrees on.
+String currentVersion(String package, {String root = '.'}) {
   final found = {
-    for (final entry in versionFiles.entries)
-      entry.key: entry.value.firstMatch(File(entry.key).readAsStringSync())?[1],
+    for (final entry in packageVersionFiles[package]!.entries)
+      entry.key: entry.value
+          .firstMatch(File('$root/${packageDir(package)}/${entry.key}').readAsStringSync())?[1],
   };
   final distinct = found.values.toSet();
-  if (distinct.length != 1 || distinct.first == null) _fail('version files disagree: $found');
+  if (distinct.length != 1 || distinct.first == null) _fail('$package version files disagree: $found');
   return distinct.first!;
 }
 
