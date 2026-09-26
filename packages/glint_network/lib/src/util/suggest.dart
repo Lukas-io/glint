@@ -1,3 +1,5 @@
+import 'package:glint_core/glint_core.dart' show editDistance;
+
 /// What the capture can and cannot see — said wherever an empty result
 /// could otherwise read as "the app made no such request" (#91).
 const String kCaptureBoundary =
@@ -20,7 +22,7 @@ List<String> closestPaths(Iterable<String> paths, String query, {int max = 5}) {
       score = 0;
     } else {
       final last = lp.split('/').where((s) => s.isNotEmpty).lastOrNull ?? lp;
-      final d = _levenshtein(last, q);
+      final d = editDistance(last, q);
       if (d <= 3) {
         score = 10 + d;
       } else if (last.startsWith(q) || q.startsWith(last)) {
@@ -49,22 +51,3 @@ List<String> closestPaths(Iterable<String> paths, String query, {int max = 5}) {
   return (pattern: pattern, ignoreCase: ignoreCase);
 }
 
-int _levenshtein(String a, String b) {
-  if (a == b) return 0;
-  if (a.isEmpty) return b.length;
-  if (b.isEmpty) return a.length;
-  var prev = List<int>.generate(b.length + 1, (i) => i);
-  var cur = List<int>.filled(b.length + 1, 0);
-  for (var i = 1; i <= a.length; i++) {
-    cur[0] = i;
-    for (var j = 1; j <= b.length; j++) {
-      final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
-      cur[j] = [cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost]
-          .reduce((x, y) => x < y ? x : y);
-    }
-    final t = prev;
-    prev = cur;
-    cur = t;
-  }
-  return prev[b.length];
-}
