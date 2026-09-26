@@ -294,7 +294,8 @@ class TelemetryTool extends GlintTool {
     final result = AuditLog.verify(dataDir);
     return StructuredResponse(
       summary: result.intact
-          ? 'intact: ${result.totalEntries} entries '
+          ? 'intact: ${result.totalEntries} entries'
+              '${result.forks == 0 ? '' : ' (${result.forks} written by two servers at once)'} '
               '${result.firstTs?.toIso8601String() ?? ""}..'
               '${result.lastTs?.toIso8601String() ?? ""}'
           : 'BROKEN at entry #${result.brokenAtIndex}: ${result.brokenReason}',
@@ -302,6 +303,7 @@ class TelemetryTool extends GlintTool {
       data: {
         'intact': result.intact,
         'totalEntries': result.totalEntries,
+        if (result.forks > 0) 'forks': result.forks,
         if (result.brokenAtIndex != null) 'brokenAtIndex': result.brokenAtIndex,
         if (result.brokenReason != null) 'brokenReason': result.brokenReason,
         if (result.firstTs != null)

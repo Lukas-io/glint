@@ -14,6 +14,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Fixed
 
+- `telemetry op:"audit"` verification reports entries written by two servers at once as a fork, not a broken chain, and new entries can't fork any more.
 - `report_issue` now masks `access_token=` and `refresh_token=` values too. Redaction moved to glint_core, which uses the stricter of the two copies the packages had.
 - iOS taps, keys and button presses were sometimes lost, and a key could repeat (typing `hello glint` gave `hello. glint`). The bridge sent each input message without waiting for the simulator to take it and could exit before the last one was delivered; it now waits for each message to be acknowledged, and fails with a clear error if one isn't.
 

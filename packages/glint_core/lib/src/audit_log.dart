@@ -10,26 +10,31 @@ class AuditLog {
   static const String _zeroHash =
       '0000000000000000000000000000000000000000000000000000000000000000';
 
-  /// Records [payloadJson], the exact bytes sent or about to be sent; throws on filesystem failure.
+  /// Records [payloadJson], the exact bytes sent or about to be sent; an exclusive file lock keeps concurrent servers from forking the chain or losing lines. Throws on filesystem failure.
   static AuditEntry append(String dataDir, String payloadJson) {
-    final path = _filePath(dataDir);
-    final file = io.File(path);
-    if (!file.parent.existsSync()) {
-      file.parent.createSync(recursive: true);
+    final file = io.File(_filePath(dataDir));
+    if (!file.parent.existsSync()) file.parent.createSync(recursive: true);
+    final raf = file.openSync(mode: io.FileMode.append);
+    try {
+      raf.lockSync(io.FileLock.blockingExclusive);
+      final prevHash = _lastHash(raf) ?? _zeroHash;
+      final ts = DateTime.now().toUtc().toIso8601String();
+      final payloadB64 = base64.encode(utf8.encode(payloadJson));
+      final preimage = '$ts|$prevHash|$payloadB64';
+      final thisHash = sha256.convert(utf8.encode(preimage)).toString();
+      // FileMode.append positions at open time, not per write; another server may have appended while this one waited for the lock.
+      raf.setPositionSync(raf.lengthSync());
+      raf.writeStringSync('$preimage|$thisHash\n');
+      raf.flushSync();
+      return AuditEntry(
+        ts: DateTime.parse(ts),
+        prevHash: prevHash,
+        payloadB64: payloadB64,
+        thisHash: thisHash,
+      );
+    } finally {
+      raf.closeSync();
     }
-    final prevHash = _lastHash(file) ?? _zeroHash;
-    final ts = DateTime.now().toUtc().toIso8601String();
-    final payloadB64 = base64.encode(utf8.encode(payloadJson));
-    final preimage = '$ts|$prevHash|$payloadB64';
-    final thisHash = sha256.convert(utf8.encode(preimage)).toString();
-    final line = '$preimage|$thisHash\n';
-    file.writeAsStringSync(line, mode: io.FileMode.append, flush: true);
-    return AuditEntry(
-      ts: DateTime.parse(ts),
-      prevHash: prevHash,
-      payloadB64: payloadB64,
-      thisHash: thisHash,
-    );
   }
 
   /// Every entry, with null where a line is malformed so [verify] can point at it.
@@ -44,57 +49,49 @@ class AuditLog {
     return out;
   }
 
-  /// Walks the chain and reports the first line whose hash or link no longer matches.
+  /// Walks the chain and reports the first line whose hash no longer matches or whose link points nowhere; a link to an earlier line other than the last is a fork from concurrent writers before appends were locked, counted in [AuditVerifyResult.forks].
   static AuditVerifyResult verify(String dataDir) {
     final entries = readAll(dataDir);
     if (entries.isEmpty) {
-      return const AuditVerifyResult(
-        totalEntries: 0,
-        intact: true,
-        firstTs: null,
-        lastTs: null,
-      );
+      return const AuditVerifyResult(totalEntries: 0, intact: true);
     }
-    String previousThisHash = _zeroHash;
+    final seen = <String>{};
+    var previousThisHash = _zeroHash;
+    var forks = 0;
+    AuditVerifyResult broken(int i, String reason) => AuditVerifyResult(
+          totalEntries: entries.length,
+          intact: false,
+          brokenAtIndex: i,
+          brokenReason: reason,
+          forks: forks,
+          firstTs: entries.first?.ts,
+        );
     for (var i = 0; i < entries.length; i++) {
       final entry = entries[i];
-      if (entry == null) {
-        return AuditVerifyResult(
-          totalEntries: entries.length,
-          intact: false,
-          brokenAtIndex: i,
-          brokenReason: 'malformed line',
-          firstTs: entries.first?.ts,
-        );
+      if (entry == null) return broken(i, 'malformed line');
+      final linksPrevious = entry.prevHash == previousThisHash;
+      if (!linksPrevious && !seen.contains(entry.prevHash)) {
+        return broken(
+            i,
+            'prev_hash mismatch (expected ${_short(previousThisHash)}, '
+            'got ${_short(entry.prevHash)})');
       }
-      if (entry.prevHash != previousThisHash) {
-        return AuditVerifyResult(
-          totalEntries: entries.length,
-          intact: false,
-          brokenAtIndex: i,
-          brokenReason: 'prev_hash mismatch (expected '
-              '${_short(previousThisHash)}, got ${_short(entry.prevHash)})',
-          firstTs: entries.first?.ts,
-        );
-      }
-      final preimage =
-          '${entry.ts.toIso8601String()}|${entry.prevHash}|${entry.payloadB64}';
+      if (!linksPrevious) forks++;
+      final preimage = '${entry.ts.toIso8601String()}|${entry.prevHash}|${entry.payloadB64}';
       final recomputed = sha256.convert(utf8.encode(preimage)).toString();
       if (recomputed != entry.thisHash) {
-        return AuditVerifyResult(
-          totalEntries: entries.length,
-          intact: false,
-          brokenAtIndex: i,
-          brokenReason: 'this_hash mismatch (recomputed '
-              '${_short(recomputed)}, recorded ${_short(entry.thisHash)})',
-          firstTs: entries.first?.ts,
-        );
+        return broken(
+            i,
+            'this_hash mismatch (recomputed ${_short(recomputed)}, '
+            'recorded ${_short(entry.thisHash)})');
       }
+      seen.add(entry.thisHash);
       previousThisHash = entry.thisHash;
     }
     return AuditVerifyResult(
       totalEntries: entries.length,
       intact: true,
+      forks: forks,
       firstTs: entries.first?.ts,
       lastTs: entries.last?.ts,
     );
@@ -102,16 +99,23 @@ class AuditLog {
 
   static String _filePath(String dataDir) => p.join(dataDir, fileName);
 
-  static String? _lastHash(io.File file) {
-    if (!file.existsSync()) return null;
-    final lines = file.readAsLinesSync();
-    for (var i = lines.length - 1; i >= 0; i--) {
-      final line = lines[i];
-      if (line.isEmpty) continue;
-      final parts = line.split('|');
-      if (parts.length == 4) return parts[3];
+  /// The last line's hash, read through the locked handle: opening the file again and closing it would drop this process's lock.
+  static String? _lastHash(io.RandomAccessFile raf) {
+    final length = raf.lengthSync();
+    var chunk = 4096;
+    while (true) {
+      final start = length > chunk ? length - chunk : 0;
+      raf.setPositionSync(start);
+      final text = utf8.decode(raf.readSync(length - start), allowMalformed: true);
+      final lines = text.split('\n').where((l) => l.isNotEmpty).toList();
+      final complete = start == 0 ? lines : lines.skip(1).toList();
+      for (final line in complete.reversed) {
+        final parts = line.split('|');
+        if (parts.length == 4) return parts[3];
+      }
+      if (start == 0) return null;
+      chunk *= 4;
     }
-    return null;
   }
 
   static String _short(String hash) =>
@@ -154,6 +158,7 @@ class AuditVerifyResult {
     required this.intact,
     this.brokenAtIndex,
     this.brokenReason,
+    this.forks = 0,
     this.firstTs,
     this.lastTs,
   });
@@ -162,6 +167,9 @@ class AuditVerifyResult {
   final bool intact;
   final int? brokenAtIndex;
   final String? brokenReason;
+
+  /// Entries linked to an earlier line rather than the last one: written by two servers at once, before appends were locked.
+  final int forks;
   final DateTime? firstTs;
   final DateTime? lastTs;
 }

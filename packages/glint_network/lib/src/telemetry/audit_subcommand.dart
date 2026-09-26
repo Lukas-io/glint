@@ -61,7 +61,7 @@ Future<void> _runVerify(List<String> args) async {
   if (result.intact) {
     io.stdout.writeln(
       'glint_network audit verify: ${result.totalEntries} entries, '
-      'chain intact.\n'
+      'chain intact${result.forks == 0 ? '' : ' (${result.forks} written by two servers at once, before appends were locked)'}.\n'
       '  First entry: ${result.firstTs?.toIso8601String()}\n'
       '  Last entry:  ${result.lastTs?.toIso8601String()}\n'
       'Use `glint_network audit show` to view payloads.',

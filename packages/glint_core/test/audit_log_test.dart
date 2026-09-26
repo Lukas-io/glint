@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:glint_core/glint_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -128,6 +129,54 @@ void main() {
       } finally {
         dir.deleteSync(recursive: true);
       }
+    });
+  });
+
+  test('processes appending at the same time keep one unbroken chain', () async {
+    final dir = Directory.systemTemp.createTempSync('audit-race');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final workers = await Future.wait([
+      for (var w = 0; w < 4; w++)
+        Process.start(Platform.resolvedExecutable,
+            ['run', 'test/support/append_worker.dart', dir.path, '$w', '25']),
+    ]);
+    final codes = await Future.wait(workers.map((w) => w.exitCode));
+    expect(codes, everyElement(0));
+    final r = AuditLog.verify(dir.path);
+    expect(r.totalEntries, 100);
+    expect(r.intact, isTrue, reason: r.brokenReason);
+    expect(r.forks, 0);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  group('entries written by two servers before appends were locked', () {
+    late Directory dir;
+    setUp(() => dir = Directory.systemTemp.createTempSync('audit-fork'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    String forged(String prevHash, String payload) {
+      final ts = DateTime.utc(2026, 7, 3).toIso8601String();
+      final b64 = base64.encode(utf8.encode(payload));
+      final preimage = '$ts|$prevHash|$b64';
+      return '$preimage|${sha256.convert(utf8.encode(preimage))}\n';
+    }
+
+    test('a link to an earlier line is a fork, not a break', () {
+      final first = AuditLog.append(dir.path, '{"a":1}');
+      AuditLog.append(dir.path, '{"b":2}');
+      File(p.join(dir.path, AuditLog.fileName))
+          .writeAsStringSync(forged(first.thisHash, '{"c":3}'), mode: FileMode.append);
+      final r = AuditLog.verify(dir.path);
+      expect(r.intact, isTrue, reason: r.brokenReason);
+      expect(r.forks, 1);
+    });
+
+    test('a link to no line at all is still a break', () {
+      AuditLog.append(dir.path, '{"a":1}');
+      File(p.join(dir.path, AuditLog.fileName))
+          .writeAsStringSync(forged('f' * 64, '{"c":3}'), mode: FileMode.append);
+      final r = AuditLog.verify(dir.path);
+      expect(r.intact, isFalse);
+      expect(r.brokenAtIndex, 1);
     });
   });
 }
