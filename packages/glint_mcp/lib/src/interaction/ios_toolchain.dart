@@ -6,7 +6,7 @@ import 'bridge_download.dart';
 import 'bridge_locator.dart';
 
 /// Xcode majors the bridge's private CoreSimulator and IndigoHID calls are verified on.
-const Set<int> testedXcodeMajors = {26};
+const Set<int> testedXcodeMajors = {26, 27};
 
 /// Must equal `bridgeProtocol` in native/ios_sim_bridge/Sources/glint-iossim/main.swift.
 const int expectedBridgeProtocol = 1;

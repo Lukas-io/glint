@@ -377,7 +377,8 @@ Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major re
 
 | Xcode | iOS Sim runtime | tap | swipe | long-press | type | buttons | Notes |
 |---|---|---|---|---|---|---|---|
-| 26.x | 26 | ✅ | ✅ | ✅ (dispatch) | ✅ | ⚠️ 1 of 5 mapped, Home requires gesture path | See "Xcode 26 layout" + "Xcode 26 open work" below |
+| 27.x | 26.5 (iOS 27 runtime not yet verified) | ✅ | ✅ | ✅ | ✅ | ✅ lock, unlock, home, back | SimulatorKit moved to `Contents/SharedFrameworks`; message layout unchanged from 26. Verified 2026-09-26 on 27.0 |
+| 26.x | 26 | ✅ | ✅ | ✅ | ✅ | ✅ lock, unlock, home, back | See "Xcode 26 layout" + "Xcode 26 open work" below |
 | ≤14 | ≤14 | — | — | — | — | — | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 |
 
 ### Xcode 26 layout (verified)

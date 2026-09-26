@@ -87,7 +87,7 @@ glint is not on pub.dev yet; install it from source.
 git clone https://github.com/Lukas-io/glint.git
 cd glint && dart pub get
 
-# iOS Simulator support (macOS with Xcode 26). Optional: without a local
+# iOS Simulator support (macOS with Xcode 26 or 27). Optional: without a local
 # build, glint downloads the release's prebuilt bridge on the first iOS attach.
 (cd packages/glint_mcp/native/ios_sim_bridge && swift build -c release)
 
@@ -102,7 +102,7 @@ Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with
 ## Limits today
 
 - **Debug and profile builds only.** glint reads the app through the Dart VM service, which release builds don't have.
-- **iOS needs a Mac with Xcode 26.** The simulator bridge uses private simulator APIs, and only Xcode 26 is supported so far. On another Xcode major, `attach` warns and taps, swipes and typing are refused with `errorKind: unsupportedToolchain`; set `GLINT_ALLOW_UNTESTED_XCODE=true` to try anyway.
+- **iOS needs a Mac with Xcode 26 or 27.** The simulator bridge uses private simulator APIs, so each Xcode major is verified before glint allows it; the support table is in [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §13. On another Xcode major, `attach` warns and taps, swipes and typing are refused with `errorKind: unsupportedToolchain`; set `GLINT_ALLOW_UNTESTED_XCODE=true` to try anyway.
 - **The prebuilt bridge is ad-hoc signed, not notarized.** Build it yourself if your machine requires notarized binaries.
 - **Android runs over adb.** Tested on macOS hosts; Linux hosts are not tested yet.
 - **Typing is ASCII only** on both platforms.
