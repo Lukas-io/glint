@@ -6,6 +6,7 @@ environment:
   sdk: ^3.6.0
 
 workspace:
+  - packages/glint_core
   - packages/glint_network
   - packages/glint_mcp
 

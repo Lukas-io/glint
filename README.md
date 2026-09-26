@@ -126,6 +126,7 @@ This repository holds the glint packages, each versioned and released on its own
 | --- | --- |
 | [`glint_mcp`](./packages/glint_mcp) | The glint MCP server: reads the screen and drives the app. |
 | [`glint_network`](./packages/glint_network) | The network toolset: HTTP, WebSocket and log capture from the same running app. |
+| [`glint_core`](./packages/glint_core) | Code both servers share: redaction, the telemetry audit log, telemetry consent. |
 
 ## Contributing
 

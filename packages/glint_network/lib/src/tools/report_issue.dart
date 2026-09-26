@@ -1,10 +1,10 @@
+import 'package:glint_core/glint_core.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:dart_mcp/server.dart';
 
-import '../telemetry/path_redactor.dart';
 import 'error_kind.dart';
 import 'result.dart';
 

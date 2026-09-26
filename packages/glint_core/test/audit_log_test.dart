@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:glint_network/src/telemetry/audit_log.dart';
+import 'package:glint_core/glint_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

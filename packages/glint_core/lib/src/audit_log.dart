@@ -4,39 +4,13 @@ import 'dart:io' as io;
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-/// Tamper-evident append-only telemetry audit log.
-///
-/// One line per entry, format:
-///
-///   <ts>|<prev_hash>|<payload_b64>|<this_hash>
-///
-/// - `ts` — ISO-8601 UTC timestamp (writer's local clock at append time).
-/// - `prev_hash` — SHA-256 hex of the previous line's `this_hash`. First
-///   entry uses [_zeroHash] (64 zeros).
-/// - `payload_b64` — base64 of the EXACT JSON bytes that were sent (or
-///   would have been, if the network attempt failed). Byte-for-byte
-///   parity with the POST body.
-/// - `this_hash` — SHA-256 hex of `<ts>|<prev_hash>|<payload_b64>`.
-///
-/// Tamper-EVIDENT, not tamper-PROOF. The user owns the file; they CAN
-/// edit it. The hash chain makes any edit detectable: change one line
-/// and its `this_hash` no longer matches the input; remove a line and
-/// the next line's `prev_hash` no longer matches the chain. The same
-/// trust model as `git log`.
-///
-/// File location: `<dataDir>/telemetry-audit.log`. Caller passes the
-/// data dir explicitly so this code has no dependency on the
-/// `CapturesDatabase` singleton (callable from anywhere).
+/// Tamper-evident telemetry log at `<dataDir>/telemetry-audit.log`: one `<ts>|<prev_hash>|<payload_b64>|<this_hash>` line per payload, each hash covering the line before it, like `git log`.
 class AuditLog {
   static const String fileName = 'telemetry-audit.log';
   static const String _zeroHash =
       '0000000000000000000000000000000000000000000000000000000000000000';
 
-  /// Appends one entry. [payloadJson] must be the exact JSON bytes (as a
-  /// String) that hit (or would have hit) the wire. Returns the
-  /// resulting [AuditEntry]. Throws on filesystem failure — callers in
-  /// the telemetry path wrap this in try/catch since the audit log is
-  /// best-effort.
+  /// Records [payloadJson], the exact bytes sent or about to be sent; throws on filesystem failure.
   static AuditEntry append(String dataDir, String payloadJson) {
     final path = _filePath(dataDir);
     final file = io.File(path);
@@ -58,9 +32,7 @@ class AuditLog {
     );
   }
 
-  /// Reads + parses every entry. Returns empty list when the file is
-  /// missing. Malformed lines surface as `null` placeholders so the
-  /// verifier can flag them at their actual index.
+  /// Every entry, with null where a line is malformed so [verify] can point at it.
   static List<AuditEntry?> readAll(String dataDir) {
     final file = io.File(_filePath(dataDir));
     if (!file.existsSync()) return const [];
@@ -72,11 +44,7 @@ class AuditLog {
     return out;
   }
 
-  /// Walks the chain. Verifies (1) each line's `this_hash` matches a
-  /// fresh SHA-256 of its preimage, (2) each line's `prev_hash` matches
-  /// the previous line's `this_hash`. Stops at the first break and
-  /// records its index + reason. Returns intact result when no entries
-  /// exist (vacuously true).
+  /// Walks the chain and reports the first line whose hash or link no longer matches.
   static AuditVerifyResult verify(String dataDir) {
     final entries = readAll(dataDir);
     if (entries.isEmpty) {
@@ -97,7 +65,6 @@ class AuditLog {
           brokenAtIndex: i,
           brokenReason: 'malformed line',
           firstTs: entries.first?.ts,
-          lastTs: null,
         );
       }
       if (entry.prevHash != previousThisHash) {
@@ -108,10 +75,10 @@ class AuditLog {
           brokenReason: 'prev_hash mismatch (expected '
               '${_short(previousThisHash)}, got ${_short(entry.prevHash)})',
           firstTs: entries.first?.ts,
-          lastTs: null,
         );
       }
-      final preimage = '${entry.ts.toIso8601String()}|${entry.prevHash}|${entry.payloadB64}';
+      final preimage =
+          '${entry.ts.toIso8601String()}|${entry.prevHash}|${entry.payloadB64}';
       final recomputed = sha256.convert(utf8.encode(preimage)).toString();
       if (recomputed != entry.thisHash) {
         return AuditVerifyResult(
@@ -121,7 +88,6 @@ class AuditLog {
           brokenReason: 'this_hash mismatch (recomputed '
               '${_short(recomputed)}, recorded ${_short(entry.thisHash)})',
           firstTs: entries.first?.ts,
-          lastTs: null,
         );
       }
       previousThisHash = entry.thisHash;
@@ -152,7 +118,6 @@ class AuditLog {
       hash.length <= 12 ? hash : '${hash.substring(0, 12)}…';
 }
 
-/// One parsed entry from the audit log.
 class AuditEntry {
   const AuditEntry({
     required this.ts,
@@ -166,11 +131,8 @@ class AuditEntry {
   final String payloadB64;
   final String thisHash;
 
-  /// Decodes the payload back to JSON bytes (UTF-8 → String). Used by
-  /// `audit show` to pretty-print what got sent.
   String decodePayload() => utf8.decode(base64.decode(payloadB64));
 
-  /// Returns null when the line doesn't have the expected 4-part shape.
   static AuditEntry? tryParse(String line) {
     final parts = line.split('|');
     if (parts.length != 4) return null;
@@ -198,13 +160,8 @@ class AuditVerifyResult {
 
   final int totalEntries;
   final bool intact;
-
-  /// Zero-based index of the broken line. Null when [intact] is true.
   final int? brokenAtIndex;
-
-  /// Human-readable reason for the break.
   final String? brokenReason;
-
   final DateTime? firstTs;
   final DateTime? lastTs;
 }
