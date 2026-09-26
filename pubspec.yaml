@@ -6,6 +6,7 @@ environment:
   sdk: ^3.6.0
 
 workspace:
+  - packages/flutter_network_mcp
   - packages/glint_mcp
 
 dependencies:
