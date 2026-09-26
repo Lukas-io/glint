@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-26
+
 ### Added: the move from flutter_network_mcp is guided
 
 - The old names stop working on 26 December 2026. Until then, an install that still uses them shows one notice with the steps left: in the MCP instructions (so the agent tells the user), first in `network_status` warnings, and on stderr at startup. It covers an install from the old repository, a config that starts the `flutter_network_mcp` command, and `FLUTTER_NETWORK_MCP_*` variables.

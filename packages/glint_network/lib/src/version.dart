@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 /// `lib/src/server.dart` (Implementation), `bin/glint_network.dart`
 /// (UpdateCheck), and the docs. Must match the `version:` line in
 /// `pubspec.yaml` — bump in both places at release time.
-const String packageVersion = '0.11.0';
+const String packageVersion = '0.12.0';
 
 /// Commit SHA baked in at AOT-compile time by `glint_network install`
 /// via `-Dglint_network_sha=<sha>`. Empty when running JIT (the
