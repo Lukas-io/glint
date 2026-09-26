@@ -18,7 +18,7 @@ import 'network_attach.dart' as attach_helper;
 import '../util/suggest.dart';
 import 'result.dart';
 import '../vm/vm_uri.dart';
-import '../util/network_env.dart';
+import '../util/legacy_install.dart';
 
 /// Per-session entry for `network_status.attached[]`. Carries structured
 /// capability health (issue #17) so socket/log degradation shows up as a
@@ -320,9 +320,9 @@ FutureOr<CallToolResult> networkStatus(
     }
   }
 
-  final legacyEnv = legacyEnvWarning(networkEnv);
-  if (legacyEnv != null) {
-    out['warnings'] = [...?(out['warnings'] as List?)?.cast<String>(), legacyEnv];
+  final legacyNotice = legacyUse.notice;
+  if (legacyNotice != null) {
+    out['warnings'] = [legacyNotice, ...?(out['warnings'] as List?)?.cast<String>()];
   }
 
   out['nextSteps'] = _suggestNextSteps(registry, session, out);

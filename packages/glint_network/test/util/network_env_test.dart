@@ -15,14 +15,4 @@ void main() {
     });
     expect(env['GLINT_NETWORK_MAX_ATTACH'], '5');
   });
-
-  test('the warning names each legacy variable and its replacement', () {
-    expect(
-      legacyEnvWarning({'FLUTTER_NETWORK_MCP_TELEMETRY': 'on', 'FLUTTER_NETWORK_MCP_DATA_DIR': '/d'}),
-      'deprecated env vars FLUTTER_NETWORK_MCP_DATA_DIR (now GLINT_NETWORK_DATA_DIR), '
-      'FLUTTER_NETWORK_MCP_TELEMETRY (now GLINT_NETWORK_TELEMETRY); '
-      'the old names still work but will be removed in a later release',
-    );
-    expect(legacyEnvWarning({'GLINT_NETWORK_TELEMETRY': 'on'}), isNull);
-  });
 }

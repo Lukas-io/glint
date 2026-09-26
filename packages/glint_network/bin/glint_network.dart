@@ -24,6 +24,7 @@ import 'package:glint_network/src/version.dart';
 import 'package:glint_network/src/vm/dtd_discovery.dart';
 import 'package:path/path.dart' as p;
 import 'package:glint_network/src/util/network_env.dart';
+import 'package:glint_network/src/util/legacy_install.dart';
 
 Future<void> main(List<String> args) async {
   // Top-level zone guard. Anything that escapes the per-call try/catches
@@ -51,8 +52,8 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> _runMain(List<String> args) async {
-  final legacyEnv = legacyEnvWarning(networkEnv);
-  if (legacyEnv != null) io.stderr.writeln('glint_network: $legacyEnv');
+  final legacyNotice = legacyUse.notice;
+  if (legacyNotice != null) io.stderr.writeln('glint_network: $legacyNotice');
   // Subcommands short-circuit ArgParser. Keep this dispatch FIRST so a
   // typo on the main flags doesn't pre-empt `install` / `update`.
   if (args.isNotEmpty) {

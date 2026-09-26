@@ -44,6 +44,15 @@ glint_network install
 
 The `install` step compiles a native binary so the server starts in under 100ms instead of recompiling a JIT snapshot on every launch. Skipping it can cause the agent host to intermittently mark the server as failed on first connect.
 
+## Moving from flutter_network_mcp
+
+> **The flutter_network_mcp names stop working on 26 December 2026.** That covers the `flutter_network_mcp` command, the `FLUTTER_NETWORK_MCP_*` variables, and updates from the old repository. Until then everything keeps working, and the server tells your agent what is left to change.
+
+1. Run `flutter_network_mcp update`. It moves your install to this repository; your captures, settings and native build carry over.
+2. In your MCP config, rename the `flutter-network` entry to `glint-network` and set its `command` to `glint_network`.
+3. Rename any `FLUTTER_NETWORK_MCP_*` variables to `GLINT_NETWORK_*`.
+4. Restart your agent host. `network_status` stops showing the notice once nothing old is left.
+
 ## Configure
 
 Add the server to your project's `.mcp.json`, or `~/.claude.json` for machine-wide:
@@ -58,8 +67,6 @@ Add the server to your project's `.mcp.json`, or `~/.claude.json` for machine-wi
   }
 }
 ```
-
-Upgrading from flutter_network_mcp: the `flutter_network_mcp` command and `FLUTTER_NETWORK_MCP_*` variables keep working for now (`network_status` warns about old variable names), and captures stay in the same data directory. Rename the entry to `glint-network`, point it at `glint_network`, and restart your agent host.
 
 The server auto-discovers a running app's Tooling Daemon on startup, so no connection URI is needed in most setups. To target a specific daemon, pass `--dtd-uri "ws://127.0.0.1:<port>/<token>="`.
 

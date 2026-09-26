@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../util/data_dir.dart';
 import '../util/network_env.dart';
 import 'repo_layout.dart';
+import '../util/legacy_install.dart';
 
 /// `glint_network install` subcommand: AOT-builds this package's
 /// entrypoint via `dart build cli` (a relocatable bundle, since Dart 3.12's
@@ -41,8 +42,8 @@ Future<void> runInstall(List<String> args) async {
     return;
   }
 
-  final output = _resolveOutputPath();
-  if (output == null) {
+  final outputs = _resolveOutputPaths();
+  if (outputs.isEmpty) {
     io.stderr.writeln(
       'glint_network install: could not resolve install output path. '
       'Set PUB_CACHE or HOME and retry.',
@@ -57,8 +58,10 @@ Future<void> runInstall(List<String> args) async {
   // a sibling `lib/` (libsqlite3.dylib) the exe finds via its own rpath. We
   // then point the install target [output] at it with a tiny exec shim, so the
   // MCP host config (which runs [output]) is unchanged.
+  final output = outputs.first;
   final bundleDir = p.join(p.dirname(output), '.glint_network_aot');
-  final exePath = p.join(bundleDir, 'bundle', 'bin', 'glint_network');
+  final exePath =
+      p.join(bundleDir, 'bundle', 'bin', p.basenameWithoutExtension(source));
 
   io.stderr.writeln(
     'glint_network install: building $source\n'
@@ -105,10 +108,14 @@ Future<void> runInstall(List<String> args) async {
     return;
   }
 
-  // Replace the install target with an exec shim at the bundle binary.
+  // Replace each install target with an exec shim at the bundle binary.
   try {
-    io.File(output).writeAsStringSync('#!/bin/sh\nexec "$exePath" "\$@"\n');
-    await io.Process.run('chmod', ['0755', output]);
+    for (final target in outputs) {
+      final legacy = p.basenameWithoutExtension(target) == legacyName;
+      io.File(target).writeAsStringSync(
+          execShim(exePath, launchedAs: legacy ? legacyName : null));
+      await io.Process.run('chmod', ['0755', target]);
+    }
   } catch (e) {
     io.stderr.writeln(
       'glint_network install: built the binary but could not write the '
@@ -142,14 +149,25 @@ String? _resolveSourcePath() {
   if (cache == null) return null;
   final gitDir = io.Directory(p.join(cache, 'git'));
   if (!gitDir.existsSync()) return null;
-  io.FileSystemEntity? newest;
-  DateTime newestStamp = DateTime.fromMillisecondsSinceEpoch(0);
+  return newestPubCacheSource(gitDir);
+}
+
+/// The newest entry point pub has checked out under [gitDir]: `glint-<commit>/packages/glint_network/bin/glint_network.dart`, or the old repository's `flutter_network_mcp-<commit>/bin/flutter_network_mcp.dart`.
+String? newestPubCacheSource(io.Directory gitDir) {
+  io.File? newest;
+  var newestStamp = DateTime.fromMillisecondsSinceEpoch(0);
   for (final entity in gitDir.listSync()) {
     if (entity is! io.Directory) continue;
-    if (!p.basename(entity.path).startsWith(repoCheckoutPrefix)) continue;
-    final candidate = io.File(
-      p.join(entity.path, packageGitPath, 'bin', 'glint_network.dart'),
-    );
+    final name = p.basename(entity.path);
+    final String candidatePath;
+    if (name.startsWith(repoCheckoutPrefix)) {
+      candidatePath = p.join(entity.path, packageGitPath, 'bin', 'glint_network.dart');
+    } else if (name.startsWith('$legacyName-')) {
+      candidatePath = p.join(entity.path, 'bin', '$legacyName.dart');
+    } else {
+      continue;
+    }
+    final candidate = io.File(candidatePath);
     if (!candidate.existsSync()) continue;
     final stamp = candidate.lastModifiedSync();
     if (stamp.isAfter(newestStamp)) {
@@ -160,15 +178,20 @@ String? _resolveSourcePath() {
   return newest?.path;
 }
 
-/// Resolves the install target — the path the JIT wrapper currently
-/// occupies, which we're about to overwrite with a native binary.
-String? _resolveOutputPath() {
+/// A shell script that runs the native binary; [launchedAs] tells the server which command started it.
+String execShim(String exePath, {String? launchedAs}) => '#!/bin/sh\n'
+    '${launchedAs == null ? '' : '$launchedAsEnv=$launchedAs '}exec "$exePath" "\$@"\n';
+
+/// The install targets: the `glint_network` wrapper, plus the `flutter_network_mcp` one when an older setup still launches through it.
+List<String> _resolveOutputPaths() {
   final cache = _pubCacheDir();
-  if (cache == null) return null;
-  final binName = io.Platform.isWindows
-      ? 'glint_network.bat'
-      : 'glint_network';
-  return p.join(cache, 'bin', binName);
+  if (cache == null) return const [];
+  final ext = io.Platform.isWindows ? '.bat' : '';
+  final legacy = p.join(cache, 'bin', '$legacyName$ext');
+  return [
+    p.join(cache, 'bin', 'glint_network$ext'),
+    if (io.File(legacy).existsSync()) legacy,
+  ];
 }
 
 /// Resolves `$PUB_CACHE`, falling back to `$HOME/.pub-cache` on POSIX or
