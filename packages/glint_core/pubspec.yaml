@@ -1,6 +1,6 @@
 name: glint_core
 description: Code shared by the glint packages. Redaction for anything that leaves the machine, the tamper-evident telemetry audit log, and telemetry identity and consent.
-version: 0.0.0
+version: 0.1.0
 publish_to: none
 repository: https://github.com/Lukas-io/glint/tree/main/packages/glint_core
 issue_tracker: https://github.com/Lukas-io/glint/issues

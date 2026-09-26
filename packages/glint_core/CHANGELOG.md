@@ -4,6 +4,8 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-26
+
 ### Added
 
 - Redaction: `redactPath`, `redactStackHead`, `redactSecrets` and `redactForSharing`, moved from glint_mcp and glint_network. Secret masking uses the stricter of the two copies, which also catches `access_token=` and `refresh_token=` values.
