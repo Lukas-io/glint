@@ -688,8 +688,26 @@ extension SimBridge {
                 "dlsym(objc_msgSend) failed: " + String(cString: dlerror()))
         }
         let send = unsafeBitCast(sym, to: SendT.self)
-        send(receiver, selector, message, ObjCBool(freeWhenDone), nil, nil)
+        let delivered = DispatchSemaphore(value: 0)
+        var failure: NSError?
+        let completion: @convention(block) (NSError?) -> Void = { error in
+            failure = error
+            delivered.signal()
+        }
+        send(receiver, selector, message, ObjCBool(freeWhenDone),
+             ackQueue, unsafeBitCast(completion, to: AnyObject.self))
+        // Waiting keeps each down/up in order and stops the process exiting before SimulatorKit flushes the last message.
+        if delivered.wait(timeout: .now() + ackTimeout) == .timedOut {
+            throw SimError(message:
+                "the simulator did not acknowledge an input message within \(ackTimeout)s")
+        }
+        if let failure {
+            throw SimError(message: "the simulator rejected an input message: \(failure.localizedDescription)")
+        }
     }
+
+    private static let ackQueue = DispatchQueue(label: "glint.iossim.hid-ack")
+    private static let ackTimeout = 2.0
 
     private static var _simKitHandle: UnsafeMutableRawPointer?
 

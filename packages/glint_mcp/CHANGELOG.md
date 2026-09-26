@@ -12,6 +12,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - `GLINT_IOS_BRIDGE` points glint at a bridge binary.
 - The bridge answers `glint-iossim version`, and glint warns when a local build speaks a different protocol.
 
+### Fixed
+
+- iOS taps, keys and button presses were sometimes lost, and a key could repeat (typing `hello glint` gave `hello. glint`). The bridge sent each input message without waiting for the simulator to take it and could exit before the last one was delivered; it now waits for each message to be acknowledged, and fails with a clear error if one isn't.
+
 ### Changed
 
 - On an Xcode major glint has not been verified on, bridge actions are refused with the new `errorKind: unsupportedToolchain` and steps to fix it; `GLINT_ALLOW_UNTESTED_XCODE=true` lets them run. A missing bridge now fails the same way instead of with a raw process error.
