@@ -2,7 +2,9 @@ import 'backend.dart';
 import 'android_server.dart';
 import 'backends/adb_backend.dart';
 import 'backends/ios_sim_backend.dart';
+import 'backends/xctest_backend.dart';
 import 'ios_toolchain.dart';
+import 'xctest_runner.dart';
 
 /// One device glint can drive; hides the [AdbBackend] / [IosSimBackend] choice and the per-platform coordinate math.
 sealed class DeviceTarget {
@@ -77,6 +79,7 @@ class IosSimulator extends DeviceTarget {
     required this.bridgePath,
     this.toolchain,
     this.hidMode = 'auto',
+    this.runner,
   });
 
   final String udid;
@@ -96,6 +99,9 @@ class IosSimulator extends DeviceTarget {
   /// The bridge's input transport: `auto`, `dtuhid` or `indigo`.
   final String hidMode;
 
+  /// When set, input goes through this XCUITest runner instead of the bridge.
+  final XcTestRunner? runner;
+
   @override
   DevicePlatform get platform => DevicePlatform.ios;
 
@@ -106,13 +112,17 @@ class IosSimulator extends DeviceTarget {
   ({double w, double h})? get screenSize => (w: logicalWidth, h: logicalHeight);
 
   @override
-  InteractionBackend createBackend() => IosSimBackend(
-        udid: udid,
-        deviceLogicalWidth: logicalWidth,
-        deviceLogicalHeight: logicalHeight,
-        devicePixelRatio: devicePixelRatio,
-        binaryPath: bridgePath,
-        toolchain: toolchain,
-        hidMode: hidMode,
-      );
+  InteractionBackend createBackend() {
+    final sim = IosSimBackend(
+      udid: udid,
+      deviceLogicalWidth: logicalWidth,
+      deviceLogicalHeight: logicalHeight,
+      devicePixelRatio: devicePixelRatio,
+      binaryPath: bridgePath,
+      toolchain: toolchain,
+      hidMode: hidMode,
+    );
+    final r = runner;
+    return r == null ? sim : XcTestBackend(runner: r, sim: sim);
+  }
 }
