@@ -17,7 +17,10 @@ import '../tool_args.dart';
 /// the right one even with several booted), and reports device + app identity,
 /// capabilities, and screen context in one reply.
 class AttachTool extends GlintTool {
-  const AttachTool();
+  const AttachTool({this.claims});
+
+  /// Which devices other glint sessions drive; a fresh [DeviceClaims] when null.
+  final DeviceClaims? claims;
 
   /// `app` here means "which app to attach/switch to", not call routing.
   @override
@@ -328,6 +331,13 @@ class AttachTool extends GlintTool {
 
       // ── 6. Build the device target (+ iOS bridge preflight, viewport) ─────
       final warnings = <String>[];
+      final deviceClaims = claims ?? DeviceClaims();
+      final claim = deviceClaims.heldByOther(deviceId);
+      if (claim != null) {
+        if (deviceArg == null) return _claimed(deviceId, claim);
+        warnings.add('another glint session is driving $deviceId (${claim.describe}); '
+            'your input and its input will interleave');
+      }
       final DeviceTarget device;
       IosToolchain? toolchain;
       var iosTransport = iosInput;
@@ -436,6 +446,7 @@ class AttachTool extends GlintTool {
       final bundleId = link?.bundleId ?? iosInfo?.$1;
       final displayName = link?.displayName ?? iosInfo?.$2;
       final appLabel = displayName ?? package ?? link?.appName;
+      deviceClaims.claim(deviceId, app: appLabel);
       final app = <String, Object?>{
         if (package != null) 'package': package,
         if (displayName != null) 'name': displayName,
@@ -544,6 +555,17 @@ class AttachTool extends GlintTool {
       await probe.disconnect();
     }
   }
+
+  /// Refuses to auto-pick [deviceId] while another live glint session drives it.
+  StructuredResponse _claimed(String deviceId, DeviceClaim claim) => StructuredResponse.error(
+        summary: '$deviceId is being driven by another glint session',
+        errorKind: GlintErrorKind.deviceClaimed,
+        detail: '${claim.describe}; attaching would mix your input with its input',
+        nextSteps: [
+          'attach to your own device: attach device:"<udid or serial>" (attach dryRun:true lists them)',
+          'only if you mean to share it: attach device:"$deviceId"',
+        ],
+      );
 
   /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
   Future<String> _iosTransport(IosToolchain toolchain, String udid,
@@ -756,6 +778,13 @@ class AttachTool extends GlintTool {
         : null;
 
     final warnings = <String>[];
+    final deviceClaims = claims ?? DeviceClaims();
+    final claim = deviceClaims.heldByOther(target.id);
+    if (claim != null) {
+      if (args['device'] == null) return _claimed(target.id, claim);
+      warnings.add('another glint session is driving ${target.id} (${claim.describe}); '
+          'your input and its input will interleave');
+    }
     final DeviceTarget device;
     IosToolchain? toolchain;
     switch (target.platform) {
@@ -796,6 +825,7 @@ class AttachTool extends GlintTool {
     }
 
     final bound = await session.attachDevice(device: device);
+    deviceClaims.claim(target.id);
 
     final caps = session.backend.capabilities;
     final simStatus = target.platform == DevicePlatform.ios
@@ -917,6 +947,7 @@ class AttachTool extends GlintTool {
       session.withScene((s) async => const PlainTextSceneRenderer().render(s));
 
   String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history) {
+    final deviceClaims = claims ?? DeviceClaims();
     return [
       'apps (${scan.vmUris.length}):',
       for (final u in scan.vmUris) '  $u',
@@ -926,6 +957,7 @@ class AttachTool extends GlintTool {
           d.name,
           if (d.osVersion != null) d.osVersion!,
           d.platform.name,
+          if (deviceClaims.heldByOther(d.id) case final c?) 'driven by ${c.describe}',
         ].join(", ")})',
       'history (${history.length}):',
       for (final r in history)

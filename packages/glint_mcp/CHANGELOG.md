@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Device claims (#102). Each glint session claims the devices it attaches to (`~/.glint/claims`). `attach` will not auto-pick a device another live session is driving, and refuses with the new `errorKind: deviceClaimed`, naming the holder. Passing `device:` still attaches, with a warning that input will interleave. `attach dryRun:true` marks claimed devices. Claims of sessions that have exited are ignored.
+
 ### Fixed
 
 - `attach launch:` accepted any folder with a `pubspec.yaml`, the Flutter SDK included, and then waited out the whole launch timeout (180 s) before failing. It now refuses at once unless the folder is a Flutter app (a `flutter` SDK dependency and `lib/main.dart`), names what is missing, and lists apps glint launched before. A named Android device (`emulator-…` or one discovery lists) is launched as Android instead of going through `simctl boot` (#103).
