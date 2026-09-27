@@ -78,6 +78,13 @@ jobs:
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Record the input setup
+        run: |
+          echo "CoreSimulator $(defaults read /Library/Developer/PrivateFrameworks/CoreSimulator.framework/Resources/Info.plist CFBundleVersion)"
+          ls -d /Applications/Xcode*.app
+          packages/glint_mcp/native/ios_sim_bridge/.build/debug/glint-iossim hid ${{ steps.sim.outputs.udid }}
+          xcrun simctl spawn ${{ steps.sim.outputs.udid }} notifyutil -g com.apple.coredevice.dtuhidd.active || true
+          xcrun simctl spawn ${{ steps.sim.outputs.udid }} defaults read com.apple.Preferences 2>/dev/null | grep -iE "keyboard|period|autocorrect|hardware" || echo "no keyboard preferences set"
       - name: Run the device check
         run: tool/ci/run_device_check.sh ios ${{ steps.sim.outputs.udid }}
       - if: failure()
