@@ -36,20 +36,18 @@ class LongPressTool extends GlintTool {
             ),
             'awaitReady': Schema.bool(
               description:
-                  'Block until the target is in the scene and hittable, then fire.',
+                  'Wait until the target is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
               description:
-                  'After the press, settle and return changed (bool) and '
-                  'changeCategory. Default true.',
+                  'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
               description:
-                  'When true: also include the full rendered scene text as '
-                  'postScene. Default false.',
+                  'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),

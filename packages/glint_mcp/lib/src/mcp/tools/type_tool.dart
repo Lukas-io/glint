@@ -16,18 +16,7 @@ class TypeTool extends GlintTool {
   Tool get definition => Tool(
         name: 'type',
         description:
-            'Type printable-ASCII text into the focused input field. '
-            'If no field is focused, pass focus: <glintId> (a `>` typeable node '
-            'from get_scene) to tap it first. '
-            'With awaitReady: true on the focus field, blocks until it is hittable '
-            'before tapping — use when the input may not be rendered yet. '
-            'Returns structuredContent with: ok (bool), changed (bool), '
-            'changeCategory. '
-            'errorKind: unresolvedTarget (focus glintId not found), '
-            'targetNeverReady (focus field never became hittable within ceilingMs). '
-            'clear: true empties the focused field first (select-all + backspace). '
-            'Device mode: types into whatever the OS has focused, with no '
-            'change signal; focus: needs a Flutter app.',
+            'Type printable ASCII into the focused field. focus: <glintId> (a `>` node) taps it first; clear: true empties it first. errorKind: unresolvedTarget (focus id not found), targetNeverReady (focus field never hittable). Device mode: types into whatever has OS focus, with no change signal.',
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(description: 'Printable-ASCII text to type.'),
@@ -47,24 +36,23 @@ class TypeTool extends GlintTool {
             ),
             'awaitReady': Schema.bool(
               description:
-                  'Only meaningful with `focus`: block until the focus target is hittable.',
+                  'With focus: wait until that field is hittable. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description:
-                  'Ceiling for `awaitReady` on the focus field. Default 5000.',
+                  'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
               description:
-                  'After typing, settle and return the new scene plus changed '
-                  '(bool) and changeCategory. Default true.',
+                  'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
               description:
-                  'When true: include full geometry in structuredContent. Default false.',
+                  'Include geometry (painted, hittable, physicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
               description:
-                  'When true: include the full rendered scene text as postScene. Default false.',
+                  'Also return the new scene text as postScene. Default false.',
             ),
           },
           required: ['text'],

@@ -56,9 +56,7 @@ abstract class GlintTool {
     final props = Map<String, Object?>.from(
         (schema['properties'] as Map?)?.cast<String, Object?>() ?? const {});
     props['app'] = Schema.string(
-      description: 'Which attached app to target when several are attached: '
-          'device id, app name, package, or simulator name. Defaults to the '
-          'active app.',
+      description: 'Target app when several are attached (device id, name, package or simulator). Default: the active one.',
     );
     return Tool.fromMap({
       ...raw,

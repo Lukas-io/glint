@@ -19,18 +19,7 @@ class DeviceTool extends GlintTool {
   Tool get definition => Tool(
         name: 'device',
         description:
-            'Inspect or configure an iOS simulator. Defaults to the attached '
-            'device; pass udid to target another booted sim. '
-            'op: status (default) returns name, OS, device type, state, '
-            'appearance (light/dark), content size. '
-            'appearance — set value: light|dark. '
-            'openurl — open value: <url/deeplink>. '
-            'screenshot — capture a PNG (works headless); returns the saved '
-            'path + pixel size. '
-            'privacy — action: grant|revoke|reset, service: '
-            'photos|camera|location|contacts|…, bundleId for grant/revoke. '
-            'errorKind: invalidArgument (bad op/args, no udid), '
-            'targetNotFound (no such sim), backendToolError (simctl failed).',
+            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless), privacy, biometric; each argument names the ops it serves. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed).',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(

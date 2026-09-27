@@ -17,17 +17,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll a direction until a target appears and is hittable. '
-            'Needs a Flutter app (device mode: errorKind flutterModeRequired). '
-            'Match by targetGlintId (exact stable id from get_scene) OR '
-            'targetTextContent (substring match against any text node). '
-            'Returns ok:true and the found glintId when the target is hittable. '
-            'errorKind values: '
-            'targetNotFound — target never appeared in any scene during scrolling; '
-            'scrollLimitReached — target appeared but was never hittable within maxScrolls; '
-            'unresolvedTarget — target is inside a modal overlay, not in scrollable content; '
-            'invalidArgument — both or neither of targetGlintId/targetTextContent provided. '
-            'direction default: down. maxScrolls default: 8. amountFraction default: 0.6.',
+            'Scroll until a target is on screen and hittable, then return its glintId. Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never hittable), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(

@@ -24,16 +24,7 @@ class RecordTool extends GlintTool {
   Tool get definition => Tool(
         name: 'record',
         description:
-            'Record the screen while running steps, then return the distinct '
-            'frames as PNG files (read them in order). Use to see a transition '
-            'or a screen that only flashes: repeated screenshots are too slow '
-            'to catch it. steps:[{tool,args}] (same as batch, optional); '
-            'durationMs is the passive capture with no steps, or the tail after '
-            'them (default 400); everyMs is the sample interval (default 50); '
-            'distinctOnly keeps one frame per run of near-identical frames '
-            '(default true); maxFrames caps the output (default 12). errorKind: '
-            'invalidArgument, unsupportedBackendAction (no recorder), '
-            'appUnresponsive (app not answering), backendToolError (recorder failed).',
+            'Record the screen while running steps, then return the distinct frames as PNG files, in order. For transitions or screens that only flash. steps:[{tool,args}] as in batch (optional). durationMs: passive capture, or the tail after the steps (default 400); everyMs: sample interval (default 50); distinctOnly (default true); maxFrames (default 12). errorKind: unsupportedBackendAction, appUnresponsive, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'steps': batchStepsSchema(_maxSteps,

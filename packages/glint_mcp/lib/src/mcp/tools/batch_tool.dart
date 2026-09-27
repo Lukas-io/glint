@@ -20,15 +20,7 @@ class BatchTool extends GlintTool {
   Tool get definition => Tool(
         name: 'batch',
         description:
-            'Run several steps in ONE call: steps:[{tool, args}] over '
-            '${kBatchStepTools.keys.join(", ")}. Each step settles like a '
-            'normal call and reports changed/changeCategory; the batch stops '
-            'at the first error or, with stopOnNoChange (default true), the '
-            'first step that changed nothing, then returns per-step results '
-            'and the final scene. Targeted steps default to awaitReady:true so '
-            'a step may name an id the previous step reveals. Use for a known '
-            'sequence (fill a form, walk a wizard); use single calls when the '
-            'next move depends on what you see.',
+            'Run several steps in one call: steps:[{tool,args}] over tap, type, key, scroll, scroll_to_find, swipe, long_press, drag, hardware_button, wait_for_settle. Each step settles and reports changed; the batch stops at the first error, or (stopOnNoChange, default true) at the first step that changed nothing. Targeted steps default to awaitReady:true. For known sequences (a form, a wizard); use single calls when the next move depends on what you see.',
         inputSchema: ObjectSchema(
           properties: {
             'steps': batchStepsSchema(

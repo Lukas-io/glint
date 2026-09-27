@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- Tool definitions are 12% shorter (32.6k to 28.5k characters, about 1,000 fewer tokens on every turn). The `app` argument and the gesture arguments shared by tap, long_press, swipe, drag, scroll and type now use one tight wording each, and the ten longest tool descriptions no longer repeat what their arguments and the instructions already say. No argument or behaviour changed.
+
 ### Fixed
 
 - `attach launch:` accepted any folder with a `pubspec.yaml`, the Flutter SDK included, and then waited out the whole launch timeout (180 s) before failing. It now refuses at once unless the folder is a Flutter app (a `flutter` SDK dependency and `lib/main.dart`), names what is missing, and lists apps glint launched before. A named Android device (`emulator-…` or one discovery lists) is launched as Android instead of going through `simctl boot` (#103).

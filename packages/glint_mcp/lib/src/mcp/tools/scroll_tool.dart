@@ -21,15 +21,7 @@ class ScrollTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll',
         description:
-            'Scroll the screen in a direction (up/down/left/right). '
-            'Direction is content-relative: "down" shows what is below (finger swipes up). '
-            'Swipes inside the visible part of the main scrollable, above the keyboard. '
-            'amountFraction controls how far (0.0–1.0, default 0.6 of that area). '
-            'When nothing moves, `reason` says why: atEnd, atStart, notScrollable or blocked. '
-            'For finding off-screen items, prefer scroll_to_find which loops until '
-            'the target appears. '
-            'With returnScene: true (default), settles and returns the new scene '
-            'plus changed + changeCategory so you know if content actually moved.',
+            'Scroll up/down/left/right, content-relative: down shows what is below. Swipes inside the visible part of the main scrollable, above the keyboard; amountFraction 0.0 to 1.0 (default 0.6). When nothing moved, reason says why: atEnd, atStart, notScrollable or blocked. To find an off-screen item use scroll_to_find.',
         inputSchema: ObjectSchema(
           properties: {
             'direction': Schema.string(
@@ -42,13 +34,11 @@ class ScrollTool extends GlintTool {
             ),
             'returnScene': Schema.bool(
               description:
-                  'After the scroll, settle and return changed (bool) and '
-                  'changeCategory. Default true.',
+                  'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
               description:
-                  'When true: also include the full rendered scene text as '
-                  'postScene. Default false.',
+                  'Also return the new scene text as postScene. Default false.',
             ),
           },
           required: ['direction'],
