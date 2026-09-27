@@ -2,3 +2,7 @@ glint
 Copyright 2026 Lukas-io
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The glint-iossim dtuhid input transport follows the wire format and connection
+path of idb (https://github.com/facebook/idb), Copyright (c) Meta Platforms, Inc.
+and affiliates, licensed under the MIT License.

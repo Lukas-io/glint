@@ -74,6 +74,11 @@ class AttachTool extends GlintTool {
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
             ),
+            'iosInput': Schema.string(
+              description:
+                  'auto (default) | dtuhid | indigo. How taps and keys reach '
+                  'the simulator; auto picks dtuhid where Xcode ships it. iOS only.',
+            ),
             'adbPath': Schema.string(
               description: 'adb executable path. Android only.',
             ),
@@ -116,6 +121,15 @@ class AttachTool extends GlintTool {
         summary: 'unknown mode: $mode',
         errorKind: GlintErrorKind.invalidArgument,
         nextSteps: const ['use one of: flutter, device, auto'],
+      );
+    }
+
+    final iosInput = (args['iosInput'] as String?) ?? 'auto';
+    if (!const {'auto', 'dtuhid', 'indigo'}.contains(iosInput)) {
+      return StructuredResponse.error(
+        summary: 'unknown iosInput: $iosInput',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['use one of: auto, dtuhid, indigo'],
       );
     }
 
@@ -314,6 +328,7 @@ class AttachTool extends GlintTool {
       final warnings = <String>[];
       final DeviceTarget device;
       IosToolchain? toolchain;
+      var iosTransport = iosInput;
       switch (platform) {
         case DevicePlatform.android:
           // Probe the viewport for the real DPR — raw x,y gestures pass logical
@@ -343,6 +358,7 @@ class AttachTool extends GlintTool {
           toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
               onPhase: (phase) => onProgress?.call(0, phase));
           warnings.addAll(toolchain.warnings);
+          iosTransport = await _iosTransport(toolchain, deviceId, iosInput, warnings);
           // A freshly launched app's inspector lags the VM URI by a few seconds;
           // an already-running app probes on the first try so the ceiling is free.
           final baseMs = session.config.attachProbeTimeoutMs;
@@ -366,11 +382,12 @@ class AttachTool extends GlintTool {
             devicePixelRatio: vp.dpr,
             bridgePath: toolchain.bridge.path,
             toolchain: toolchain,
+            hidMode: iosTransport,
           );
       }
 
       final input = describeSetup(platform == DevicePlatform.ios
-          ? await readIosSetup(deviceId, toolchain?.xcode.major)
+          ? await readIosSetup(deviceId, toolchain?.xcode.major, transport: iosTransport)
           : await readAndroidSetup(deviceId, adbPath));
       warnings.addAll(input.warnings);
 
@@ -524,6 +541,23 @@ class AttachTool extends GlintTool {
     } finally {
       await probe.disconnect();
     }
+  }
+
+  /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
+  Future<String> _iosTransport(IosToolchain toolchain, String udid,
+      String mode, List<String> warnings) async {
+    if (toolchain.blocker != null) return mode == 'auto' ? 'indigo' : mode;
+    final t = await readIosTransport(toolchain.bridge.path, udid, mode);
+    if (t.fallback != null) {
+      warnings.add('dtuhid is unavailable (${t.fallback}), so taps and keys '
+          'go through indigo, which the simulator drops once dtuhidd is active; '
+          'if taps do nothing, reboot the simulator');
+    }
+    if (t.transport == null) {
+      warnings.add('the bridge could not open iosInput:$mode (${t.error}); '
+          'gestures will fail until it can, attach again with iosInput:auto');
+    }
+    return t.transport ?? mode;
   }
 
   StructuredResponse _adbMissing() => StructuredResponse.error(
@@ -727,6 +761,8 @@ class AttachTool extends GlintTool {
         toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
             onPhase: (phase) => onProgress?.call(0, phase));
         warnings.addAll(toolchain.warnings);
+        final iosTransport = await _iosTransport(toolchain, target.id,
+            (args['iosInput'] as String?) ?? 'auto', warnings);
         // iOS taps inject a ratio of the size, so the size is required.
         if (screen == null) {
           return StructuredResponse.error(
@@ -742,6 +778,7 @@ class AttachTool extends GlintTool {
           devicePixelRatio: 1.0,
           bridgePath: toolchain.bridge.path,
           toolchain: toolchain,
+          hidMode: iosTransport,
         );
       case DevicePlatform.android:
         // Android taps take raw pixels; the size only enables center scroll.

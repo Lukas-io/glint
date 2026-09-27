@@ -71,6 +71,7 @@ class IosSimulator extends DeviceTarget {
     required this.devicePixelRatio,
     required this.bridgePath,
     this.toolchain,
+    this.hidMode = 'auto',
   });
 
   final String udid;
@@ -86,6 +87,9 @@ class IosSimulator extends DeviceTarget {
   final String bridgePath;
 
   final IosToolchain? toolchain;
+
+  /// The bridge's input transport: `auto`, `dtuhid` or `indigo`.
+  final String hidMode;
 
   @override
   DevicePlatform get platform => DevicePlatform.ios;
@@ -104,5 +108,6 @@ class IosSimulator extends DeviceTarget {
         devicePixelRatio: devicePixelRatio,
         binaryPath: bridgePath,
         toolchain: toolchain,
+        hidMode: hidMode,
       );
 }

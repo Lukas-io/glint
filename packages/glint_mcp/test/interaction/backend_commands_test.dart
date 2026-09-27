@@ -74,6 +74,24 @@ void main() {
       ]);
     });
 
+    test('a forced input transport leads every bridge command', () async {
+      final calls = <List<String>>[];
+      final b = IosSimBackend(
+        udid: 'UDID',
+        deviceLogicalWidth: 402,
+        deviceLogicalHeight: 874,
+        devicePixelRatio: 3,
+        binaryPath: '/bin/glint-iossim',
+        hidMode: 'indigo',
+        run: (exe, args) async {
+          calls.add([exe, ...args]);
+          return ProcessResult(0, 0, '', '');
+        },
+      );
+      await b.pressKey(KeyName.enter);
+      expect(calls.single.take(4), ['/bin/glint-iossim', '--hid', 'indigo', 'key']);
+    });
+
     test('a non-zero exit throws BackendToolError', () async {
       final b = IosSimBackend(
         udid: 'U',

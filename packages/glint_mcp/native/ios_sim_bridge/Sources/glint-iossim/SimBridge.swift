@@ -283,27 +283,57 @@ enum SimBridge {
 struct SimDeviceProxy {
     let device: AnyObject
 
-    func tap(x: Double, y: Double, deviceLogicalSize: CGSize) throws {
-        let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
-        let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
-        // ~50ms dwell so the OS recognises a tap (idb's value).
-        Thread.sleep(forTimeInterval: 0.05)
-        try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
+    /// Which transport carries touch and keys; set once from `--hid`.
+    static var hidMode: HidMode = .auto
+
+    /// Why `auto` fell back to Indigo on the last `input()`, if it did.
+    static var fallbackReason: String?
+
+    /// Opens the input transport [hidMode] selects: DTUHID where CoreSimulator ships it and `dtuhidd` answers, else Indigo.
+    func input() throws -> HidInput {
+        switch Self.hidMode {
+        case .indigo:
+            return IndigoInput(proxy: self, client: try makeHidClient())
+        case .dtuhid:
+            return DtuHidInput(connection: try DtuHidConnection.connect(device: device))
+        case .auto:
+            guard DtuHidConnection.shipped else {
+                return IndigoInput(proxy: self, client: try makeHidClient())
+            }
+            do {
+                return DtuHidInput(connection: try DtuHidConnection.connect(device: device))
+            } catch {
+                Self.fallbackReason = error.localizedDescription
+                return IndigoInput(proxy: self, client: try makeHidClient())
+            }
+        }
     }
 
-    /// Taps [points] in order from one HID client, pausing [intervalMs] between taps.
-    func taps(_ points: [CGPoint], deviceLogicalSize: CGSize, intervalMs: Int) throws {
-        let client = try makeHidClient()
+    func tap(x: Double, y: Double, deviceLogicalSize: CGSize) throws -> String {
+        let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
+        let hid = try input()
+        defer { hid.finish() }
+        try hid.touch(ratio, .start)
+        // ~50ms dwell so the OS recognises a tap (idb's value).
+        Thread.sleep(forTimeInterval: 0.05)
+        try hid.touch(ratio, .end)
+        return hid.name
+    }
+
+    /// Taps [points] in order over one transport, pausing [intervalMs] between taps.
+    func taps(_ points: [CGPoint], deviceLogicalSize: CGSize, intervalMs: Int) throws -> String {
+        let hid = try input()
+        defer { hid.finish() }
         for (i, p) in points.enumerated() {
             let ratio = _ratio(x: p.x, y: p.y, in: deviceLogicalSize)
-            try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
+            try hid.touch(ratio, .start)
             Thread.sleep(forTimeInterval: 0.05)
-            try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
+            try hid.touch(ratio, .end)
             if i < points.count - 1 {
                 Thread.sleep(forTimeInterval: Double(intervalMs) / 1000.0)
             }
         }
+        return hid.name
     }
 
     func longPress(
@@ -311,12 +341,14 @@ struct SimDeviceProxy {
         y: Double,
         deviceLogicalSize: CGSize,
         durationMs: Int,
-    ) throws {
+    ) throws -> String {
         let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
-        let client = try makeHidClient()
-        try sendTouch(client: client, ratio: ratio, direction: .down, marker: .start)
+        let hid = try input()
+        defer { hid.finish() }
+        try hid.touch(ratio, .start)
         Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
-        try sendTouch(client: client, ratio: ratio, direction: .up, marker: .end)
+        try hid.touch(ratio, .end)
+        return hid.name
     }
 
     func swipe(
@@ -325,37 +357,50 @@ struct SimDeviceProxy {
         deviceLogicalSize: CGSize,
         durationMs: Int,
         holdMs: Int = 0,
-    ) throws {
+    ) throws -> String {
         let steps = max(8, durationMs / 16)
         let perStepMs = max(1, durationMs / steps)
-        let client = try makeHidClient()
+        let hid = try input()
+        defer { hid.finish() }
         let r1 = _ratio(x: from.x, y: from.y, in: deviceLogicalSize)
         let r2 = _ratio(x: to.x, y: to.y, in: deviceLogicalSize)
-        try sendTouch(client: client, ratio: r1, direction: .down, marker: .start)
+        try hid.touch(r1, .start)
         for i in 1..<steps {
             let t = Double(i) / Double(steps)
             let r = CGPoint(
                 x: r1.x + (r2.x - r1.x) * t,
                 y: r1.y + (r2.y - r1.y) * t,
             )
-            try sendTouch(client: client, ratio: r, direction: .down, marker: .move)
+            try hid.touch(r, .move)
             Thread.sleep(forTimeInterval: Double(perStepMs) / 1000.0)
         }
         // Resting at the end point drains the velocity tracker, so the lift starts no fling.
         var held = 0
         while held < holdMs {
-            try sendTouch(client: client, ratio: r2, direction: .down, marker: .move)
+            try hid.touch(r2, .move)
             Thread.sleep(forTimeInterval: 0.016)
             held += 16
         }
-        try sendTouch(client: client, ratio: r2, direction: .up, marker: .end)
+        try hid.touch(r2, .end)
+        return hid.name
     }
 
-    func pressButton(_ buttonCode: Int32) throws {
+    /// Presses Indigo button [buttonCode], or its HID Consumer [usage] when the transport is DTUHID.
+    func pressButton(_ buttonCode: Int32, usage: UInt64?) throws -> String {
+        let hid = try input()
+        if let dtu = hid as? DtuHidInput, let usage {
+            dtu.connection.button(usage: usage, down: true)
+            Thread.sleep(forTimeInterval: 0.05)
+            dtu.connection.button(usage: usage, down: false)
+            dtu.finish()
+            return dtu.name
+        }
+        hid.finish()
         let client = try makeHidClient()
         try sendButton(client: client, code: buttonCode, direction: .down)
         Thread.sleep(forTimeInterval: 0.05)
         try sendButton(client: client, code: buttonCode, direction: .up)
+        return "indigo"
     }
 
     /// Sends literal ASCII text via per-character HID key down/up. Shifted
@@ -368,51 +413,59 @@ struct SimDeviceProxy {
     private static let keyDwell = 0.006
     static let interKeyGap = 0.018
 
-    func typeText(_ text: String, gapSeconds: Double = interKeyGap) throws {
-        let client = try makeHidClient()
+    func typeText(_ text: String, gapSeconds: Double = interKeyGap) throws -> String {
         let scalars = Array(text.unicodeScalars)
-        for (i, scalar) in scalars.enumerated() {
+        var mapped: [HidMapping] = []
+        for scalar in scalars {
             guard let m = HidKeymap.map(scalar) else {
                 throw SimError(message:
                     "no HID mapping for U+\(String(scalar.value, radix: 16, uppercase: true))" +
                     " — v1 keyboard supports ASCII printable + space/newline/tab/backspace")
             }
+            mapped.append(m)
+        }
+        let hid = try input()
+        defer { hid.finish() }
+        for (i, m) in mapped.enumerated() {
             if m.shift {
-                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .down)
+                try hid.key(HidKeymap.shiftUsage, down: true)
             }
-            try sendKey(client: client, usage: m.usage, direction: .down)
+            try hid.key(m.usage, down: true)
             Thread.sleep(forTimeInterval: Self.keyDwell)
-            try sendKey(client: client, usage: m.usage, direction: .up)
+            try hid.key(m.usage, down: false)
             if m.shift {
-                try sendKey(client: client, usage: HidKeymap.shiftUsage, direction: .up)
+                try hid.key(HidKeymap.shiftUsage, down: false)
             }
             // Let a formatter-driven rebuild settle before the next key.
-            if i < scalars.count - 1 {
+            if i < mapped.count - 1 {
                 Thread.sleep(forTimeInterval: gapSeconds)
             }
         }
+        return hid.name
     }
 
     /// Presses HID [usage] [count] times; each press is bracketed by the modifiers in [modifierMask] (bit i = usage 0xE0 + i), with typeText's dwell and gap.
-    func pressKey(usage: Int32, count: Int, modifierMask: Int) throws {
-        let client = try makeHidClient()
+    func pressKey(usage: Int32, count: Int, modifierMask: Int) throws -> String {
+        let hid = try input()
+        defer { hid.finish() }
         let mods: [Int32] = (0..<4)
             .filter { modifierMask & (1 << $0) != 0 }
             .map { Int32(0xE0 + $0) }
         for i in 0..<max(count, 1) {
             for m in mods {
-                try sendKey(client: client, usage: m, direction: .down)
+                try hid.key(m, down: true)
             }
-            try sendKey(client: client, usage: usage, direction: .down)
+            try hid.key(usage, down: true)
             Thread.sleep(forTimeInterval: Self.keyDwell)
-            try sendKey(client: client, usage: usage, direction: .up)
+            try hid.key(usage, down: false)
             for m in mods.reversed() {
-                try sendKey(client: client, usage: m, direction: .up)
+                try hid.key(m, down: false)
             }
             if i < count - 1 {
                 Thread.sleep(forTimeInterval: Self.interKeyGap)
             }
         }
+        return hid.name
     }
 
     private func _ratio(x: CGFloat, y: CGFloat, in size: CGSize) -> CGPoint {
@@ -423,7 +476,7 @@ struct SimDeviceProxy {
         CGPoint(x: CGFloat(x) / size.width, y: CGFloat(y) / size.height)
     }
 
-    private func sendTouch(
+    func sendTouch(
         client: AnyObject,
         ratio: CGPoint,
         direction: TouchDirection,
@@ -453,7 +506,7 @@ struct SimDeviceProxy {
         try send(client: client, message: buf)
     }
 
-    private func sendKey(
+    func sendKey(
         client: AnyObject,
         usage: Int32,
         direction: TouchDirection,
@@ -487,7 +540,7 @@ struct SimDeviceProxy {
         )
     }
 
-    private func makeHidClient() throws -> AnyObject {
+    func makeHidClient() throws -> AnyObject {
         try SimBridge.ensureLoaded()
         _ = SimBridge.simulatorKitHandle()
         guard let cls = NSClassFromString("SimulatorKit.SimDeviceLegacyHIDClient")

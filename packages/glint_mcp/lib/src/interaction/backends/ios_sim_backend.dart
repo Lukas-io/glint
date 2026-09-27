@@ -17,6 +17,7 @@ class IosSimBackend implements InteractionBackend {
     required this.devicePixelRatio,
     required this.binaryPath,
     this.toolchain,
+    this.hidMode = 'auto',
     this.run = Process.run,
   });
 
@@ -29,6 +30,9 @@ class IosSimBackend implements InteractionBackend {
 
   /// Attach's toolchain check; when it names a blocker, bridge commands are refused.
   final IosToolchain? toolchain;
+
+  /// The bridge's input transport: `auto`, `dtuhid` or `indigo`.
+  final String hidMode;
 
   @override
   String get label => 'ios-sim(${_shortPath(udid)})';
@@ -303,7 +307,7 @@ class IosSimBackend implements InteractionBackend {
     if (blocker != null) {
       throw IosToolchainBlocked(label, blocker, toolchain!.nextSteps);
     }
-    final argv = [cmd.cliName, ...args];
+    final argv = [if (hidMode != 'auto') ...['--hid', hidMode], cmd.cliName, ...args];
     final result = await run(binaryPath, argv);
     if (result.exitCode != 0) {
       throw BackendToolError(

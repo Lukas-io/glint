@@ -23,7 +23,7 @@ class TestedSetup {
   /// `ios` or `android`.
   final String platform;
 
-  /// Input path: `bridge` (glint-iossim) or `adb`.
+  /// Input path: glint-iossim's `dtuhid` or `indigo` transport, or `adb`.
   final String backend;
 
   /// iOS runtime major, or the Android API level.
@@ -59,7 +59,7 @@ class TestedSetup {
 const List<TestedSetup> testedSetups = [
   TestedSetup(
     platform: 'ios',
-    backend: 'bridge',
+    backend: 'indigo',
     runtimeMajor: 26,
     xcodeMajor: 26,
     hostMajor: 26,
@@ -70,28 +70,40 @@ const List<TestedSetup> testedSetups = [
   ),
   TestedSetup(
     platform: 'ios',
-    backend: 'bridge',
-    runtimeMajor: 26,
+    backend: 'dtuhid',
+    runtimeMajor: 27,
     xcodeMajor: 27,
-    hostMajor: 26,
+    hostMajor: 27,
     status: SetupStatus.verified,
-    checkedOn: '2026-09-26',
-    evidence: 'every bridge action on Xcode 27.0, iPhone 17, iOS 26.5 (#62)',
+    checkedOn: '2026-09-27',
+    evidence: 'tap, type, keys, swipe and long press live on iPhone 17, iOS 27.0, with dtuhidd active (#74)',
+    issues: ['native sheets presented inside the app (photo picker) are not detected (#80)'],
   ),
   TestedSetup(
     platform: 'ios',
-    backend: 'bridge',
+    backend: 'indigo',
+    runtimeMajor: 26,
+    xcodeMajor: 27,
+    hostMajor: 26,
+    status: SetupStatus.partial,
+    checkedOn: '2026-09-27',
+    evidence: 'every bridge action on Xcode 27.0, iPhone 17, iOS 26.5 (#62)',
+    issues: [_indigoDropped],
+  ),
+  TestedSetup(
+    platform: 'ios',
+    backend: 'indigo',
     runtimeMajor: 26,
     xcodeMajor: 27,
     hostMajor: 27,
     status: SetupStatus.partial,
     checkedOn: '2026-09-27',
     evidence: 'counter benchmark on iPhone 17, iOS 26.5',
-    issues: ['typed keys can be dropped on some simulator boots (#74)'],
+    issues: [_indigoDropped],
   ),
   TestedSetup(
     platform: 'ios',
-    backend: 'bridge',
+    backend: 'indigo',
     runtimeMajor: 27,
     xcodeMajor: 27,
     hostMajor: 27,
@@ -99,7 +111,7 @@ const List<TestedSetup> testedSetups = [
     checkedOn: '2026-09-27',
     evidence: 'Ember signup completed by an agent on iPhone 17, iOS 27.0 (#88)',
     issues: [
-      'typed keys can be dropped on some simulator boots (#74)',
+      _indigoDropped,
       'native sheets presented inside the app (photo picker) are not detected (#80)',
     ],
   ),
@@ -120,6 +132,9 @@ const List<TestedSetup> testedSetups = [
     evidence: 'CI device check on an x86_64 emulator',
   ),
 ];
+
+const _indigoDropped =
+    'the simulator drops indigo taps and keys once anything starts dtuhidd on the boot (#74); iosInput:auto picks dtuhid here';
 
 /// The setup in front of glint at attach; null fields could not be read.
 typedef DeviceSetup = ({
@@ -189,9 +204,9 @@ typedef DeviceSetup = ({
   );
 }
 
-/// iOS runtime of simulator [udid] and the Mac's macOS major.
+/// iOS runtime of simulator [udid] and the Mac's macOS major; [transport] is the bridge's input path.
 Future<DeviceSetup> readIosSetup(String udid, int? xcodeMajor,
-    {ProcessRunner run = Process.run}) async {
+    {String transport = 'indigo', ProcessRunner run = Process.run}) async {
   String? runtime;
   int? runtimeMajor;
   try {
@@ -211,12 +226,31 @@ Future<DeviceSetup> readIosSetup(String udid, int? xcodeMajor,
   }
   return (
     platform: 'ios',
-    backend: 'bridge',
+    backend: transport,
     runtimeMajor: runtimeMajor,
     runtime: runtime,
     xcodeMajor: xcodeMajor,
     hostMajor: await _hostMajor(run),
   );
+}
+
+/// The input transport glint-iossim opens for [udid] under [mode]; [fallback] says why `auto` settled for indigo.
+Future<({String? transport, String? fallback, String? error})> readIosTransport(
+    String bridgePath, String udid, String mode,
+    {ProcessRunner run = Process.run}) async {
+  try {
+    final r = await run(bridgePath, [if (mode != 'auto') ...['--hid', mode], 'hid', udid])
+        .timeout(const Duration(seconds: 30));
+    final m = RegExp(r'^hid (\w+) coresimulator \S+(?: \(dtuhid unavailable: (.*)\))?$', multiLine: true)
+        .firstMatch('${r.stdout}');
+    if (r.exitCode == 0 && m != null) {
+      return (transport: m.group(1), fallback: m.group(2), error: null);
+    }
+    final err = '${r.stderr}'.trim();
+    return (transport: null, fallback: null, error: err.isEmpty ? 'the bridge did not name its transport' : err);
+  } on Object catch (e) {
+    return (transport: null, fallback: null, error: '$e');
+  }
 }
 
 /// Android API level of [serial].

@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:glint_mcp/interaction.dart';
 import 'package:test/test.dart';
 
-DeviceSetup _ios(int runtime, int xcode, int host) => (
+DeviceSetup _ios(int runtime, int xcode, int host, {String backend = 'indigo'}) => (
       platform: 'ios',
-      backend: 'bridge',
+      backend: backend,
       runtimeMajor: runtime,
       runtime: 'iOS $runtime.0',
       xcodeMajor: xcode,
@@ -20,10 +20,16 @@ void main() {
       expect(v.match!.evidence, contains('CI'));
     });
 
-    test('macOS 27 with Xcode 27 is partial and names #74', () {
+    test('indigo on Xcode 27 is partial and names #74', () {
       final v = judgeSetup(_ios(27, 27, 27));
       expect(v.status, SetupStatus.partial);
       expect(v.match!.issues.join(), contains('#74'));
+    });
+
+    test('dtuhid on Xcode 27 is verified, judged apart from indigo', () {
+      final v = judgeSetup(_ios(27, 27, 27, backend: 'dtuhid'));
+      expect(v.status, SetupStatus.verified);
+      expect(v.match!.backend, 'dtuhid');
     });
 
     test('an unknown combination is untested and points at the closest proven one', () {
@@ -48,7 +54,7 @@ void main() {
   group('describeSetup', () {
     test('partial setups warn with their issues; untested ones ask to report failures', () {
       final partial = describeSetup(_ios(27, 27, 27));
-      expect(partial.line, 'input: iOS 27.0, Xcode 27, macOS 27, bridge · partial');
+      expect(partial.line, 'input: iOS 27.0, Xcode 27, macOS 27, indigo · partial');
       expect(partial.warnings.single, contains('known issues'));
       final untested = describeSetup(_ios(28, 28, 28));
       expect(untested.json['status'], 'untested');
@@ -65,6 +71,33 @@ void main() {
             '"com.apple.CoreSimulator.SimRuntime.iOS-26-5":[{"udid":"XYZ"}]}}', '');
       });
       expect((setup.runtimeMajor, setup.runtime, setup.hostMajor), (27, 'iOS 27.0', 27));
+    });
+
+    test('the bridge names the transport it opened', () async {
+      late List<String> argv;
+      final t = await readIosTransport('/b', 'ABC', 'auto', run: (_, a) async {
+        argv = a;
+        return ProcessResult(0, 0, 'hid dtuhid coresimulator 1171.7\n', '');
+      });
+      expect(argv, ['hid', 'ABC']);
+      expect((t.transport, t.fallback, t.error), ('dtuhid', null, null));
+    });
+
+    test('auto reports why it fell back to indigo', () async {
+      final t = await readIosTransport('/b', 'ABC', 'auto', run: (_, __) async => ProcessResult(0, 0,
+          'hid indigo coresimulator 1171.7 (dtuhid unavailable: no reply within 4s)\n', ''));
+      expect((t.transport, t.fallback), ('indigo', 'no reply within 4s'));
+    });
+
+    test('a forced transport is passed through, and its failure is reported', () async {
+      late List<String> argv;
+      final t = await readIosTransport('/b', 'ABC', 'dtuhid', run: (_, a) async {
+        argv = a;
+        return ProcessResult(0, 1, '', 'hid failed: the simulator has no service');
+      });
+      expect(argv, ['--hid', 'dtuhid', 'hid', 'ABC']);
+      expect(t.transport, isNull);
+      expect(t.error, contains('no service'));
     });
 
     test('Android reads the API level', () async {

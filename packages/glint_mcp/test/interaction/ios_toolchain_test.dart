@@ -20,7 +20,7 @@ const _xcode26 = {
   'plutil': '26.6\n',
 };
 
-ProcessRunner _xcode(String version, {String bridgeOut = 'glint-iossim 1\n'}) =>
+ProcessRunner _xcode(String version, {String bridgeOut = 'glint-iossim 2\n'}) =>
     _runner({
       'xcode-select -p': _ok(_xcode26['xcode-select -p']!),
       'plutil': _ok('$version\n'),
@@ -28,7 +28,7 @@ ProcessRunner _xcode(String version, {String bridgeOut = 'glint-iossim 1\n'}) =>
     });
 
 IosToolchain _toolchain(String? version,
-        {bool found = true, bool allow = false, int? protocol = 1}) =>
+        {bool found = true, bool allow = false, int? protocol = 2}) =>
     IosToolchain(
       xcode: XcodeInfo(version: version),
       bridge: BridgeLocation(
@@ -65,7 +65,7 @@ void main() {
   group('bridgeHandshake', () {
     test('parses the protocol number', () async {
       final h = await bridgeHandshake('/bridge', run: _xcode('26.6'));
-      expect(h.protocol, 1);
+      expect(h.protocol, 2);
       expect(h.error, isNull);
     });
 
@@ -85,7 +85,7 @@ void main() {
       expect(t.toJson(), {
         'xcode': '26.6',
         'bridge': 'build',
-        'bridgeProtocol': 1,
+        'bridgeProtocol': 2,
         'actionsAllowed': true,
       });
     });
@@ -107,7 +107,7 @@ void main() {
       final t = IosToolchain(
           xcode: const XcodeInfo(error: 'xcode-select not found'),
           bridge: const BridgeLocation('/bridge', BridgeSource.build),
-          bridgeProtocol: 1);
+          bridgeProtocol: 2);
       expect(t.blocker, isNull);
       expect(t.warnings.single, contains('could not read the Xcode version'));
     });
