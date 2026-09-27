@@ -4,6 +4,7 @@
 library;
 
 export 'src/interaction/action.dart';
+export 'src/interaction/android_server.dart';
 export 'src/interaction/attach_history.dart';
 export 'src/interaction/backend.dart';
 export 'src/interaction/backends/adb_backend.dart';

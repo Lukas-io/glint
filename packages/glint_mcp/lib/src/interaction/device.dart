@@ -1,4 +1,5 @@
 import 'backend.dart';
+import 'android_server.dart';
 import 'backends/adb_backend.dart';
 import 'backends/ios_sim_backend.dart';
 import 'ios_toolchain.dart';
@@ -31,7 +32,11 @@ class AndroidDevice extends DeviceTarget {
     this.screenWidth,
     this.screenHeight,
     this.devicePixelRatio = 1.0,
+    this.server,
   });
+
+  /// glint's resident server on this device, when attach could start it.
+  final AndroidServer? server;
 
   /// adb `-s` serial, e.g. `emulator-5554`.
   final String serial;
@@ -60,7 +65,7 @@ class AndroidDevice extends DeviceTarget {
 
   @override
   InteractionBackend createBackend() =>
-      AdbBackend(deviceSerial: serial, adbPath: adbPath);
+      AdbBackend(deviceSerial: serial, adbPath: adbPath, server: server);
 }
 
 class IosSimulator extends DeviceTarget {
