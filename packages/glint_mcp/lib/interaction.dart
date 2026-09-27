@@ -17,6 +17,7 @@ export 'src/interaction/image_out.dart';
 export 'src/interaction/interactor.dart';
 export 'src/interaction/ios_toolchain.dart';
 export 'src/interaction/launcher.dart';
+export 'src/interaction/native_crashes.dart';
 export 'src/interaction/result.dart';
 export 'src/interaction/sim_control.dart';
 export 'src/interaction/target.dart';

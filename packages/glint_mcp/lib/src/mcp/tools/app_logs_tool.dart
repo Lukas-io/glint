@@ -34,6 +34,9 @@ class AppLogsTool extends GlintTool {
             'stream': Schema.string(
               description: 'Filter: stderr or logging.',
             ),
+            'native': Schema.bool(
+              description: 'Native crashes of the app since attach (iOS crash reports, Android crash buffer) instead of Dart logs.',
+            ),
             'sinceSeq': Schema.int(
               description: 'Return entries with sequence >= sinceSeq.',
             ),
@@ -50,6 +53,7 @@ class AppLogsTool extends GlintTool {
     final asJson = (args['format'] as String?) == 'json';
     final streamName = args['stream'] as String?;
     final sinceSeq = argInt(args, 'sinceSeq');
+    if (argBool(args, 'native') ?? false) return _nativeCrashes(session, asJson);
 
     AppLogStream? streamFilter;
     if (streamName != null) {
@@ -88,6 +92,30 @@ class AppLogsTool extends GlintTool {
         // The rendered summary already carries the entries; only ship the
         // structured array when json is explicitly requested (matches `logs`).
         if (asJson) 'entries': entries.map((e) => e.toJson()).toList(),
+      },
+    );
+  }
+
+  Future<StructuredResponse> _nativeCrashes(GlintSession session, bool asJson) async {
+    final active = session.active;
+    if (active == null) {
+      return StructuredResponse.error(
+        summary: 'not attached, so there is no app to read crashes for',
+        errorKind: GlintErrorKind.sessionNotAttached,
+        nextSteps: const ['call `attach` first'],
+      );
+    }
+    final crashes = await active.nativeCrashes();
+    return StructuredResponse(
+      summary: crashes.isEmpty
+          ? 'no native crashes of the app since attach'
+          : [
+              for (final c in crashes)
+                '${c.time.toIso8601String().substring(11, 19)} ${c.reason}\n${c.frames.map((f) => '  at $f').join('\n')}',
+            ].join('\n'),
+      data: {
+        'count': crashes.length,
+        if (asJson) 'crashes': [for (final c in crashes) c.toJson()],
       },
     );
   }

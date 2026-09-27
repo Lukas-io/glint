@@ -187,13 +187,19 @@ abstract class GlintTool {
                     ],
             );
     } on RuntimeConnectionLostError catch (e) {
+      final crash = await _recentCrash(session);
       response = StructuredResponse.error(
-        summary: 'VM service connection lost — the app may have hot-restarted '
-            'or been terminated',
+        summary: crash == null
+            ? 'VM service connection lost — the app may have hot-restarted '
+                'or been terminated'
+            : 'the app crashed: ${crash.line}',
         errorKind: GlintErrorKind.connectionLost,
-        detail: e.toString(),
-        nextSteps: const [
-          'call `attach` again with the same vmUri to reconnect',
+        detail: crash == null
+            ? e.toString()
+            : [crash.reason, ...crash.frames.map((f) => '  at $f'), if (crash.source != null) 'report: ${crash.source}'].join('\n'),
+        nextSteps: [
+          if (crash != null) 'this is a crash in the app, worth reporting to the user with the frames above',
+          'relaunch the app, then `attach` again',
         ],
       );
     } on RuntimeUnresponsiveError catch (e) {
@@ -264,6 +270,18 @@ abstract class GlintTool {
             '(screenshot pixels), type, hardware_button, device op:screenshot',
       ],
     );
+  }
+
+  /// The app's newest native crash from the last minute, if the VM dropped because it crashed.
+  Future<NativeCrash?> _recentCrash(GlintSession session) async {
+    try {
+      final crashes = await session.active?.nativeCrashes() ?? const [];
+      final newest = crashes.firstOrNull;
+      if (newest == null || DateTime.now().difference(newest.time) > const Duration(minutes: 1)) return null;
+      return newest;
+    } on Object {
+      return null;
+    }
   }
 
   /// A gesture that failed because the glint-iossim binary is not built: say how to build it.
