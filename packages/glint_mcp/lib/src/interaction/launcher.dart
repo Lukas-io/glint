@@ -13,6 +13,17 @@ class LaunchError implements Exception {
   String toString() => 'LaunchError: $message';
 }
 
+/// Why [dir] is not a Flutter app `flutter run` can start, or null when it is.
+String? flutterAppProblem(String dir) {
+  final pubspec = File('$dir/pubspec.yaml');
+  if (!pubspec.existsSync()) return 'no pubspec.yaml in $dir';
+  final declaresFlutter = RegExp(r'^\s+flutter:\s*\n\s+sdk:\s*flutter', multiLine: true)
+      .hasMatch(pubspec.readAsStringSync());
+  if (!declaresFlutter) return '$dir/pubspec.yaml does not depend on the flutter SDK';
+  if (!File('$dir/lib/main.dart').existsSync()) return 'no lib/main.dart in $dir';
+  return null;
+}
+
 /// Boots devices and starts/stops Flutter apps so `attach` can recover from cold.
 class AppLauncher {
   const AppLauncher({this.flutterPath = 'flutter'});
