@@ -51,7 +51,7 @@ void main() {
       final r = const PlainTextSceneRenderer()
           .renderDetailed(scene([for (var i = 0; i < 15; i++) _row(i)]));
       expect(r.text, contains('* button button_in_orders#0 Open'));
-      expect(r.text, contains('… 14 more like it: "Order 1" #001, "Order 2" #002'));
+      expect(r.text, contains('… 14 more like it: "Order 1 · Open" #001, "Order 2 · Open" #002'));
       expect(r.text, contains('+4'));
       expect(r.text, isNot(contains('"Order 12"')));
       expect(r.runs.single.count, 15);
@@ -95,7 +95,7 @@ void main() {
       final folded = (kids[1] as Map)['folded'] as Map;
       expect(folded['count'], 5);
       expect(folded['base'], 'row_in_orders');
-      expect((folded['items'] as List).first, {'glintId': 'row_in_orders#001', 'label': 'Order 1'});
+      expect((folded['items'] as List).first, {'glintId': 'row_in_orders#001', 'label': 'Order 1 · Open'});
     });
 
     test('maxDepth replaces deeper children with a count', () {

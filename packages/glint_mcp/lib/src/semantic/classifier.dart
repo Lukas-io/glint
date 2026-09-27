@@ -286,6 +286,9 @@ class ListClassifier extends WidgetClassifier {
         'PageView',
         'NestedScrollView',
         'SingleChildScrollView',
+        'ListWheelScrollView',
+        'CupertinoPicker',
+        'ReorderableListView',
       });
 
   @override
@@ -335,7 +338,8 @@ class ImageClassifier extends WidgetClassifier {
 
   @override
   bool matches(SceneNode node) =>
-      _labelOneOf(node, const {'Image', 'RawImage', 'FadeInImage'});
+      _labelOneOf(node, const {'Image', 'RawImage', 'FadeInImage'}) ||
+      (node.children.isEmpty && _labelOneOf(node, const {'CircleAvatar', 'Ink'}));
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {

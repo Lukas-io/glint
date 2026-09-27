@@ -107,12 +107,12 @@ class _Writer {
     if (node is SemanticPage && depth > 0 && inList && node.onViewport != true) return;
     final isList = node is SemanticList;
     if (isList) _listStack.add(node.glintId);
-    _children(node.children, depth: depth + 1, inList: isList);
+    _children(node.children, depth: depth + 1, inList: isList, parentId: node.glintId);
     if (isList) _listStack.removeLast();
   }
 
   void _children(List<SemanticNode> children,
-      {required int depth, bool inList = false}) {
+      {required int depth, bool inList = false, String? parentId}) {
     var i = 0;
     while (i < children.length) {
       final run = fold ? detectFoldRun(children, i, threshold: r.foldThreshold) : null;
@@ -123,12 +123,12 @@ class _Writer {
       }
       final items = children.sublist(run.start, run.end);
       write(items.first, depth: depth, inList: inList);
-      _digest(items, depth);
+      _digest(items, depth, parentId);
       i = run.end;
     }
   }
 
-  void _digest(List<SemanticNode> items, int depth) {
+  void _digest(List<SemanticNode> items, int depth, String? parentId) {
     final firstId = items.first.glintId;
     final base = firstId == null ? null : glintIdBase(firstId);
     final rest = items.sublist(1);
@@ -146,6 +146,7 @@ class _Writer {
       listId: _listStack.isEmpty ? null : _listStack.last,
       firstItemId: firstId,
       lastItemId: items.last.glintId,
+      parentId: parentId,
     ));
   }
 

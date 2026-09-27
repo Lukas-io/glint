@@ -97,6 +97,11 @@ class SceneSnapshot {
         if (n is SemanticButton) {
           mix(n.label ?? '');
           mix(n.toggleState ?? '');
+          mix(n.selected == true ? 'S' : '');
+        }
+        if (n is SemanticImage) {
+          mix(n.source ?? '');
+          mix(n.state ?? '');
         }
       }
     }

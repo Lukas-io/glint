@@ -14,7 +14,8 @@ String structuralSignature(SemanticNode node) {
       b
         ..write(bt.label != null ? ':L' : ':')
         ..write(bt.isToggle ? 'T' : '')
-        ..write(bt.toggleState ?? '');
+        ..write(bt.toggleState ?? '')
+        ..write(bt.selected == true ? 'S' : '');
     case SemanticInput i:
       b
         ..write(i.hint != null ? ':H' : ':')
@@ -63,23 +64,23 @@ FoldRun? detectFoldRun(List<SemanticNode> children, int start,
   return FoldRun(start: start, length: length, signature: sig);
 }
 
-/// What a folded item is called in the digest: its first text, else its first
-/// button label, else its first input value. Null when it says nothing.
-String? foldItemLabel(SemanticNode item, {int maxChars = 24}) {
-  for (final d in item.walk()) {
-    String? raw;
-    if (d is SemanticText && d.content.trim().isNotEmpty) raw = d.content;
-    if (d is SemanticButton && d.label != null && d.label!.trim().isNotEmpty) {
-      raw = d.label;
-    }
-    if (d is SemanticInput && (d.currentValue?.isNotEmpty ?? false)) {
-      raw = d.currentValue;
-    }
-    if (raw == null) continue;
-    final flat = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return flat.length <= maxChars ? flat : '${flat.substring(0, maxChars - 1)}…';
-  }
-  return null;
+/// Every text an item says, in order: text content, button labels, input values.
+List<String> _texts(SemanticNode item) => [
+      for (final d in item.walk())
+        if (d is SemanticText && d.content.trim().isNotEmpty)
+          d.content
+        else if (d is SemanticButton && (d.label?.trim().isNotEmpty ?? false))
+          d.label!
+        else if (d is SemanticInput && (d.currentValue?.isNotEmpty ?? false))
+          d.currentValue!,
+    ];
+
+/// What a folded item is called in the digest: all its texts joined with ` · `, cut at [maxChars]. Null when it says nothing.
+String? foldItemLabel(SemanticNode item, {int maxChars = 60}) {
+  final texts = _texts(item);
+  if (texts.isEmpty) return null;
+  final flat = texts.join(' · ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  return flat.length <= maxChars ? flat : '${flat.substring(0, maxChars - 1)}…';
 }
 
 /// `base#hash` → `base`; unchanged when there is no hash.
@@ -108,7 +109,11 @@ class FoldedRun {
     required this.listId,
     required this.firstItemId,
     required this.lastItemId,
+    this.parentId,
   });
+
+  /// glintId of the node the run's items sit under; drilling into it shows every item in full.
+  final String? parentId;
 
   /// Shared id base of the run's items (e.g. `row_in_transaction_history_screen`).
   final String base;
@@ -126,6 +131,7 @@ class FoldedRun {
         'base': base,
         'count': count,
         if (listId != null) 'list': listId,
+        if (parentId != null) 'parent': parentId,
         if (lastItemId != null) 'lastItemId': lastItemId,
       };
 }
