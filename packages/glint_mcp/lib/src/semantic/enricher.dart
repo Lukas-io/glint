@@ -408,3 +408,124 @@ class InputEnricher implements SemanticEnricher {
     return null;
   }
 }
+
+/// Evaluates one expression over many elements at once: `f` is a block-bodied lambda taking an [Element] and returning a String; results come back `;`-joined in [ids] order.
+String batchOverElements(List<String> ids, String f) =>
+    "<String>[${ids.map((i) => "'$i'").join(',')}]"
+    '.map((id) => ($f)(WidgetInspectorService.instance.toObject(id) as Element))'
+    ".join(';')";
+
+/// Reads selection and checked state for buttons from the widget (`selected` on chips) or its nearest `Semantics` wrapper, in one eval. Capped at [maxNodes].
+class SemanticsFlagEnricher implements SemanticEnricher {
+  SemanticsFlagEnricher({required this.runtime, this.maxNodes = 40});
+
+  final FlutterRuntime runtime;
+  final int maxNodes;
+
+  static const _flags = '(Element e) { bool? s; bool? c; '
+      'try { s = (e.widget as dynamic).selected as bool?; } catch (_) {} '
+      'var n = 0; e.visitAncestorElements((a) { n++; final w = a.widget; '
+      'if (w is Semantics) { s ??= w.properties.selected; c ??= w.properties.checked ?? w.properties.toggled; return false; } '
+      'return n < 6; }); '
+      "return (s == null ? '' : s.toString()) + ',' + (c == null ? '' : c.toString()); }";
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final nodes = <(SemanticButton, String)>[];
+    for (final b in scene.root.walk().whereType<SemanticButton>()) {
+      final id = b.glintId;
+      final source = id == null ? null : scene.sourceFor(id);
+      if (source == null || source.inspectorId.isEmpty) continue;
+      nodes.add((b, source.inspectorId));
+      if (nodes.length >= maxNodes) break;
+    }
+    if (nodes.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(
+          batchOverElements([for (final n in nodes) n.$2], _flags));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != nodes.length) return;
+    for (final (i, part) in parts.indexed) {
+      final (node, _) = nodes[i];
+      final f = part.split(',');
+      if (f.isEmpty) continue;
+      node.selected = switch (f[0]) { 'true' => true, 'false' => false, _ => null };
+      if (f.length > 1 && node.toggleState == null && f[1].isNotEmpty) {
+        node.toggleState = f[1] == 'true' ? 'on' : 'off';
+      }
+    }
+  }
+}
+
+/// Names what each image shows (file, asset or URL from its provider) and whether it painted, in one eval. Capped at [maxImages].
+class ImageEnricher implements SemanticEnricher {
+  ImageEnricher({required this.runtime, this.maxImages = 20});
+
+  final FlutterRuntime runtime;
+  final int maxImages;
+
+  static const _image = '(Element e) { final w = e.widget as dynamic; Object? p; '
+      'try { p = w.image; } catch (_) {} '
+      'if (p == null) { try { p = w.backgroundImage; } catch (_) {} } '
+      'if (p == null) { try { p = w.foregroundImage; } catch (_) {} } '
+      'if (p == null) { try { p = w.decoration?.image?.image; } catch (_) {} } '
+      'bool? ok; void v(Element c) { if (ok != null) return; '
+      'if (c.widget is RawImage) { ok = (c.widget as RawImage).image != null; return; } c.visitChildren(v); } '
+      'e.visitChildren(v); '
+      "return (p == null ? '' : p.toString().replaceAll(';', ',').replaceAll('|', '/')) + '|' + (ok == null ? '' : ok.toString()); }";
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final nodes = <(SemanticImage, String)>[];
+    for (final img in scene.root.walk().whereType<SemanticImage>()) {
+      final id = img.glintId;
+      final source = id == null ? null : scene.sourceFor(id);
+      if (source == null || source.inspectorId.isEmpty) continue;
+      nodes.add((img, source.inspectorId));
+      if (nodes.length >= maxImages) break;
+    }
+    if (nodes.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(
+          batchOverElements([for (final n in nodes) n.$2], _image));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != nodes.length) return;
+    for (final (i, part) in parts.indexed) {
+      final (node, _) = nodes[i];
+      final bar = part.lastIndexOf('|');
+      if (bar < 0) continue;
+      node.source = imageSourceName(part.substring(0, bar));
+      node.state = switch (part.substring(bar + 1)) {
+        'true' => 'loaded',
+        'false' => 'not loaded',
+        _ => null,
+      };
+    }
+  }
+}
+
+/// Short name for an ImageProvider's `toString()`: a file's base name, an asset name, a URL's host and last segment, else the provider type.
+String? imageSourceName(String provider) {
+  if (provider.isEmpty) return null;
+  final quoted = RegExp(r'"([^"]+)"').firstMatch(provider)?.group(1);
+  if (quoted == null) return provider.split('(').first.trim();
+  final uri = Uri.tryParse(quoted);
+  if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+    final last = uri.pathSegments.where((s) => s.isNotEmpty).lastOrNull;
+    return last == null ? uri.host : '${uri.host}/…/$last';
+  }
+  return _middleCut(quoted.split('/').last);
+}
+
+/// Keeps both ends of a long file name (the start and the extension) so the label stays short.
+String _middleCut(String name, {int max = 24}) => name.length <= max
+    ? name
+    : '${name.substring(0, max - 11)}…${name.substring(name.length - 10)}';

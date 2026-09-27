@@ -14,6 +14,9 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - `hittable` comes from Flutter's own hit test at the target's centre (`hitTest: "real"`); when that can't run it falls back to the old check and says `hitTest: "approximate"`. A miss names what would take the touch (`hitBy`), and a tap that would land on another widget is refused by default with `errorKind: notHittable` (#77).
 - A glintId that is really a visible label ("Create account") gets a next step naming the id to use (#86).
 - `scroll` reports `reason` when nothing moved: `atEnd`, `atStart`, `notScrollable` or `blocked` (#84).
+- Buttons show `[selected]` when the widget (chips) or its `Semantics` wrapper says so, and a `Semantics` `checked`/`toggled` fills `[on]`/`[off]` for custom toggles. Selection counts as a change, so tapping a pill no longer reports `changed:false` (#78).
+- Images name what they show (`- image profile.jpg (loaded)`), read from the image provider; a childless `CircleAvatar` or `Ink` is an image (#79).
+- Action replies write the change report into their text (`· routeChanged`, `· nothing changed`) for clients that only read text (#78).
 
 ### Fixed
 
@@ -21,6 +24,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - `report_issue` now masks `access_token=` and `refresh_token=` values too. Redaction moved to glint_core, which uses the stricter of the two copies the packages had.
 - A target clipped by its scroll view counted as painted and on screen, so taps landed on whatever covered it (on Android, the button bar below a form). It is now off-viewport, and the refusal says it is clipped or under the keyboard (#77).
 - `scroll` swiped around the centre of the screen, which with the keyboard up is often the keyboard. It now swipes inside the visible part of the scrollable, above the keyboard (#84).
+- Folded rows kept only their first text, so values on review and settings screens vanished (a row said "Distance" and hid "Up to 50 mi"). A folded item now keeps all its texts, and the trailer points at each run's parent to expand it (#82).
+- Items in lazily built lists and wheels took their id from their slot, so after a scroll the same id meant a different item. Under ListView, GridView, ListWheelScrollView, CupertinoPicker and PageView, the id now follows the item's text; wheels and pickers also show as scrollable (#81).
 - A page route's own barrier and empty text-field chrome were read as open overlays, so errors claimed "a non-modal overlay is active" on plain screens (#86).
 - Error replies showed only the first line of a VM error, which is often just "Unhandled exception:". They now include the line with the reason, and a failed geometry read is retried once and says what to do next (#87).
 - iOS taps, keys and button presses were sometimes lost, and a key could repeat (typing `hello glint` gave `hello. glint`). The bridge sent each input message without waiting for the simulator to take it and could exit before the last one was delivered; it now waits for each message to be acknowledged, and fails with a clear error if one isn't.

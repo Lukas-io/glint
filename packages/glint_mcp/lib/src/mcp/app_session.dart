@@ -41,6 +41,8 @@ class AppSession {
   OverlayEnricher? overlayEnricher;
   InputEnricher? inputEnricher;
   ToggleEnricher? toggleEnricher;
+  SemanticsFlagEnricher? flagEnricher;
+  ImageEnricher? imageEnricher;
   IconEnricher? iconEnricher;
   LinkEnricher? linkEnricher;
   NavigationEnricher? navEnricher;
@@ -156,6 +158,8 @@ class AppSession {
     overlayEnricher = OverlayEnricher(semanticizer: sem);
     inputEnricher = InputEnricher(runtime: rt, inspector: insp);
     toggleEnricher = ToggleEnricher(runtime: rt);
+    flagEnricher = SemanticsFlagEnricher(runtime: rt);
+    imageEnricher = ImageEnricher(runtime: rt);
     iconEnricher = IconEnricher(runtime: rt);
     linkEnricher = LinkEnricher(runtime: rt);
     navEnricher = NavigationEnricher(runtime: rt);

@@ -191,9 +191,12 @@ class GetSceneTool extends GlintTool {
           r = tr.renderDetailed(semantic, maxDepth: used);
         }
         if (r.runs.isNotEmpty) {
-          final where = r.runs.first.listId ?? r.runs.first.firstItemId;
+          final wheres = {
+            for (final run in r.runs)
+              if ((run.parentId ?? run.listId) case final w?) w,
+          }.take(3).map((w) => 'glintId:"$w"').join(' or ');
           trailerBits.add('folded: ${r.runs.length} run(s), ${r.foldedItems} rows'
-              '${where != null ? " · get_scene glintId:\"$where\" for all rows" : ""}');
+              '${wheres.isEmpty ? "" : " · get_scene $wheres for all rows"}');
           dataBits['folded'] = [for (final run in r.runs) run.toJson()];
           warnings.addAll(await _eagerListFindings(session, semantic, r.runs));
         }

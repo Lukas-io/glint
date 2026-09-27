@@ -121,6 +121,10 @@ class StructuredResponse {
 
   String renderText() {
     final buf = StringBuffer(summary);
+    final changed = data?['changed'];
+    if (!isError && changed is bool) {
+      buf.write(changed ? ' · ${data?['changeCategory'] ?? 'changed'}' : ' · nothing changed');
+    }
     // Surface the first line of detail on errors so agents see the real reason
     // without having to parse structuredContent.
     if (isError) {

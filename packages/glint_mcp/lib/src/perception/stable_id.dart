@@ -74,9 +74,51 @@ class _IdPass {
   }
 
   String _shortHash(SceneNode node) {
-    final seed = '${node.locationId ?? ''}:${_indexPath(node).join(',')}';
+    final seed = '${node.locationId ?? ''}:${_itemKeyedPath(node) ?? _indexPath(node).join(',')}';
     return _Hash.fnvBase32(seed, length: 4);
   }
+
+  /// Lazily built lists recycle slots, so under one the item's own text replaces its slot index; null when the node is not in such a list or the text does not tell items apart.
+  String? _itemKeyedPath(SceneNode node) {
+    SceneNode? item;
+    SceneNode? list;
+    var cur = node;
+    while (parentOf.containsKey(cur)) {
+      final p = parentOf[cur]!;
+      if (_lazyLists.contains(p.baseLabel)) {
+        item = cur;
+        list = p;
+        break;
+      }
+      cur = p;
+    }
+    if (item == null || list == null) return null;
+    final key = _firstText(item);
+    if (key == null) return null;
+    if (list.children.where((c) => _firstText(c) == key).length != 1) return null;
+    final above = _indexPath(list).join(',');
+    final inside = _indexPath(node).skip(_indexPath(item).length).join(',');
+    return '$above|$key|$inside';
+  }
+
+  static String? _firstText(SceneNode n) {
+    for (final d in n.walk()) {
+      final t = d.textPreview?.trim();
+      if (t != null && t.isNotEmpty) return t;
+    }
+    return null;
+  }
+
+  static const _lazyLists = {
+    'ListView',
+    'GridView',
+    'ListWheelScrollView',
+    'CupertinoPicker',
+    'PageView',
+    'SliverList',
+    'SliverGrid',
+    'ReorderableListView',
+  };
 
   List<int> _indexPath(SceneNode node) {
     final path = <int>[];

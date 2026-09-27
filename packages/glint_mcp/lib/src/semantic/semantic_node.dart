@@ -134,19 +134,23 @@ class SemanticButton extends SemanticNode {
   /// 'on' / 'off', populated by [ToggleEnricher]; null when unknown.
   String? toggleState;
 
+  /// Selection read from the widget or its `Semantics` by [SemanticsFlagEnricher]; null when it says nothing.
+  bool? selected;
+
   @override
   SemanticRole get role => SemanticRole.button;
 
   @override
   String get displayLabel {
     final state = toggleState != null ? '[$toggleState]' : null;
-    return [label, state].nonNulls.join(' ');
+    return [label, state, if (selected == true) '[selected]'].nonNulls.join(' ');
   }
 
   @override
   Map<String, Object?> _extraJson() => {
         if (label != null) 'label': label,
         if (toggleState != null) 'toggleState': toggleState,
+        if (selected != null) 'selected': selected,
       };
 }
 
@@ -276,17 +280,23 @@ class SemanticImage extends SemanticNode {
     this.source,
   }) : super(children: const []);
 
-  final String? source;
+  /// Short name of what is shown (file name, asset, URL host), set by [ImageEnricher].
+  String? source;
+
+  /// 'loaded' or 'not loaded' when the image paints through a RawImage; null when unknown.
+  String? state;
 
   @override
   SemanticRole get role => SemanticRole.image;
 
   @override
-  String get displayLabel => source ?? 'image';
+  String get displayLabel =>
+      [source ?? 'image', if (state != null) '($state)'].join(' ');
 
   @override
   Map<String, Object?> _extraJson() => {
         if (source != null) 'source': source,
+        if (state != null) 'state': state,
       };
 }
 
