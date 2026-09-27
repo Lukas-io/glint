@@ -4,6 +4,11 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- `attach launch:` accepted any folder with a `pubspec.yaml`, the Flutter SDK included, and then waited out the whole launch timeout (180 s) before failing. It now refuses at once unless the folder is a Flutter app (a `flutter` SDK dependency and `lib/main.dart`), names what is missing, and lists apps glint launched before. A named Android device (`emulator-…` or one discovery lists) is launched as Android instead of going through `simctl boot` (#103).
+- When the app on the `device` you named is gone and another device has one, attach no longer suggests omitting `device` (which moves you onto the other device). It leads with relaunching on your device when glint launched an app there before (#103).
+
 ## [0.2.0] - 2026-09-27
 
 ### Added

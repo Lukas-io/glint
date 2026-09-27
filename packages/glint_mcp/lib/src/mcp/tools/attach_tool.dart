@@ -284,8 +284,10 @@ class AttachTool extends GlintTool {
                 '${link.appName != null ? " (${link.appName})" : ""} — '
                 'attaching to $deviceArg would send taps to the wrong device',
             nextSteps: [
-              'omit device to auto-correlate',
-              'or pass device: "${link.deviceId}"',
+              for (final r in session.attachHistory.load().where((r) =>
+                      r.deviceId == deviceArg && r.projectDir != null && flutterAppProblem(r.projectDir!) == null).take(1))
+                'if the app closed on $deviceArg, relaunch it: attach device:"$deviceArg" launch:"${r.projectDir}"',
+              'only if you mean to drive ${link.deviceId}: pass device:"${link.deviceId}"',
             ],
           );
         }
@@ -994,19 +996,32 @@ class AttachTool extends GlintTool {
     String? platformArg,
     void Function(int, String?)? onProgress,
   ) async {
-    if (!File('$path/pubspec.yaml').existsSync()) {
+    final problem = flutterAppProblem(path);
+    if (problem != null) {
+      final known = {
+        for (final r in session.attachHistory.load())
+          if (r.projectDir != null && flutterAppProblem(r.projectDir!) == null) r.projectDir!,
+      };
       return (
         vmUri: null,
         deviceId: null,
         error: StructuredResponse.error(
-          summary: 'no Flutter project at "$path"',
+          summary: 'no Flutter app at "$path"',
           errorKind: GlintErrorKind.invalidArgument,
-          detail: 'expected a pubspec.yaml in that directory',
-          nextSteps: const ['pass a Flutter project root path'],
+          detail: problem,
+          nextSteps: [
+            'pass the root of the app to run: the folder with its pubspec.yaml and lib/main.dart',
+            for (final dir in known.take(3)) 'launched before: attach launch:"$dir"',
+          ],
         ),
       );
     }
-    final platform = _platformFromArg(platformArg) ?? DevicePlatform.ios;
+    final named = deviceArg == null
+        ? null
+        : scan.devices.where((d) => d.id == deviceArg).firstOrNull;
+    final platform = _platformFromArg(platformArg) ??
+        named?.platform ??
+        (deviceArg != null && deviceArg.startsWith('emulator-') ? DevicePlatform.android : DevicePlatform.ios);
     final deviceId = deviceArg ?? _firstBootedId(scan, platform);
     if (deviceId == null) {
       return (
