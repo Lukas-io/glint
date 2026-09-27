@@ -52,7 +52,14 @@ Future<StructuredResponse> appendPostAction(
   if (!returnScene || response.isError) return response;
   final post =
       await readPostActionState(session, pre, includeSceneText: fetchScene);
-  return post == null ? response : response.mergeData(post.toData());
+  if (post == null) return response;
+  final merged = response.mergeData(post.toData());
+  final shot = post.screenshot;
+  if (shot == null) return merged;
+  final sent = await session.modelImage(shot);
+  return merged
+      .mergeData({'coordinates': sent.coordinates})
+      .copyWith(imagePaths: [sent.image.path]);
 }
 
 /// Lightweight snapshot of observable scene state for change detection.

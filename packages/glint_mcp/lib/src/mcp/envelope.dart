@@ -169,7 +169,11 @@ class StructuredResponse {
         Content.text(text: renderText()),
         for (final path in imagePaths)
           if (_base64File(path) case final data?)
-            Content.image(data: data, mimeType: 'image/png'),
+            Content.image(
+                data: data,
+                mimeType: path.endsWith('.jpg') || path.endsWith('.jpeg')
+                    ? 'image/jpeg'
+                    : 'image/png'),
       ],
       structuredContent: textOnly ? null : toStructuredContent(),
       isError: isError,

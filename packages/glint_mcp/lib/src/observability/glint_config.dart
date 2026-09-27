@@ -21,6 +21,9 @@ class GlintConfig {
     this.sceneLineBudget = 160,
     this.devHints = true,
     this.captureSettleMs = 700,
+    this.screenshotMaxSize = 1024,
+    this.screenshotFormat = 'jpeg',
+    this.screenshotQuality = 75,
   });
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
@@ -70,6 +73,15 @@ class GlintConfig {
   /// Delay after a lifecycle change before the background screenshot.
   int captureSettleMs;
 
+  /// Longest side, in pixels, of any image sent to the model; 0 sends captures at full size.
+  int screenshotMaxSize;
+
+  /// `jpeg` or `png` for images sent to the model.
+  String screenshotFormat;
+
+  /// JPEG quality 1-100 for images sent to the model.
+  int screenshotQuality;
+
   /// All known keys → string of current value, for the `config get` view.
   /// Telemetry is env-controlled (GLINT_TELEMETRY, DO_NOT_TRACK, GLINT_NO_TELEMETRY), never agent-controlled.
   Map<String, Object> toJson() => {
@@ -88,6 +100,9 @@ class GlintConfig {
         'sceneLineBudget': sceneLineBudget,
         'devHints': devHints,
         'captureSettleMs': captureSettleMs,
+        'screenshotMaxSize': screenshotMaxSize,
+        'screenshotFormat': screenshotFormat,
+        'screenshotQuality': screenshotQuality,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -155,6 +170,18 @@ class GlintConfig {
         final v = _asPositiveInt(value);
         if (v == null) return 'captureSettleMs must be a positive int';
         captureSettleMs = v;
+      case 'screenshotMaxSize':
+        final v = looseInt(value);
+        if (v == null || v < 0) return 'screenshotMaxSize must be 0 (full size) or a positive int';
+        screenshotMaxSize = v;
+      case 'screenshotFormat':
+        final v = value.toString().toLowerCase();
+        if (v != 'jpeg' && v != 'png') return "screenshotFormat must be 'jpeg' or 'png'";
+        screenshotFormat = v;
+      case 'screenshotQuality':
+        final v = looseInt(value);
+        if (v == null || v < 1 || v > 100) return 'screenshotQuality must be 1-100';
+        screenshotQuality = v;
       default:
         return 'unknown config key: $key';
     }

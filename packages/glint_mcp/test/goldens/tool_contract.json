@@ -61,7 +61,11 @@
       },
       "inline": {
         "type": "boolean",
-        "description": "op=screenshot: also return the PNG as image content, so no separate read is needed. Default false."
+        "description": "op=screenshot: also return the image as image content, so no separate read is needed. Default false."
+      },
+      "maxSize": {
+        "type": "integer",
+        "description": "op=screenshot inline: longest side in pixels of the image sent (0 = full size). Default: the screenshotMaxSize config (1024)."
       },
       "latest": {
         "type": "boolean",
@@ -571,6 +575,10 @@
       "maxFrames": {
         "type": "integer",
         "description": "Max frames returned (1-60). Default 12."
+      },
+      "inline": {
+        "type": "boolean",
+        "description": "Attach up to 4 frames as images (512 px longest side), for clients that cannot read files. Default false."
       }
     }
   },
