@@ -369,6 +369,11 @@ class AttachTool extends GlintTool {
           );
       }
 
+      final input = describeSetup(platform == DevicePlatform.ios
+          ? await readIosSetup(deviceId, toolchain?.xcode.major)
+          : await readAndroidSetup(deviceId, adbPath));
+      warnings.addAll(input.warnings);
+
       // ── 7. Hand the resolved target to the session ────────────────────────
       await session.attach(vmUri: vmUri, device: device);
 
@@ -476,7 +481,8 @@ class AttachTool extends GlintTool {
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
             '${appLabel != null ? " running $appLabel" : ""} '
             'at $vmUri'
-            '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}',
+            '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}'
+            '\n${input.line}',
         warnings: warnings,
         nextSteps: [
           if (!returnScene) 'call `get_scene` to read the current screen',
@@ -509,6 +515,7 @@ class AttachTool extends GlintTool {
           },
           'screen': screen,
           if (toolchain != null) 'toolchain': toolchain.toJson(),
+          'input': input.json,
           if (settleData != null) 'settle': settleData,
           if (sceneText != null) 'scene': sceneText,
           'apps': session.appsJson(),

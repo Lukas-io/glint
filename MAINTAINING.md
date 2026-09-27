@@ -56,6 +56,10 @@ The `CI` workflow runs on every PR and every push to `main`:
 
 The `Device check` workflow drives `fixtures/counter_app` on a real Android emulator and iOS simulator: nightly on Flutter stable, weekly on beta, and on demand with `gh workflow run device.yml --ref <branch>`. Run it on the branch before merging anything that touches input, attach, or the bridge. A green job is not enough on its own: read its `PASS` lines.
 
+### Tested setups
+
+`packages/glint_mcp/lib/src/interaction/tested_matrix.dart` lists every device setup glint has been proven on: iOS runtime × Xcode × macOS × input backend, and Android API × backend, each `verified` or `partial` with its evidence and known issues. `attach` looks up the setup it is on and tells the agent whether it is verified, partial or untested. When a device check, a live run or a bug report proves or breaks a setup, update its entry (date, evidence, issues) in the same PR.
+
 ## Releases
 
 Each package has its own version, changelog and tags. Versions follow semver with Dart's pre-1.0 rule: until 1.0, a minor bump may break things and a patch bump never does. A package's public API is its tool names, arguments, `errorKind` values and reply shape.
