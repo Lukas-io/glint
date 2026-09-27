@@ -202,7 +202,7 @@ class TypeTool extends GlintTool {
     );
   }
 
-  /// Empties the focused field: select-all + backspace, then a per-char backspace fallback when text remains. Reads the field before and after in flutter mode; device mode clears blind.
+  /// Empties the focused field: select-all + backspace, then per-char backspace and forward delete when text remains. Reads the field before and after in flutter mode; device mode clears blind.
   Future<_ClearOutcome> _clearField(GlintSession session, Scene scene) async {
     if (session.isDeviceMode) {
       try {
@@ -225,6 +225,12 @@ class TypeTool extends GlintTool {
     if (after != null && after.isNotEmpty) {
       await session.interactor
           .run(scene, PressKey(KeyName.backspace, count: after.length));
+      after = await session.focusedFieldText();
+    }
+    // Backspace stops at the cursor, which a tap leaves mid-text; forward delete takes the rest.
+    if (after != null && after.isNotEmpty) {
+      await session.interactor
+          .run(scene, PressKey(KeyName.delete, count: after.length));
       after = await session.focusedFieldText();
     }
     final removed = before?.length ?? 0;
