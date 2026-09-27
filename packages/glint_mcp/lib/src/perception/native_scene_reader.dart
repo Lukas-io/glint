@@ -4,10 +4,19 @@ import 'dart:io';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
+/// Reads whatever native UI covers the app.
+abstract class NativeReader {
+  /// The native surface as a scene; a sentinel scene when it cannot be read.
+  Future<Scene> readSnapshot();
+
+  /// The window in front of the app when it belongs to someone else (a system picker, another app); null when the app is in front or this platform cannot tell.
+  Future<String?> foreignSurface() async => null;
+}
+
 /// Reads native surface content via glint-iossim `ax-snapshot`. Returns a
 /// parsed scene when the Simulator exposes an AX tree (needs macOS a11y
 /// permission), else a sentinel scene flagging an unreadable native surface.
-class NativeSceneReader {
+class NativeSceneReader extends NativeReader {
   NativeSceneReader({required this.udid, required this.bridgePath});
 
   final String udid;
@@ -15,6 +24,7 @@ class NativeSceneReader {
 
   /// Read the native surface. Always returns a non-null [Scene]; uses a
   /// sentinel scene when the AX tree is unavailable.
+  @override
   Future<Scene> readSnapshot() async {
     try {
       final result = await Process.run(bridgePath, ['ax-snapshot', udid]);
@@ -130,9 +140,13 @@ class NativeSceneReader {
     if (id.isNotEmpty && !id.startsWith('_native')) {
       final label = node.textPreview ?? node.label;
       final marker = (node.isNativeEnabled ?? false) ? '*' : '-';
+      final f = node.axFrame;
+      final at = f == null
+          ? ''
+          : ' @ ${(f.x + f.w / 2).round()},${(f.y + f.h / 2).round()}';
       buf
         ..write('  ' * depth)
-        ..writeln('$marker native $id $label');
+        ..writeln('$marker native $id $label$at');
     }
     for (final child in node.children) {
       _renderNode(buf, child, depth: depth + 1);

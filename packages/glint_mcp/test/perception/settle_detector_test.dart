@@ -100,6 +100,21 @@ void main() {
       expect(r.elapsedMs, lessThan(400));
     });
 
+    test('frames never quiet with a spinner showing does not settle', () async {
+      final d = _detector(
+        ['persistentCallbacks'],
+        [
+          _node('Scaffold', kids: [
+            _node('InkWell', kids: [_node('CircularProgressIndicator')]),
+          ])
+        ],
+      );
+      final r = await d.awaitSettle(
+          ceilingMs: 300, quietFramesNeeded: 3, quietGraceMs: 20);
+      expect(r, isA<SettledButLoading>());
+      expect(r.settled, isFalse);
+    });
+
     test('frames never quiet and content changing times out', () async {
       var n = 0;
       final roots = List.generate(

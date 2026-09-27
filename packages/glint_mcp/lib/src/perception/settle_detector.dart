@@ -38,6 +38,7 @@ class SettleDetector {
     final start = DateTime.now();
     var consecutiveQuiet = 0;
     var stabilityChecked = false;
+    var spinnersSeen = const <String>[];
     final graceMs = quietGraceMs.clamp(0, ceilingMs);
 
     while (true) {
@@ -68,14 +69,22 @@ class SettleDetector {
       } else if (!stabilityChecked && elapsed >= graceMs) {
         stabilityChecked = true;
         if (await _treeIsStable()) {
+          spinnersSeen = checkLoadingAffordances
+              ? await _findLoadingAffordances()
+              : const [];
           elapsed = DateTime.now().difference(start).inMilliseconds;
-          return SettleResult.animatingButStable(elapsedMs: elapsed);
+          if (spinnersSeen.isEmpty) {
+            return SettleResult.animatingButStable(elapsedMs: elapsed);
+          }
         }
         elapsed = DateTime.now().difference(start).inMilliseconds;
       }
 
       if (elapsed >= ceilingMs) {
-        return SettleResult.timedOut(elapsedMs: elapsed);
+        return spinnersSeen.isEmpty
+            ? SettleResult.timedOut(elapsedMs: elapsed)
+            : SettleResult.loadingStable(
+                elapsedMs: elapsed, loadingAffordances: spinnersSeen);
       }
       await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
     }

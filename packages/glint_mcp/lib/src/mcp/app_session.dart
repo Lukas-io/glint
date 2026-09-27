@@ -49,7 +49,10 @@ class AppSession {
   PagedViewportEnricher? pagedEnricher;
   ReadinessGate? readinessGate;
   SettleDetector? settleDetector;
-  NativeSceneReader? nativeReader;
+  NativeReader? nativeReader;
+
+  /// The foreign window in front of the app at the last check (Android), e.g. a system photo picker.
+  String? nativeSurfaceName;
 
   /// Identity filled in by `attach` once known; used for routing by name.
   String? package;
@@ -167,9 +170,14 @@ class AppSession {
     readinessGate = ReadinessGate(reader: rd, resolver: res);
     settleDetector = SettleDetector(runtime: rt, reader: rd);
     final dev = device;
-    nativeReader = dev is IosSimulator
-        ? NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath)
-        : null;
+    nativeReader = switch (dev) {
+      IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
+      AndroidDevice() => AndroidNativeReader(
+          serial: dev.serial,
+          adbPath: dev.adbPath,
+          devicePixelRatio: () => dev.devicePixelRatio,
+        ),
+    };
 
     try {
       await appLogs.subscribe(rt);
@@ -181,7 +189,7 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _reconnect(runtimeFactory));
 
     _lifecyclePollTimer?.cancel();
-    if (nativeReader != null) {
+    if (nativeReader is NativeSceneReader) {
       _lifecyclePollTimer = Timer.periodic(
         const Duration(milliseconds: 500),
         (_) => _pollLifecycle(),
@@ -282,7 +290,24 @@ class AppSession {
 
   Future<void> _pollLifecycle() async {
     final rt = runtime;
-    if (rt == null || nativeReader == null) return;
+    final native = nativeReader;
+    if (rt == null || native == null) return;
+    if (native is AndroidNativeReader && native.appPackage == null) {
+      try {
+        final s = await rt
+            .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""')
+            .timeout(lifecycleProbeTimeout);
+        if (s == 'resumed') await native.learnAppPackage();
+      } on Object {
+        // not learnable yet; the next poll tries again
+      }
+    }
+    final foreign = await native.foreignSurface();
+    nativeSurfaceName = foreign;
+    if (foreign != null) {
+      sceneMode = SceneMode.native;
+      return;
+    }
     try {
       final state = await rt
           .evaluateString(

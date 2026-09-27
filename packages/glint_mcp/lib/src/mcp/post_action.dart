@@ -162,7 +162,11 @@ class PostActionState {
     this.sceneText,
     this.scrolledPx,
     this.screenshot,
+    this.nativeSurface,
   });
+
+  /// The foreign window in front of the app after the action (Android), e.g. a system photo picker.
+  final String? nativeSurface;
 
   /// Null when a native surface was up before and after: a screenshot alone cannot say.
   final bool? changed;
@@ -187,6 +191,7 @@ class PostActionState {
         'changeCategory': changeCategory,
         if (state != 'loaded') 'state': state,
         if (screenshot != null) 'screenshot': screenshot,
+        if (nativeSurface != null) 'nativeSurface': nativeSurface,
         if (sceneText != null) 'postScene': sceneText,
       };
 }
@@ -270,6 +275,7 @@ Future<PostActionState?> readPostActionState(
           changeCategory: 'nativeSurface',
           state: 'native',
           screenshot: capture?.path,
+          nativeSurface: app.nativeSurfaceName,
         );
       }
       if (wasNative) {
