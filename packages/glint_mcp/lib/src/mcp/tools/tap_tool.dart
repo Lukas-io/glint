@@ -18,16 +18,7 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by its glintId from get_scene, or pass x,y for raw '
-            'coordinates (device mode: screenshot pixels; flutter mode: logical '
-            'points). Returns changed + changeCategory (routeChanged / '
-            'overlayAppeared / overlayDismissed / contentChanged / nothing, or '
-            'nativeSurface with a fresh screenshot / nativeDismissed around '
-            'system dialogs) so you know if the screen reacted; pass '
-            'detail:true for geometry. '
-            'awaitReady:true blocks until the target exists AND is hittable '
-            'before firing — use across screen transitions '
-            '(readyTimeoutMs, default 5000).',
+            'Tap a node by glintId from get_scene, or x,y (device mode: screenshot pixels; flutter mode: logical points). Returns changed and changeCategory: routeChanged, overlayAppeared, overlayDismissed, contentChanged, nothing, nativeSurface (with a screenshot) or nativeDismissed.',
         inputSchema: ObjectSchema(
           properties: {
             'glintId': Schema.string(
@@ -63,27 +54,22 @@ class TapTool extends GlintTool {
             ),
             'awaitReady': Schema.bool(
               description:
-                  'Arm the tap: block until the target is in the scene AND passes a hit test, then fire. Default false.',
+                  'Wait until the target is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
-              description: 'Ceiling for `awaitReady`. Default 5000.',
+              description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
               description:
-                  'After the tap, settle and return the new scene plus changed '
-                  '(bool) and changeCategory. Collapses tap → wait_for_settle '
-                  '→ get_scene into one call. Default true.',
+                  'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
               description:
-                  'When true: include full geometry (painted, hittable, physicalCenter) '
-                  'in structuredContent. Default false (ok-only — saves tokens).',
+                  'Include geometry (painted, hittable, physicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
               description:
-                  'When true: include the full rendered scene text as postScene '
-                  'in structuredContent. Collapses returnScene + get_scene into '
-                  'one call. Default false.',
+                  'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),

@@ -20,11 +20,11 @@
       },
       "device": {
         "type": "string",
-        "description": "iOS simulator UDID or Android serial. Omit to auto-correlate to the app's real device. When nothing is running, passing a device from the \"no app running\" list starts its app there."
+        "description": "iOS simulator UDID or Android serial. Omit to use the device the app runs on. A device from the \"no app running\" list starts its app there."
       },
       "launch": {
         "type": "string",
-        "description": "Path to a Flutter project root to run when it is not in history. Usually you pass a device from the no-app-running list instead."
+        "description": "Flutter project root to run when it is not in history."
       },
       "iosBridgePath": {
         "type": "string",
@@ -195,23 +195,23 @@
       },
       "awaitReady": {
         "type": "boolean",
-        "description": "Arm the tap: block until the target is in the scene AND passes a hit test, then fire. Default false."
+        "description": "Wait until the target is on screen and hittable, then act. Default false."
       },
       "readyTimeoutMs": {
         "type": "integer",
-        "description": "Ceiling for `awaitReady`. Default 5000."
+        "description": "Ceiling for awaitReady. Default 5000."
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After the tap, settle and return the new scene plus changed (bool) and changeCategory. Collapses tap → wait_for_settle → get_scene into one call. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "detail": {
         "type": "boolean",
-        "description": "When true: include full geometry (painted, hittable, physicalCenter) in structuredContent. Default false (ok-only — saves tokens)."
+        "description": "Include geometry (painted, hittable, physicalCenter). Default false."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: include the full rendered scene text as postScene in structuredContent. Collapses returnScene + get_scene into one call. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     }
   },
@@ -236,7 +236,7 @@
       },
       "awaitReady": {
         "type": "boolean",
-        "description": "Block until the target is in the scene and hittable, then fire."
+        "description": "Wait until the target is on screen and hittable, then act. Default false."
       },
       "readyTimeoutMs": {
         "type": "integer",
@@ -244,11 +244,11 @@
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After the press, settle and return changed (bool) and changeCategory. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: also include the full rendered scene text as postScene. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     }
   },
@@ -285,7 +285,7 @@
       },
       "awaitReady": {
         "type": "boolean",
-        "description": "Block until fromGlintId is in the scene and hittable, then fire."
+        "description": "Wait until fromGlintId is on screen and hittable, then act. Default false."
       },
       "readyTimeoutMs": {
         "type": "integer",
@@ -293,11 +293,11 @@
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After the swipe, settle and return changed (bool) and changeCategory. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: also include the full rendered scene text as postScene. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     }
   },
@@ -334,7 +334,7 @@
       },
       "awaitReady": {
         "type": "boolean",
-        "description": "Block until fromGlintId is in the scene and hittable, then fire."
+        "description": "Wait until fromGlintId is on screen and hittable, then act. Default false."
       },
       "readyTimeoutMs": {
         "type": "integer",
@@ -342,11 +342,11 @@
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After the drag, settle and return changed (bool) and changeCategory. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: also include the full rendered scene text as postScene. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     }
   },
@@ -363,11 +363,11 @@
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After the scroll, settle and return changed (bool) and changeCategory. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: also include the full rendered scene text as postScene. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     },
     "required": [
@@ -424,23 +424,23 @@
       },
       "awaitReady": {
         "type": "boolean",
-        "description": "Only meaningful with `focus`: block until the focus target is hittable."
+        "description": "With focus: wait until that field is hittable. Default false."
       },
       "readyTimeoutMs": {
         "type": "integer",
-        "description": "Ceiling for `awaitReady` on the focus field. Default 5000."
+        "description": "Ceiling for awaitReady. Default 5000."
       },
       "returnScene": {
         "type": "boolean",
-        "description": "After typing, settle and return the new scene plus changed (bool) and changeCategory. Default true."
+        "description": "Settle, then report changed and changeCategory. Default true."
       },
       "detail": {
         "type": "boolean",
-        "description": "When true: include full geometry in structuredContent. Default false."
+        "description": "Include geometry (painted, hittable, physicalCenter). Default false."
       },
       "fetchScene": {
         "type": "boolean",
-        "description": "When true: include the full rendered scene text as postScene. Default false."
+        "description": "Also return the new scene text as postScene. Default false."
       }
     },
     "required": [

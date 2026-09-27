@@ -15,16 +15,7 @@ class WaitForSettleTool extends GlintTool {
   Tool get definition => Tool(
         name: 'wait_for_settle',
         description:
-            'Block until the screen is visually stable: no scheduled frames '
-            'AND no loading spinners (CircularProgressIndicator, '
-            'LinearProgressIndicator, RefreshIndicator). Needs a Flutter app '
-            '(device mode: errorKind flutterModeRequired). '
-            'Use after an action that triggers async work (network call, '
-            'animation, route transition) before reading the scene again. '
-            'ceilingMs: hard timeout (default 5000). '
-            'Returns settled: true when stable, settled: false when ceiling hit '
-            '(the screen was still loading — check what is loading and wait more '
-            'or raise ceilingMs).',
+            'Wait until the screen is stable: no scheduled frames and no loading spinners. For async work you started (network, animation, route change); actions already settle themselves. ceilingMs default 5000. settled:false means it was still loading at the ceiling: check what is loading, then wait again or raise ceilingMs. Device mode: flutterModeRequired.',
         inputSchema: ObjectSchema(
           properties: {
             'ceilingMs': Schema.int(

@@ -27,17 +27,7 @@ class AttachTool extends GlintTool {
   Tool get definition => Tool(
         name: 'attach',
         description:
-            'Connect glint to a running Flutter debug app. Call once before any '
-            'other tool. ALL ARGS OPTIONAL: with no args glint discovers the '
-            'app, derives the platform from the VM, and correlates it to the '
-            'exact simulator it runs on (correct even with several booted). A '
-            '`device` that does not host the app is refused (taps would hit the '
-            'wrong one). When nothing is running it does not error — it reports '
-            '"no app running" and lists prior launches to start from. The reply '
-            'carries device + app identity, available hardwareButtons, and '
-            'screen (viewport, dpr, orientation, locale). Apps stay attached: '
-            'attaching a second app pools it, and re-attaching a pooled app '
-            '(by `app` or `device`) switches instantly with no probe.',
+            'Connect to a running Flutter debug app; call once first. All args optional: with none, glint finds the app, its platform and the exact device it runs on. A `device` that does not host the app is refused. With nothing running it lists earlier launches to start from. The reply carries device and app identity, hardwareButtons, screen and the input setup. Attaching a second app pools it; re-attaching by `app` or `device` switches instantly.',
         inputSchema: ObjectSchema(
           properties: {
             'app': Schema.string(
@@ -61,15 +51,11 @@ class AttachTool extends GlintTool {
             ),
             'device': Schema.string(
               description:
-                  'iOS simulator UDID or Android serial. Omit to auto-correlate '
-                  'to the app\'s real device. When nothing is running, passing a '
-                  'device from the "no app running" list starts its app there.',
+                  'iOS simulator UDID or Android serial. Omit to use the device the app runs on. A device from the "no app running" list starts its app there.',
             ),
             'launch': Schema.string(
               description:
-                  'Path to a Flutter project root to run when it is not in '
-                  'history. Usually you pass a device from the no-app-running '
-                  'list instead.',
+                  'Flutter project root to run when it is not in history.',
             ),
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',

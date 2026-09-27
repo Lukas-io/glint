@@ -18,20 +18,7 @@ class GetSceneTool extends GlintTool {
   Tool get definition => Tool(
         name: 'get_scene',
         description:
-            'Read the current screen as a compact role-classified scene. '
-            'Each line: `<marker> <role> <glintId> [label]`. '
-            'Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static. '
-            'The glintId on each line is the stable address you pass to tap/type/scroll. '
-            'When a dialog or modal is open, an `--- dialog ---` section appears first '
-            'followed by `--- screen (blocked by modal) ---` for the base screen. '
-            'structuredContent includes: hasOverlay (bool), overlayKind (string), '
-            'keyboardVisible (bool), route.name, state '
-            '(loaded/loading/error, or device/native when no Flutter tree). '
-            'Long lists are folded: the first row in full, then one digest '
-            'line naming the rest by label and #hash — tap by that id, or read '
-            'the list with glintId: for every row. '
-            'glintId: render only that node\'s subtree (drill-down); depth '
-            'caps how many levels below it are shown.',
+            'Read the screen as a compact scene, one node per line: `<marker> <role> <glintId> [label]`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static. Pass the glintId to tap/type/scroll. An open dialog comes first under `--- dialog ---`, the blocked screen after it. Long lists fold to the first row plus a digest naming the rest by label and #id. glintId: only that node\'s subtree; depth caps the levels below it. structuredContent: hasOverlay, overlayKind, keyboardVisible, route.name, state (loaded/loading/error, or device/native).',
         inputSchema: ObjectSchema(
           properties: {
             'format': Schema.string(
