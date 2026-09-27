@@ -15,6 +15,24 @@ import Foundation
 enum SimButton: String, CaseIterable {
     case home, lock, side, siri
 
+    /// HID Consumer-page usage `dtuhidd` takes for this button (Menu, Power, Power, Voice Command).
+    var consumerUsage: UInt64 {
+        switch self {
+        case .home: return 0x40
+        case .lock, .side: return 0x30
+        case .siri: return 0xCF
+        }
+    }
+
+    /// Consumer usage for the raw Indigo codes glint sends through probe-button (0 home, 1 lock).
+    static func consumerUsage(probeCode: Int32) -> UInt64? {
+        switch probeCode {
+        case 0: return 0x40
+        case 1: return 0x30
+        default: return nil
+        }
+    }
+
     var code: Int32 {
         switch self {
         case .home: return 1
@@ -26,12 +44,30 @@ enum SimButton: String, CaseIterable {
 }
 
 /// Bumped whenever a command's arguments or output change; glint checks it before driving the bridge.
-let bridgeProtocol = 1
+let bridgeProtocol = 2
 
-let args = CommandLine.arguments
+var args = CommandLine.arguments
+if args.count >= 3, args[1] == "--hid" {
+    guard let mode = HidMode(rawValue: args[2]) else {
+        FileHandle.standardError.write(Data("--hid must be one of \(HidMode.allCases.map(\.rawValue).joined(separator: "|"))\n".utf8))
+        exit(2)
+    }
+    SimDeviceProxy.hidMode = mode
+    args.removeSubrange(1...2)
+}
 if args.count < 2 {
-    print("usage: glint-iossim <version|list|dump-*|tap|long-press|swipe|button|probe-button|type> ...")
+    print("usage: glint-iossim [--hid auto|dtuhid|indigo] <version|list|hid|dump-*|tap|taps|long-press|swipe|button|probe-button|type|key> ...")
     exit(2)
+}
+
+/// Why `auto` fell back to Indigo, when it did.
+func fallbackNote() -> String {
+    SimDeviceProxy.fallbackReason.map { " (dtuhid unavailable: \($0))" } ?? ""
+}
+
+/// Names the transport a command used.
+func viaNote(_ name: String) -> String {
+    " via \(name)\(fallbackNote())"
 }
 
 func die(_ msg: String) -> Never {
@@ -142,8 +178,8 @@ do {
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
         let p = try _Point.parse(dwStr: args[3], dhStr: args[4], xStr: args[5], yStr: args[6])
-        try proxy.tap(x: p.x, y: p.y, deviceLogicalSize: p.size)
-        print("OK tap \(args[2]) (\(p.x),\(p.y)) of (\(p.size.width)x\(p.size.height))")
+        let via = try proxy.tap(x: p.x, y: p.y, deviceLogicalSize: p.size)
+        print("OK tap \(args[2]) (\(p.x),\(p.y)) of (\(p.size.width)x\(p.size.height))\(viaNote(via))")
 
     case "taps":
         // Several taps from one process: glint's tap sequence (PIN pads, keypads).
@@ -163,8 +199,8 @@ do {
             i += 2
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.taps(points, deviceLogicalSize: CGSize(width: dw, height: dh), intervalMs: intervalMs)
-        print("OK taps \(args[2]) \(points.count) points")
+        let via = try proxy.taps(points, deviceLogicalSize: CGSize(width: dw, height: dh), intervalMs: intervalMs)
+        print("OK taps \(args[2]) \(points.count) points\(viaNote(via))")
 
     case "long-press":
         guard args.count == 8 else {
@@ -173,8 +209,8 @@ do {
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
         let p = try _Point.parse(dwStr: args[3], dhStr: args[4], xStr: args[5], yStr: args[6])
         guard let dur = Int(args[7]), dur > 0 else { die("duration_ms must be positive") }
-        try proxy.longPress(x: p.x, y: p.y, deviceLogicalSize: p.size, durationMs: dur)
-        print("OK long-press \(args[2]) (\(p.x),\(p.y)) hold=\(dur)ms")
+        let via = try proxy.longPress(x: p.x, y: p.y, deviceLogicalSize: p.size, durationMs: dur)
+        print("OK long-press \(args[2]) (\(p.x),\(p.y)) hold=\(dur)ms\(viaNote(via))")
 
     case "swipe":
         guard args.count == 10 || args.count == 11 else {
@@ -192,14 +228,14 @@ do {
               let dur = Int(args[9]), dur > 0 else {
             die("x1/y1/x2/y2/duration_ms must be valid numbers")
         }
-        try proxy.swipe(
+        let via = try proxy.swipe(
             from: CGPoint(x: x1, y: y1),
             to: CGPoint(x: x2, y: y2),
             deviceLogicalSize: size,
             durationMs: dur,
             holdMs: holdMs,
         )
-        print("OK swipe \(args[2]) (\(x1),\(y1)) -> (\(x2),\(y2)) dur=\(dur)ms")
+        print("OK swipe \(args[2]) (\(x1),\(y1)) -> (\(x2),\(y2)) dur=\(dur)ms\(viaNote(via))")
 
     case "button":
         guard args.count == 4 else {
@@ -209,8 +245,8 @@ do {
             die("unknown button: \(args[3])")
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.pressButton(button.code)
-        print("OK button \(args[2]) \(button.rawValue)")
+        let via = try proxy.pressButton(button.code, usage: button.consumerUsage)
+        print("OK button \(args[2]) \(button.rawValue)\(viaNote(via))")
 
     case "probe-button":
         // Calibration helper: fire IndigoHIDMessageForButton with a raw
@@ -219,8 +255,8 @@ do {
             die("usage: glint-iossim probe-button <UDID> <int-code>")
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.pressButton(code)
-        print("OK probe-button \(args[2]) code=\(code)")
+        let via = try proxy.pressButton(code, usage: SimButton.consumerUsage(probeCode: code))
+        print("OK probe-button \(args[2]) code=\(code)\(viaNote(via))")
 
     case "type":
         // Optional per-key gap for fields whose formatter needs longer than the default.
@@ -235,8 +271,8 @@ do {
             gap = Double(ms) / 1000
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.typeText(args[3], gapSeconds: gap)
-        print("OK type \(args[2]) \(args[3].count) chars")
+        let via = try proxy.typeText(args[3], gapSeconds: gap)
+        print("OK type \(args[2]) \(args[3].count) chars\(viaNote(via))")
 
     case "key":
         // Press one HID usage N times, holding a modifier mask (bit i = usage 0xE0+i).
@@ -248,8 +284,16 @@ do {
             die("usage: glint-iossim key <UDID> <hid-usage> <count 1-500> <modifier-mask 0-15>")
         }
         let proxy = try SimBridge.requireBootedDevice(udid: args[2])
-        try proxy.pressKey(usage: usage, count: count, modifierMask: mask)
-        print("OK key \(args[2]) usage=\(usage) x\(count) mods=\(mask)")
+        let via = try proxy.pressKey(usage: usage, count: count, modifierMask: mask)
+        print("OK key \(args[2]) usage=\(usage) x\(count) mods=\(mask)\(viaNote(via))")
+
+    case "hid":
+        // Opens the transport touch and keys would use now, and names it.
+        guard args.count == 3 else { die("usage: glint-iossim [--hid auto|dtuhid|indigo] hid <UDID>") }
+        let proxy = try SimBridge.requireBootedDevice(udid: args[2])
+        let input = try proxy.input()
+        input.finish()
+        print("hid \(input.name) coresimulator \(DtuHidConnection.loadedCoreSimulatorVersion ?? "unknown")\(fallbackNote())")
 
     case "frames":
         // Extract distinct frames from a recorded video via AVFoundation.

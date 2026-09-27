@@ -378,9 +378,19 @@ Module A's iOS bridge (`native/ios_sim_bridge/`) targets a single Xcode major re
 
 | Xcode | iOS Sim runtime | tap | swipe | long-press | type | buttons | Notes |
 |---|---|---|---|---|---|---|---|
-| 27.x | 26.5 (iOS 27 runtime not yet verified) | ✅ | ✅ | ✅ | ✅ | ✅ lock, unlock, home, back | SimulatorKit moved to `Contents/SharedFrameworks`; message layout unchanged from 26. Verified 2026-09-26 on 27.0 |
+| 27.x (dtuhid) | 27.0 | ✅ | ✅ | ✅ | ✅ | ✅ lock, unlock, home, back | Default on CoreSimulator 1155.4+. Verified 2026-09-27 on 27.0, CoreSimulator 1171.7, with dtuhidd active. See "Xcode 27 input transports" |
+| 27.x (indigo) | 26.5, 27.0 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Works until anything starts dtuhidd on the boot, then the guest drops Indigo touch, keys and buttons (#74). SimulatorKit moved to `Contents/SharedFrameworks`; message layout unchanged from 26 |
 | 26.x | 26 | ✅ | ✅ | ✅ | ✅ | ✅ lock, unlock, home, back | See "Xcode 26 layout" + "Xcode 26 open work" below |
 | ≤14 | ≤14 | — | — | — | — | — | reference only (idb's FBSimulatorIndigoHID.m); not targeted by glint v1 |
+
+### Xcode 27 input transports
+
+CoreSimulator 1155.4 (Xcode 27) injects `dtuhidd` into the guest. The first host connection to it sets the guest notify state `com.apple.coredevice.dtuhidd.active` to 1, and from then until the simulator reboots the guest ignores the legacy Indigo path: taps, keys and buttons are delivered without error and dropped. Restarting backboardd clears the flag but kills the running app, so there is no in-place heal.
+
+The bridge therefore picks a transport per command (`--hid auto|dtuhid|indigo`, from attach's `iosInput`):
+
+- `dtuhid`: `-[SimDevice lookup:error:]` on `com.apple.coredevice.feature.remote.hid.digitizer`, turned into a host XPC connection with `xpc_endpoint_create_mach_port_4sim`, `xpc_connection_create_from_endpoint` and `xpc_connection_enable_sim2host_4sim`. A barrier `IndigoKeyboardButtonEvent` with a reply proves the daemon answers (the lookup succeeds even when it cannot run). Messages are XPC dictionaries `{messageType, isBarrier, featureIdentifier, payload}`: `IndigoDigitizerEvent {pointOne {x,y} 0...1, eventType 0 start / 1 move / 2 end, edge 0, target 0}`, `IndigoKeyboardButtonEvent {usageCode, state 1 down / 2 up}`, `IndigoButtonEvent {usagePage 0x0C, usageCode, state}` with home = 0x40 and lock = 0x30. After the last event: an XPC send barrier, then 80 ms for the guest to consume it. Wire format from idb (MIT).
+- `auto`: dtuhid when the loaded CoreSimulator's `CFBundleVersion` is 1155.4 or newer (compared numerically) and the liveness probe answers; otherwise indigo, with the reason in the command's output.
 
 ### Xcode 26 layout (verified)
 

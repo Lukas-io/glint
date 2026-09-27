@@ -9,7 +9,7 @@ import 'bridge_locator.dart';
 const Set<int> testedXcodeMajors = {26, 27};
 
 /// Must equal `bridgeProtocol` in native/ios_sim_bridge/Sources/glint-iossim/main.swift.
-const int expectedBridgeProtocol = 1;
+const int expectedBridgeProtocol = 2;
 
 /// Env var that lets bridge actions run on an Xcode major outside [testedXcodeMajors].
 const String allowUntestedXcodeEnv = 'GLINT_ALLOW_UNTESTED_XCODE';
