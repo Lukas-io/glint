@@ -183,7 +183,7 @@
       },
       "refuseNotHittable": {
         "type": "boolean",
-        "description": "When true, a non-hittable target produces an error (errorKind=notHittable) instead of a warning. Default false."
+        "description": "true refuses any target that may not be hittable, false never refuses (errorKind=notHittable). Default: refuse only when Flutter's hit test shows the tap would land on another widget."
       },
       "awaitReady": {
         "type": "boolean",

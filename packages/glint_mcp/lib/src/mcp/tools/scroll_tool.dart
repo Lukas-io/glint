@@ -23,8 +23,9 @@ class ScrollTool extends GlintTool {
         description:
             'Scroll the screen in a direction (up/down/left/right). '
             'Direction is content-relative: "down" shows what is below (finger swipes up). '
-            'Anchors the swipe at viewport center. amountFraction controls how far '
-            '(0.0–1.0, default 0.6 = 60% of viewport per scroll). '
+            'Swipes inside the visible part of the main scrollable, above the keyboard. '
+            'amountFraction controls how far (0.0–1.0, default 0.6 of that area). '
+            'When nothing moves, `reason` says why: atEnd, atStart, notScrollable or blocked. '
             'For finding off-screen items, prefer scroll_to_find which loops until '
             'the target appears. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -88,7 +89,8 @@ class ScrollTool extends GlintTool {
           ],
         );
       }
-      final line = _swipeLine(dir, amount, size.w.toDouble(), size.h.toDouble());
+      final line = _swipeLine(dir, amount,
+          (x: 0.0, y: 0.0, w: size.w.toDouble(), h: size.h.toDouble()));
       return coordinateSwipe(
           session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled', holdMs: scrollHoldMs);
@@ -115,7 +117,10 @@ class ScrollTool extends GlintTool {
           ],
         );
       }
-      final line = _swipeLine(dir, amount, vp.logicalW, vp.logicalH);
+      final keyboard = (await session.uiState()).keyboardBottomPx / vp.dpr;
+      final region = swipeRegion(
+          (x: 0.0, y: 0.0, w: vp.logicalW, h: vp.logicalH - keyboard), anchor?.clip);
+      final line = _swipeLine(dir, amount, region);
       var response = await coordinateSwipe(
           session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled', holdMs: scrollHoldMs);
@@ -133,6 +138,12 @@ class ScrollTool extends GlintTool {
             'changeCategory': merged.category,
             if (movedPx != null) 'scrolledPx': movedPx.round(),
           });
+          if (!merged.changed) {
+            final reason = await _whyStill(session, action.scene, anchor, dir);
+            response = response.copyWith(
+              summary: '${response.summary}; nothing moved: ${_reasonText[reason]}',
+            ).mergeData({'reason': reason});
+          }
         }
       }
       return response;
@@ -161,21 +172,67 @@ class ScrollTool extends GlintTool {
   /// endpoints get clamped by the OS and can trip system edge gestures.
   static const _edgeMarginFraction = 0.06;
 
-  /// Swipe travel centered on the viewport, clamped inside the edge margin.
+  /// Swipe travel centered on [r], clamped inside the edge margin.
   /// Content moves toward [dir], so the finger travels the opposite way.
   ({double fromX, double fromY, double toX, double toY}) _swipeLine(
-      ScrollDirection dir, double amount, double w, double h) {
+      ScrollDirection dir, double amount, Rect4 r) {
     final horizontal =
         dir == ScrollDirection.left || dir == ScrollDirection.right;
-    final span = horizontal ? w : h;
+    final span = horizontal ? r.w : r.h;
     final margin = span * _edgeMarginFraction;
     final travel = (span * amount).clamp(0.0, span - 2 * margin);
     final sign =
         (dir == ScrollDirection.right || dir == ScrollDirection.down) ? -1 : 1;
-    final cx = w / 2, cy = h / 2;
+    final cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     final half = sign * travel / 2;
     return horizontal
         ? (fromX: cx - half, fromY: cy, toX: cx + half, toY: cy)
         : (fromX: cx, fromY: cy - half, toX: cx, toY: cy + half);
   }
+
+  static const _reasonText = {
+    'atEnd': 'already at the end',
+    'atStart': 'already at the start',
+    'notScrollable': 'nothing scrollable on this screen',
+    'blocked': 'the list can still move, so the swipe did not reach it (an overlay or the keyboard may be in the way)',
+  };
+
+  /// Why a scroll moved nothing, from the scrollable's own position.
+  Future<String> _whyStill(GlintSession session, Scene scene,
+      ScrollAnchor? anchor, ScrollDirection dir) async {
+    final node = anchor == null ? null : scene.findByGlintId(anchor.glintId);
+    if (node == null) return 'notScrollable';
+    final raw = await session.runtime.evaluateWithSelection(
+      expression: _positionExpr,
+      inspectorId: node.inspectorId,
+      groupName: scene.groupName,
+    );
+    final parts = raw?.split(',').map(double.tryParse).toList();
+    if (parts == null || parts.length != 3 || parts.contains(null)) {
+      return raw == 'none' ? 'notScrollable' : 'blocked';
+    }
+    final (pixels, min, max) = (parts[0]!, parts[1]!, parts[2]!);
+    final forward = dir == ScrollDirection.down || dir == ScrollDirection.right;
+    if (forward && pixels >= max - 1) return 'atEnd';
+    if (!forward && pixels <= min + 1) return 'atStart';
+    return 'blocked';
+  }
+
+  static const _positionExpr =
+      "((ScrollPosition? p) => p == null ? 'none' : p.pixels.toString() + ',' + "
+      "p.minScrollExtent.toString() + ',' + p.maxScrollExtent.toString())"
+      '(Scrollable.maybeOf(WidgetInspectorService.instance.selection.currentElement!)?.position)';
+}
+
+typedef Rect4 = ({double x, double y, double w, double h});
+
+/// Where to swipe: [screen] (already above the keyboard) narrowed to the scrollable's visible [clip]; falls back to [screen] when the overlap is too small to swipe in.
+Rect4 swipeRegion(Rect4 screen, Rect4? clip) {
+  if (clip == null) return screen;
+  final x = clip.x > screen.x ? clip.x : screen.x;
+  final y = clip.y > screen.y ? clip.y : screen.y;
+  final right = (clip.x + clip.w) < (screen.x + screen.w) ? clip.x + clip.w : screen.x + screen.w;
+  final bottom = (clip.y + clip.h) < (screen.y + screen.h) ? clip.y + clip.h : screen.y + screen.h;
+  if (right - x < 80 || bottom - y < 80) return screen;
+  return (x: x, y: y, w: right - x, h: bottom - y);
 }

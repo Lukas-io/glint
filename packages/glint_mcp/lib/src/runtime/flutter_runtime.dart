@@ -81,6 +81,10 @@ abstract class FlutterRuntime {
   /// Throws [RuntimeEvalError] on compilation error or ErrorRef return.
   Future<InstanceRef> evaluate(String expression);
 
+  /// Evaluates [expression] in the loaded library whose uri ends with [librarySuffix] (the usual eval library when null), with [scope] naming live object ids.
+  Future<InstanceRef> evaluateIn(String expression,
+      {String? librarySuffix, Map<String, String>? scope});
+
   /// Evaluates [expression] and returns its `valueAsString`, transparently
   /// refetching via `getObject` when the value is truncated past the
   /// 128-char preview. Returns null for a non-string result, and for an eval

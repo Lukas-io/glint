@@ -13,8 +13,8 @@ class Interactor {
   final InteractionBackend backend;
   final CoordinateResolver resolver;
 
-  /// When true, non-hittable targets fail with [GlintErrorKind.notHittable] instead of warning. Default permissive (§3): agent decides.
-  bool refuseNotHittable = false;
+  /// True refuses any non-hittable target, false never refuses; null (default) refuses only when Flutter's real hit test missed.
+  bool? refuseNotHittable;
 
   Future<ActionResult> run(Scene scene, Action action) async {
     try {
@@ -63,9 +63,12 @@ class Interactor {
         painted: false,
         hittable: false,
         nextSteps: [
-          'the target is scrolled out of the viewport: bring it on-screen with '
-              'scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", '
-              'then retry',
+          if (e.underKeyboard)
+            'close the on-screen keyboard (hardware_button back on Android, or tap outside the field), then retry'
+          else
+            'bring it on-screen with '
+                'scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", '
+                'then retry',
         ],
       );
     } on NotHittableRefused catch (e) {
@@ -78,9 +81,14 @@ class Interactor {
         devicePixelRatio: e.devicePixelRatio,
         painted: e.painted,
         hittable: false,
-        nextSteps: const [
-          'check what\'s on top with the scene read — a modal or absorber probably covers the target',
-        ],
+        nextSteps: e.hitBy != null
+            ? [
+                'something covers the target: scroll it into view with scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", or dismiss what is on top, then retry',
+                'pass refuseNotHittable:false to tap anyway',
+              ]
+            : const [
+                'check what\'s on top with get_scene: a modal or absorber probably covers the target',
+              ],
       );
     } on GeometryResolveError catch (e) {
       return ActionResult.failure(
@@ -88,6 +96,10 @@ class Interactor {
         summary: 'resolve failed for ${action.label}',
         error: e.message,
         errorKind: GlintErrorKind.geometryResolveError,
+        nextSteps: const [
+          'retry once: the app may have been mid-rebuild',
+          'if it repeats, call get_scene and target a fresh glintId',
+        ],
       );
     }
   }
@@ -194,27 +206,39 @@ class Interactor {
     if (coord.logicalViewSize.w <= 0 || coord.logicalViewSize.h <= 0) return;
     if (coord.centerOnViewport) return;
     final c = coord.logicalCenter;
-    throw OffViewportRefused(
-      message: 'refusing action: ${coord.glintId} resolved to '
-          '(${c.x.toStringAsFixed(1)}, ${c.y.toStringAsFixed(1)}) logical — '
-          'outside the ${coord.logicalViewSize.w.toStringAsFixed(0)}x'
+    final at = '(${c.x.toStringAsFixed(1)}, ${c.y.toStringAsFixed(1)}) logical';
+    final String why;
+    if (coord.centerUnderKeyboard) {
+      why = 'under the on-screen keyboard';
+    } else if (!coord.centerInClip) {
+      why = 'outside the visible part of its scroll view (clipped)';
+    } else {
+      why = 'outside the ${coord.logicalViewSize.w.toStringAsFixed(0)}x'
           '${coord.logicalViewSize.h.toStringAsFixed(0)} viewport '
-          '(scrolled out or not laid out on-screen)',
+          '(scrolled out or not laid out on-screen)';
+    }
+    throw OffViewportRefused(
+      message: 'refusing action: ${coord.glintId} resolved to $at, $why',
       physicalCenter: coord.physicalCenter,
       devicePixelRatio: coord.devicePixelRatio,
+      underKeyboard: coord.centerUnderKeyboard,
     );
   }
 
   void _gateHittable(ResolvedCoord coord) {
-    if (refuseNotHittable && coord.hittable == false) {
-      throw NotHittableRefused(
-        message: 'refusing action: target is not hittable '
-            '(painted=${coord.painted}, hittable=false)',
-        physicalCenter: coord.physicalCenter,
-        devicePixelRatio: coord.devicePixelRatio,
-        painted: coord.painted,
-      );
-    }
+    if (coord.hittable) return;
+    if (!(refuseNotHittable ?? coord.hitTestReal)) return;
+    throw NotHittableRefused(
+      message: coord.hitTestReal
+          ? 'refusing action: a tap at the centre of ${coord.glintId} would land on '
+              '${coord.hitBy ?? 'another widget'}, not on it'
+          : 'refusing action: target is not hittable '
+              '(painted=${coord.painted}, hittable=false)',
+      physicalCenter: coord.physicalCenter,
+      devicePixelRatio: coord.devicePixelRatio,
+      painted: coord.painted,
+      hitBy: coord.hitBy,
+    );
   }
 
   ActionResult _coordinateResult(Action action, ResolvedCoord c,
@@ -244,10 +268,12 @@ class OffViewportRefused implements Exception {
     required this.message,
     this.physicalCenter,
     this.devicePixelRatio,
+    this.underKeyboard = false,
   });
   final String message;
   final ({int x, int y})? physicalCenter;
   final double? devicePixelRatio;
+  final bool underKeyboard;
 }
 
 class NotHittableRefused implements Exception {
@@ -256,11 +282,13 @@ class NotHittableRefused implements Exception {
     this.physicalCenter,
     this.devicePixelRatio,
     this.painted,
+    this.hitBy,
   });
   final String message;
   final ({int x, int y})? physicalCenter;
   final double? devicePixelRatio;
   final bool? painted;
+  final String? hitBy;
 }
 
 /// The glintId an action aims at, when it targets one node symbolically.

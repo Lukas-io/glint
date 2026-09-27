@@ -2,8 +2,11 @@ import 'package:glint_mcp/src/perception/scene_node.dart';
 import 'package:glint_mcp/src/perception/scene_reader.dart';
 import 'package:test/test.dart';
 
-SceneNode _n(String label, {String? glintId, List<SceneNode> children = const []}) {
+SceneNode _n(String label,
+    {String? glintId, String? text, bool local = false, List<SceneNode> children = const []}) {
   return SceneNode(
+    textPreview: text,
+    createdByLocalProject: local,
     depth: 0,
     indexInParent: -1,
     description: label,
@@ -28,7 +31,7 @@ void main() {
       final tree = _overlayTree([
         _entry([_n('Scaffold')]), // base route
         _entry([
-          _n('AlertDialog', glintId: 'alert', children: [
+          _n('AlertDialog', glintId: 'alert', local: true, children: [
             _n('TextButton', glintId: 'ok_button'),
           ]),
         ]),
@@ -66,11 +69,43 @@ void main() {
         _entry([_n('_SelectionHandleOverlay', glintId: 'handle')]),
         _entry([
           _n('Dialog', glintId: 'confirm', children: [
-            _n('Text'),
+            _n('Text', text: 'Delete this?'),
           ]),
         ]),
       ]);
       expect(SceneReader.debugOverlayContentIds(tree), ['confirm']);
+    });
+
+    test('an empty text-field tap region entry is not surfaced', () {
+      final tree = _overlayTree([
+        _entry([_n('Scaffold')]),
+        _entry([
+          _n('TapRegion', glintId: 'tap_region', children: [
+            _n('SizedBox.shrink', glintId: 'sized_box_shrink'),
+          ]),
+        ]),
+      ]);
+      expect(SceneReader.debugOverlayContentIds(tree), isEmpty);
+    });
+
+    test('a page route barrier below the top page is not a covering barrier', () {
+      final tree = _overlayTree([
+        _entry([_n('IgnorePointer', children: [_n('ModalBarrier')])]),
+        _entry([_n('Scaffold')]),
+      ]);
+      expect(SceneReader.debugOverlayContentIds(tree), isEmpty);
+      expect(SceneReader.debugHasCoveringBarrier(tree), isFalse);
+    });
+
+    test('a dialog barrier above the top page covers it', () {
+      final tree = _overlayTree([
+        _entry([_n('IgnorePointer', children: [_n('ModalBarrier')])]),
+        _entry([_n('Scaffold')]),
+        _entry([_n('ModalBarrier')]),
+        _entry([_n('AlertDialog', glintId: 'alert', local: true)]),
+      ]);
+      expect(SceneReader.debugHasCoveringBarrier(tree), isTrue);
+      expect(SceneReader.debugOverlayContentIds(tree), ['alert']);
     });
 
     test('barrier-only entry is not surfaced as content', () {

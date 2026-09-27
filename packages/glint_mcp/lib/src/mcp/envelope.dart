@@ -126,7 +126,7 @@ class StructuredResponse {
     if (isError) {
       final detail = data?['detail'] as String?;
       if (detail != null) {
-        final firstLine = detail.split('\n').first.trim();
+        final firstLine = reasonLine(detail);
         if (firstLine.isNotEmpty && firstLine != summary) {
           buf.writeln();
           buf.writeln('detail: $firstLine');
@@ -179,4 +179,17 @@ String? _base64File(String path) {
   } on Object {
     return null;
   }
+}
+
+/// The line of [detail] that carries the reason: a VM header like "Unhandled exception:" is joined to the line after it, capped at 240 chars.
+String reasonLine(String detail) {
+  final lines = detail
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty)
+      .toList();
+  if (lines.isEmpty) return '';
+  var line = lines.first;
+  if (line.endsWith(':') && lines.length > 1) line = '$line ${lines[1]}';
+  return line.length > 240 ? '${line.substring(0, 239)}…' : line;
 }

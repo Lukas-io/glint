@@ -315,6 +315,39 @@ class VmServiceRuntime implements FlutterRuntime {
   }
 
   @override
+  Future<InstanceRef> evaluateIn(String expression,
+      {String? librarySuffix, Map<String, String>? scope}) async {
+    final String library;
+    if (librarySuffix == null) {
+      library = await _evalLibrary();
+    } else {
+      final match = (_vm.flutterIsolate.libraries ?? const <LibraryRef>[])
+          .where((l) => l.uri?.endsWith(librarySuffix) ?? false)
+          .firstOrNull;
+      if (match?.id == null) {
+        throw RuntimeEvalError(expression, 'no loaded library ends with $librarySuffix');
+      }
+      library = match!.id!;
+    }
+    final Object raw;
+    try {
+      raw = await _guard(
+        () => _vm.service
+            .evaluate(flutterIsolateId, library, expression, scope: scope),
+        op: 'evaluate',
+      );
+    } on RPCError catch (e) {
+      throw RuntimeEvalError(expression, 'RPCError(${e.code}): ${e.message}');
+    }
+    if (raw is InstanceRef) return raw;
+    if (raw is ErrorRef) {
+      throw RuntimeEvalError(expression, raw.message ?? 'ErrorRef');
+    }
+    throw RuntimeEvalError(
+        expression, 'unexpected eval return ${raw.runtimeType}');
+  }
+
+  @override
   Future<String?> evaluateWithSelection({
     required String expression,
     required String inspectorId,

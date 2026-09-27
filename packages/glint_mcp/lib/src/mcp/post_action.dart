@@ -201,7 +201,12 @@ Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
 
 /// Reference point inside the primary scrollable, for scroll-displacement
 /// detection: (glintId, logicalCenter).
-typedef ScrollAnchor = ({String glintId, double x, double y});
+typedef ScrollAnchor = ({
+  String glintId,
+  double x,
+  double y,
+  ({double x, double y, double w, double h})? clip,
+});
 
 /// After an action fires, settle (bounded by `postActionSettleMs`) then read
 /// the post-action scene and compare with [pre] for the changed signal. A
