@@ -17,6 +17,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - Buttons show `[selected]` when the widget (chips) or its `Semantics` wrapper says so, and a `Semantics` `checked`/`toggled` fills `[on]`/`[off]` for custom toggles. Selection counts as a change, so tapping a pill no longer reports `changed:false` (#78).
 - Images name what they show (`- image profile.jpg (loaded)`), read from the image provider; a childless `CircleAvatar` or `Ink` is an image (#79).
 - Action replies write the change report into their text (`· routeChanged`, `· nothing changed`) for clients that only read text (#78).
+- On Android, a system window in front of the app (the photo picker, another app) is detected from the window manager: the action reply says `changeCategory: nativeSurface` and names it, and `get_scene` lists the window's elements from `uiautomator dump` with `@ x,y` tap coordinates. When the dump fails it says why, for example when another automation tool holds the accessibility connection (#80).
 
 ### Fixed
 
@@ -26,6 +27,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - `scroll` swiped around the centre of the screen, which with the keyboard up is often the keyboard. It now swipes inside the visible part of the scrollable, above the keyboard (#84).
 - Folded rows kept only their first text, so values on review and settings screens vanished (a row said "Distance" and hid "Up to 50 mi"). A folded item now keeps all its texts, and the trailer points at each run's parent to expand it (#82).
 - Items in lazily built lists and wheels took their id from their slot, so after a scroll the same id meant a different item. Under ListView, GridView, ListWheelScrollView, CupertinoPicker and PageView, the id now follows the item's text; wheels and pickers also show as scrollable (#81).
+- A spinner inside a button didn't count as loading, so replies said `state: loaded` while the screen was still working. Loading is now read from every widget on the page. `wait_for_settle` no longer calls an animating screen settled while a spinner shows, and says which signal settled it (#83).
 - A page route's own barrier and empty text-field chrome were read as open overlays, so errors claimed "a non-modal overlay is active" on plain screens (#86).
 - Error replies showed only the first line of a VM error, which is often just "Unhandled exception:". They now include the line with the reason, and a failed geometry read is retried once and says what to do next (#87).
 - iOS taps, keys and button presses were sometimes lost, and a key could repeat (typing `hello glint` gave `hello. glint`). The bridge sent each input message without waiting for the simulator to take it and could exit before the last one was delivered; it now waits for each message to be acknowledged, and fails with a clear error if one isn't.

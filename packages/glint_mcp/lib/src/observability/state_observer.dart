@@ -14,15 +14,26 @@ class StateObserver {
   static const _errorLabels = {'ErrorWidget', 'RenderErrorBox'};
 
   SceneState observe(SemanticScene scene) {
-    // We only see SemanticNodes here; loading/error affordances were
-    // classified as SemanticUnknown (no specific role). Check by label.
     // Error wins over loading — a crashed build outranks a spinner.
     var loading = false;
-    for (final n in scene.root.walk()) {
-      if (n is! SemanticUnknown) continue;
-      if (_errorLabels.contains(n.label)) return SceneState.error;
-      if (kLoadingAffordanceLabels.contains(n.label)) loading = true;
+    for (final label in _labels(scene)) {
+      if (_errorLabels.contains(label)) return SceneState.error;
+      if (kLoadingAffordanceLabels.contains(label)) loading = true;
     }
     return loading ? SceneState.loading : SceneState.loaded;
+  }
+
+  /// Unknown semantic nodes plus every raw widget on the active page and in overlays, so a spinner folded into a button still counts.
+  Iterable<String> _labels(SemanticScene scene) sync* {
+    for (final n in scene.root.walk()) {
+      if (n is SemanticUnknown) yield n.label;
+    }
+    final id = scene.root.glintId;
+    final page = id == null ? null : scene.sourceFor(id);
+    for (final root in [if (page != null) page, ...scene.sourceScene.overlayRoots]) {
+      for (final n in root.walk()) {
+        if (!n.isOffstage) yield n.baseLabel;
+      }
+    }
   }
 }

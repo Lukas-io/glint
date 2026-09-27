@@ -189,7 +189,7 @@ class GlintSession {
       _requireAttached(_active?.settleDetector, 'settle detector');
 
   /// Null when the active device is not an iOS simulator.
-  NativeSceneReader? get nativeReader => _active?.nativeReader;
+  NativeReader? get nativeReader => _active?.nativeReader;
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
 

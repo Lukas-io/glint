@@ -62,7 +62,9 @@ class WaitForSettleTool extends GlintTool {
     switch (result) {
       case SettledOk():
         return StructuredResponse(
-          summary: 'settled in ${result.elapsedMs}ms',
+          summary: checkAffordances
+              ? 'settled in ${result.elapsedMs}ms (frames quiet, no spinner)'
+              : 'settled in ${result.elapsedMs}ms (frames quiet)',
           data: {'settled': true, 'elapsedMs': result.elapsedMs},
         );
       case SettledAnimating():

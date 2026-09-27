@@ -79,7 +79,8 @@ class GetSceneTool extends GlintTool {
       );
     }
 
-    if (session.sceneMode == SceneMode.native) {
+    if (session.sceneMode == SceneMode.native ||
+        session.nativeReader is AndroidNativeReader) {
       await session.active?.refreshSceneMode();
     }
     if (session.sceneMode == SceneMode.native) {
@@ -327,28 +328,38 @@ class GetSceneTool extends GlintTool {
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
     final dpr = session.device.devicePixelRatio;
+    final surface = app?.nativeSurfaceName;
+    final readProblem =
+        nativeReader is AndroidNativeReader ? nativeReader.lastReadProblem : null;
     return StructuredResponse(
       summary: [
         '--- native surface active ---',
-        locked == true
-            ? 'the device is locked, so your app is suspended (lifecycle: ${lifecycle ?? "unknown"})'
-            : '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
+        if (surface != null)
+          '${surface.split('/').last.split('.').last} (${surface.split('/').first}) is in front of your app'
+        else if (locked == true)
+          'the device is locked, so your app is suspended (lifecycle: ${lifecycle ?? "unknown"})'
+        else
+          '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
         if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
         if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
       ].join('\n'),
       warnings: [
         if (capture != null && capture.trigger != 'scene')
           'fresh screenshot failed; this one is ${capture.describe()}, so the screen may have changed',
+        if (readProblem != null) readProblem,
       ],
       nextSteps: [
+        if (surface != null && !isSentinel)
+          'tap an element above with tap x,y using its @ coordinates (logical points)',
+        if (surface != null) 'hardware_button back closes it without choosing',
         if (capture != null) 'read the screenshot to see what is on top',
         if (capture == null) '`device op:screenshot` to see what is on top',
-        if (overlay)
+        if (overlay && surface == null)
           'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
-        if (overlay) 'or wait: some sheets dismiss on their own, then get_scene again',
+        if (overlay && surface == null) 'or wait: some sheets dismiss on their own, then get_scene again',
         if (locked == true) 'hardware_button unlock, then get_scene',
-        if (!overlay && locked != true) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
-        if (!overlay && locked != true) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+        if (!overlay && locked != true && surface == null) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
+        if (!overlay && locked != true && surface == null) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
       ],
       data: {
         'format': format,
@@ -357,6 +368,7 @@ class GetSceneTool extends GlintTool {
         'sceneMode': 'native',
         if (lifecycle != null) 'lifecycle': lifecycle,
         'overlay': overlay,
+        if (surface != null) 'nativeSurface': surface,
         if (locked != null) 'locked': locked,
         if (capture != null) 'screenshot': capture.toJson(),
         'devicePixelRatio': dpr,
