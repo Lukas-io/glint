@@ -60,6 +60,11 @@ class AttachTool extends GlintTool {
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
             ),
+            'iosBackend': Schema.string(
+              description:
+                  'bridge (default) | xctest. xctest drives the simulator through '
+                  "glint's XCUITest runner, built once per Xcode. iOS, Flutter mode.",
+            ),
             'iosInput': Schema.string(
               description:
                   'auto (default) | dtuhid | indigo. How taps and keys reach '
@@ -110,6 +115,14 @@ class AttachTool extends GlintTool {
       );
     }
 
+    final iosBackend = (args['iosBackend'] as String?) ?? 'bridge';
+    if (!const {'bridge', 'xctest'}.contains(iosBackend)) {
+      return StructuredResponse.error(
+        summary: 'unknown iosBackend: $iosBackend',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['use one of: bridge, xctest'],
+      );
+    }
     final iosInput = (args['iosInput'] as String?) ?? 'auto';
     if (!const {'auto', 'dtuhid', 'indigo'}.contains(iosInput)) {
       return StructuredResponse.error(
@@ -317,6 +330,7 @@ class AttachTool extends GlintTool {
       final DeviceTarget device;
       IosToolchain? toolchain;
       var iosTransport = iosInput;
+      XcTestRunner? runner;
       switch (platform) {
         case DevicePlatform.android:
           // Probe the viewport for the real DPR — raw x,y gestures pass logical
@@ -347,6 +361,11 @@ class AttachTool extends GlintTool {
               onPhase: (phase) => onProgress?.call(0, phase));
           warnings.addAll(toolchain.warnings);
           iosTransport = await _iosTransport(toolchain, deviceId, iosInput, warnings);
+          if (iosBackend == 'xctest') {
+            final started = await _startRunner(deviceId, toolchain, onProgress);
+            if (started.error != null) return started.error!;
+            runner = started.runner;
+          }
           // A freshly launched app's inspector lags the VM URI by a few seconds;
           // an already-running app probes on the first try so the ceiling is free.
           final baseMs = session.config.attachProbeTimeoutMs;
@@ -371,11 +390,13 @@ class AttachTool extends GlintTool {
             bridgePath: toolchain.bridge.path,
             toolchain: toolchain,
             hidMode: iosTransport,
+            runner: runner,
           );
       }
 
       final input = describeSetup(platform == DevicePlatform.ios
-          ? await readIosSetup(deviceId, toolchain?.xcode.major, transport: iosTransport)
+          ? await readIosSetup(deviceId, toolchain?.xcode.major,
+              transport: runner != null ? 'xctest' : iosTransport)
           : await readAndroidSetup(deviceId, adbPath));
       warnings.addAll(input.warnings);
 
@@ -427,6 +448,7 @@ class AttachTool extends GlintTool {
         if (displayName != null) 'name': displayName,
         if (bundleId != null) 'bundleId': bundleId,
       };
+      if (session.backend case final XcTestBackend b) b.bundleId = bundleId;
       session.active!
         ..package = package
         ..displayName = displayName
@@ -529,6 +551,42 @@ class AttachTool extends GlintTool {
     } finally {
       await probe.disconnect();
     }
+  }
+
+  /// Builds (once per Xcode) and starts glint's XCUITest runner on [udid], reporting each slow phase.
+  Future<({XcTestRunner? runner, StructuredResponse? error})> _startRunner(
+      String udid, IosToolchain toolchain, void Function(int, String?)? onProgress) async {
+    final project = locateRunnerProject();
+    if (project == null) {
+      return (
+        runner: null,
+        error: StructuredResponse.error(
+          summary: 'the XCTest runner project is not part of this glint install',
+          errorKind: GlintErrorKind.unsupportedToolchain,
+          detail: 'looked for $kRunnerProject above the running script',
+          nextSteps: const ['attach again with iosBackend:bridge'],
+        ),
+      );
+    }
+    final home = Platform.environment['HOME'] ?? '.';
+    final runner = XcTestRunner(
+        udid: udid,
+        projectPath: project,
+        cacheDir: '$home/.glint/xctest/xcode-${toolchain.xcode.version ?? "unknown"}');
+    try {
+      await runner.ensureStarted(onPhase: (phase) => onProgress?.call(0, phase));
+    } on XcTestRunnerError catch (e) {
+      return (
+        runner: null,
+        error: StructuredResponse.error(
+          summary: e.message,
+          errorKind: GlintErrorKind.backendToolError,
+          detail: e.detail,
+          nextSteps: e.nextSteps,
+        ),
+      );
+    }
+    return (runner: runner, error: null);
   }
 
   /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
