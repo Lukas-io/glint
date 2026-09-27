@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-27
+
 ### Added
 
 - iOS input over `dtuhidd` on Xcode 27. Once anything starts dtuhidd on a simulator boot, the simulator drops taps, keys and buttons sent the old way (Indigo) until it reboots; that was #74. The bridge now sends touch, keys, home and lock through dtuhidd when CoreSimulator ships it, falls back to Indigo when it does not answer, and says which it used. `attach iosInput:indigo|dtuhid` overrides the choice, and the attach `input:` line and the tested setups name the transport. Bridge protocol 2.
