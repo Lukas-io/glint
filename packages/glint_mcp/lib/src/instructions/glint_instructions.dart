@@ -87,7 +87,7 @@ const _recovery = '''
 - `invalidArgument` — fix per tool description.
 - `internal` — glint bug. `report_issue` with the user's OK.
 
-`hittable=false` warns by default; `refuseNotHittable: true` fails loud.
+Taps that would hit another widget refuse; `refuseNotHittable:false` forces.
 ''';
 
 const _gotchas = '''

@@ -49,6 +49,7 @@ class ResolveTool extends GlintTool {
           summary: 'no node with glintId "$glintId" in the current scene',
           errorKind: GlintErrorKind.unresolvedTarget,
           nextSteps: [
+            if (labelHint(scene.root, glintId) case final h?) h,
             if (hint != null) hint,
             're-run get_scene to read current glintIds',
           ],

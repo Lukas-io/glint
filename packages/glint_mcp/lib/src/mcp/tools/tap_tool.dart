@@ -59,7 +59,7 @@ class TapTool extends GlintTool {
             ),
             'refuseNotHittable': Schema.bool(
               description:
-                  'When true, a non-hittable target produces an error (errorKind=notHittable) instead of a warning. Default false.',
+                  'true refuses any target that may not be hittable, false never refuses (errorKind=notHittable). Default: refuse only when Flutter\'s hit test shows the tap would land on another widget.',
             ),
             'awaitReady': Schema.bool(
               description:
@@ -134,7 +134,7 @@ class TapTool extends GlintTool {
         ],
       );
     }
-    final refuse = argBool(args, 'refuseNotHittable') ?? false;
+    final refuse = argBool(args, 'refuseNotHittable');
 
     final arming = await maybeAwaitReady(
       session: session,
@@ -150,36 +150,31 @@ class TapTool extends GlintTool {
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
+      interactor.refuseNotHittable = null;
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
       if (!result.ok) {
-        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
-            scene.overlayRoots.isEmpty) {
-          final hint = didYouMean(suggestIds(scene.glintIds, glintId));
-          if (hint != null) {
-            response = response.copyWith(
-                nextSteps: [hint, ...response.nextSteps]);
-          }
+        if (result.errorKind != GlintErrorKind.unresolvedTarget) return response;
+        final hints = [
+          if (labelHint(scene.root, glintId) case final h?) h,
+          if (didYouMean(suggestIds(scene.glintIds, glintId)) case final h?) h,
+        ];
+        if (scene.overlayRoots.isEmpty) {
+          return response.copyWith(nextSteps: [...hints, ...response.nextSteps]);
         }
-        // Enrich unresolvedTarget with overlay context — the scene may have
-        // changed (overlay appeared/dismissed) since the agent's last read.
-        if (result.errorKind == GlintErrorKind.unresolvedTarget &&
-            scene.overlayRoots.isNotEmpty) {
-          response = StructuredResponse.error(
-            summary: response.summary,
-            errorKind: GlintErrorKind.unresolvedTarget,
-            detail: 'glintId "$glintId" not found in scene. '
-                'A ${scene.hasBarrierOverlay ? "modal" : "non-modal"} overlay is active — '
-                'the scene may have changed since your last get_scene. '
-                'Re-read with get_scene to see current ids including overlay content.',
-            nextSteps: const [
-              'call get_scene to read the current overlay and base-screen ids',
-            ],
-          );
-        }
-        return response;
+        return StructuredResponse.error(
+          summary: response.summary,
+          errorKind: GlintErrorKind.unresolvedTarget,
+          detail: 'glintId "$glintId" not found in scene. '
+              'A ${scene.hasBarrierOverlay ? "modal" : "non-modal"} overlay is open, '
+              'so the scene may have changed since your last get_scene.',
+          nextSteps: [
+            ...hints,
+            'call get_scene to read the current overlay and base-screen ids',
+          ],
+        );
       }
 
       // Warn when tapping a base-screen node while a modal barrier is up — the

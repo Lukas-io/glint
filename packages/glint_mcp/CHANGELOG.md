@@ -11,11 +11,18 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - Each release attaches a universal (Apple Silicon and Intel) `glint-iossim-macos` bridge with a sha256. glint downloads it on the first iOS attach when no local build exists, into `~/.glint/bin`. `GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off.
 - `GLINT_IOS_BRIDGE` points glint at a bridge binary.
 - The bridge answers `glint-iossim version`, and glint warns when a local build speaks a different protocol.
+- `hittable` comes from Flutter's own hit test at the target's centre (`hitTest: "real"`); when that can't run it falls back to the old check and says `hitTest: "approximate"`. A miss names what would take the touch (`hitBy`), and a tap that would land on another widget is refused by default with `errorKind: notHittable` (#77).
+- A glintId that is really a visible label ("Create account") gets a next step naming the id to use (#86).
+- `scroll` reports `reason` when nothing moved: `atEnd`, `atStart`, `notScrollable` or `blocked` (#84).
 
 ### Fixed
 
 - `telemetry op:"audit_verify"` reports entries written by two servers at once as a fork, not a broken chain, and new entries can't fork any more.
 - `report_issue` now masks `access_token=` and `refresh_token=` values too. Redaction moved to glint_core, which uses the stricter of the two copies the packages had.
+- A target clipped by its scroll view counted as painted and on screen, so taps landed on whatever covered it (on Android, the button bar below a form). It is now off-viewport, and the refusal says it is clipped or under the keyboard (#77).
+- `scroll` swiped around the centre of the screen, which with the keyboard up is often the keyboard. It now swipes inside the visible part of the scrollable, above the keyboard (#84).
+- A page route's own barrier and empty text-field chrome were read as open overlays, so errors claimed "a non-modal overlay is active" on plain screens (#86).
+- Error replies showed only the first line of a VM error, which is often just "Unhandled exception:". They now include the line with the reason, and a failed geometry read is retried once and says what to do next (#87).
 - iOS taps, keys and button presses were sometimes lost, and a key could repeat (typing `hello glint` gave `hello. glint`). The bridge sent each input message without waiting for the simulator to take it and could exit before the last one was delivered; it now waits for each message to be acknowledged, and fails with a clear error if one isn't.
 
 ### Changed

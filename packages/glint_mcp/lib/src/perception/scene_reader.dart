@@ -166,6 +166,11 @@ class SceneReader {
               orElse: () => n).glintId)
           .toList();
 
+  /// Whether a modal barrier covers the top page; the test seam for barrier placement.
+  @visibleForTesting
+  static bool debugHasCoveringBarrier(SceneNode fullRoot) =>
+      _extractDialogEntries(fullRoot).hasBarrier;
+
   static _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
     final overlay = _findNode(fullRoot, 'Overlay');
     if (overlay == null) {
@@ -182,15 +187,17 @@ class SceneReader {
 
     final contentRoots = <SceneNode>[];
     var hasBarrier = false;
+    final entries = entriesParent.children.where(_isEntryWidget).toList();
+    final topPage = entries.lastIndexWhere(_hasScaffoldDescendant);
 
-    for (final entry in entriesParent.children) {
-      if (!_isEntryWidget(entry)) continue;
+    for (final (i, entry) in entries.indexed) {
       if (_hasScaffoldDescendant(entry)) continue; // base route
       if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
       if (_isBarrierOnlyEntry(entry)) {
-        hasBarrier = true;
+        if (i > topPage) hasBarrier = true;
         continue;
       }
+      if (_isEmptyEntry(entry)) continue;
       contentRoots.add(entry);
     }
 
@@ -226,11 +233,21 @@ class SceneReader {
         'CupertinoTextSelectionToolbar',
         'SelectionContainer',
         'ContextMenu',
+        'TextFieldTapRegion',
       }.contains(d.baseLabel));
+
+  /// Framework chrome with nothing to read: no text and no widget built by the app.
+  static bool _isEmptyEntry(SceneNode n) => n
+      .walk()
+      .every((d) => (d.textPreview ?? '').isEmpty && !d.createdByLocalProject);
 
   /// True when every descendant is a known barrier/gesture-plumbing widget
   /// with no user-meaningful content.
   static bool _isBarrierOnlyEntry(SceneNode n) {
+    if (n.walk().any((d) =>
+        d.baseLabel == 'ModalBarrier' || d.baseLabel == 'AnimatedModalBarrier')) {
+      return true;
+    }
     // Widgets that are pass-through / pointer-routing plumbing with no
     // user-visible content. MouseRegion appears as an overlay entry in
     // Flutter 3.x for drag/hover tracking — filter it out so it doesn't
@@ -512,6 +529,10 @@ class _NullRuntime implements FlutterRuntime {
   Future<void> disposeInspectorGroup(String groupName) async {}
   @override
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
+  @override
+  Future<InstanceRef> evaluateIn(String expression,
+          {String? librarySuffix, Map<String, String>? scope}) =>
+      throw UnimplementedError();
   @override
   Future<String?> evaluateString(String expression,
           {bool rethrowErrors = false}) async => null;

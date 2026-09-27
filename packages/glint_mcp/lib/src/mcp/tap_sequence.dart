@@ -86,6 +86,7 @@ Future<StructuredResponse> runTapSequence(
           summary: 'sequence step ${i + 1}: no node with glintId "${s.glintId}"; nothing was tapped',
           errorKind: GlintErrorKind.unresolvedTarget,
           nextSteps: [
+            if (labelHint(scene.root, s.glintId!) case final hint?) hint,
             if (didYouMean(suggestIds(scene.glintIds, s.glintId!)) case final hint?) hint,
             'call get_scene for the current ids',
           ],

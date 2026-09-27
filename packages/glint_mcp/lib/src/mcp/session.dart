@@ -10,6 +10,7 @@ import '../../semantic.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
+import 'post_action.dart' show ScrollAnchor;
 
 export 'app_session.dart' show AppSession, SceneMode;
 export 'capture_ring.dart';
@@ -398,7 +399,7 @@ class GlintSession {
   /// (SingleChildScrollView) has an identical tree at every offset, so we
   /// measure a descendant's physical shift instead. Null when there's no
   /// scrollable or no resolvable descendant.
-  Future<({String glintId, double x, double y})?> probeScrollAnchor() async {
+  Future<ScrollAnchor?> probeScrollAnchor() async {
     final scene = await reader.readSummary();
     try {
       return await scrollAnchorIn(scene, semanticizer.semanticize(scene));
@@ -408,7 +409,7 @@ class GlintSession {
   }
 
   /// [probeScrollAnchor] against a scene + semantic view the caller holds; the anchor is scrolled content, never the viewport itself, whose center stays put.
-  Future<({String glintId, double x, double y})?> scrollAnchorIn(
+  Future<ScrollAnchor?> scrollAnchorIn(
       Scene scene, SemanticScene semantic) async {
     final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
     if (list == null) return null;
@@ -418,7 +419,7 @@ class GlintSession {
       try {
         final c = await resolver.resolve(scene, id);
         if (c.hasNonZeroBounds) {
-          return (glintId: id, x: c.logicalCenter.x, y: c.logicalCenter.y);
+          return (glintId: id, x: c.logicalCenter.x, y: c.logicalCenter.y, clip: c.clip);
         }
       } on Object {
         // unresolvable node — try the next descendant

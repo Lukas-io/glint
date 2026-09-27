@@ -7,8 +7,16 @@ ResolvedCoord _coord({
   double vw = 420,
   double vh = 912,
   bool hittable = true,
+  ({double x, double y, double w, double h})? clip,
+  double keyboardInset = 0,
+  bool hitTestReal = false,
+  String? hitBy,
 }) {
   return ResolvedCoord(
+    clip: clip,
+    keyboardInset: keyboardInset,
+    hitTestReal: hitTestReal,
+    hitBy: hitBy,
     glintId: 'target',
     logicalCenter: (x: x, y: y),
     logicalBounds: (x: 0, y: 0, w: 40, h: 40),
@@ -89,6 +97,47 @@ void main() {
       );
       expect(r.errorKind, GlintErrorKind.offViewport);
       expect(backend.swipes, isEmpty);
+    });
+
+    test('a target clipped by its scroll view refuses and says so', () async {
+      final i = build(_coord(x: 48, y: 869, clip: (x: 0, y: 102, w: 411, h: 706)));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.errorKind, GlintErrorKind.offViewport);
+      expect(r.summary, contains('clipped'));
+      expect(r.nextSteps.join(), contains('scroll_to_find'));
+      expect(backend.taps, isEmpty);
+    });
+
+    test('a target under the keyboard refuses and says to close it', () async {
+      final i = build(_coord(x: 200, y: 800, keyboardInset: 300));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.errorKind, GlintErrorKind.offViewport);
+      expect(r.summary, contains('keyboard'));
+      expect(r.nextSteps.join(), contains('keyboard'));
+    });
+
+    test('a real hit-test miss refuses by default and names the winner', () async {
+      final i = build(_coord(
+          x: 200, y: 400, hittable: false, hitTestReal: true, hitBy: 'ink_well "Continue"'));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.errorKind, GlintErrorKind.notHittable);
+      expect(r.summary, contains('ink_well "Continue"'));
+      expect(backend.taps, isEmpty);
+    });
+
+    test('refuseNotHittable:false taps through a real miss', () async {
+      final i = build(_coord(x: 200, y: 400, hittable: false, hitTestReal: true))
+        ..refuseNotHittable = false;
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.ok, isTrue);
+      expect(backend.taps, hasLength(1));
+    });
+
+    test('an approximate miss only warns by default', () async {
+      final i = build(_coord(x: 200, y: 400, hittable: false));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.ok, isTrue);
+      expect(r.warnings.join(), contains('approximate'));
     });
 
     test('coordinate targets bypass the gate — caller owns raw coords', () async {

@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:glint_core/glint_core.dart' show instanceText;
+
 import '../runtime/flutter_runtime.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
@@ -16,6 +18,10 @@ class ResolvedCoord {
     required this.nearestAncestorOpacity,
     required this.nearestAncestorVisible,
     required this.hittable,
+    this.clip,
+    this.keyboardInset = 0,
+    this.hitTestReal = false,
+    this.hitBy,
   });
 
   final String glintId;
@@ -26,6 +32,18 @@ class ResolvedCoord {
   final double nearestAncestorOpacity;
   final bool nearestAncestorVisible;
   final bool hittable;
+
+  /// Global rect of the nearest scroll viewport; content outside it is clipped away.
+  final ({double x, double y, double w, double h})? clip;
+
+  /// Logical height the on-screen keyboard covers at the bottom of the view.
+  final double keyboardInset;
+
+  /// True when [hittable] comes from Flutter's own hit test rather than the ancestor approximation.
+  final bool hitTestReal;
+
+  /// What a tap at the centre would reach instead, when the real hit test misses the target.
+  final String? hitBy;
 
   ({int x, int y}) get physicalCenter => (
         x: (logicalCenter.x * devicePixelRatio).round(),
@@ -46,8 +64,27 @@ class ResolvedCoord {
     if (globalRight <= 0 || globalBottom <= 0) return false;
     if (globalLeft >= logicalViewSize.w) return false;
     if (globalTop >= logicalViewSize.h) return false;
-    return true;
+    final c = clip;
+    if (c == null) return true;
+    return globalRight > c.x &&
+        globalBottom > c.y &&
+        globalLeft < c.x + c.w &&
+        globalTop < c.y + c.h;
   }
+
+  /// True when the centre sits inside the nearest scroll viewport (or there is none).
+  bool get centerInClip {
+    final c = clip;
+    if (c == null) return true;
+    return logicalCenter.x >= c.x &&
+        logicalCenter.y >= c.y &&
+        logicalCenter.x < c.x + c.w &&
+        logicalCenter.y < c.y + c.h;
+  }
+
+  /// True when the on-screen keyboard covers the centre.
+  bool get centerUnderKeyboard =>
+      keyboardInset > 0 && logicalCenter.y >= logicalViewSize.h - keyboardInset;
 
   bool get painted =>
       hasNonZeroBounds &&
@@ -63,7 +100,9 @@ class ResolvedCoord {
       logicalCenter.x >= 0 &&
       logicalCenter.y >= 0 &&
       logicalCenter.x < logicalViewSize.w &&
-      logicalCenter.y < logicalViewSize.h;
+      logicalCenter.y < logicalViewSize.h &&
+      centerInClip &&
+      !centerUnderKeyboard;
 
   /// Non-fatal observations for [ActionResult.warnings].
   List<String> get warnings {
@@ -73,9 +112,10 @@ class ResolvedCoord {
           'or hidden by ancestor opacity / visibility)');
     }
     if (!hittable) {
-      out.add('target is not hittable — an absorber, overlay, or modal '
-          'likely sits above; the OS-level tap landed but the framework '
-          'hit test would not route it to your target');
+      out.add(hitTestReal
+          ? 'a tap at the centre would land on ${hitBy ?? 'another widget'}, not on the target'
+          : 'target may not be hittable: an absorber, overlay or modal '
+              'likely sits above it (approximate check)');
     }
     return out;
   }
@@ -99,6 +139,11 @@ class ResolvedCoord {
         'nearestAncestorVisible': nearestAncestorVisible,
         'painted': painted,
         'hittable': hittable,
+        'hitTest': hitTestReal ? 'real' : 'approximate',
+        if (hitBy != null) 'hitBy': hitBy,
+        if (clip != null)
+          'clip': {'x': clip!.x, 'y': clip!.y, 'w': clip!.w, 'h': clip!.h},
+        if (keyboardInset > 0) 'keyboardInset': keyboardInset,
       };
 }
 
@@ -191,12 +236,18 @@ class CoordinateResolver {
       );
     }
 
-    final String? json;
-    try {
-      json = await _runtime.evaluateString(GeometryExpr.build(),
-          rethrowErrors: true);
-    } on RuntimeEvalError catch (e) {
-      throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
+    String? json;
+    for (var attempt = 0;; attempt++) {
+      try {
+        json = await _runtime.evaluateString(GeometryExpr.build(),
+            rethrowErrors: true);
+        break;
+      } on RuntimeEvalError catch (e) {
+        if (attempt > 0) {
+          throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
     }
     if (json == null) {
       throw GeometryResolveError('evaluate(geometry) returned non-string');
@@ -215,6 +266,14 @@ class CoordinateResolver {
     final id = node.glintId;
     final blockedByBarrier =
         scene.hasBarrierOverlay && id != null && !scene.isInOverlay(id);
+    final clip = await _clipRect();
+    final gx = (decoded['gx'] as num).toDouble(), gy = (decoded['gy'] as num).toDouble();
+    final onScreen = gx >= 0 &&
+        gy >= 0 &&
+        gx < (decoded['vw'] as num) &&
+        gy < (decoded['vh'] as num);
+    final probed = await _hitTest(scene, groupName, (decoded['vid'] as num?)?.toInt() ?? 0);
+    final hit = probed == null || onScreen ? probed : (hit: false, hitBy: null);
     return ResolvedCoord(
       glintId: node.glintId!,
       logicalCenter: (
@@ -234,8 +293,70 @@ class CoordinateResolver {
       ),
       nearestAncestorOpacity: (decoded['op'] as num).toDouble(),
       nearestAncestorVisible: decoded['vis'] as bool,
-      hittable: evalHittable && !blockedByBarrier,
+      hittable: hit?.hit ?? (evalHittable && !blockedByBarrier),
+      clip: clip,
+      keyboardInset: (decoded['kb'] as num?)?.toDouble() ?? 0,
+      hitTestReal: hit != null,
+      hitBy: hit?.hitBy,
     );
+  }
+
+  /// The selected node's nearest scroll viewport as a global rect; null when there is none or the eval fails.
+  Future<({double x, double y, double w, double h})?> _clipRect() async {
+    try {
+      final raw = await _runtime.evaluateString(GeometryExpr.clip, rethrowErrors: true);
+      final parts = raw?.split(',').map(double.tryParse).toList();
+      if (parts == null || parts.length != 4 || parts.contains(null)) return null;
+      return (x: parts[0]!, y: parts[1]!, w: parts[2]!, h: parts[3]!);
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Flutter's own hit test at the selected node's centre; null when it cannot run, so callers fall back to the approximation.
+  Future<({bool hit, String? hitBy})?> _hitTest(
+      Scene scene, String groupName, int viewId) async {
+    try {
+      final pair = await _runtime.evaluateIn(GeometryExpr.hitInputs);
+      final pairId = pair.id;
+      if (pairId == null) return null;
+      final path = await _runtime.evaluateIn(GeometryExpr.hitPath(viewId),
+          librarySuffix: GeometryExpr.gesturesLibrary, scope: {'x': pairId});
+      final pathId = path.id;
+      if (pathId == null) return null;
+      final verdict = await _runtime.evaluateIn(GeometryExpr.hitVerdict(groupName),
+          scope: {'h': pathId});
+      final text = verdict.valueAsStringIsTruncated == true
+          ? await instanceText(_runtime.rawService, _runtime.flutterIsolateId, verdict)
+          : verdict.valueAsString;
+      if (text == null) return null;
+      if (text == 'hit') return (hit: true, hitBy: null);
+      return (hit: false, hitBy: _describeWinner(scene, text));
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Names the nearest scene node on the winner's ancestor chain, else the winner's widget type.
+  String _describeWinner(Scene scene, String verdict) {
+    final parts = verdict.split('|');
+    final ids = parts.length > 1 ? parts[1].split(',') : const <String>[];
+    final byId = {
+      for (final n in scene.root.walk())
+        if (n.glintId != null) n.inspectorId: n,
+    };
+    for (final id in ids) {
+      final n = byId[id];
+      if (n == null) continue;
+      final label = n
+          .walk()
+          .map((d) => d.textPreview)
+          .firstWhere((t) => t != null && t.isNotEmpty, orElse: () => null);
+      return label == null ? n.glintId! : '${n.glintId} "$label"';
+    }
+    return parts.first.replaceFirst('miss:', '').trim().isEmpty
+        ? 'another widget'
+        : parts.first.replaceFirst('miss:', '').trim();
   }
 }
 
@@ -273,15 +394,7 @@ class GeometryExpr {
       '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
   static const _ancVisible =
       '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
-  // A true hit-test is unreachable here: the eval runs in the app's root
-  // library, where `HitTestResult`/`GestureBinding` don't resolve (RPCError 113,
-  // confirmed empirically — they're only re-exported, not declared, by the
-  // imported libraries). So hittability is approximated in two layers: this
-  // ancestor walk (nearest AbsorbPointer / IgnorePointer), plus a scene-level
-  // ModalBarrier check in CoordinateResolver (a barrier blocks via its own hit
-  // test, not an absorber ancestor). Residual gap: a plain opaque sibling drawn
-  // on top in the same layer, with no barrier, can still read as hittable —
-  // only a real hit-test would catch that.
+  /// Fallback when the real hit test ([hitPath]) cannot run: nearest AbsorbPointer / IgnorePointer only.
   static const _hittable =
       '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
@@ -312,10 +425,42 @@ class GeometryExpr {
       '$_ancVisible.toString()',
       "',\"hit\":'",
       '$_hittable.toString()',
+      "',\"vid\":'",
+      '$_view.viewId.toString()',
+      "',\"kb\":'",
+      '($_view.viewInsets.bottom / $_view.devicePixelRatio).toString()',
       "'}'",
     ].join(' + ');
     return '((Offset c) => $body)($_ro.localToGlobal($_ro.paintBounds.center))';
   }
+
+  /// The nearest scroll viewport's global rect as `x,y,w,h`, or empty when the node is not in one.
+  static const clip =
+      "((RenderAbstractViewport? v) => v == null ? '' : ((RenderBox b) => "
+      "b.localToGlobal(Offset.zero).dx.toString() + ',' + b.localToGlobal(Offset.zero).dy.toString() + ',' + "
+      "b.size.width.toString() + ',' + b.size.height.toString())(v as RenderBox))"
+      '(RenderAbstractViewport.maybeOf($_ro))';
+
+  /// Library that declares `GestureBinding` and imports `HitTestResult` directly, so a real hit test compiles there.
+  static const gesturesLibrary = 'flutter/src/gestures/binding.dart';
+
+  /// The selected render object and its global centre, handed to [hitPath] through eval scope.
+  static const hitInputs =
+      '<Object>[$_ro, $_ro.localToGlobal($_ro.paintBounds.center)]';
+
+  /// Runs Flutter's hit test at the centre; yields `[targetOnPath, deepestTarget]`.
+  static String hitPath(int viewId) =>
+      '((HitTestResult r) => [GestureBinding.instance..hitTestInView(r, x[1] as dynamic, $viewId)].isEmpty '
+      '? null : <Object?>[r.path.any((e) => identical(e.target, x[0])), '
+      'r.path.isEmpty ? null : r.path.first.target])(HitTestResult())';
+
+  /// `hit`, or `miss:<creator>|<inspector ids up the winner's element chain>` in [groupName].
+  static String hitVerdict(String groupName) =>
+      "(h[0] as bool) ? 'hit' : ((h[1] as RenderObject?)?.debugCreator is DebugCreator "
+      "? 'miss:' + ((h[1] as RenderObject).debugCreator as DebugCreator).element.widget.runtimeType.toString() "
+      "+ '|' + ((h[1] as RenderObject).debugCreator as DebugCreator).element.debugGetDiagnosticChain()"
+      ".take(120).map((e) => WidgetInspectorService.instance.toId(e, '$groupName')).join(',') "
+      ": 'miss:')";
 
   static const _implicitView =
       'WidgetsBinding.instance.platformDispatcher.implicitView!';
