@@ -49,4 +49,14 @@ void main() {
     expect(cancel.axFrame!.h, closeTo(147 / 2.625, 0.01));
     expect(NativeSceneReader.renderAsText(scene), contains('* native native_cancel Cancel @ 28,157'));
   });
+
+  test('names app_process servers other tools left running', () {
+    const ps = 'ARGS\n'
+        'app_process / com.mobilenext.mobilecli.DeviceServer\n'
+        'app_process64 / com.genymobile.scrcpy.Server 2.4 log_level=info\n'
+        '/system/bin/surfaceflinger\n'
+        'app_process -Xzygote /system/bin --zygote\n';
+    expect(parseDeviceServers(ps),
+        ['com.mobilenext.mobilecli.DeviceServer', 'com.genymobile.scrcpy.Server']);
+  });
 }

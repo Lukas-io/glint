@@ -110,7 +110,6 @@ const List<TestedSetup> testedSetups = [
     status: SetupStatus.verified,
     checkedOn: '2026-09-27',
     evidence: 'Ember signup completed by an agent on a Pixel 8 emulator (#88)',
-    issues: ['record captures no frames after an emulator restart (#95)'],
   ),
   TestedSetup(
     platform: 'android',

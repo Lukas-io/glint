@@ -57,8 +57,10 @@ class AndroidNativeReader extends NativeReader {
       const path = '/data/local/tmp/glint_ui.xml';
       final dump = await run(adbPath, ['-s', serial, 'shell', 'uiautomator', 'dump', path]);
       if (dump.exitCode != 0) {
+        final others = await otherDeviceServers(serial, adbPath, run: run);
         lastReadProblem = dump.exitCode == 137
-            ? 'uiautomator was killed: another automation tool on the device (Appium, mobile-mcp, agent-device) likely holds the accessibility connection'
+            ? 'uiautomator was killed: another automation tool holds the accessibility connection'
+                '${others.isEmpty ? ' (Appium, mobile-mcp, agent-device)' : ': ${others.join(', ')}'}'
             : 'uiautomator dump failed (exit ${dump.exitCode})';
         return _sentinel();
       }
@@ -81,6 +83,23 @@ class AndroidNativeReader extends NativeReader {
     return Scene.native(root: root);
   }
 }
+
+/// Automation servers other tools left running on the device (`app_process` mains such as mobile-mcp's DeviceServer or scrcpy); they hold the accessibility and screen-capture connections glint needs.
+Future<List<String>> otherDeviceServers(String serial, String adbPath,
+    {Future<ProcessResult> Function(String, List<String>) run = Process.run}) async {
+  try {
+    final r = await run(adbPath, ['-s', serial, 'shell', 'ps', '-A', '-o', 'ARGS']);
+    return parseDeviceServers(r.stdout as String);
+  } on Object {
+    return const [];
+  }
+}
+
+/// Main classes of `app_process` servers in a `ps -o ARGS` listing.
+List<String> parseDeviceServers(String ps) => [
+      for (final m in RegExp(r'app_process\S*\s+\S+\s+([\w.]+)').allMatches(ps))
+        if (m.group(1)!.contains('.')) m.group(1)!,
+    ];
 
 /// The `package/activity` in `mCurrentFocus=Window{… u0 package/activity}`, or null.
 String? parseFocusedComponent(String dumpsys) {

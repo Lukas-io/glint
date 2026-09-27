@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../perception.dart' show otherDeviceServers;
 import '../batch_runner.dart';
 import '../envelope.dart';
 import '../frame_sampling.dart';
@@ -196,7 +197,7 @@ class RecordTool extends GlintTool {
         'frames not extracted: ${extraction.error}. The video is at $video. '
             'Build the bridge: cd native/ios_sim_bridge && swift build',
       if (extraction.error == null && frames.isEmpty)
-        'no frames decoded from the video',
+        await _whyNoFrames(session, video),
       if (frames.length == 1)
         'only one distinct frame in $wallMs ms: the screen did not change while '
             'recording, or changed faster than everyMs=$everyMs',
@@ -247,6 +248,23 @@ class RecordTool extends GlintTool {
       },
     );
   }
+
+  /// Which stage came back empty: the recording itself (and what may have blocked it) or decoding it.
+  static Future<String> _whyNoFrames(GlintSession session, String video) async {
+    final size = File(video).existsSync() ? File(video).lengthSync() : 0;
+    if (size >= _emptyVideoBytes) {
+      return 'no frames decoded from the video ($size bytes at $video)';
+    }
+    final device = session.device;
+    final others = device is AndroidDevice
+        ? await otherDeviceServers(device.serial, device.adbPath)
+        : const <String>[];
+    return 'the recording is empty ($size bytes): '
+        '${others.isNotEmpty ? 'another tool is capturing the device (${others.join(', ')}); stop it and record again' : device is AndroidDevice ? 'another tool capturing the screen (scrcpy, a mobile-mcp server) stops screenrecord from getting frames' : 'the simulator may be asleep or locked'}';
+  }
+
+  /// A video smaller than this holds no frames.
+  static const _emptyVideoBytes = 16 * 1024;
 
   /// Up to [n] items spread evenly from first to last.
   static List<T> _spread<T>(List<T> items, int n) {
