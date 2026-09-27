@@ -20,3 +20,4 @@ export 'src/interaction/launcher.dart';
 export 'src/interaction/result.dart';
 export 'src/interaction/sim_control.dart';
 export 'src/interaction/target.dart';
+export 'src/interaction/tested_matrix.dart';

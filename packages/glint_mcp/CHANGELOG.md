@@ -11,6 +11,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - Each release attaches a universal (Apple Silicon and Intel) `glint-iossim-macos` bridge with a sha256. glint downloads it on the first iOS attach when no local build exists, into `~/.glint/bin`. `GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off.
 - `GLINT_IOS_BRIDGE` points glint at a bridge binary.
 - The bridge answers `glint-iossim version`, and glint warns when a local build speaks a different protocol.
+- `attach` reports the input setup it is on (iOS runtime, Xcode, macOS and backend, or the Android API level) and whether glint has verified it, with known issues and the closest proven setup when it is untested. The list lives in `tested_matrix.dart`.
 - `hittable` comes from Flutter's own hit test at the target's centre (`hitTest: "real"`); when that can't run it falls back to the old check and says `hitTest: "approximate"`. A miss names what would take the touch (`hitBy`), and a tap that would land on another widget is refused by default with `errorKind: notHittable` (#77).
 - A glintId that is really a visible label ("Create account") gets a next step naming the id to use (#86).
 - `scroll` reports `reason` when nothing moved: `atEnd`, `atStart`, `notScrollable` or `blocked` (#84).
