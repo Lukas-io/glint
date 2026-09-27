@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Device claims (#102). Each glint session claims the devices it attaches to (`~/.glint/claims`). `attach` will not auto-pick a device another live session is driving, and refuses with the new `errorKind: deviceClaimed`, naming the holder. Passing `device:` still attaches, with a warning that input will interleave. `attach dryRun:true` marks claimed devices. Claims of sessions that have exited are ignored.
+
 ### Fixed
 
 - A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
