@@ -30,6 +30,10 @@
         "type": "string",
         "description": "Path to compiled `glint-iossim` binary. iOS only."
       },
+      "iosBackend": {
+        "type": "string",
+        "description": "bridge (default) | xctest. xctest drives the simulator through glint's XCUITest runner, built once per Xcode. iOS, Flutter mode."
+      },
       "iosInput": {
         "type": "string",
         "description": "auto (default) | dtuhid | indigo. How taps and keys reach the simulator; auto picks dtuhid where Xcode ships it. iOS only."
