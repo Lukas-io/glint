@@ -630,6 +630,10 @@
         "type": "string",
         "description": "Filter: stderr or logging."
       },
+      "native": {
+        "type": "boolean",
+        "description": "Native crashes of the app since attach (iOS crash reports, Android crash buffer) instead of Dart logs."
+      },
       "sinceSeq": {
         "type": "integer",
         "description": "Return entries with sequence >= sinceSeq."

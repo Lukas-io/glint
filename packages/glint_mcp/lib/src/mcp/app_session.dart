@@ -51,6 +51,23 @@ class AppSession {
   SettleDetector? settleDetector;
   NativeReader? nativeReader;
 
+  /// Native crashes of this app since attach: the simulator's crash reports on iOS, the crash log buffer on Android.
+  Future<List<NativeCrash>> nativeCrashes() async {
+    final since = attachedAt.subtract(const Duration(seconds: 5));
+    final dev = device;
+    switch (dev) {
+      case IosSimulator():
+        final id = bundleId;
+        return id == null ? const [] : iosCrashes(bundleId: id, since: since);
+      case AndroidDevice():
+        final reader = nativeReader;
+        final pkg = (reader is AndroidNativeReader ? reader.appPackage : null) ?? package;
+        return pkg == null
+            ? const []
+            : androidCrashes(serial: dev.serial, adbPath: dev.adbPath, package: pkg, since: since);
+    }
+  }
+
   /// The foreign window in front of the app at the last check (Android), e.g. a system photo picker.
   String? nativeSurfaceName;
 
