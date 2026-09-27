@@ -43,8 +43,12 @@ class DeviceTool extends GlintTool {
                   'Target simulator UDID. Defaults to the attached device.',
             ),
             'inline': Schema.bool(
-              description: 'op=screenshot: also return the PNG as image '
+              description: 'op=screenshot: also return the image as image '
                   'content, so no separate read is needed. Default false.',
+            ),
+            'maxSize': Schema.int(
+              description: 'op=screenshot inline: longest side in pixels of the '
+                  'image sent (0 = full size). Default: the screenshotMaxSize config (1024).',
             ),
             'latest': Schema.bool(
               description:
@@ -150,6 +154,9 @@ class DeviceTool extends GlintTool {
               errorKind: GlintErrorKind.backendToolError,
             );
           }
+          final sent = inline
+              ? await session.modelImage(capture.path, maxSize: argInt(args, 'maxSize'))
+              : null;
           return StructuredResponse(
             summary: 'screenshot ${latest ? "(newest capture)" : "saved"}: '
                 '${capture.path} (${capture.describe()})',
@@ -160,9 +167,10 @@ class DeviceTool extends GlintTool {
               'ok': true,
               ...capture.toJson(),
               'captures': app.captures.length,
-              if (inline) 'coordinates': _coordinateNote(session, capture.width),
+              if (sent != null) 'coordinates': sent.coordinates,
+              if (sent != null) 'sent': {'width': sent.image.width, 'height': sent.image.height, 'mimeType': sent.image.mimeType},
             },
-            imagePaths: [if (inline) capture.path],
+            imagePaths: [if (sent != null) sent.image.path],
           );
         }
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
@@ -177,6 +185,14 @@ class DeviceTool extends GlintTool {
         final dims = shot.width != null && shot.height != null
             ? ' (${shot.width}x${shot.height} px)'
             : '';
+        final sent = inline && shot.width != null && shot.height != null
+            ? await prepareModelImage(shot.path!,
+                width: shot.width!,
+                height: shot.height!,
+                maxSize: argInt(args, 'maxSize') ?? session.config.screenshotMaxSize,
+                format: session.config.screenshotFormat,
+                quality: session.config.screenshotQuality)
+            : null;
         return StructuredResponse(
           summary: 'screenshot saved: ${shot.path}$dims',
           nextSteps: [
@@ -187,8 +203,12 @@ class DeviceTool extends GlintTool {
             'path': shot.path,
             if (shot.width != null) 'width': shot.width,
             if (shot.height != null) 'height': shot.height,
+            if (sent != null)
+              'coordinates': 'image is ${sent.width}x${sent.height}; tap x,y in screen pixels = image pixel × ${(shot.width! / sent.width).toStringAsFixed(3)}',
           },
-          imagePaths: [if (inline) shot.path!],
+          imagePaths: [
+            if (sent != null) sent.path else if (inline) shot.path!,
+          ],
         );
 
       case 'biometric':
@@ -236,16 +256,6 @@ class DeviceTool extends GlintTool {
         summary: msg,
         errorKind: GlintErrorKind.invalidArgument,
       );
-
-  /// Which space tap x,y uses relative to this image, since a viewer may show it scaled.
-  String _coordinateNote(GlintSession session, int? width) {
-    final w = width == null ? '' : ' (image is $width px wide)';
-    if (session.isDeviceMode) {
-      return 'tap x,y in this image\'s own pixels$w; scale up if your viewer shows it smaller';
-    }
-    final dpr = session.device.devicePixelRatio;
-    return 'tap x,y in logical points: image pixel ÷ $dpr$w';
-  }
 
   Future<StructuredResponse> _biometric(
       SimControl sim, String udid, Map<String, Object?> args) async {

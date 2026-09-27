@@ -17,6 +17,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - Buttons show `[selected]` when the widget (chips) or its `Semantics` wrapper says so, and a `Semantics` `checked`/`toggled` fills `[on]`/`[off]` for custom toggles. Selection counts as a change, so tapping a pill no longer reports `changed:false` (#78).
 - Images name what they show (`- image profile.jpg (loaded)`), read from the image provider; a childless `CircleAvatar` or `Ink` is an image (#79).
 - Action replies write the change report into their text (`· routeChanged`, `· nothing changed`) for clients that only read text (#78).
+- Images sent to the model are shrunk and re-encoded first: by default JPEG at quality 75 with the longest side at 1024 px (`screenshotMaxSize`, `screenshotFormat`, `screenshotQuality` in `config`; `maxSize` per `device op:screenshot`). An iPhone 17 screenshot goes from a 1206×2622 PNG (about 2,900 tokens) to a 471×1024 JPEG (about 640). Every inline image says how its pixels map to `tap x,y` (#89).
+- When native UI takes over, `get_scene` and the action reply attach the screenshot as an image instead of only a file path, and `record inline:true` attaches up to 4 frames at 512 px, so agents without a file tool can see them (#85).
 - On Android, a system window in front of the app (the photo picker, another app) is detected from the window manager: the action reply says `changeCategory: nativeSurface` and names it, and `get_scene` lists the window's elements from `uiautomator dump` with `@ x,y` tap coordinates. When the dump fails it says why, for example when another automation tool holds the accessibility connection (#80).
 
 ### Fixed

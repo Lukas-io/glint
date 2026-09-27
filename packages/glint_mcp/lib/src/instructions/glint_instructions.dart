@@ -19,7 +19,7 @@ const _feedback = '''
 Every action already answers "what did that do?": `tap` / `type` / `scroll` settle and return `changed` + `changeCategory` (routeChanged / overlayAppeared / overlayDismissed / contentChanged / nothing), plus `state` when the screen is loading.
 
 1. `changed:false` = tree, text, values and selection unchanged. Re-read; never retry blind.
-2. No `wait_for_settle` after an action — it already settled. `wait_for_settle` is for async work you started. `state: native` brings a screenshot path: read it, then `tap x,y` (logical points).
+2. No `wait_for_settle` after an action — it already settled. `wait_for_settle` is for async work you started. `state: native` attaches a screenshot; `tap x,y` uses its `coordinates` scale.
 3. Failures explain: read `detail` + `nextSteps`; a "did you mean" names the live id.
 4. When in doubt: `get_scene`. The framework is truth, not your prediction.
 ''';

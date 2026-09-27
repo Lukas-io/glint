@@ -325,6 +325,7 @@ class GetSceneTool extends GlintTool {
     final overlay = lifecycleIsOverlay(lifecycle);
     final locked = overlay ? null : await _lockState(session);
     final capture = await app?.captureNow('scene') ?? app?.captures.newest;
+    final sent = capture == null ? null : await session.modelImage(capture.path);
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
     final dpr = session.device.devicePixelRatio;
@@ -341,6 +342,7 @@ class GetSceneTool extends GlintTool {
         else
           '${describeLifecycle(lifecycle)} (lifecycle: ${lifecycle ?? "unknown"})',
         if (capture != null) 'screenshot: ${capture.path} (${capture.describe()})',
+        if (sent != null) sent.coordinates,
         if (!isSentinel) NativeSceneReader.renderAsText(nativeScene),
       ].join('\n'),
       warnings: [
@@ -352,10 +354,10 @@ class GetSceneTool extends GlintTool {
         if (surface != null && !isSentinel)
           'tap an element above with tap x,y using its @ coordinates (logical points)',
         if (surface != null) 'hardware_button back closes it without choosing',
-        if (capture != null) 'read the screenshot to see what is on top',
-        if (capture == null) '`device op:screenshot` to see what is on top',
+        if (capture != null) 'the screenshot is attached: look at it to see what is on top',
+        if (capture == null) '`device op:screenshot inline:true` to see what is on top',
         if (overlay && surface == null)
-          'tap its button with tap x,y in logical points (screenshot pixel ÷ $dpr)',
+          'tap its button with tap x,y in logical points (see the image line above for the scale)',
         if (overlay && surface == null) 'or wait: some sheets dismiss on their own, then get_scene again',
         if (locked == true) 'hardware_button unlock, then get_scene',
         if (!overlay && locked != true && surface == null) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
@@ -371,8 +373,10 @@ class GetSceneTool extends GlintTool {
         if (surface != null) 'nativeSurface': surface,
         if (locked != null) 'locked': locked,
         if (capture != null) 'screenshot': capture.toJson(),
+        if (sent != null) 'coordinates': sent.coordinates,
         'devicePixelRatio': dpr,
       },
+      imagePaths: [if (sent != null) sent.image.path],
     );
   }
 

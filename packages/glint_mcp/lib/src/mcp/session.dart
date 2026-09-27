@@ -7,6 +7,7 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
+import '../interaction/image_size.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
@@ -432,6 +433,34 @@ class GlintSession {
       }
     }
     return null;
+  }
+
+  /// [path] shrunk for the model per the screenshot settings, with how its pixels map to `tap x,y`; [maxSize] overrides the configured cap.
+  Future<({ModelImage image, String coordinates})> modelImage(String path,
+      {int? maxSize}) async {
+    final size = pngSize(path);
+    if (size == null) {
+      return (
+        image: (path: path, width: 0, height: 0, mimeType: 'image/png'),
+        coordinates: 'image size unknown; tap x,y in logical points',
+      );
+    }
+    final (w, h) = size;
+    final image = await prepareModelImage(path,
+        width: w,
+        height: h,
+        maxSize: maxSize ?? config.screenshotMaxSize,
+        format: config.screenshotFormat,
+        quality: config.screenshotQuality);
+    final device = isDeviceMode;
+    final target = device ? w.toDouble() : w / this.device.devicePixelRatio;
+    final factor = image.width == 0 ? 1.0 : target / image.width;
+    return (
+      image: image,
+      coordinates: 'image is ${image.width}x${image.height}; tap x,y in '
+          '${device ? 'screen pixels' : 'logical points'} = image pixel × '
+          '${factor.toStringAsFixed(3)}',
+    );
   }
 
   T _requireAttached<T>(T? value, String name) {

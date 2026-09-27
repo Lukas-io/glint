@@ -46,6 +46,9 @@ class RecordTool extends GlintTool {
                 description: 'Keep only frames that differ. Default true.'),
             'maxFrames':
                 Schema.int(description: 'Max frames returned (1-60). Default 12.'),
+            'inline': Schema.bool(
+                description:
+                    'Attach up to 4 frames as images (512 px longest side), for clients that cannot read files. Default false.'),
           },
         ),
       );
@@ -58,6 +61,7 @@ class RecordTool extends GlintTool {
     final everyMs = argInt(args, 'everyMs') ?? 50;
     final distinctOnly = argBool(args, 'distinctOnly') ?? true;
     final maxFrames = argInt(args, 'maxFrames') ?? 12;
+    final inline = argBool(args, 'inline') ?? false;
 
     if (durationMs < 0 || durationMs > 30000) {
       return _bad('durationMs must be 0-30000');
@@ -205,17 +209,26 @@ class RecordTool extends GlintTool {
         ? const <String>[]
         : [for (final o in run.outcomes) o.line(origin: t0)];
 
+    final attached = <String>[];
+    if (inline) {
+      for (final f in _spread(frames, 4)) {
+        attached.add((await session.modelImage(f.path, maxSize: 512)).image.path);
+      }
+    }
     return StructuredResponse(
+      imagePaths: attached,
       summary: [
         describeFrames(frames, wallMs, distinctOnly: distinctOnly),
         ...stepLines,
-        if (frames.isNotEmpty)
+        if (frames.isNotEmpty && attached.isEmpty)
           'frames are PNG files under ${dir.path}/frames; read them in order',
+        if (attached.isNotEmpty)
+          '${attached.length} of ${frames.length} frames attached in order',
       ].join('\n'),
       warnings: warnings,
       nextSteps: [
-        if (frames.isNotEmpty)
-          'read ${frames.map((f) => f.path).take(4).join(", ")} to see what changed',
+        if (frames.isNotEmpty && attached.isEmpty)
+          'read ${frames.map((f) => f.path).take(4).join(", ")} to see what changed, or record again with inline:true',
         if (frames.length == 1) 'record again with everyMs:16 for finer sampling',
       ],
       data: {
@@ -233,6 +246,12 @@ class RecordTool extends GlintTool {
         if (session.isDeviceMode) 'mode': 'device',
       },
     );
+  }
+
+  /// Up to [n] items spread evenly from first to last.
+  static List<T> _spread<T>(List<T> items, int n) {
+    if (items.length <= n) return items;
+    return [for (var i = 0; i < n; i++) items[(i * (items.length - 1) / (n - 1)).round()]];
   }
 
   StructuredResponse _bad(String why) => StructuredResponse.error(
