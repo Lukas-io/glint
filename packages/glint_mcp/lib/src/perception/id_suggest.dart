@@ -45,20 +45,41 @@ String? didYouMean(List<String> suggestions) => suggestions.isEmpty
     ? null
     : 'did you mean: ${suggestions.map((s) => '"$s"').join(', ')}';
 
-/// The glintId to use when [wanted] is visible text rather than an id: the nearest tappable ancestor of the matching text, else the text itself.
+/// The glintId to use when [wanted] is visible text rather than an id: the nearest tappable ancestor of the matching text, else the text itself; pages under the active one are skipped.
 String? idForLabel(SceneNode root, String wanted) {
   final want = wanted.trim().toLowerCase();
   if (want.isEmpty) return null;
-  String? visit(SceneNode n, String? tappable) {
+  final active = _activePage(root);
+  String? visit(SceneNode n, String? tappable, bool inPage) {
+    if (n.isOffstage) return null;
+    if (!inPage && n.baseLabel == 'Scaffold') {
+      if (!identical(n, active)) return null;
+      inPage = true;
+    }
     final here = n.glintId != null && _tappable(n.baseLabel) ? n.glintId : tappable;
     if ((n.textPreview ?? '').trim().toLowerCase() == want) return here ?? n.glintId;
     for (final c in n.children) {
-      final f = visit(c, here);
+      final f = visit(c, here, inPage);
       if (f != null) return f;
     }
     return null;
   }
-  return visit(root, null);
+  return visit(root, null, false);
+}
+
+/// The last outermost onstage Scaffold, the page the user sees (as the semanticizer picks it).
+SceneNode? _activePage(SceneNode root) {
+  SceneNode? last;
+  void visit(SceneNode n) {
+    if (n.isOffstage) return;
+    if (n.baseLabel == 'Scaffold') {
+      last = n;
+      return;
+    }
+    n.children.forEach(visit);
+  }
+  visit(root);
+  return last;
 }
 
 bool _tappable(String label) =>

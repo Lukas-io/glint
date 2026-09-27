@@ -53,6 +53,33 @@ void main() {
       expect(idForLabel(root, 'Seven days to meet someone real'), 'text#bbbb');
     });
 
+    test('a label on an offstage page underneath is not suggested', () {
+      final page = _n('InkWell', glintId: 'ink_well_in_welcome_page', children: [
+        _n('Text', text: 'Create account'),
+      ]);
+      for (final n in page.walk()) {
+        n.isOffstage = true;
+      }
+      expect(idForLabel(_n('Column', children: [page]), 'Create account'), isNull);
+    });
+
+    test('a label on the page underneath the current one is not suggested', () {
+      final root = _n('Overlay', children: [
+        _n('Scaffold', children: [
+          _n('InkWell', glintId: 'ink_well_in_welcome_page', children: [
+            _n('Text', text: 'Create account'),
+          ]),
+        ]),
+        _n('Scaffold', children: [
+          _n('InkWell', glintId: 'ink_well_in_stack', children: [
+            _n('Text', text: 'Continue'),
+          ]),
+        ]),
+      ]);
+      expect(idForLabel(root, 'Create account'), isNull);
+      expect(idForLabel(root, 'Continue'), 'ink_well_in_stack');
+    });
+
     test('an id that matches no text gives no hint', () {
       expect(labelHint(root, 'checkbox'), isNull);
     });
