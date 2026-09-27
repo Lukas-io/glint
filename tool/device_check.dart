@@ -27,7 +27,7 @@ Future<void> main(List<String> args) async {
   }
 
   try {
-    await step('attach', 'attach', {
+    final attached = await step('attach', 'attach', {
       if (opts['vm-uri'] != null) 'vmUri': opts['vm-uri'],
       if (opts['platform'] != null) 'platform': opts['platform'],
       if (opts['device'] != null) 'device': opts['device'],
@@ -35,6 +35,7 @@ Future<void> main(List<String> args) async {
     }, (r, text) =>
         text.contains('attached') &&
         (opts['platform'] != 'ios' || (_data(r)['toolchain'] as Map?)?['actionsAllowed'] == true));
+    stdout.writeln('      input: ${_data(attached)['input']}');
     if (failed) exit(1);
 
     var scene = '';
