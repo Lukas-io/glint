@@ -34,6 +34,10 @@
         "type": "string",
         "description": "auto (default) | dtuhid | indigo. How taps and keys reach the simulator; auto picks dtuhid where Xcode ships it. iOS only."
       },
+      "androidInput": {
+        "type": "string",
+        "description": "auto (default) | server | adb. server = glint's resident input server. Android only."
+      },
       "adbPath": {
         "type": "string",
         "description": "adb executable path. Android only."

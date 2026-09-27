@@ -176,6 +176,7 @@ class AppSession {
           serial: dev.serial,
           adbPath: dev.adbPath,
           devicePixelRatio: () => dev.devicePixelRatio,
+          serverCall: _serverCall(dev.server),
         ),
     };
 
@@ -336,4 +337,17 @@ class AppSession {
       _onLifecycle('paused');
     }
   }
+}
+
+/// A call into [server] for the native reader, null when there is no server or it failed.
+Future<Map<String, Object?>?> Function(Map<String, Object?>)? _serverCall(AndroidServer? server) {
+  if (server == null) return null;
+  return (request) async {
+    if (!server.running) return null;
+    try {
+      return await server.call(request);
+    } on AndroidServerError {
+      return null;
+    }
+  };
 }
