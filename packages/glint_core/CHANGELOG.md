@@ -4,6 +4,8 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-27
+
 ### Added
 
 - `editDistance`, the Levenshtein distance both packages' suggestions use.
