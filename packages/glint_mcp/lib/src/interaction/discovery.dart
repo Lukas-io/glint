@@ -161,6 +161,19 @@ class DeviceDiscovery {
     }
   }
 
+  /// The Android package whose process is [pid] on [serial], or null when adb cannot tell.
+  Future<String?> androidPackageForPid(String serial, int pid) async {
+    try {
+      final res = await Process.run(
+              adbPath, ['-s', serial, 'shell', 'cat', '/proc/$pid/cmdline'])
+          .timeout(const Duration(seconds: 3));
+      final name = (res.stdout as String).replaceAll('\u0000', '').trim().split(':').first;
+      return RegExp(r'^[A-Za-z][\w]*(\.\w+)+$').hasMatch(name) ? name : null;
+    } on Object {
+      return null;
+    }
+  }
+
   Future<bool> isDevicePresent(String deviceId, DevicePlatform platform) async {
     final devices = platform == DevicePlatform.ios
         ? await _bootedIosSims()

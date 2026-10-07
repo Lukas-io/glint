@@ -24,7 +24,7 @@
       },
       "launch": {
         "type": "string",
-        "description": "Flutter project root to run when it is not in history."
+        "description": "Flutter project folder to build and run, or an installed app id (bundle id or package) to reopen in seconds without a rebuild."
       },
       "iosBridgePath": {
         "type": "string",

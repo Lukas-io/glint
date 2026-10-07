@@ -6,6 +6,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `attach launch:` also takes an installed app id (an iOS bundle id or an Android package) and reopens that debug build in seconds without a rebuild. glint reads the app's VM service address from the simulator log or logcat, then pairs it with `flutter attach` in the project folder it remembers, so evaluation and `hot_reload` work as after a `flutter run`. It refuses an app that is already open, one glint has no project folder for, and a physical iPhone, and each failure names the next call. When an app is gone from a device, the next steps list the reopen first and the rebuild second (#103).
 - `hot_reload` reloads or (with `restart:true`) restarts the attached app through the services its own `flutter run` registered, so code changes can be applied without a shell and only the app under test is touched (#118).
 - Apps and devices are owned by the session that attached or launched them. `kill_app appId:` refuses an app this session never attached, and `shutdown_sim` refuses a device it never attached or launched on (including any in `all:true`), with the new `errorKind: notOwned`; `force:true` overrides. `attach` and the session's app list show the app's project root (#118).
 
