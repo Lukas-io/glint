@@ -12,6 +12,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 ### Changed
 
 - `long_press` holds for 800 ms by default instead of 500 ms. 500 ms equals Flutter's long-press threshold, so about half of default long presses ended just before Flutter recognised them (#112).
+- An unplugged physical Android phone was reported as a closed emulator, with a next step to boot it. It is now reported as disconnected, with "ask the user to reconnect the phone, then attach" (#120).
 
 ### Changed
 

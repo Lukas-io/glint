@@ -313,11 +313,26 @@ abstract class GlintTool {
     return deviceGoneResponse(session, app);
   }
 
-  /// The device behind [app] is no longer booted: name it, and say how back.
+  /// The device behind [app] is gone (a closed simulator or emulator, or an unplugged phone): name it, and say how back.
   static StructuredResponse deviceGoneResponse(
       GlintSession session, AppSession app) {
     final what = app.platform == DevicePlatform.ios ? 'simulator' : 'emulator';
     final remaining = session.apps;
+    if (app.platform == DevicePlatform.android && !app.id.startsWith('emulator-')) {
+      return StructuredResponse.error(
+        summary: 'phone ${app.deviceName ?? app.id} disconnected: adb no '
+            'longer lists it, so ${app.label} is gone',
+        errorKind: GlintErrorKind.deviceGone,
+        detail: 'device ${app.id} is missing from `adb devices`; its session '
+            'was dropped from the pool',
+        nextSteps: [
+          'ask the user to reconnect the phone (USB cable or wireless debugging), '
+              'then attach device:"${app.id}"',
+          if (remaining.isNotEmpty)
+            'or continue on: ${remaining.map((a) => '"${a.label}"').join(", ")} (attach app:"<name>")',
+        ],
+      );
+    }
     return StructuredResponse.error(
       summary: '$what ${app.deviceName ?? app.id} is no longer booted — it was '
           'closed or crashed, so ${app.label} is gone',
