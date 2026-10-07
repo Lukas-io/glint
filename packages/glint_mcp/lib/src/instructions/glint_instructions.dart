@@ -73,19 +73,19 @@ const _recovery = '''
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady` — never hittable; dismiss the cover.
-- `targetNotFound` — `scroll_to_find` miss; `detail` lists on-screen text.
+- `targetNotFound` — `scroll_to_find` miss; `detail` lists visible text.
 - `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
-- `connectionLost` — VM dropped; `attach` again.
-- `appUnresponsive` — suspended (locked / breakpoint). Unlock or reopen, retry.
+- `connectionLost` — VM dropped; re-`attach`.
+- `appUnresponsive` — suspended (locked/breakpoint); unlock, retry.
 - `deviceGone` — sim closed; `attach device:"<id>"` boots + relaunches.
 - `deviceClaimed` — another agent's device; pass your own `device:`.
-- `notOwned` — not an app/device you attached; leave it, or ask the user before `force:true`.
+- `notOwned`: not your app/device; `force:true` only if the user asked.
 - `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
 - `unknownApp` — `app:` matched none/several apps; pick from the list.
 - `sessionNotAttached` — `attach`.
-- `appNotResumed` — native surface on top; dismiss it, retry.
+- `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; `wait_for_settle`, retry; else re-`attach`.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` — platform gap, tool failed, iOS bridge/Xcode; read `detail`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` — read `detail`.
 - `invalidArgument` — fix per tool description.
 - `internal` — glint bug. `report_issue` with the user's OK.
 
