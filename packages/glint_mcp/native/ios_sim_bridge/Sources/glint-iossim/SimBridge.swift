@@ -487,7 +487,7 @@ struct SimDeviceProxy {
             direction: direction,
             marker: marker,
         ).buffer
-        try send(client: client, message: buf)
+        try send(client: client, message: buf, release: direction == .up)
     }
 
     private func sendButton(
@@ -503,7 +503,7 @@ struct SimDeviceProxy {
             throw SimError(message:
                 "IndigoHIDMessageForButton returned nil for code \(code)")
         }
-        try send(client: client, message: buf)
+        try send(client: client, message: buf, release: direction == .up)
     }
 
     func sendKey(
@@ -519,10 +519,11 @@ struct SimDeviceProxy {
             throw SimError(message:
                 "IndigoHIDMessageForKeyboardArbitrary returned nil for usage \(usage)")
         }
-        try send(client: client, message: buf)
+        try send(client: client, message: buf, release: direction == .up)
     }
 
-    private func send(client: AnyObject, message: UnsafeMutableRawPointer) throws {
+    /// Sends one Indigo message; a press goes out without waiting, and a [release] waits for every message still unacknowledged, so a slow simulator cannot hold a key or finger down.
+    private func send(client: AnyObject, message: UnsafeMutableRawPointer, release: Bool) throws {
         let sel = NSSelectorFromString(
             "sendWithMessage:freeWhenDone:completionQueue:completion:")
         guard client.responds(to: sel) else {
@@ -538,6 +539,7 @@ struct SimDeviceProxy {
             message: message,
             freeWhenDone: true,
         )
+        if release { try SimBridge.awaitAcks() }
     }
 
     func makeHidClient() throws -> AnyObject {
@@ -741,26 +743,31 @@ extension SimBridge {
                 "dlsym(objc_msgSend) failed: " + String(cString: dlerror()))
         }
         let send = unsafeBitCast(sym, to: SendT.self)
-        let delivered = DispatchSemaphore(value: 0)
-        var failure: NSError?
+        pendingAcks.enter()
         let completion: @convention(block) (NSError?) -> Void = { error in
-            failure = error
-            delivered.signal()
+            if let error { ackFailure = error }
+            pendingAcks.leave()
         }
         send(receiver, selector, message, ObjCBool(freeWhenDone),
              ackQueue, unsafeBitCast(completion, to: AnyObject.self))
-        // Waiting keeps each down/up in order and stops the process exiting before SimulatorKit flushes the last message.
-        if delivered.wait(timeout: .now() + ackTimeout) == .timedOut {
+    }
+
+    /// Waits until SimulatorKit has acknowledged every message sent so far, so order holds and nothing is lost when the process exits.
+    static func awaitAcks() throws {
+        if pendingAcks.wait(timeout: .now() + ackTimeout) == .timedOut {
             throw SimError(message:
-                "the simulator did not acknowledge an input message within \(ackTimeout)s")
+                "the simulator did not acknowledge input within \(ackTimeout)s")
         }
-        if let failure {
+        if let failure = ackFailure {
+            ackFailure = nil
             throw SimError(message: "the simulator rejected an input message: \(failure.localizedDescription)")
         }
     }
 
+    private static let pendingAcks = DispatchGroup()
+    nonisolated(unsafe) private static var ackFailure: NSError?
     private static let ackQueue = DispatchQueue(label: "glint.iossim.hid-ack")
-    private static let ackTimeout = 2.0
+    private static let ackTimeout = 10.0
 
     private static var _simKitHandle: UnsafeMutableRawPointer?
 

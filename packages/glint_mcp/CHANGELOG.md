@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- iOS (Indigo input): every key and touch event waited up to 2 s for the simulator's acknowledgement before the next was sent, so on a loaded machine a key stayed pressed for seconds and repeated (`hello glint` typed as `hello. glint`), and typing 11 characters took up to 80 s. Presses now go out at once and each release waits for everything still unacknowledged, so a key or finger is held only as long as intended (#75).
+
 ### Changed
 
 - Tool definitions are 12% shorter (32.6k to 28.5k characters, about 1,000 fewer tokens on every turn). The `app` argument and the gesture arguments shared by tap, long_press, swipe, drag, scroll and type now use one tight wording each, and the ten longest tool descriptions no longer repeat what their arguments and the instructions already say. No argument or behaviour changed.
