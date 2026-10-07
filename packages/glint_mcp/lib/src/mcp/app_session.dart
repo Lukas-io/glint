@@ -192,6 +192,12 @@ class AppSession {
     settleDetector = SettleDetector(runtime: rt, reader: rd);
     final dev = device;
     nativeReader = switch (dev) {
+      IosSimulator(:final runner?) => RunnerNativeReader(
+          tree: (bundleId) => runner.call('GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
+              timeout: const Duration(seconds: 5)),
+          bundleId: () => this.bundleId,
+          fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
+        ),
       IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
       AndroidDevice() => AndroidNativeReader(
           serial: dev.serial,
@@ -211,10 +217,10 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _reconnect(runtimeFactory));
 
     _lifecyclePollTimer?.cancel();
-    if (nativeReader is NativeSceneReader) {
+    if (nativeReader is NativeSceneReader || nativeReader is RunnerNativeReader) {
       _lifecyclePollTimer = Timer.periodic(
         const Duration(milliseconds: 500),
-        (_) => _pollLifecycle(),
+        (_) => _pollLifecycle(background: true),
       );
     }
   }
@@ -310,7 +316,10 @@ class AppSession {
   /// A suspended app (device locked, backgrounded) never answers; a live one answers well inside this.
   static const lifecycleProbeTimeout = Duration(seconds: 2);
 
-  Future<void> _pollLifecycle() async {
+  int _backgroundTicks = 0;
+
+  /// A [background] tick reads the runner's tree (about 90 ms) only every fourth time; actions and `get_scene` always do.
+  Future<void> _pollLifecycle({bool background = false}) async {
     final rt = runtime;
     final native = nativeReader;
     if (rt == null || native == null) return;
@@ -324,7 +333,8 @@ class AppSession {
         // not learnable yet; the next poll tries again
       }
     }
-    final foreign = await native.foreignSurface();
+    final skipForeign = background && native is RunnerNativeReader && _backgroundTicks++ % 4 != 0;
+    final foreign = skipForeign ? nativeSurfaceName : await native.foreignSurface();
     nativeSurfaceName = foreign;
     if (foreign != null) {
       sceneMode = SceneMode.native;

@@ -23,6 +23,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Fixed
 
+- Native UI an iOS app presents inside its own process (the system photo picker, the text edit menu) was invisible: the app stays `resumed`, so a tap that opened the picker reported `overlayDismissed` and a long press that opened the edit menu reported `nothing changed`. With glint's XCUITest runner attached (`attach iosBackend:xctest`), glint reads the app's accessibility tree after each action and in `get_scene`. The action reply says `nativeSurface` and names it (`native screen "Photos"`, `menu (Paste · Select All · Scan Text)`, or a system alert), and `get_scene` lists its elements with tap coordinates instead of attaching a screenshot. Closing it reports `nativeDismissed` (#80).
 - `type clear:true` deleted only the text before the cursor, which a tap leaves mid-field, so text after it survived and the new text landed in the middle (`wisdomiyamu.ember@gmail.commbe…`). Clearing now also forward-deletes what is left.
 - On Android, the first keys typed into a field just switched to were lost while the keyboard reconnected (a 9-character password arrived as 5). `type focus:` now gives the keyboard 300 ms to take the new field before typing.
 - `type` reported `contentChanged` even when most keys never reached the field. It now reads the field back and warns, with lengths only, when the typed text is not there (letters and digits compared, so input formatters do not count).

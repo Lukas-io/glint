@@ -68,7 +68,8 @@ class GetSceneTool extends GlintTool {
     }
 
     if (session.sceneMode == SceneMode.native ||
-        session.nativeReader is AndroidNativeReader) {
+        session.nativeReader is AndroidNativeReader ||
+        session.nativeReader is RunnerNativeReader) {
       await session.active?.refreshSceneMode();
     }
     if (session.sceneMode == SceneMode.native) {
@@ -314,18 +315,21 @@ class GetSceneTool extends GlintTool {
     final overlay = lifecycleIsOverlay(lifecycle);
     final locked = overlay ? null : await _lockState(session);
     final capture = await app?.captureNow('scene') ?? app?.captures.newest;
-    final sent = capture == null ? null : await session.modelImage(capture.path);
     final nativeScene = await nativeReader.readSnapshot();
     final isSentinel = nativeScene.root.glintId == '_native_surface';
     final dpr = session.device.devicePixelRatio;
     final surface = app?.nativeSurfaceName;
+    final listed = surface != null && !isSentinel && nativeScene.root.children.isNotEmpty;
+    final sent = capture == null || listed ? null : await session.modelImage(capture.path);
     final readProblem =
         nativeReader is AndroidNativeReader ? nativeReader.lastReadProblem : null;
     return StructuredResponse(
       summary: [
         '--- native surface active ---',
-        if (surface != null)
+        if (surface != null && nativeReader is AndroidNativeReader)
           '${surface.split('/').last.split('.').last} (${surface.split('/').first}) is in front of your app'
+        else if (surface != null)
+          '$surface is in front of your app'
         else if (locked == true)
           'the device is locked, so your app is suspended (lifecycle: ${lifecycle ?? "unknown"})'
         else
@@ -342,9 +346,11 @@ class GetSceneTool extends GlintTool {
       nextSteps: [
         if (surface != null && !isSentinel)
           'tap an element above with tap x,y using its @ coordinates (logical points)',
-        if (surface != null) 'hardware_button back closes it without choosing',
-        if (capture != null) 'the screenshot is attached: look at it to see what is on top',
-        if (capture == null) '`device op:screenshot inline:true` to see what is on top',
+        if (surface != null && nativeReader is AndroidNativeReader) 'hardware_button back closes it without choosing',
+        if (surface != null && nativeReader is RunnerNativeReader)
+          'to close it without choosing, tap its Cancel or Close element, or tap outside a menu',
+        if (sent != null) 'the screenshot is attached: look at it to see what is on top',
+        if (capture == null && !listed) '`device op:screenshot inline:true` to see what is on top',
         if (overlay && surface == null)
           'tap its button with tap x,y in logical points (see the image line above for the scale)',
         if (overlay && surface == null) 'or wait: some sheets dismiss on their own, then get_scene again',
