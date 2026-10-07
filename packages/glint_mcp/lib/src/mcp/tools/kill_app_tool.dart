@@ -4,6 +4,7 @@ import '../../../interaction.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// `kill_app` — stop a running app glint started (or the attached one) and detach.
 class KillAppTool extends GlintTool {
@@ -18,7 +19,8 @@ class KillAppTool extends GlintTool {
             'stopped via its `flutter run`; an attached app is also terminated '
             'on the device when its bundle id is known. '
             'device: target device (defaults to the attached one). '
-            'appId: bundle id (iOS) or package (Android) to force-terminate.',
+            'appId: bundle id (iOS) or package (Android) to force-terminate; '
+            'an app this session never attached is refused unless force:true.',
         inputSchema: ObjectSchema(
           properties: {
             'device': Schema.string(
@@ -26,6 +28,9 @@ class KillAppTool extends GlintTool {
             ),
             'appId': Schema.string(
               description: 'Bundle id (iOS) / package (Android) to terminate.',
+            ),
+            'force': Schema.bool(
+              description: 'Terminate an appId this session did not attach. Default false.',
             ),
           },
         ),
@@ -42,6 +47,19 @@ class KillAppTool extends GlintTool {
         summary: 'no device to stop — attach first, or pass device',
         errorKind: GlintErrorKind.invalidArgument,
         nextSteps: const ['pass device:"<udid/serial>"'],
+      );
+    }
+    final requestedAppId = args['appId'] as String?;
+    final force = argBool(args, 'force') ?? false;
+    if (requestedAppId != null && !force && !session.ownsApp(requestedAppId)) {
+      return StructuredResponse.error(
+        summary: 'refused: $requestedAppId is not an app this session attached or launched',
+        errorKind: GlintErrorKind.notOwned,
+        detail: 'it may belong to another project or agent working on $deviceId',
+        nextSteps: const [
+          'call kill_app with no appId to stop the app you are driving',
+          'only if the user asked to stop that app: pass force:true',
+        ],
       );
     }
     final pooled = session.appFor(deviceId);
@@ -63,7 +81,7 @@ class KillAppTool extends GlintTool {
     }
 
     // 2. Terminate on device when we know the app id and platform.
-    final appId = (args['appId'] as String?) ?? pooled?.bundleId;
+    final appId = requestedAppId ?? pooled?.bundleId;
     if (platform != null && appId != null) {
       final err = await const AppLauncher()
           .terminateApp(platform, deviceId, appId, adbPath: adbPath);

@@ -115,6 +115,19 @@
       "appId": {
         "type": "string",
         "description": "Bundle id (iOS) / package (Android) to terminate."
+      },
+      "force": {
+        "type": "boolean",
+        "description": "Terminate an appId this session did not attach. Default false."
+      }
+    }
+  },
+  "hot_reload": {
+    "type": "object",
+    "properties": {
+      "restart": {
+        "type": "boolean",
+        "description": "Hot restart instead of hot reload. Default false."
       }
     }
   },
@@ -128,6 +141,10 @@
       "all": {
         "type": "boolean",
         "description": "Shut down every booted device. Default false."
+      },
+      "force": {
+        "type": "boolean",
+        "description": "Also shut down devices this session never used. Default false."
       }
     }
   },

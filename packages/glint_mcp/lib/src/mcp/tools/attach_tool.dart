@@ -472,13 +472,16 @@ class AttachTool extends GlintTool {
         if (package != null) 'package': package,
         if (displayName != null) 'name': displayName,
         if (bundleId != null) 'bundleId': bundleId,
+        if (projectDir != null) 'project': projectDir,
       };
       if (session.backend case final XcTestBackend b) b.bundleId = bundleId;
       session.active!
         ..package = package
         ..displayName = displayName
         ..bundleId = bundleId
-        ..deviceName = deviceName;
+        ..deviceName = deviceName
+        ..projectDir = projectDir;
+      session.markOwnedApp([package, bundleId]);
 
       // Remember this attach so a future cold start can relaunch it.
       final appKey = package ?? _basename(projectDir) ?? link?.appName;
@@ -531,7 +534,8 @@ class AttachTool extends GlintTool {
       final others = session.apps.where((a) => a.id != deviceId).toList();
       return StructuredResponse(
         summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
-            '${appLabel != null ? " running $appLabel" : ""} '
+            '${appLabel != null ? " running $appLabel" : ""}'
+            '${projectDir != null ? " from ${_tildePath(projectDir)}" : ""} '
             'at $vmUri'
             '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}'
             '\n${input.line}',
@@ -1235,6 +1239,11 @@ class AttachTool extends GlintTool {
         'bootedDevices': [for (final d in scan.devices) d.toJson()],
       },
     );
+  }
+
+  String _tildePath(String path) {
+    final home = Platform.environment['HOME'];
+    return home != null && path.startsWith('$home/') ? '~${path.substring(home.length)}' : path;
   }
 
   String? _basename(String? path) {
