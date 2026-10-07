@@ -7,6 +7,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 ### Fixed
 
 - A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
+- A bottom sheet or dialog that contains a text field was left out of `get_scene` (only the page below showed, with no overlay marker), because any overlay holding a `TextField` was taken for the cursor handles and copy/paste toolbar. Only an overlay with no editable field counts as that chrome now. Fields inside sheets and dialogs also get their label, value and error read, so typing into them reports a change (#111).
 
 ### Fixed
 

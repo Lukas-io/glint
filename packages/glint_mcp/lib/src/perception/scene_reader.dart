@@ -239,16 +239,18 @@ class SceneReader {
   /// ride in their own [OverlayEntry] whenever a field is focused. They are
   /// transient affordances, not modal content: surfacing them as `--- dialog
   /// ---` makes the agent think a modal is open and try to dismiss it.
-  static bool _isTextEditingOverlay(SceneNode n) => n.walk().any((d) =>
-      const {
-        '_SelectionHandleOverlay',
-        '_SelectionToolbarWrapper',
-        'TextSelectionToolbar',
-        'CupertinoTextSelectionToolbar',
-        'SelectionContainer',
-        'ContextMenu',
-        'TextFieldTapRegion',
-      }.contains(d.baseLabel));
+  /// A sheet or dialog holding a form also contains [TextFieldTapRegion]; only an entry with no editable field is chrome (#111).
+  static bool _isTextEditingOverlay(SceneNode n) =>
+      n.walk().any((d) => const {
+            '_SelectionHandleOverlay',
+            '_SelectionToolbarWrapper',
+            'TextSelectionToolbar',
+            'CupertinoTextSelectionToolbar',
+            'SelectionContainer',
+            'ContextMenu',
+            'TextFieldTapRegion',
+          }.contains(d.baseLabel)) &&
+      !n.walk().any((d) => d.baseLabel == 'EditableText');
 
   /// Framework chrome with nothing to read: no text and no widget built by the app.
   static bool _isEmptyEntry(SceneNode n) => n

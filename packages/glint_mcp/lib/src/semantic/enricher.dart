@@ -27,7 +27,7 @@ class PagedViewportEnricher implements SemanticEnricher {
   @override
   Future<void> enrich(SemanticScene scene) async {
     var budget = maxPages;
-    for (final list in scene.root.walk().whereType<SemanticList>()) {
+    for (final list in scene.allNodes().whereType<SemanticList>()) {
       final id = list.glintId;
       if (id == null) continue;
       final label = scene.sourceFor(id)?.baseLabel;
@@ -149,7 +149,7 @@ class IconEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    final icons = scene.root.walk().whereType<SemanticIcon>().toList();
+    final icons = scene.allNodes().whereType<SemanticIcon>().toList();
     final budget = min(icons.length, maxIcons);
     for (var i = 0; i < budget; i++) {
       final node = icons[i];
@@ -157,7 +157,7 @@ class IconEnricher implements SemanticEnricher {
       final source = scene.sourceFor(node.glintId!);
       if (source == null) continue;
       try {
-        await _enrichOne(source, scene.sourceScene.groupName, node);
+        await _enrichOne(source, groupFor(scene.sourceScene, source), node);
       } on Object {
         // best-effort
       }
@@ -219,7 +219,7 @@ class ToggleEnricher implements SemanticEnricher {
               '((WidgetInspectorService.instance.selection.currentElement!.widget'
               ' as dynamic).value).toString()',
           inspectorId: source.inspectorId,
-          groupName: scene.sourceScene.groupName,
+          groupName: groupFor(scene.sourceScene, source),
         );
         node.toggleState = switch (raw) {
           'true' => 'on',
@@ -268,7 +268,7 @@ class LinkEnricher implements SemanticEnricher {
         final r = await runtime.evaluateWithSelection(
           expression: _hasRecognizerExpr,
           inspectorId: source.inspectorId,
-          groupName: scene.sourceScene.groupName,
+          groupName: groupFor(scene.sourceScene, source),
         );
         if (r == 'true') node.affordances.add(Affordance.tappable);
       } on Object {
@@ -293,7 +293,7 @@ class InputEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    final inputs = scene.root.walk().whereType<SemanticInput>().toList();
+    final inputs = scene.allNodes().whereType<SemanticInput>().toList();
     final budget = min(inputs.length, maxInputs);
     for (var i = 0; i < budget; i++) {
       final node = inputs[i];
@@ -320,12 +320,13 @@ class InputEnricher implements SemanticEnricher {
 
   Future<void> _enrichOne(
       SceneNode source, Scene scene, SemanticInput target) async {
+    final group = groupFor(scene, source);
     // One subtree read serves both label and value lookups.
     Map<String, Object?>? subtree;
     try {
       subtree = await inspector.getDetailsSubtree(
         inspectorId: source.inspectorId,
-        groupName: scene.groupName,
+        groupName: group,
       );
     } on Object {
       // best-effort — fall back to the source node below
@@ -337,17 +338,17 @@ class InputEnricher implements SemanticEnricher {
         : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
             source.inspectorId);
     try {
-      target.hint = await _readDecoration(scene, fieldId, _labelExpr);
+      target.hint = await _readDecoration(group, fieldId, _labelExpr);
     } on Object {
       // best-effort
     }
     try {
-      target.error = await _readDecoration(scene, fieldId, _errorExpr);
+      target.error = await _readDecoration(group, fieldId, _errorExpr);
     } on Object {
       // best-effort
     }
     try {
-      target.setReadValue(await _readCurrentValue(scene, subtree));
+      target.setReadValue(await _readCurrentValue(group, subtree));
     } on Object {
       // best-effort
     }
@@ -357,17 +358,17 @@ class InputEnricher implements SemanticEnricher {
   /// [TextFormField] builds an inner TextField, so [fieldId] is resolved from
   /// the subtree rather than the source (which would be the FormField).
   Future<String?> _readDecoration(
-      Scene scene, String fieldId, String expr) async {
+      String group, String fieldId, String expr) async {
     final v = await runtime.evaluateWithSelection(
       expression: expr,
       inspectorId: fieldId,
-      groupName: scene.groupName,
+      groupName: group,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
 
   Future<String?> _readCurrentValue(
-      Scene scene, Map<String, Object?>? subtree) async {
+      String group, Map<String, Object?>? subtree) async {
     if (subtree == null) return null;
     final editableId = _findWidgetId(subtree, const {'EditableText'});
     if (editableId == null) return null;
@@ -375,7 +376,7 @@ class InputEnricher implements SemanticEnricher {
     final v = await runtime.evaluateWithSelection(
       expression: _currentValueExpr,
       inspectorId: editableId,
-      groupName: scene.groupName,
+      groupName: group,
     );
     return (v == null || v.isEmpty) ? null : v;
   }
@@ -410,6 +411,12 @@ class InputEnricher implements SemanticEnricher {
 }
 
 /// Evaluates one expression over many elements at once: `f` is a block-bodied lambda taking an [Element] and returning a String; results come back `;`-joined in [ids] order.
+/// The inspector group that owns [source]'s id: overlay nodes come from the full-tree read, whose ids the summary group cannot look up.
+String groupFor(Scene scene, SceneNode source) {
+  final id = source.glintId;
+  return id != null && scene.isInOverlay(id) ? (scene.fullGroupName ?? scene.groupName) : scene.groupName;
+}
+
 String batchOverElements(List<String> ids, String f) =>
     "<String>[${ids.map((i) => "'$i'").join(',')}]"
     '.map((id) => ($f)(WidgetInspectorService.instance.toObject(id) as Element))'
@@ -432,7 +439,7 @@ class SemanticsFlagEnricher implements SemanticEnricher {
   @override
   Future<void> enrich(SemanticScene scene) async {
     final nodes = <(SemanticButton, String)>[];
-    for (final b in scene.root.walk().whereType<SemanticButton>()) {
+    for (final b in scene.allNodes().whereType<SemanticButton>()) {
       final id = b.glintId;
       final source = id == null ? null : scene.sourceFor(id);
       if (source == null || source.inspectorId.isEmpty) continue;
@@ -481,7 +488,7 @@ class ImageEnricher implements SemanticEnricher {
   @override
   Future<void> enrich(SemanticScene scene) async {
     final nodes = <(SemanticImage, String)>[];
-    for (final img in scene.root.walk().whereType<SemanticImage>()) {
+    for (final img in scene.allNodes().whereType<SemanticImage>()) {
       final id = img.glintId;
       final source = id == null ? null : scene.sourceFor(id);
       if (source == null || source.inspectorId.isEmpty) continue;

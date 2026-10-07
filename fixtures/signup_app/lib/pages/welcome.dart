@@ -70,7 +70,7 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
               const SizedBox(height: 8),
               Center(
                 child: TextButton(
-                  onPressed: () => toast(context, 'Log in is coming soon.'),
+                  onPressed: () => _showLogIn(context),
                   child: const Text('I already have an account', style: TextStyle(color: muted)),
                 ),
               ),
@@ -81,4 +81,35 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
       ),
     );
   }
+}
+
+void _showLogIn(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (sheet) => Padding(
+      padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + MediaQuery.of(sheet).viewInsets.bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+          const TextField(keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email')),
+          const SizedBox(height: 12),
+          const TextField(obscureText: true, decoration: InputDecoration(labelText: 'Password')),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(sheet).pop();
+              toast(context, 'Log in is coming soon.');
+            },
+            child: const Text('Log in'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
