@@ -187,15 +187,7 @@ abstract class GlintTool {
                     ],
             );
     } on RuntimeConnectionLostError catch (e) {
-      response = StructuredResponse.error(
-        summary: 'VM service connection lost — the app may have hot-restarted '
-            'or been terminated',
-        errorKind: GlintErrorKind.connectionLost,
-        detail: e.toString(),
-        nextSteps: const [
-          'call `attach` again with the same vmUri to reconnect',
-        ],
-      );
+      response = await _connectionLostResponse(session, e);
     } on RuntimeUnresponsiveError catch (e) {
       response = await _unresponsiveResponse(session, e);
     } on IosToolchainBlocked catch (e) {
@@ -207,11 +199,13 @@ abstract class GlintTool {
         nextSteps: ['pass ${e.key} as ${e.expected}'],
       );
     } catch (e, st) {
-      response = StructuredResponse.error(
-        summary: '${definition.name} failed',
-        errorKind: GlintErrorKind.internal,
-        detail: '$e\n$st',
-      );
+      response = looksLikeConnectionLoss(e)
+          ? await _connectionLostResponse(session, e)
+          : StructuredResponse.error(
+              summary: '${definition.name} failed',
+              errorKind: GlintErrorKind.internal,
+              detail: '$e\n$st',
+            );
     }
     response = await _checkDeviceGone(session, app, response);
     response = explainMissingBridge(response);
@@ -264,6 +258,36 @@ abstract class GlintTool {
             '(screenshot pixels), type, hardware_button, device op:screenshot',
       ],
     );
+  }
+
+  /// The VM connection is gone: says whether the app crashed (with the native crash) or was restarted or closed.
+  Future<StructuredResponse> _connectionLostResponse(GlintSession session, Object e) async {
+    final crash = await _recentCrash(session);
+    return StructuredResponse.error(
+      summary: crash == null
+          ? 'VM service connection lost: the app may have hot-restarted or been terminated'
+          : 'the app crashed: ${crash.line}',
+      errorKind: GlintErrorKind.connectionLost,
+      detail: crash == null
+          ? e.toString()
+          : [crash.reason, ...crash.frames.map((f) => '  at $f'), if (crash.source != null) 'report: ${crash.source}'].join('\n'),
+      nextSteps: [
+        if (crash != null) 'this is a crash in the app, worth reporting to the user with the frames above',
+        'relaunch the app, then `attach` again',
+      ],
+    );
+  }
+
+  /// The app's newest native crash from the last minute, if the VM dropped because it crashed.
+  Future<NativeCrash?> _recentCrash(GlintSession session) async {
+    try {
+      final crashes = await session.active?.nativeCrashes() ?? const [];
+      final newest = crashes.firstOrNull;
+      if (newest == null || DateTime.now().difference(newest.time) > const Duration(minutes: 1)) return null;
+      return newest;
+    } on Object {
+      return null;
+    }
   }
 
   /// A gesture that failed because the glint-iossim binary is not built: say how to build it.
@@ -476,3 +500,13 @@ const List<GlintTool> kDefaultGlintTools = [
   ReportIssueTool(),
   TelemetryTool(),
 ];
+
+/// A read that failed because the VM service went away, whatever wrapper it arrived in.
+bool looksLikeConnectionLoss(Object e) {
+  final m = e.toString();
+  return e is RuntimeConnectionLostError ||
+      m.contains('RuntimeConnectionLostError') ||
+      m.contains('Service has disappeared') ||
+      m.contains('Service connection disposed') ||
+      m.contains('VM service is not connected');
+}
