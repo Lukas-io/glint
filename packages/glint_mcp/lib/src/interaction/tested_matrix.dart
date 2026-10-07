@@ -117,6 +117,14 @@ const List<TestedSetup> testedSetups = [
   ),
   TestedSetup(
     platform: 'android',
+    backend: 'server',
+    runtimeMajor: 35,
+    status: SetupStatus.verified,
+    checkedOn: '2026-10-07',
+    evidence: 'tap, Unicode type, keys, scroll, long press, back and the system photo picker read live on a Pixel 8 emulator (#109)',
+  ),
+  TestedSetup(
+    platform: 'android',
     backend: 'adb',
     runtimeMajor: 35,
     status: SetupStatus.verified,

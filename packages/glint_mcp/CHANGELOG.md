@@ -6,6 +6,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Android input through glint's own resident server: a small `app_process` server holding one UiAutomation connection, reached over an adb-forwarded socket. Taps, swipes, long presses and keys go through it, text of any script types (key events, or the field's text for characters no key makes, so `zoë` works where `adb shell input` fails), and native surfaces are read from every window instead of a `uiautomator dump`. `adb shell input` stays the fallback, with a warning saying why (another tool holding the accessibility connection is named). `attach androidInput:auto|server|adb` overrides; the attach `input:` line names the path. Releases attach `glint-android-server.dex` with a sha256, downloaded on first use like the iOS bridge.
+
+### Added
+
 - Device claims (#102). Each glint session claims the devices it attaches to (`~/.glint/claims`). `attach` will not auto-pick a device another live session is driving, and refuses with the new `errorKind: deviceClaimed`, naming the holder. Passing `device:` still attaches, with a warning that input will interleave. `attach dryRun:true` marks claimed devices. Claims of sessions that have exited are ignored.
 
 ### Fixed

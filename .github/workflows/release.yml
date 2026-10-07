@@ -49,6 +49,16 @@ jobs:
           cd "$RUNNER_TEMP/assets"
           shasum -a 256 glint-iossim-macos > glint-iossim-macos.sha256
           cat glint-iossim-macos.sha256
+      - name: Build the glint Android server
+        if: steps.tag.outputs.package == 'glint_mcp'
+        working-directory: packages/glint_mcp/native/android_server
+        run: |
+          ./build.sh
+          mkdir -p "$RUNNER_TEMP/assets"
+          cp build/glint-android-server.dex "$RUNNER_TEMP/assets/glint-android-server.dex"
+          cd "$RUNNER_TEMP/assets"
+          shasum -a 256 glint-android-server.dex > glint-android-server.dex.sha256
+          cat glint-android-server.dex.sha256
       - name: Publish the GitHub Release
         run: |
           shopt -s nullglob

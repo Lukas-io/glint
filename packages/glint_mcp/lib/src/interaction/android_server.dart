@@ -146,6 +146,10 @@ String? locateAndroidServerDex({Map<String, String>? env, String? scriptPath}) {
     if (parent.path == dir.path) break;
     dir = parent;
   }
-  final cached = '${e['HOME'] ?? '.'}/.glint/bin/glint-android-server-$glintVersion.dex';
+  final cached = cachedAndroidServerPath(env: e);
   return File(cached).existsSync() ? cached : null;
 }
+
+/// Where the downloaded server for this glint version lives, under `~/.glint/bin`.
+String cachedAndroidServerPath({Map<String, String>? env}) =>
+    '${(env ?? Platform.environment)['HOME'] ?? '.'}/.glint/bin/glint-android-server-$glintVersion.dex';

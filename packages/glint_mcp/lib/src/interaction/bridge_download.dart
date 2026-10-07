@@ -11,9 +11,15 @@ const String noBridgeDownloadEnv = 'GLINT_NO_BRIDGE_DOWNLOAD';
 /// The release asset name of the universal macOS bridge.
 const String bridgeAssetName = 'glint-iossim-macos';
 
+/// The release asset name of glint's Android input server.
+const String androidServerAssetName = 'glint-android-server.dex';
+
 /// The bridge asset attached to this version's GitHub Release.
-Uri bridgeReleaseUri([String version = glintVersion]) => Uri.parse(
-    'https://github.com/Lukas-io/glint/releases/download/glint_mcp-v$version/$bridgeAssetName');
+Uri bridgeReleaseUri([String version = glintVersion]) => releaseAssetUri(bridgeAssetName, version);
+
+/// An asset attached to this version's GitHub Release.
+Uri releaseAssetUri(String asset, [String version = glintVersion]) => Uri.parse(
+    'https://github.com/Lukas-io/glint/releases/download/glint_mcp-v$version/$asset');
 
 /// Fetches one URL's body; injected so tests run offline.
 typedef BytesFetcher = Future<List<int>> Function(Uri uri);
@@ -28,9 +34,15 @@ class BridgeDownloadError implements Exception {
 /// Downloads the release bridge to [dest], checks it against the published sha256, and marks it executable.
 Future<void> downloadBridge(String dest,
     {BytesFetcher? fetch, void Function(String phase)? onPhase}) async {
-  final get = fetch ?? _httpGet;
-  final uri = bridgeReleaseUri();
   onPhase?.call('downloading the glint-iossim bridge for glint $glintVersion');
+  await downloadReleaseAsset(bridgeAssetName, dest, executable: true, fetch: fetch);
+}
+
+/// Downloads release asset [asset] to [dest] and checks it against its published sha256; [executable] marks it runnable.
+Future<void> downloadReleaseAsset(String asset, String dest,
+    {bool executable = false, BytesFetcher? fetch}) async {
+  final get = fetch ?? _httpGet;
+  final uri = releaseAssetUri(asset);
   final expected = String.fromCharCodes(
           await get(Uri.parse('$uri.sha256')))
       .trim()
@@ -46,10 +58,12 @@ Future<void> downloadBridge(String dest,
   final partial = File('$dest.partial-$pid');
   await partial.parent.create(recursive: true);
   await partial.writeAsBytes(bytes, flush: true);
-  final chmod = await Process.run('chmod', ['755', partial.path]);
-  if (chmod.exitCode != 0) {
-    await partial.delete();
-    throw BridgeDownloadError('chmod failed: ${chmod.stderr}');
+  if (executable) {
+    final chmod = await Process.run('chmod', ['755', partial.path]);
+    if (chmod.exitCode != 0) {
+      await partial.delete();
+      throw BridgeDownloadError('chmod failed: ${chmod.stderr}');
+    }
   }
   await partial.rename(dest);
 }

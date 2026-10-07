@@ -571,7 +571,17 @@ class AttachTool extends GlintTool {
   Future<AndroidServer?> _androidServer(
       String serial, String adbPath, String mode, List<String> warnings) async {
     if (mode == 'adb') return null;
-    final dex = locateAndroidServerDex();
+    var dex = locateAndroidServerDex();
+    if (dex == null && Platform.environment[noBridgeDownloadEnv] != 'true') {
+      final dest = cachedAndroidServerPath();
+      try {
+        await downloadReleaseAsset(androidServerAssetName, dest);
+        dex = dest;
+      } on Object catch (e) {
+        warnings.add('the glint Android server could not be downloaded ($e); input uses adb shell input');
+        return null;
+      }
+    }
     if (dex == null) {
       if (mode == 'server') {
         warnings.add('no glint Android server build found; input uses adb shell input. '
@@ -584,7 +594,14 @@ class AttachTool extends GlintTool {
       await server.start();
       return server;
     } on AndroidServerError catch (e) {
-      warnings.add('the glint Android server did not start (${e.message}); input uses adb shell input');
+      if (e.message.contains('already registered')) {
+        final others = await otherDeviceServers(serial, adbPath);
+        warnings.add('the glint Android server could not start: another automation tool holds the '
+            'accessibility connection${others.isEmpty ? '' : ' (${others.join(', ')})'}; input uses adb shell input. '
+            'Stop that tool and attach again to use the server');
+      } else {
+        warnings.add('the glint Android server did not start (${e.message}); input uses adb shell input');
+      }
       return null;
     }
   }
