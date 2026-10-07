@@ -65,8 +65,9 @@ class XcTestRunner {
 
   /// Reuses a runner already answering, else builds (once per Xcode) and starts one; [onPhase] names each slow step.
   Future<void> ensureStarted({void Function(String phase)? onPhase, Duration timeout = const Duration(seconds: 180)}) async {
+    final fresh = _builtFrom() == sourcesStamp();
     final running = await ping();
-    if (running == expectedRunnerProtocol) return;
+    if (running == expectedRunnerProtocol && fresh) return;
     if (running != null) await stop();
     final xctestrun = await build(onPhase: onPhase);
     onPhase?.call('starting the XCTest runner on $udid');
@@ -99,8 +100,9 @@ class XcTestRunner {
 
   /// The runner's .xctestrun, building it first when this Xcode has none.
   Future<String> build({void Function(String phase)? onPhase}) async {
+    final stamp = sourcesStamp();
     final existing = findXctestrun('$cacheDir/build/Build/Products');
-    if (existing != null) return existing;
+    if (existing != null && _builtFrom() == stamp) return existing;
     onPhase?.call('building the XCTest runner (first use on this Xcode, about a minute)');
     final r = await Process.run('xcodebuild', [
       'build-for-testing',
@@ -111,6 +113,7 @@ class XcTestRunner {
       'CODE_SIGNING_ALLOWED=NO',
     ]);
     final built = findXctestrun('$cacheDir/build/Build/Products');
+    if (r.exitCode == 0 && built != null) File('$cacheDir/build/.sources').writeAsStringSync(stamp);
     if (r.exitCode != 0 || built == null) {
       final tail = '${r.stdout}\n${r.stderr}'.trim().split('\n').where((l) => l.contains('error')).take(5).join('\n');
       throw XcTestRunnerError('could not build the XCTest runner',
@@ -118,6 +121,25 @@ class XcTestRunner {
           nextSteps: const ['check that Xcode and an iOS Simulator SDK are installed', 'or attach again with iosBackend:bridge']);
     }
     return built;
+  }
+
+  /// A hash of the runner's Swift sources, so a glint update with a changed runner rebuilds it.
+  String sourcesStamp() {
+    var h = 0x811c9dc5;
+    final root = Directory(projectPath).parent;
+    final files = root.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.swift') || f.path.endsWith('.pbxproj')).toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final f in files) {
+      for (final b in f.readAsBytesSync()) {
+        h = ((h ^ b) * 0x01000193) & 0xffffffff;
+      }
+    }
+    return h.toRadixString(16);
+  }
+
+  String? _builtFrom() {
+    final f = File('$cacheDir/build/.sources');
+    return f.existsSync() ? f.readAsStringSync() : null;
   }
 
   /// The first .xctestrun under [dir], or null.
@@ -165,8 +187,10 @@ class XcTestRunner {
     try {
       final req = await client.openUrl(method, uri).timeout(timeout);
       if (body != null) {
+        final bytes = utf8.encode(jsonEncode(body));
         req.headers.contentType = ContentType.json;
-        req.write(jsonEncode(body));
+        req.contentLength = bytes.length;
+        req.add(bytes);
       }
       final res = await req.close().timeout(timeout);
       final text = await res.transform(utf8.decoder).join().timeout(timeout);

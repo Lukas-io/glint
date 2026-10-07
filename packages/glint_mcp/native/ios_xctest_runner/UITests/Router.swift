@@ -46,8 +46,11 @@ final class Router {
                     flags.insert(flag)
                 }
                 let target = app(body["app"] as? String)
-                for _ in 0..<max((body["count"] as? NSNumber)?.intValue ?? 1, 1) {
-                    target.typeKey(key, modifierFlags: flags)
+                let count = max((body["count"] as? NSNumber)?.intValue ?? 1, 1)
+                if flags.isEmpty {
+                    target.typeText(String(repeating: key, count: count))
+                } else {
+                    for _ in 0..<count { target.typeKey(key, modifierFlags: flags) }
                 }
                 return .ok(["done": "key"])
             case ("POST", "/button"):
@@ -81,9 +84,7 @@ final class Router {
         "cmd": .command, "shift": .shift, "ctrl": .control, "alt": .option,
     ]
 
-    private static let buttons: [String: XCUIDevice.Button] = [
-        "home": .home, "volumeUp": .volumeUp, "volumeDown": .volumeDown,
-    ]
+    private static let buttons: [String: XCUIDevice.Button] = ["home": .home]
 
     private func app(_ bundleId: String?) -> XCUIApplication {
         let id = bundleId ?? springboardId

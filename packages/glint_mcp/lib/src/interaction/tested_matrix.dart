@@ -81,6 +81,16 @@ const List<TestedSetup> testedSetups = [
   ),
   TestedSetup(
     platform: 'ios',
+    backend: 'xctest',
+    runtimeMajor: 26,
+    xcodeMajor: 27,
+    hostMajor: 27,
+    status: SetupStatus.verified,
+    checkedOn: '2026-10-07',
+    evidence: 'tap, Unicode type, keys, scroll, long press and home live through glint\'s XCUITest runner on iPhone 17, iOS 26.5 (#110)',
+  ),
+  TestedSetup(
+    platform: 'ios',
     backend: 'indigo',
     runtimeMajor: 26,
     xcodeMajor: 27,
