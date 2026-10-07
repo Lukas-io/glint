@@ -232,7 +232,7 @@
       },
       "durationMs": {
         "type": "integer",
-        "description": "Hold time in ms. Default 500."
+        "description": "Hold time in ms. Default 800."
       },
       "awaitReady": {
         "type": "boolean",

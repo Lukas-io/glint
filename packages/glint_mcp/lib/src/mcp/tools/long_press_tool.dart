@@ -18,7 +18,7 @@ class LongPressTool extends GlintTool {
         description:
             'Long-press a node by glintId, OR pass x,y for raw coordinates '
             '(device mode: screenshot pixels; flutter mode: logical points). '
-            'Default duration 500ms. '
+            "Default duration 800ms, past Flutter's 500ms long-press threshold. "
             'Supports awaitReady / readyTimeoutMs to gate on the target '
             'becoming hittable before firing. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -32,7 +32,7 @@ class LongPressTool extends GlintTool {
             'x': Schema.num(description: 'Raw x (with y). Bypasses glintId.'),
             'y': Schema.num(description: 'Raw y (with x).'),
             'durationMs': Schema.int(
-              description: 'Hold time in ms. Default 500.',
+              description: 'Hold time in ms. Default 800.',
             ),
             'awaitReady': Schema.bool(
               description:
@@ -57,7 +57,7 @@ class LongPressTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final durationMs = argInt(args, 'durationMs') ?? 500;
+    final durationMs = argInt(args, 'durationMs') ?? 800;
     final t = readTargetedArgs(args, session.config);
 
     final pt = readPoint(args);
