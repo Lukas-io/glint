@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Must equal `runnerProtocol` in native/ios_xctest_runner/UITests/Router.swift.
-const int expectedRunnerProtocol = 1;
+const int expectedRunnerProtocol = 2;
 
 /// The runner's Xcode project relative to glint's package root.
 const String kRunnerProject = 'native/ios_xctest_runner/GlintRunner.xcodeproj';
@@ -65,9 +65,8 @@ class XcTestRunner {
 
   /// Reuses a runner already answering, else builds (once per Xcode) and starts one; [onPhase] names each slow step.
   Future<void> ensureStarted({void Function(String phase)? onPhase, Duration timeout = const Duration(seconds: 180)}) async {
-    final fresh = _builtFrom() == sourcesStamp();
     final running = await ping();
-    if (running == expectedRunnerProtocol && fresh) return;
+    if (running == expectedRunnerProtocol) return;
     if (running != null) await stop();
     final xctestrun = await build(onPhase: onPhase);
     onPhase?.call('starting the XCTest runner on $udid');
@@ -103,6 +102,9 @@ class XcTestRunner {
     final stamp = sourcesStamp();
     final existing = findXctestrun('$cacheDir/build/Build/Products');
     if (existing != null && _builtFrom() == stamp) return existing;
+    // An incremental rebuild kept a changed runner's old code once; a stale build starts clean.
+    final stale = Directory('$cacheDir/build');
+    if (existing != null && stale.existsSync()) stale.deleteSync(recursive: true);
     onPhase?.call('building the XCTest runner (first use on this Xcode, about a minute)');
     final r = await Process.run('xcodebuild', [
       'build-for-testing',
@@ -127,6 +129,7 @@ class XcTestRunner {
   String sourcesStamp() {
     var h = 0x811c9dc5;
     final root = Directory(projectPath).parent;
+    if (!root.existsSync()) return '';
     final files = root.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.swift') || f.path.endsWith('.pbxproj')).toList()
       ..sort((a, b) => a.path.compareTo(b.path));
     for (final f in files) {

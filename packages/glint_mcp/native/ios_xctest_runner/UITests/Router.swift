@@ -1,7 +1,7 @@
 import XCTest
 
 /// Bumped whenever a route's arguments or reply change; glint checks it before driving the runner.
-let runnerProtocol = 1
+let runnerProtocol = 2
 
 private let springboardId = "com.apple.springboard"
 
