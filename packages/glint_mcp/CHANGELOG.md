@@ -6,6 +6,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Fixed
 
+- A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
+
+### Fixed
+
 - iOS (Indigo input): every key and touch event waited up to 2 s for the simulator's acknowledgement before the next was sent, so on a loaded machine a key stayed pressed for seconds and repeated (`hello glint` typed as `hello. glint`), and typing 11 characters took up to 80 s. Presses now go out at once and each release waits for everything still unacknowledged, so a key or finger is held only as long as intended (#75).
 - iOS taps are a short held contact (down, a move frame at the same point, up after about 100 ms) instead of a bare 50 ms down/up, the same shape as the zero-length swipe and 120 ms long press that landed reliably where plain taps were dropped (#113).
 

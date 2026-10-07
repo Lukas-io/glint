@@ -15,6 +15,9 @@ class SceneReader {
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
 
+  /// Source location behind each glintId this reader has handed out, so a renamed id still finds its own widget.
+  final Map<String, int> _seenLocations = {};
+
   String? _pubRootsIsolate;
 
   String _currentIsolate() {
@@ -42,15 +45,26 @@ class SceneReader {
     final overlay = await _tryReadOverlay(root);
 
     StableIdGenerator().assignIds(root);
+    _rememberLocations(root);
     return Scene._(
       root: root,
       groupName: groupName,
       inspector: _inspector,
+      knownLocations: _seenLocations,
       overlayRoots: overlay?.contentRoots ?? const [],
       hasBarrierOverlay: overlay?.hasBarrier ?? false,
       fullGroupName: overlay?.groupName,
       degenerate: degenerate,
     );
+  }
+
+  void _rememberLocations(SceneNode root) {
+    if (_seenLocations.length > 20000) _seenLocations.clear();
+    for (final n in root.walk()) {
+      final id = n.glintId;
+      final loc = n.locationId;
+      if (!n.isOffstage && id != null && loc != null) _seenLocations[id] = loc;
+    }
   }
 
   /// Registers the app's own package root once per isolate (a hot restart starts a fresh inspector), so the inspector's local-project filter keeps the app's widgets even when it runs from a path (e.g. under packages/flutter/) the default heuristic misreads.
@@ -305,8 +319,12 @@ class Scene {
     this.hasBarrierOverlay = false,
     String? fullGroupName,
     this.degenerate = false,
+    Map<String, int> knownLocations = const {},
   })  : _inspector = inspector,
-        _fullGroupName = fullGroupName;
+        _fullGroupName = fullGroupName,
+        _knownLocations = knownLocations;
+
+  final Map<String, int> _knownLocations;
 
   final SceneNode root;
   final String groupName;
@@ -333,12 +351,43 @@ class Scene {
 
   bool _disposed = false;
 
+  /// The node with [glintId], or the one node it was renamed to: an id's `_in_<scope>` part and `#hash` come and go as other nodes with the same name appear or leave.
   SceneNode? findByGlintId(String glintId) {
     for (final n in root.walk()) {
       if (n.isOffstage) continue;
       if (n.glintId == glintId) return n;
     }
-    return null;
+    return _renamedTarget(glintId);
+  }
+
+  /// Only a node built at the same source location as the id's earlier holder counts, so a stale id never lands on a different widget.
+  SceneNode? _renamedTarget(String glintId) {
+    final location = _knownLocations[glintId];
+    if (location == null) return null;
+    final wanted = _idParts(glintId);
+    final matches = <SceneNode>[];
+    void walk(SceneNode n, List<String> scopes) {
+      if (n.isOffstage) return;
+      final id = n.glintId;
+      final parts = id == null ? null : _idParts(id);
+      if (parts != null && parts.base == wanted.base && n.locationId == location) {
+        final scope = wanted.scope;
+        if (scope == null || parts.scope == scope || scopes.contains(scope)) matches.add(n);
+      }
+      final inner = parts == null ? scopes : [...scopes, parts.base];
+      for (final c in n.children) {
+        walk(c, inner);
+      }
+    }
+
+    walk(root, const []);
+    return matches.length == 1 ? matches.single : null;
+  }
+
+  static ({String base, String? scope}) _idParts(String id) {
+    final core = id.split('#').first;
+    final at = core.indexOf('_in_');
+    return at < 0 ? (base: core, scope: null) : (base: core.substring(0, at), scope: core.substring(at + 4));
   }
 
   /// Every addressable id on screen (offstage excluded).
