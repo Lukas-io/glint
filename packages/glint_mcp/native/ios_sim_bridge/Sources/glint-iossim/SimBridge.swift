@@ -313,11 +313,17 @@ struct SimDeviceProxy {
         let ratio = _ratio(x: x, y: y, in: deviceLogicalSize)
         let hid = try input()
         defer { hid.finish() }
-        try hid.touch(ratio, .start)
-        // ~50ms dwell so the OS recognises a tap (idb's value).
-        Thread.sleep(forTimeInterval: 0.05)
-        try hid.touch(ratio, .end)
+        try press(hid, at: ratio)
         return hid.name
+    }
+
+    /// One tap as a short held contact: down, a move frame at the same point, up after about 100 ms; a bare 50 ms down/up was dropped on some apps (#113).
+    private func press(_ hid: HidInput, at ratio: CGPoint) throws {
+        try hid.touch(ratio, .start)
+        Thread.sleep(forTimeInterval: 0.04)
+        try hid.touch(ratio, .move)
+        Thread.sleep(forTimeInterval: 0.06)
+        try hid.touch(ratio, .end)
     }
 
     /// Taps [points] in order over one transport, pausing [intervalMs] between taps.
@@ -325,10 +331,7 @@ struct SimDeviceProxy {
         let hid = try input()
         defer { hid.finish() }
         for (i, p) in points.enumerated() {
-            let ratio = _ratio(x: p.x, y: p.y, in: deviceLogicalSize)
-            try hid.touch(ratio, .start)
-            Thread.sleep(forTimeInterval: 0.05)
-            try hid.touch(ratio, .end)
+            try press(hid, at: _ratio(x: p.x, y: p.y, in: deviceLogicalSize))
             if i < points.count - 1 {
                 Thread.sleep(forTimeInterval: Double(intervalMs) / 1000.0)
             }
