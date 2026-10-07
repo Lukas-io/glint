@@ -8,26 +8,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 - Android input through glint's own resident server: a small `app_process` server holding one UiAutomation connection, reached over an adb-forwarded socket. Taps, swipes, long presses and keys go through it, text of any script types (key events, or the field's text for characters no key makes, so `zoë` works where `adb shell input` fails), and native surfaces are read from every window instead of a `uiautomator dump`. `adb shell input` stays the fallback, with a warning saying why (another tool holding the accessibility connection is named). `attach androidInput:auto|server|adb` overrides; the attach `input:` line names the path. Releases attach `glint-android-server.dex` with a sha256, downloaded on first use like the iOS bridge.
 - A second iOS backend: glint's own XCUITest runner (`attach iosBackend:xctest`). It is built once per Xcode into `~/.glint/xctest` (about 70 s the first time, rebuilt when glint ships a changed runner), runs as a long test that serves glint on a local port, and is reused across sessions. Taps, swipes, long presses, Unicode text, keys and home go through XCTest; screenshots, recording, lock and unlock stay on the bridge. Build and start failures name the step and the compiler or log line.
-
-### Added
-
 - Device claims (#102). Each glint session claims the devices it attaches to (`~/.glint/claims`). `attach` will not auto-pick a device another live session is driving, and refuses with the new `errorKind: deviceClaimed`, naming the holder. Passing `device:` still attaches, with a warning that input will interleave. `attach dryRun:true` marks claimed devices. Claims of sessions that have exited are ignored.
-
-### Fixed
-
-- `type clear:true` deleted only the text before the cursor, which a tap leaves mid-field, so text after it survived and the new text landed in the middle (`wisdomiyamu.ember@gmail.commbe…`). Clearing now also forward-deletes what is left.
-- On Android, the first keys typed into a field just switched to were lost while the keyboard reconnected (a 9-character password arrived as 5). `type focus:` now gives the keyboard 300 ms to take the new field before typing.
-- `type` reported `contentChanged` even when most keys never reached the field. It now reads the field back and warns, with lengths only, when the typed text is not there (letters and digits compared, so input formatters do not count).
-
-### Fixed
-
-- A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
-- A bottom sheet or dialog that contains a text field was left out of `get_scene` (only the page below showed, with no overlay marker), because any overlay holding a `TextField` was taken for the cursor handles and copy/paste toolbar. Only an overlay with no editable field counts as that chrome now. Fields inside sheets and dialogs also get their label, value and error read, so typing into them reports a change (#111).
-
-### Fixed
-
-- iOS (Indigo input): every key and touch event waited up to 2 s for the simulator's acknowledgement before the next was sent, so on a loaded machine a key stayed pressed for seconds and repeated (`hello glint` typed as `hello. glint`), and typing 11 characters took up to 80 s. Presses now go out at once and each release waits for everything still unacknowledged, so a key or finger is held only as long as intended (#75).
-- iOS taps are a short held contact (down, a move frame at the same point, up after about 100 ms) instead of a bare 50 ms down/up, the same shape as the zero-length swipe and 120 ms long press that landed reliably where plain taps were dropped (#113).
 
 ### Changed
 
@@ -35,13 +16,17 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 - An unplugged physical Android phone was reported as a closed emulator, with a next step to boot it. It is now reported as disconnected, with "ask the user to reconnect the phone, then attach" (#120).
 - A tap on a native surface (a system alert, permission dialog or another app) reported `changeCategory: nativeSurface`, which reads as success, even when the surface did not react. glint now compares the screen before and after (giving native animations time to finish): unchanged means `changed:false`, `changeCategory: nothing` and a warning to check the coordinates or ask the user to tap; changed means `changed:true` (#115, #119).
 - Native crashes next to Dart logs. `app_logs native:true` lists the app's native crashes since attach: the simulator's crash reports on iOS (exception, signal and the crashing thread's top frames), and Java exceptions and native tombstones from the crash log buffer on Android. When the VM drops because the app crashed, the `connectionLost` reply now says "the app crashed" with the reason and frames instead of guessing at a hot restart. A lost connection that reached a tool wrapped in another error (`Service has disappeared`, `Service connection disposed`) is now reported as `connectionLost` too, instead of `<tool> failed` with `errorKind: internal`.
-
-### Changed
-
 - Tool definitions are 12% shorter (32.6k to 28.5k characters, about 1,000 fewer tokens on every turn). The `app` argument and the gesture arguments shared by tap, long_press, swipe, drag, scroll and type now use one tight wording each, and the ten longest tool descriptions no longer repeat what their arguments and the instructions already say. No argument or behaviour changed.
 
 ### Fixed
 
+- `type clear:true` deleted only the text before the cursor, which a tap leaves mid-field, so text after it survived and the new text landed in the middle (`wisdomiyamu.ember@gmail.commbe…`). Clearing now also forward-deletes what is left.
+- On Android, the first keys typed into a field just switched to were lost while the keyboard reconnected (a 9-character password arrived as 5). `type focus:` now gives the keyboard 300 ms to take the new field before typing.
+- `type` reported `contentChanged` even when most keys never reached the field. It now reads the field back and warns, with lengths only, when the typed text is not there (letters and digits compared, so input formatters do not count).
+- A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
+- A bottom sheet or dialog that contains a text field was left out of `get_scene` (only the page below showed, with no overlay marker), because any overlay holding a `TextField` was taken for the cursor handles and copy/paste toolbar. Only an overlay with no editable field counts as that chrome now. Fields inside sheets and dialogs also get their label, value and error read, so typing into them reports a change (#111).
+- iOS (Indigo input): every key and touch event waited up to 2 s for the simulator's acknowledgement before the next was sent, so on a loaded machine a key stayed pressed for seconds and repeated (`hello glint` typed as `hello. glint`), and typing 11 characters took up to 80 s. Presses now go out at once and each release waits for everything still unacknowledged, so a key or finger is held only as long as intended (#75).
+- iOS taps are a short held contact (down, a move frame at the same point, up after about 100 ms) instead of a bare 50 ms down/up, the same shape as the zero-length swipe and 120 ms long press that landed reliably where plain taps were dropped (#113).
 - `attach launch:` accepted any folder with a `pubspec.yaml`, the Flutter SDK included, and then waited out the whole launch timeout (180 s) before failing. It now refuses at once unless the folder is a Flutter app (a `flutter` SDK dependency and `lib/main.dart`), names what is missing, and lists apps glint launched before. A named Android device (`emulator-…` or one discovery lists) is launched as Android instead of going through `simctl boot` (#103).
 - When the app on the `device` you named is gone and another device has one, attach no longer suggests omitting `device` (which moves you onto the other device). It leads with relaunching on your device when glint launched an app there before (#103).
 
