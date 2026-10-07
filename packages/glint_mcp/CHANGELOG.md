@@ -7,6 +7,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 ### Fixed
 
 - iOS (Indigo input): every key and touch event waited up to 2 s for the simulator's acknowledgement before the next was sent, so on a loaded machine a key stayed pressed for seconds and repeated (`hello glint` typed as `hello. glint`), and typing 11 characters took up to 80 s. Presses now go out at once and each release waits for everything still unacknowledged, so a key or finger is held only as long as intended (#75).
+- iOS taps are a short held contact (down, a move frame at the same point, up after about 100 ms) instead of a bare 50 ms down/up, the same shape as the zero-length swipe and 120 ms long press that landed reliably where plain taps were dropped (#113).
 
 ### Changed
 
