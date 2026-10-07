@@ -60,7 +60,8 @@ class OverlayEnricher implements SemanticEnricher {
 
     final layers = <SemanticOverlayLayer>[];
     for (final root in roots) {
-      final semantic = semanticizer.classifyNode(root);
+      final semantic =
+          semanticizer.classifyNode(root, imageCandidates: true);
       // Flatten pass-through Unknown roots: surface children directly.
       final nodes =
           (semantic is SemanticUnknown && semantic.children.isNotEmpty)
@@ -80,6 +81,7 @@ class OverlayEnricher implements SemanticEnricher {
 
   static bool _hasContent(List<SemanticNode> nodes) {
     for (final n in nodes) {
+      if (n is SemanticImage && n.candidate) continue;
       if (n is! SemanticUnknown) return true;
       if (_hasContent(n.children)) return true;
     }
@@ -468,32 +470,61 @@ class SemanticsFlagEnricher implements SemanticEnricher {
   }
 }
 
-/// Names what each image shows (file, asset or URL from its provider) and whether it painted, in one eval. Capped at [maxImages].
+/// Names what each image shows (file, asset or URL from its provider) and whether it painted, in one eval. Capped at [maxImages]; containers that might paint a decoration image ride the same eval, capped at [maxDecorationCandidates].
 class ImageEnricher implements SemanticEnricher {
-  ImageEnricher({required this.runtime, this.maxImages = 20});
+  ImageEnricher({
+    required this.runtime,
+    this.maxImages = 20,
+    this.maxDecorationCandidates = 12,
+  });
 
   final FlutterRuntime runtime;
   final int maxImages;
+  final int maxDecorationCandidates;
 
-  static const _image = '(Element e) { final w = e.widget as dynamic; Object? p; '
+  static const _image = '(Element e) { final w = e.widget as dynamic; Object? p; bool d = false; '
       'try { p = w.image; } catch (_) {} '
       'if (p == null) { try { p = w.backgroundImage; } catch (_) {} } '
       'if (p == null) { try { p = w.foregroundImage; } catch (_) {} } '
-      'if (p == null) { try { p = w.decoration?.image?.image; } catch (_) {} } '
+      'if (p == null) { try { p = w.decoration?.image?.image; d = p != null; } catch (_) {} } '
       'bool? ok; void v(Element c) { if (ok != null) return; '
       'if (c.widget is RawImage) { ok = (c.widget as RawImage).image != null; return; } c.visitChildren(v); } '
-      'e.visitChildren(v); '
+      'if (!d) e.visitChildren(v); '
       "return (p == null ? '' : p.toString().replaceAll(';', ',').replaceAll('|', '/')) + '|' + (ok == null ? '' : ok.toString()); }";
 
   @override
   Future<void> enrich(SemanticScene scene) async {
+    try {
+      await _resolve(scene);
+    } finally {
+      dropCandidates(scene);
+    }
+  }
+
+  /// Removes decoration-image candidates nothing confirmed, leaving the scene as if they had been dissolved.
+  static void dropCandidates(SemanticScene scene) {
+    bool unconfirmed(SemanticNode n) => n is SemanticImage && n.candidate;
+    for (final node in scene.allNodes().toList()) {
+      if (node.children.any(unconfirmed)) node.children.removeWhere(unconfirmed);
+    }
+    for (final layer in scene.overlayLayers) {
+      layer.nodes.removeWhere(unconfirmed);
+    }
+  }
+
+  Future<void> _resolve(SemanticScene scene) async {
     final nodes = <(SemanticImage, String)>[];
+    var images = 0;
+    var candidates = 0;
     for (final img in scene.allNodes().whereType<SemanticImage>()) {
+      if (img.candidate ? candidates >= maxDecorationCandidates : images >= maxImages) {
+        continue;
+      }
       final id = img.glintId;
       final source = id == null ? null : scene.sourceFor(id);
       if (source == null || source.inspectorId.isEmpty) continue;
       nodes.add((img, source.inspectorId));
-      if (nodes.length >= maxImages) break;
+      img.candidate ? candidates++ : images++;
     }
     if (nodes.isEmpty) return;
     final String? raw;
@@ -510,6 +541,10 @@ class ImageEnricher implements SemanticEnricher {
       final bar = part.lastIndexOf('|');
       if (bar < 0) continue;
       node.source = imageSourceName(part.substring(0, bar));
+      if (node.candidate) {
+        node.candidate = node.source == null;
+        continue;
+      }
       node.state = switch (part.substring(bar + 1)) {
         'true' => 'loaded',
         'false' => 'not loaded',

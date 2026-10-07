@@ -298,13 +298,15 @@ class GlintSession {
     Scene scene, {
     SceneDetail detail = SceneDetail.full,
   }) async {
-    final semantic = semanticizer.semanticize(scene);
+    final semantic = semanticizer.semanticize(scene, imageCandidates: true);
     // Overlay first so overlayLayers is populated before anything renders;
     // the rest are order-independent.
     await overlayEnricher.enrich(semantic);
     await navEnricher.enrich(semantic);
     await pagedEnricher.enrich(semantic);
-    if (detail != SceneDetail.structural) {
+    if (detail == SceneDetail.structural) {
+      ImageEnricher.dropCandidates(semantic);
+    } else {
       await inputEnricher.enrich(semantic);
       await toggleEnricher.enrich(semantic);
       await flagEnricher.enrich(semantic);
