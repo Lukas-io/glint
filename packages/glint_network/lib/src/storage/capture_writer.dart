@@ -49,6 +49,7 @@ class CaptureWriter {
   VmClient? _vm;
   int? _sessionId;
   Timer? _timer;
+  StreamSubscription<String>? _isolatesAdded;
   bool _ticking = false;
 
   /// Per-isolate HTTP cursor map (multi-isolate Phase 10). Each isolate
@@ -90,7 +91,16 @@ class CaptureWriter {
     _wsIngestor = WsTimelineIngestor(_dao);
     _refreshIgnoredHosts();
     _timer = Timer.periodic(pollInterval, (_) => _tick());
+    try {
+      _isolatesAdded = vm.httpProfilingIsolatesAdded().listen((_) => unawaited(_rescanNow(vm)));
+    } catch (_) {/* not connected; the periodic rescan still runs */}
     unawaited(_tick());
+  }
+
+  /// A new isolate (a hot restart's main isolate) records HTTP only once logging is on, so enable it at once instead of on the next periodic rescan.
+  Future<void> _rescanNow(VmClient vm) async {
+    _ticksSinceRescan = _rescanEveryNTicks;
+    await _maybeRescanIsolates(vm);
   }
 
   /// Stops the poll timer. With [flush], drains any still-pending bodies to
@@ -99,6 +109,9 @@ class CaptureWriter {
   Future<void> stop({bool flush = false}) async {
     _timer?.cancel();
     _timer = null;
+    final added = _isolatesAdded;
+    _isolatesAdded = null;
+    await added?.cancel();
     if (flush) {
       try {
         await flushPendingBodies();
@@ -259,6 +272,7 @@ class CaptureWriter {
         // Cursor advances only after the batch is durably processed.
         _lastCursorPerIsolate[iso.id] = profile.timestamp;
       } catch (e, st) {
+        if ('$e'.contains('Collected')) _ticksSinceRescan = _rescanEveryNTicks;
         io.stderr.writeln(
           'CaptureWriter _pollHttp(${iso.id}) failed: $e\n$st',
         );
