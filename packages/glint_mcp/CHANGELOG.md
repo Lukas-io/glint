@@ -6,6 +6,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- `long_press` holds for 800 ms by default instead of 500 ms. 500 ms equals Flutter's long-press threshold, so about half of default long presses ended just before Flutter recognised them (#112).
+
+### Changed
+
 - Tool definitions are 12% shorter (32.6k to 28.5k characters, about 1,000 fewer tokens on every turn). The `app` argument and the gesture arguments shared by tap, long_press, swipe, drag, scroll and type now use one tight wording each, and the ten longest tool descriptions no longer repeat what their arguments and the instructions already say. No argument or behaviour changed.
 
 ### Fixed
