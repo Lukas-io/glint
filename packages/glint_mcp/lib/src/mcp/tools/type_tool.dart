@@ -116,6 +116,10 @@ class TypeTool extends GlintTool {
           warnings.add('$focus did not report focus within 2s after the tap; '
               'typed anyway');
         }
+        // Android rebinds the keyboard to a newly focused field after the inset is already steady; keys sent in that gap are lost.
+        if (session.device.platform == DevicePlatform.android) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
       }
 
       _ClearOutcome? cleared;
@@ -126,6 +130,10 @@ class TypeTool extends GlintTool {
 
       final result = await session.interactor
           .run(scene, TypeText(text, keyDelayMs: keyDelayMs));
+      if (result.ok) {
+        final dropped = await _droppedKeys(session, text);
+        if (dropped != null) warnings.add(dropped);
+      }
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail)
               .addWarnings(warnings);
@@ -157,6 +165,20 @@ class TypeTool extends GlintTool {
     } finally {
       await action.dispose();
     }
+  }
+
+  /// A warning when the focused field does not hold [typed] after typing (keys swallowed while the keyboard was busy); compares letters and digits so input formatters do not count, and reports lengths only, so no password leaves the app.
+  Future<String?> _droppedKeys(GlintSession session, String typed) async {
+    final String? now;
+    try {
+      now = await session.focusedFieldText();
+    } on Object {
+      return null;
+    }
+    String core(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (now == null || core(now).contains(core(typed))) return null;
+    return 'the field does not hold what was typed (${typed.length} chars typed, the field has '
+        '${now.length}): keys were dropped. Retype with clear:true and keyDelayMs:40';
   }
 
   /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focused. clear does a blind select-all + backspace first.
@@ -202,7 +224,7 @@ class TypeTool extends GlintTool {
     );
   }
 
-  /// Empties the focused field: select-all + backspace, then a per-char backspace fallback when text remains. Reads the field before and after in flutter mode; device mode clears blind.
+  /// Empties the focused field: select-all + backspace, then per-char backspace and forward delete when text remains. Reads the field before and after in flutter mode; device mode clears blind.
   Future<_ClearOutcome> _clearField(GlintSession session, Scene scene) async {
     if (session.isDeviceMode) {
       try {
@@ -225,6 +247,12 @@ class TypeTool extends GlintTool {
     if (after != null && after.isNotEmpty) {
       await session.interactor
           .run(scene, PressKey(KeyName.backspace, count: after.length));
+      after = await session.focusedFieldText();
+    }
+    // Backspace stops at the cursor, which a tap leaves mid-text; forward delete takes the rest.
+    if (after != null && after.isNotEmpty) {
+      await session.interactor
+          .run(scene, PressKey(KeyName.delete, count: after.length));
       after = await session.focusedFieldText();
     }
     final removed = before?.length ?? 0;

@@ -6,6 +6,12 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Fixed
 
+- `type clear:true` deleted only the text before the cursor, which a tap leaves mid-field, so text after it survived and the new text landed in the middle (`wisdomiyamu.ember@gmail.commbe…`). Clearing now also forward-deletes what is left.
+- On Android, the first keys typed into a field just switched to were lost while the keyboard reconnected (a 9-character password arrived as 5). `type focus:` now gives the keyboard 300 ms to take the new field before typing.
+- `type` reported `contentChanged` even when most keys never reached the field. It now reads the field back and warns, with lengths only, when the typed text is not there (letters and digits compared, so input formatters do not count).
+
+### Fixed
+
 - A glintId stopped resolving when its `_in_<parent>` part or `#hash` changed between reads, which happens when another node with the same name appears or leaves (a text field read as `text_field_in_qc_glass_card` before focus and `text_field` after). An id that no longer exists now resolves to the one node of the same name built at the same source location as the id's earlier holder, so `focus:` and taps taken from an earlier scene keep working. A stale id never resolves to a different widget (#117).
 - A bottom sheet or dialog that contains a text field was left out of `get_scene` (only the page below showed, with no overlay marker), because any overlay holding a `TextField` was taken for the cursor handles and copy/paste toolbar. Only an overlay with no editable field counts as that chrome now. Fields inside sheets and dialogs also get their label, value and error read, so typing into them reports a change (#111).
 
