@@ -228,7 +228,7 @@ class ButtonClassifier extends WidgetClassifier {
     final label = _captionIn(children);
     final kept = children
         .where((c) => c is SemanticIcon || c is SemanticImage)
-        .toList(growable: false);
+        .toList();
     return SemanticButton(
       glintId: node.glintId,
       label: label,

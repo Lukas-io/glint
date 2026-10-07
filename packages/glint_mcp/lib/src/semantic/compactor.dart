@@ -1,3 +1,4 @@
+import '../../perception.dart';
 import 'semantic_node.dart';
 
 /// Strips framework noise: [expandChild] spills nameless pass-throughs into the
@@ -5,10 +6,31 @@ import 'semantic_node.dart';
 class SceneCompactor {
   const SceneCompactor();
 
-  Iterable<SemanticNode> expandChild(SemanticNode node) {
-    if (_isNoisyPassThrough(node)) return node.children;
-    return [node];
+  /// With [imageCandidate], a dissolved node leaves a pending [SemanticImage] ahead of its children for [ImageEnricher] to confirm or drop.
+  Iterable<SemanticNode> expandChild(SemanticNode node,
+      {bool imageCandidate = false}) {
+    if (!_isNoisyPassThrough(node)) return [node];
+    if (!imageCandidate) return node.children;
+    return [
+      SemanticImage(
+        glintId: node.glintId,
+        isBackground: node.children.isNotEmpty,
+        candidate: true,
+      ),
+      ...node.children,
+    ];
   }
+
+  /// Widgets whose `decoration` can paint an image, which dissolving would hide.
+  bool paintsDecorationImage(SceneNode node) =>
+      _decorationLabels.contains(node.baseLabel);
+
+  static const _decorationLabels = {
+    'Container',
+    'DecoratedBox',
+    'Ink',
+    'AnimatedContainer',
+  };
 
   SemanticNode hoistPage(SemanticNode root) {
     final page = _findPage(root);

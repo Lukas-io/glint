@@ -278,7 +278,15 @@ class SemanticImage extends SemanticNode {
   SemanticImage({
     super.glintId,
     this.source,
+    this.isBackground = false,
+    this.candidate = false,
   }) : super(children: const []);
+
+  /// True for a decoration image painted behind the children of its container.
+  final bool isBackground;
+
+  /// True until [ImageEnricher] confirms the container paints an image; unconfirmed ones are removed.
+  bool candidate;
 
   /// Short name of what is shown (file name, asset, URL host), set by [ImageEnricher].
   String? source;
@@ -290,13 +298,17 @@ class SemanticImage extends SemanticNode {
   SemanticRole get role => SemanticRole.image;
 
   @override
-  String get displayLabel =>
-      [source ?? 'image', if (state != null) '($state)'].join(' ');
+  String get displayLabel => [
+        source ?? 'image',
+        if (state != null) '($state)',
+        if (isBackground) '(background)',
+      ].join(' ');
 
   @override
   Map<String, Object?> _extraJson() => {
         if (source != null) 'source': source,
         if (state != null) 'state': state,
+        if (isBackground) 'background': true,
       };
 }
 

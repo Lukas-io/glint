@@ -15,8 +15,9 @@ class Semanticizer {
   final ClassifierRegistry _registry;
   final SceneCompactor _compactor;
 
-  SemanticScene semanticize(Scene scene) {
-    final classified = _classify(scene.root);
+  /// [imageCandidates] keeps dissolved containers that might paint a decoration image as pending [SemanticImage]s.
+  SemanticScene semanticize(Scene scene, {bool imageCandidates = false}) {
+    final classified = _classify(scene.root, imageCandidates);
     final root = selectActivePage(classified);
     return SemanticScene(root: root, sourceScene: scene);
   }
@@ -45,20 +46,23 @@ class Semanticizer {
   /// Classify a subtree without hoisting to a page root. Used by
   /// [OverlayEnricher] to classify dialog/overlay content that has no
   /// [Scaffold] ancestor.
-  SemanticNode classifyNode(SceneNode root) {
-    return _classify(root);
+  SemanticNode classifyNode(SceneNode root, {bool imageCandidates = false}) {
+    return _classify(root, imageCandidates);
   }
 
-  SemanticNode _classify(SceneNode node) {
+  SemanticNode _classify(SceneNode node, bool imageCandidates) {
     // Offstage subtrees (hidden IndexedStack children, shell branches) must
     // not surface content — the user cannot see or touch them.
     if (node.isOffstage) {
       return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
     }
     final children = node.children
-        .map(_classify)
-        .expand(_compactor.expandChild)
-        .toList(growable: false);
+        .expand((child) => _compactor.expandChild(
+              _classify(child, imageCandidates),
+              imageCandidate:
+                  imageCandidates && _compactor.paintsDecorationImage(child),
+            ))
+        .toList();
     final classifier = _registry.classifierFor(node);
     return classifier.build(node, children);
   }

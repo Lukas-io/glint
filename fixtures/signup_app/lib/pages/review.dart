@@ -38,6 +38,17 @@ class _ReviewPageState extends State<ReviewPage> {
           child: Column(
             children: [
               if (signup.photoPath != null)
+                Container(
+                  height: 120,
+                  alignment: Alignment.bottomLeft,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    image: DecorationImage(image: FileImage(File(signup.photoPath!)), fit: BoxFit.cover),
+                  ),
+                  child: const Text('Your cover', style: TextStyle(color: cream, fontWeight: FontWeight.w800)),
+                ),
+              if (signup.photoPath != null)
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: CircleAvatar(radius: 44, backgroundImage: FileImage(File(signup.photoPath!))),
