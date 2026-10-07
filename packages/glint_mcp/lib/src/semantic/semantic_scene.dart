@@ -22,10 +22,20 @@ class SemanticScene {
   /// Topmost-first. Empty when no overlay is present.
   List<SemanticOverlayLayer> overlayLayers;
 
+  /// Every node an agent can see: overlay layers first (they sit on top), then the page.
+  Iterable<SemanticNode> allNodes() sync* {
+    for (final layer in overlayLayers) {
+      for (final n in layer.nodes) {
+        yield* n.walk();
+      }
+    }
+    yield* root.walk();
+  }
+
   /// The node with [glintId], or the node it was renamed to (see [Scene.findByGlintId]).
   SemanticNode? findByGlintId(String glintId) {
     SemanticNode? byId(String id) {
-      for (final n in root.walk()) {
+      for (final n in allNodes()) {
         if (n.glintId == id) return n;
       }
       return null;
