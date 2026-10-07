@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../action.dart';
+import '../android_server.dart';
 import '../backend.dart';
 import '../image_size.dart';
 import '../key_codes.dart';
@@ -26,14 +27,35 @@ class AdbBackend implements InteractionBackend {
     required this.deviceSerial,
     this.adbPath = 'adb',
     this.run = Process.run,
+    this.server,
   });
 
   final String deviceSerial;
   final String adbPath;
   final ProcessRunner run;
 
+  /// glint's resident server; input goes through it while it answers, else through `adb shell input`.
+  AndroidServer? server;
+
+  /// Why the last input fell back from the server to `adb shell input`.
+  String? serverProblem;
+
   @override
   String get label => 'adb($deviceSerial)';
+
+  /// Sends [request] to the server; false (with [serverProblem] set) when there is none or it failed, so the caller falls back.
+  Future<bool> _viaServer(Map<String, Object?> request) async {
+    final s = server;
+    if (s == null || !s.running) return false;
+    try {
+      final r = await s.call(request);
+      if (r['ok'] == true) return true;
+      serverProblem = '${r['error']}: ${r['detail']}';
+    } on AndroidServerError catch (e) {
+      serverProblem = e.message;
+    }
+    return false;
+  }
 
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
@@ -50,8 +72,11 @@ class AdbBackend implements InteractionBackend {
       );
 
   @override
-  Future<void> tap({required int physicalX, required int physicalY}) =>
-      _shell(['input', 'tap', '$physicalX', '$physicalY']);
+  Future<void> tap({required int physicalX, required int physicalY}) async {
+    if (await _viaServer({'cmd': 'tap', 'x': physicalX, 'y': physicalY}))
+      return;
+    await _shell(['input', 'tap', '$physicalX', '$physicalY']);
+  }
 
   // adb has no dedicated long-press; `input swipe x y x y duration` with
   // zero displacement is the canonical workaround.
@@ -60,16 +85,20 @@ class AdbBackend implements InteractionBackend {
     required int physicalX,
     required int physicalY,
     required int durationMs,
-  }) =>
-      _shell([
-        'input',
-        'swipe',
-        '$physicalX',
-        '$physicalY',
-        '$physicalX',
-        '$physicalY',
-        '$durationMs',
-      ]);
+  }) async {
+    if (await _viaServer(
+        {'cmd': 'longpress', 'x': physicalX, 'y': physicalY, 'ms': durationMs}))
+      return;
+    await _shell([
+      'input',
+      'swipe',
+      '$physicalX',
+      '$physicalY',
+      '$physicalX',
+      '$physicalY',
+      '$durationMs',
+    ]);
+  }
 
   @override
   Future<void> swipe({
@@ -79,26 +108,52 @@ class AdbBackend implements InteractionBackend {
     required int physicalY2,
     required int durationMs,
     int holdMs = 0,
-  }) =>
-      // `input swipe` cannot rest at the end; spreading the hold over the move lowers the lift velocity instead.
-      _shell([
-        'input',
-        'swipe',
-        '$physicalX1',
-        '$physicalY1',
-        '$physicalX2',
-        '$physicalY2',
-        '${durationMs + holdMs}',
-      ]);
+  }) async {
+    if (await _viaServer({
+      'cmd': 'swipe',
+      'x1': physicalX1,
+      'y1': physicalY1,
+      'x2': physicalX2,
+      'y2': physicalY2,
+      'ms': durationMs,
+      'holdMs': holdMs,
+    })) {
+      return;
+    }
+    // `input swipe` cannot rest at the end; spreading the hold over the move lowers the lift velocity instead.
+    await _shell([
+      'input',
+      'swipe',
+      '$physicalX1',
+      '$physicalY1',
+      '$physicalX2',
+      '$physicalY2',
+      '${durationMs + holdMs}',
+    ]);
+  }
 
   @override
   Future<void> tapSequence(List<({int x, int y})> points,
           {required int intervalMs}) =>
       tapEachInTurn(this, points, intervalMs);
 
-  /// Latin only; non-ASCII would need an IME via `am broadcast`.
+  /// Through the server any text types (key events, or the field's text for characters no key makes); `adb shell input` is Latin only.
   @override
   Future<void> typeText(String text, {int? keyDelayMs}) async {
+    if (server?.running ?? false) {
+      final chunks =
+          keyDelayMs == null || text.length < 2 ? [text] : text.split('');
+      var sent = 0;
+      for (final c in chunks) {
+        if (!await _viaServer({'cmd': 'text', 'text': c})) break;
+        sent++;
+        if (keyDelayMs != null && sent < chunks.length) {
+          await Future<void>.delayed(Duration(milliseconds: keyDelayMs));
+        }
+      }
+      if (sent == chunks.length) return;
+      text = chunks.skip(sent).join();
+    }
     if (keyDelayMs == null || text.length < 2) return _inputText(text);
     final chars = text.split('');
     for (var i = 0; i < chars.length; i++) {
@@ -140,6 +195,12 @@ class AdbBackend implements InteractionBackend {
   Future<void> pressKey(KeyName key,
       {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
     final code = key.androidKeyCode;
+    if (await _viaServer({
+      'cmd': 'key',
+      'code': code,
+      'meta': androidMetaState(modifiers),
+      'count': count
+    })) return;
     if (modifiers.isEmpty) {
       await _shell(['input', 'keyevent', ...List.filled(count, '$code')]);
       return;
@@ -154,8 +215,14 @@ class AdbBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> selectAll() =>
-      _shell(['input', 'keycombination', '113', '29']); // CTRL_LEFT + A
+  Future<void> selectAll() async {
+    if (await _viaServer({
+      'cmd': 'key',
+      'code': 29,
+      'meta': androidMetaState({KeyModifier.ctrl})
+    })) return;
+    await _shell(['input', 'keycombination', '113', '29']); // CTRL_LEFT + A
+  }
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
@@ -217,4 +284,18 @@ List<String> splitLiteralPercentS(String text) {
   }
   chunks.add(text.substring(start));
   return chunks.where((c) => c.isNotEmpty).toList();
+}
+
+/// KeyEvent meta state for [modifiers], with the left-hand flag each key event carries.
+int androidMetaState(Set<KeyModifier> modifiers) {
+  var meta = 0;
+  for (final m in modifiers) {
+    meta |= switch (m) {
+      KeyModifier.shift => 0x1 | 0x40,
+      KeyModifier.alt => 0x2 | 0x10,
+      KeyModifier.ctrl => 0x1000 | 0x2000,
+      KeyModifier.cmd => 0x10000 | 0x20000,
+    };
+  }
+  return meta;
 }

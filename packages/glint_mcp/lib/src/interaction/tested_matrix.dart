@@ -23,7 +23,7 @@ class TestedSetup {
   /// `ios` or `android`.
   final String platform;
 
-  /// Input path: glint-iossim's `dtuhid` or `indigo` transport, or `adb`.
+  /// Input path: glint-iossim's `dtuhid` or `indigo` transport, or Android's `server` or `adb`.
   final String backend;
 
   /// iOS runtime major, or the Android API level.
@@ -114,6 +114,14 @@ const List<TestedSetup> testedSetups = [
       _indigoDropped,
       'native sheets presented inside the app (photo picker) are not detected (#80)',
     ],
+  ),
+  TestedSetup(
+    platform: 'android',
+    backend: 'server',
+    runtimeMajor: 35,
+    status: SetupStatus.verified,
+    checkedOn: '2026-10-07',
+    evidence: 'tap, Unicode type, keys, scroll, long press, back and the system photo picker read live on a Pixel 8 emulator (#109)',
   ),
   TestedSetup(
     platform: 'android',
@@ -255,7 +263,7 @@ Future<({String? transport, String? fallback, String? error})> readIosTransport(
 
 /// Android API level of [serial].
 Future<DeviceSetup> readAndroidSetup(String serial, String adbPath,
-    {ProcessRunner run = Process.run}) async {
+    {String transport = 'adb', ProcessRunner run = Process.run}) async {
   int? api;
   try {
     final r = await run(adbPath, ['-s', serial, 'shell', 'getprop', 'ro.build.version.sdk']);
@@ -265,7 +273,7 @@ Future<DeviceSetup> readAndroidSetup(String serial, String adbPath,
   }
   return (
     platform: 'android',
-    backend: 'adb',
+    backend: transport,
     runtimeMajor: api,
     runtime: api == null ? null : 'Android API $api',
     xcodeMajor: null,

@@ -68,6 +68,9 @@ class AttachTool extends GlintTool {
                   'auto (default) | dtuhid | indigo. How taps and keys reach '
                   'the simulator; auto picks dtuhid where Xcode ships it. iOS only.',
             ),
+            'androidInput': Schema.string(
+              description: "auto (default) | server | adb. server = glint's resident input server. Android only.",
+            ),
             'adbPath': Schema.string(
               description: 'adb executable path. Android only.',
             ),
@@ -113,6 +116,14 @@ class AttachTool extends GlintTool {
       );
     }
 
+    final androidInput = (args['androidInput'] as String?) ?? 'auto';
+    if (!const {'auto', 'server', 'adb'}.contains(androidInput)) {
+      return StructuredResponse.error(
+        summary: 'unknown androidInput: $androidInput',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['use one of: auto, server, adb'],
+      );
+    }
     final iosInput = (args['iosInput'] as String?) ?? 'auto';
     if (!const {'auto', 'dtuhid', 'indigo'}.contains(iosInput)) {
       return StructuredResponse.error(
@@ -327,6 +338,7 @@ class AttachTool extends GlintTool {
       final DeviceTarget device;
       IosToolchain? toolchain;
       var iosTransport = iosInput;
+      AndroidServer? androidServer;
       switch (platform) {
         case DevicePlatform.android:
           // Probe the viewport for the real DPR — raw x,y gestures pass logical
@@ -347,10 +359,12 @@ class AttachTool extends GlintTool {
               '${probed.lastError != null ? " (last probe error: ${probed.lastError})" : ""}',
             );
           }
+          androidServer = await _androidServer(deviceId, adbPath, androidInput, warnings);
           device = AndroidDevice(
             serial: deviceId,
             adbPath: adbPath,
             devicePixelRatio: vp?.dpr ?? 1.0,
+            server: androidServer,
           );
         case DevicePlatform.ios:
           toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
@@ -386,7 +400,7 @@ class AttachTool extends GlintTool {
 
       final input = describeSetup(platform == DevicePlatform.ios
           ? await readIosSetup(deviceId, toolchain?.xcode.major, transport: iosTransport)
-          : await readAndroidSetup(deviceId, adbPath));
+          : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb'));
       warnings.addAll(input.warnings);
 
       // ── 7. Hand the resolved target to the session ────────────────────────
@@ -552,6 +566,45 @@ class AttachTool extends GlintTool {
           'only if you mean to share it: attach device:"$deviceId"',
         ],
       );
+
+  /// Starts glint's resident server on [serial] unless [mode] is `adb`; on failure input stays on `adb shell input`, with a warning.
+  Future<AndroidServer?> _androidServer(
+      String serial, String adbPath, String mode, List<String> warnings) async {
+    if (mode == 'adb') return null;
+    var dex = locateAndroidServerDex();
+    if (dex == null && Platform.environment[noBridgeDownloadEnv] != 'true') {
+      final dest = cachedAndroidServerPath();
+      try {
+        await downloadReleaseAsset(androidServerAssetName, dest);
+        dex = dest;
+      } on Object catch (e) {
+        warnings.add('the glint Android server could not be downloaded ($e); input uses adb shell input');
+        return null;
+      }
+    }
+    if (dex == null) {
+      if (mode == 'server') {
+        warnings.add('no glint Android server build found; input uses adb shell input. '
+            'Build it with native/android_server/build.sh or set $androidServerEnv');
+      }
+      return null;
+    }
+    final server = AndroidServer(serial: serial, adbPath: adbPath, dexPath: dex);
+    try {
+      await server.start();
+      return server;
+    } on AndroidServerError catch (e) {
+      if (e.message.contains('already registered')) {
+        final others = await otherDeviceServers(serial, adbPath);
+        warnings.add('the glint Android server could not start: another automation tool holds the '
+            'accessibility connection${others.isEmpty ? '' : ' (${others.join(', ')})'}; input uses adb shell input. '
+            'Stop that tool and attach again to use the server');
+      } else {
+        warnings.add('the glint Android server did not start (${e.message}); input uses adb shell input');
+      }
+      return null;
+    }
+  }
 
   /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
   Future<String> _iosTransport(IosToolchain toolchain, String udid,
@@ -807,6 +860,8 @@ class AttachTool extends GlintTool {
           adbPath: adbPath,
           screenWidth: shot.width?.toDouble(),
           screenHeight: shot.height?.toDouble(),
+          server: await _androidServer(
+              target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
         );
     }
 

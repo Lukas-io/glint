@@ -11,7 +11,11 @@ class AndroidNativeReader extends NativeReader {
     required this.adbPath,
     required this.devicePixelRatio,
     this.run = Process.run,
+    this.serverCall,
   });
+
+  /// Asks glint's resident server; null when there is none or it failed, and then dumpsys and uiautomator answer instead.
+  Future<Map<String, Object?>?> Function(Map<String, Object?> request)? serverCall;
 
   final String serial;
   final String adbPath;
@@ -26,6 +30,8 @@ class AndroidNativeReader extends NativeReader {
 
   /// `package/activity` of the focused window, or null when adb cannot say.
   Future<String?> focusedComponent() async {
+    final viaServer = await _serverFocus();
+    if (viaServer != null) return viaServer;
     try {
       final r = await run(adbPath, ['-s', serial, 'shell', 'dumpsys', 'window', 'displays']);
       if (r.exitCode != 0) return null;
@@ -33,6 +39,14 @@ class AndroidNativeReader extends NativeReader {
     } on Object {
       return null;
     }
+  }
+
+  /// `package/title` of the focused window from the server, or null when it cannot say.
+  Future<String?> _serverFocus() async {
+    final r = await serverCall?.call(const {'cmd': 'focus'});
+    final pkg = r?['package'];
+    if (r?['ok'] != true || pkg is! String) return null;
+    return '$pkg/${r!['title'] ?? r['type'] ?? 'window'}';
   }
 
   /// Records the focused package as the app's own; call only while Flutter reports `resumed`, when its activity has focus.
@@ -53,6 +67,8 @@ class AndroidNativeReader extends NativeReader {
   @override
   Future<Scene> readSnapshot() async {
     lastReadProblem = null;
+    final r = await serverCall?.call(const {'cmd': 'windows'});
+    if (r != null && r['ok'] == true) return sceneFromServerWindows(r, devicePixelRatio());
     try {
       const path = '/data/local/tmp/glint_ui.xml';
       final dump = await run(adbPath, ['-s', serial, 'shell', 'uiautomator', 'dump', path]);
@@ -108,8 +124,65 @@ String? parseFocusedComponent(String dumpsys) {
   return c == null || !c.contains('/') ? null : c;
 }
 
+/// One node a native reader found: class, label, whether it is tappable, and its bounds in pixels.
+typedef NativeNode = ({String cls, String label, bool clickable, int x1, int y1, int x2, int y2});
+
 /// Flat scene of the labelled or tappable nodes in a `uiautomator dump`, framed in logical points.
 Scene sceneFromUiDump(String xml, double dpr) {
+  final nodes = <NativeNode>[];
+  for (final m in RegExp(r'<node ([^>]*?)/?>').allMatches(xml)) {
+    final a = {
+      for (final kv in RegExp(r'([\w-]+)="([^"]*)"').allMatches(m.group(1)!))
+        kv.group(1)!: _unescape(kv.group(2)!),
+    };
+    final text = a['text'] ?? '';
+    final b = RegExp(r'\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]').firstMatch(a['bounds'] ?? '');
+    if (b == null) continue;
+    nodes.add((
+      cls: (a['class'] ?? 'View').split('.').last,
+      label: text.isNotEmpty ? text : (a['content-desc'] ?? ''),
+      clickable: a['clickable'] == 'true',
+      x1: int.parse(b.group(1)!),
+      y1: int.parse(b.group(2)!),
+      x2: int.parse(b.group(3)!),
+      y2: int.parse(b.group(4)!),
+    ));
+  }
+  return nativeScene(nodes, dpr);
+}
+
+/// Flat scene of the focused window in the server's `windows` reply (the top application window when none has focus).
+Scene sceneFromServerWindows(Map<String, Object?> reply, double dpr) {
+  final windows = [for (final w in (reply['windows'] as List? ?? const [])) (w as Map).cast<String, Object?>()];
+  final chosen = windows.where((w) => w['focused'] == true).firstOrNull ??
+      windows.where((w) => w['type'] == 'application').firstOrNull;
+  final nodes = <NativeNode>[];
+  void walk(Map<String, Object?> n) {
+    final b = (n['bounds'] as List?)?.cast<num>();
+    final text = n['text'] as String? ?? '';
+    if (b != null && b.length == 4) {
+      nodes.add((
+        cls: ((n['class'] as String?) ?? 'View').split('.').last,
+        label: text.isNotEmpty ? text : (n['desc'] as String? ?? ''),
+        clickable: n['clickable'] == true,
+        x1: b[0].toInt(),
+        y1: b[1].toInt(),
+        x2: b[2].toInt(),
+        y2: b[3].toInt(),
+      ));
+    }
+    for (final c in (n['children'] as List? ?? const [])) {
+      walk((c as Map).cast<String, Object?>());
+    }
+  }
+
+  final root = chosen?['root'];
+  if (root is Map) walk(root.cast<String, Object?>());
+  return nativeScene(nodes, dpr);
+}
+
+/// The labelled or tappable [nodes] as a flat native scene in logical points.
+Scene nativeScene(Iterable<NativeNode> nodes, double dpr) {
   final root = SceneNode(
     depth: 0,
     indexInParent: -1,
@@ -119,37 +192,24 @@ Scene sceneFromUiDump(String xml, double dpr) {
   )..glintId = '_native_root';
   final used = <String, int>{};
   final kids = <SceneNode>[];
-  for (final m in RegExp(r'<node ([^>]*?)/?>').allMatches(xml)) {
-    final a = {
-      for (final kv in RegExp(r'([\w-]+)="([^"]*)"').allMatches(m.group(1)!))
-        kv.group(1)!: _unescape(kv.group(2)!),
-    };
-    final text = a['text'] ?? '';
-    final desc = a['content-desc'] ?? '';
-    final clickable = a['clickable'] == 'true';
-    final label = text.isNotEmpty ? text : desc;
-    if (label.isEmpty && !clickable) continue;
-    final b = RegExp(r'\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]').firstMatch(a['bounds'] ?? '');
-    if (b == null) continue;
-    final x1 = int.parse(b.group(1)!), y1 = int.parse(b.group(2)!);
-    final x2 = int.parse(b.group(3)!), y2 = int.parse(b.group(4)!);
-    if (x2 <= x1 || y2 <= y1) continue;
-    final cls = (a['class'] ?? 'View').split('.').last;
-    final base = _slug(label.isNotEmpty ? label : cls);
-    final n = used.update(base, (v) => v + 1, ifAbsent: () => 1);
+  for (final n in nodes) {
+    if (n.label.isEmpty && !n.clickable) continue;
+    if (n.x2 <= n.x1 || n.y2 <= n.y1) continue;
+    final base = _slug(n.label.isNotEmpty ? n.label : n.cls);
+    final count = used.update(base, (v) => v + 1, ifAbsent: () => 1);
     kids.add(SceneNode(
       depth: 1,
       indexInParent: kids.length,
-      description: cls,
+      description: n.cls,
       type: 'native',
       inspectorId: '',
-      widgetRuntimeType: cls,
-      textPreview: label.isEmpty ? null : label,
+      widgetRuntimeType: n.cls,
+      textPreview: n.label.isEmpty ? null : n.label,
       createdByLocalProject: true,
     )
-      ..glintId = n == 1 ? 'native_$base' : 'native_${base}_$n'
-      ..isNativeEnabled = clickable
-      ..axFrame = (x: x1 / dpr, y: y1 / dpr, w: (x2 - x1) / dpr, h: (y2 - y1) / dpr));
+      ..glintId = count == 1 ? 'native_$base' : 'native_${base}_$count'
+      ..isNativeEnabled = n.clickable
+      ..axFrame = (x: n.x1 / dpr, y: n.y1 / dpr, w: (n.x2 - n.x1) / dpr, h: (n.y2 - n.y1) / dpr));
   }
   root.children = kids;
   return Scene.native(root: root);
