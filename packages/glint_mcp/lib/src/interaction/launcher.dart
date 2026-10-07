@@ -53,25 +53,29 @@ class AppLauncher {
     return null;
   }
 
-  /// `flutter run` [projectDir] on [deviceId], returning the VM URI + live process; throws [LaunchError] on failure/timeout.
+  /// `flutter run` [projectDir] on [deviceId], or with [attachTo] `flutter attach` to the app already serving that VM URI; returns the tool's VM URI + live process, throws [LaunchError] on failure/timeout.
   Future<({Uri uri, Process process})> launchApp({
     required String projectDir,
     required String deviceId,
+    Uri? attachTo,
     Duration timeout = const Duration(seconds: 180),
     Duration poll = const Duration(seconds: 2),
     Duration progressEvery = const Duration(seconds: 15),
     void Function(int elapsedSec, String? phase)? onProgress,
   }) async {
+    final verb = attachTo == null ? 'run' : 'attach';
     final Process proc;
     try {
       proc = await Process.start(
         flutterPath,
-        ['run', '-d', deviceId],
+        [verb, '-d', deviceId, if (attachTo != null) ...['--debug-url', '$attachTo']],
         workingDirectory: projectDir,
       );
     } on Object catch (e) {
-      throw LaunchError('could not start `$flutterPath run`: $e');
+      throw LaunchError('could not start `$flutterPath $verb`: $e');
     }
+    var exited = false;
+    unawaited(proc.exitCode.then((_) => exited = true));
 
     // Bounded — the listeners keep draining for the app's whole life (the
     // process outlives this call for kill_app), so accumulate only the tail.
@@ -85,14 +89,14 @@ class AppLauncher {
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(poll);
       final text = out.text;
-      final uri = _vmUriPattern.firstMatch(text)?.group(0);
+      final uri = vmUriPattern.firstMatch(text)?.group(0);
       if (uri != null) {
         final parsed = Uri.tryParse(uri);
         if (parsed != null) return (uri: parsed, process: proc);
       }
-      if (_looksFailed(text)) {
+      if (exited || _looksFailed(text)) {
         proc.kill();
-        throw LaunchError('flutter run failed', logTail: _tail(text));
+        throw LaunchError('flutter $verb failed', logTail: _tail(text));
       }
       final now = DateTime.now();
       if (onProgress != null && now.isAfter(nextUpdate)) {
@@ -165,7 +169,7 @@ class AppLauncher {
     }
   }
 
-  static final _vmUriPattern = RegExp(
+  static final vmUriPattern = RegExp(
     r'http://(?:127\.0\.0\.1|localhost):\d+/[A-Za-z0-9_=+\-/]*',
   );
 

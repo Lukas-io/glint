@@ -17,6 +17,7 @@ export 'src/interaction/device.dart';
 export 'src/interaction/device_claims.dart';
 export 'src/interaction/discovery.dart';
 export 'src/interaction/image_out.dart';
+export 'src/interaction/installed_app.dart';
 export 'src/interaction/interactor.dart';
 export 'src/interaction/ios_toolchain.dart';
 export 'src/interaction/launcher.dart';
