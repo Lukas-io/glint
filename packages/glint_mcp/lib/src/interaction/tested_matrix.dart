@@ -81,6 +81,16 @@ const List<TestedSetup> testedSetups = [
   ),
   TestedSetup(
     platform: 'ios',
+    backend: 'dtuhid',
+    runtimeMajor: 26,
+    xcodeMajor: 27,
+    hostMajor: 27,
+    status: SetupStatus.verified,
+    checkedOn: '2026-10-07',
+    evidence: 'tap (40 in a row) and type live on iPhone 17, iOS 26.5, with dtuhidd active',
+  ),
+  TestedSetup(
+    platform: 'ios',
     backend: 'xctest',
     runtimeMajor: 26,
     xcodeMajor: 27,
