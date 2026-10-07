@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- Device claims (#102). Each glint session claims the devices it attaches to (`~/.glint/claims`). `attach` will not auto-pick a device another live session is driving, and refuses with the new `errorKind: deviceClaimed`, naming the holder. Passing `device:` still attaches, with a warning that input will interleave. `attach dryRun:true` marks claimed devices. Claims of sessions that have exited are ignored.
+
 ### Fixed
 
 - `type clear:true` deleted only the text before the cursor, which a tap leaves mid-field, so text after it survived and the new text landed in the middle (`wisdomiyamu.ember@gmail.commbe…`). Clearing now also forward-deletes what is left.

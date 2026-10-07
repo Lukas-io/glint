@@ -12,6 +12,7 @@ export 'src/interaction/bridge_download.dart';
 export 'src/interaction/bridge_locator.dart';
 export 'src/interaction/screen_recording.dart';
 export 'src/interaction/device.dart';
+export 'src/interaction/device_claims.dart';
 export 'src/interaction/discovery.dart';
 export 'src/interaction/image_out.dart';
 export 'src/interaction/interactor.dart';

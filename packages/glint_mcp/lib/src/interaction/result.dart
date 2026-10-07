@@ -24,6 +24,8 @@ enum GlintErrorKind {
   appUnresponsive,
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
+  /// Another live glint session is driving the device attach would have picked.
+  deviceClaimed,
   /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
   flutterModeRequired,
   // armed-intent failures (§7.3 try/catch)
