@@ -22,11 +22,19 @@ class SemanticScene {
   /// Topmost-first. Empty when no overlay is present.
   List<SemanticOverlayLayer> overlayLayers;
 
+  /// The node with [glintId], or the node it was renamed to (see [Scene.findByGlintId]).
   SemanticNode? findByGlintId(String glintId) {
-    for (final n in root.walk()) {
-      if (n.glintId == glintId) return n;
+    SemanticNode? byId(String id) {
+      for (final n in root.walk()) {
+        if (n.glintId == id) return n;
+      }
+      return null;
     }
-    return null;
+
+    final exact = byId(glintId);
+    if (exact != null) return exact;
+    final renamed = sourceScene.findByGlintId(glintId)?.glintId;
+    return renamed == null || renamed == glintId ? null : byId(renamed);
   }
 
   Map<String, SceneNode>? _sourceIndex;
