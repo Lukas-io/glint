@@ -154,6 +154,17 @@ class VmClient {
     }));
   }
 
+  /// Ids of isolates that register dart:io HTTP profiling from now on, such as the fresh main isolate after a hot restart.
+  Stream<String> httpProfilingIsolatesAdded() {
+    final svc = service;
+    unawaited(svc.streamListen(EventStreams.kIsolate).then((_) {}, onError: (_) {}));
+    return svc.onIsolateEvent
+        .where((e) => e.kind == EventKind.kServiceExtensionAdded && e.extensionRPC == 'ext.dart.io.getHttpProfile')
+        .map((e) => e.isolate?.id)
+        .where((id) => id != null)
+        .cast<String>();
+  }
+
   /// Scans the connected VM and returns every isolate that exposes
   /// `ext.dart.io.getHttpProfile`. Caches the result in [_isolates] so
   /// subsequent calls to [httpProfilingIsolates] / [isolateId] / the
