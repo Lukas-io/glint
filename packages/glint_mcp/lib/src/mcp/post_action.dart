@@ -1,3 +1,4 @@
+import '../../interaction.dart' show screensDiffer;
 import '../../observability.dart' show StateObserver;
 import '../../perception.dart';
 import '../../semantic.dart';
@@ -53,7 +54,7 @@ Future<StructuredResponse> appendPostAction(
   final post =
       await readPostActionState(session, pre, includeSceneText: fetchScene);
   if (post == null) return response;
-  final merged = response.mergeData(post.toData());
+  final merged = response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
   final shot = post.screenshot;
   if (shot == null) return merged;
   final sent = await session.modelImage(shot);
@@ -170,12 +171,16 @@ class PostActionState {
     this.scrolledPx,
     this.screenshot,
     this.nativeSurface,
+    this.note,
   });
+
+  /// A warning for the reply, e.g. that a native surface did not react.
+  final String? note;
 
   /// The foreign window in front of the app after the action (Android), e.g. a system photo picker.
   final String? nativeSurface;
 
-  /// Null when a native surface was up before and after: a screenshot alone cannot say.
+  /// Null when a native surface was up before and after and the screenshots could not be compared.
   final bool? changed;
   final String changeCategory;
 
@@ -276,13 +281,28 @@ Future<PostActionState?> readPostActionState(
       await app.refreshSceneMode();
       if (wasNative) await _awaitNativeGone(app);
       if (app.sceneMode == SceneMode.native) {
-        final capture = await app.captureNow('action');
+        final before = wasNative ? app.captures.newest?.path : null;
+        // Native sheets and menus animate in while the backgrounded app reports settled at once.
+        if (before != null) await Future<void>.delayed(Duration(milliseconds: session.config.captureSettleMs));
+        var capture = await app.captureNow('action');
+        var differ = before == null || capture == null ? null : await screensDiffer(before, capture.path);
+        if (differ == false) {
+          await Future<void>.delayed(Duration(milliseconds: session.config.captureSettleMs));
+          capture = await app.captureNow('action') ?? capture;
+          differ = capture == null ? null : await screensDiffer(before!, capture.path);
+        }
+        final unchanged = differ == false;
         return PostActionState(
-          changed: wasNative ? null : true,
-          changeCategory: 'nativeSurface',
+          changed: wasNative ? differ : true,
+          changeCategory: unchanged ? 'nothing' : 'nativeSurface',
           state: 'native',
           screenshot: capture?.path,
           nativeSurface: app.nativeSurfaceName,
+          note: unchanged
+              ? 'the native surface looks the same after the action, so the input may not have reached it '
+                  '(system dialogs can refuse injected input). Check the coordinates on the screenshot; '
+                  'if they are right, ask the user to tap it'
+              : null,
         );
       }
       if (wasNative) {
