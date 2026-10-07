@@ -16,8 +16,9 @@ class ShutdownSimTool extends GlintTool {
         description:
             'Shut down a simulator/emulator. device: the one to stop (defaults '
             'to the attached device). all:true shuts down every booted device. '
-            'Detaches first if glint is driving the device. iOS via simctl, '
-            'Android via adb emu kill.',
+            'Detaches first if glint is driving the device. A device this '
+            'session never attached or launched on is refused unless force:true. '
+            'iOS via simctl, Android via adb emu kill.',
         inputSchema: ObjectSchema(
           properties: {
             'device': Schema.string(
@@ -25,6 +26,9 @@ class ShutdownSimTool extends GlintTool {
             ),
             'all': Schema.bool(
               description: 'Shut down every booted device. Default false.',
+            ),
+            'force': Schema.bool(
+              description: 'Also shut down devices this session never used. Default false.',
             ),
           },
         ),
@@ -35,6 +39,7 @@ class ShutdownSimTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final all = argBool(args, 'all') ?? false;
+    final force = argBool(args, 'force') ?? false;
     final attachedDevice = session.active?.device;
     final adbPath = attachedDevice is AndroidDevice
         ? attachedDevice.adbPath
@@ -49,6 +54,8 @@ class ShutdownSimTool extends GlintTool {
           data: const {'shutDown': []},
         );
       }
+      final foreign = [for (final d in scan.devices) if (!session.ownsDevice(d.id)) d.id];
+      if (foreign.isNotEmpty && !force) return _notOwned(foreign);
       final done = <String>[];
       for (final d in scan.devices) {
         final err = await launcher.shutdown(d.platform, d.id, adbPath: adbPath);
@@ -71,6 +78,7 @@ class ShutdownSimTool extends GlintTool {
         nextSteps: const ['pass device:"<udid/serial>" or all:true'],
       );
     }
+    if (!force && !session.ownsDevice(deviceId)) return _notOwned([deviceId]);
     final platform = _platformOf(deviceId, scan, session);
     final isThisDevice = session.hasApp(deviceId);
     if (isThisDevice) await session.detach(deviceId: deviceId);
@@ -88,6 +96,16 @@ class ShutdownSimTool extends GlintTool {
       data: {'device': deviceId, if (isThisDevice) 'detached': true},
     );
   }
+
+  StructuredResponse _notOwned(List<String> ids) => StructuredResponse.error(
+        summary: 'refused: this session never attached or launched on ${ids.join(", ")}',
+        errorKind: GlintErrorKind.notOwned,
+        detail: 'another project or agent may be using ${ids.length == 1 ? "it" : "them"}',
+        nextSteps: const [
+          'shut down only your own device: shutdown_sim with no args',
+          'only if the user asked for it: pass force:true',
+        ],
+      );
 
   // Booted scan first; else the attached device; else infer from the id shape
   // (an iOS UDID is 36-char hyphenated hex).

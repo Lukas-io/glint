@@ -65,8 +65,25 @@ class GlintSession {
   /// `flutter run` processes glint started, keyed by device id, for `kill_app`.
   final Map<String, Process> _launchedApps = {};
 
-  void registerLaunchedApp(String deviceId, Process process) =>
-      _launchedApps[deviceId] = process;
+  void registerLaunchedApp(String deviceId, Process process) {
+    _launchedApps[deviceId] = process;
+    _ownedDevices.add(deviceId);
+  }
+
+  /// Devices this session attached to or launched on, kept after detach so `shutdown_sim` can tell its own from others'.
+  final Set<String> _ownedDevices = {};
+
+  /// Bundle ids / packages of apps this session attached, kept after detach for `kill_app`.
+  final Set<String> _ownedAppIds = {};
+
+  bool ownsDevice(String deviceId) => _ownedDevices.contains(deviceId);
+
+  bool ownsApp(String appId) =>
+      _ownedAppIds.contains(appId.toLowerCase()) ||
+      _pool.values.any((a) => a.bundleId?.toLowerCase() == appId.toLowerCase());
+
+  void markOwnedApp(Iterable<String?> appIds) =>
+      _ownedAppIds.addAll(appIds.whereType<String>().map((id) => id.toLowerCase()));
 
   Process? launchedAppFor(String deviceId) => _launchedApps[deviceId];
 
@@ -218,6 +235,7 @@ class GlintSession {
     );
     app.captureSettleMs = config.captureSettleMs;
     _pool[device.id] = app;
+    _ownedDevices.add(device.id);
     _active = app;
     return app;
   }
@@ -230,6 +248,7 @@ class GlintSession {
     if (existing != null) await _drop(existing);
     final app = AppSession.bindDevice(device: device);
     _pool[device.id] = app;
+    _ownedDevices.add(device.id);
     _active = app;
     return app;
   }

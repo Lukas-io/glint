@@ -77,6 +77,9 @@ class AppSession {
   String? bundleId;
   String? deviceName;
 
+  /// Flutter project root behind the app, when attach could resolve it.
+  String? projectDir;
+
   /// Screen signature the last developer hint was issued for (one per screen).
   String? lastHintSignature;
 
@@ -154,6 +157,7 @@ class AppSession {
         if (!deviceMode) 'app': label,
         if (package != null) 'package': package,
         if (bundleId != null) 'bundleId': bundleId,
+        if (projectDir != null) 'project': projectDir,
         'mode': deviceMode ? 'device' : 'flutter',
         if (vmUri != null) 'vmUri': vmUri.toString(),
         'live': isLive,

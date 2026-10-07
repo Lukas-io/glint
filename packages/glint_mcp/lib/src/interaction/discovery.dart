@@ -444,15 +444,32 @@ class DeviceDiscovery {
   }
 
   // ── project dir (for relaunch) ───────────────────────────────────────────
-  /// Flutter project root behind a running app — the VM port's listening process (DDS) cwd, validated by pubspec.yaml.
+  /// Flutter project root behind a running app — the cwd of the DDS serving [vmUri] (its listener, or the DDS fronting that raw VM port), validated by pubspec.yaml.
   Future<String?> projectDirForVm(Uri vmUri) async {
     final port = vmUri.port;
     if (port == 0) return null;
-    for (final pid in await _listeningPids(port)) {
+    for (final pid in [...await _listeningPids(port), ...await _ddsPidsFronting(port)]) {
       final cwd = await _cwdOf(pid);
       if (cwd != null && File('$cwd/pubspec.yaml').existsSync()) return cwd;
     }
     return null;
+  }
+
+  Future<List<int>> _ddsPidsFronting(int vmPort) async {
+    final ProcessResult res;
+    try {
+      res = await Process.run('ps', ['-eo', 'pid=,command=']);
+    } on Object {
+      return const [];
+    }
+    if (res.exitCode != 0) return const [];
+    final fronting = RegExp('development-service .*--vm-service-uri=https?://[^/:]+:$vmPort/');
+    return (res.stdout as String)
+        .split('\n')
+        .where(fronting.hasMatch)
+        .map((line) => int.tryParse(line.trim().split(' ').first))
+        .whereType<int>()
+        .toList();
   }
 
   Future<String?> _cwdOf(int pid) async {

@@ -18,6 +18,7 @@ import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
+import 'tools/hot_reload_tool.dart';
 import 'tools/kill_app_tool.dart';
 import 'tools/logs_tool.dart';
 import 'tools/long_press_tool.dart';
@@ -478,6 +479,7 @@ const List<GlintTool> kDefaultGlintTools = [
   AttachTool(),
   DeviceTool(),
   KillAppTool(),
+  HotReloadTool(),
   ShutdownSimTool(),
   GetSceneTool(),
   ResolveTool(),

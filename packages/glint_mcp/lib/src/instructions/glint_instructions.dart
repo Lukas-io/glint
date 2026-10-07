@@ -79,6 +79,7 @@ const _recovery = '''
 - `appUnresponsive` — suspended (locked / breakpoint). Unlock or reopen, retry.
 - `deviceGone` — sim closed; `attach device:"<id>"` boots + relaunches.
 - `deviceClaimed` — another agent's device; pass your own `device:`.
+- `notOwned` — not an app/device you attached; leave it, or ask the user before `force:true`.
 - `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
 - `unknownApp` — `app:` matched none/several apps; pick from the list.
 - `sessionNotAttached` — `attach`.

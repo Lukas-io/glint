@@ -17,6 +17,7 @@ export 'src/mcp/tools/drag_tool.dart';
 export 'src/mcp/tools/get_scene_tool.dart';
 export 'src/mcp/tools/hardware_button_tool.dart';
 export 'src/mcp/tools/key_tool.dart';
+export 'src/mcp/tools/hot_reload_tool.dart';
 export 'src/mcp/tools/kill_app_tool.dart';
 export 'src/mcp/tools/logs_tool.dart';
 export 'src/mcp/tools/long_press_tool.dart';
