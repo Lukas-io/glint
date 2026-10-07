@@ -28,7 +28,9 @@ Future<StructuredResponse> withCoordinateChange(
   if (response.isError) return response;
   final post =
       await readPostActionState(session, pre, includeSceneText: fetchScene);
-  return post == null ? response : response.mergeData(post.toData());
+  return post == null
+      ? response
+      : response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
 }
 
 Future<StructuredResponse> coordinateTap(
