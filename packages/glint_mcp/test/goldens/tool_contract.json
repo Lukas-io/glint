@@ -131,6 +131,106 @@
       }
     }
   },
+  "media": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "seed | files | inspect"
+      },
+      "device": {
+        "type": "string",
+        "description": "Simulator UDID or adb serial. Default: the attached device."
+      },
+      "kind": {
+        "type": "string",
+        "description": "seed: photo | video | audio. Default: from source, else video."
+      },
+      "source": {
+        "type": "string",
+        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio)."
+      },
+      "name": {
+        "type": "string",
+        "description": "seed: asset name (also the file name). clear:true with name removes just that one."
+      },
+      "count": {
+        "type": "integer",
+        "description": "seed testcard photo: how many photos. Default 1."
+      },
+      "clear": {
+        "type": "boolean",
+        "description": "seed: remove what glint seeded on this device, nothing else."
+      },
+      "size": {
+        "type": "string",
+        "description": "testcard: WxH, even. Default 1080x1920."
+      },
+      "durationSec": {
+        "type": "number",
+        "description": "testcard video or tone: seconds. Default 6."
+      },
+      "fps": {
+        "type": "integer",
+        "description": "testcard video: frames per second. Default 30."
+      },
+      "rotation": {
+        "type": "integer",
+        "description": "testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0."
+      },
+      "text": {
+        "type": "string",
+        "description": "speech: what to say."
+      },
+      "voice": {
+        "type": "string",
+        "description": "speech: a macOS voice name."
+      },
+      "hz": {
+        "type": "number",
+        "description": "tone: frequency. Default 440."
+      },
+      "since": {
+        "type": "string",
+        "description": "files: lastAction (since the last tap, type, swipe ...) or an ISO time."
+      },
+      "glob": {
+        "type": "string",
+        "description": "files: e.g. *.mp4 (matches the file name, or the path when it has a /)."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "files: cap on the list. Default 50, max 200."
+      },
+      "pull": {
+        "type": "boolean",
+        "description": "files: copy path to the host and return the host path."
+      },
+      "path": {
+        "type": "string",
+        "description": "files pull / inspect: a host path, or a path from files."
+      },
+      "appId": {
+        "type": "string",
+        "description": "files: bundle id or package. Default: the attached app."
+      },
+      "frames": {
+        "type": "array",
+        "description": "inspect: times to return as images, seconds or start | middle | end (max 6)."
+      },
+      "probe": {
+        "type": "boolean",
+        "description": "inspect: false leaves out the metadata and loudness lines. Default true."
+      },
+      "maxSize": {
+        "type": "integer",
+        "description": "inspect: longest side of returned frames (0 = full). Default: screenshotMaxSize."
+      }
+    },
+    "required": [
+      "op"
+    ]
+  },
   "shutdown_sim": {
     "type": "object",
     "properties": {
