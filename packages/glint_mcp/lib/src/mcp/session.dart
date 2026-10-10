@@ -387,6 +387,17 @@ class GlintSession {
     return (raw == null || raw.isEmpty) ? null : raw.substring(1);
   }
 
+  /// The focused field's text, and whether its own input formatters may rewrite what is typed (the newline filter every single-line field gets does not count); null when no text field has focus.
+  Future<({String text, bool formatted})?> focusedFieldInfo() async {
+    const state = 'FocusManager.instance.primaryFocus!.context!.findAncestorStateOfType<EditableTextState>()!';
+    final raw = await runtime.evaluateString(
+      '(FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>() == null ? "" : '
+      '(($state.widget.inputFormatters ?? const []).any((f) { try { return (f as dynamic).filterPattern != "\\n"; } catch (_) { return true; } }) ? "f" : "p") + '
+      '$state.textEditingValue.text)',
+    );
+    return (raw == null || raw.isEmpty) ? null : (text: raw.substring(1), formatted: raw[0] == 'f');
+  }
+
   /// Logical viewport size + DPR, probed via geometry resolver on any
   /// addressable node. Used by direction-based scroll tools.
   Future<({double logicalW, double logicalH, double dpr})>

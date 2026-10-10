@@ -1,3 +1,5 @@
+import 'dart:math' show max;
+
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
@@ -128,15 +130,34 @@ class TypeTool extends GlintTool {
         warnings.addAll(cleared.warnings);
       }
 
-      final result = await session.interactor
+      final before = await _fieldInfo(session);
+      var result = await session.interactor
           .run(scene, TypeText(text, keyDelayMs: keyDelayMs));
+      var retyped = false;
       if (result.ok) {
-        final dropped = await _droppedKeys(session, text);
-        if (dropped != null) warnings.add(dropped);
+        final first = await _check(session, before, text);
+        if (first.problem != null && first.retryable) {
+          await _clearField(session, scene);
+          result = await session.interactor.run(
+              scene, TypeText(text, keyDelayMs: max(keyDelayMs ?? 0, _retypeDelayMs)));
+          retyped = true;
+          final second = await _check(session, before, text);
+          warnings.add(second.problem == null
+              ? '${first.problem} on the first attempt; cleared it and retyped once at '
+                  '${_retypeDelayMs}ms a key, and the field now holds exactly what was typed'
+              : second.got == first.got
+                  ? 'the field rewrites what is typed (it held ${first.got} chars both times, '
+                      'for ${text.length} typed): the app formats this field, nothing was lost'
+                  : '${second.problem} even after a slower retype; read the field and retype '
+                      'the missing part, or ask the user to check the device');
+        } else if (first.problem != null) {
+          warnings.add('${first.problem}. Retype with clear:true and keyDelayMs:$_retypeDelayMs');
+        }
       }
       var response =
           StructuredResponse.fromActionResult(result, detail: t.detail)
               .addWarnings(warnings);
+      if (retyped) response = response.mergeData(const {'retyped': true});
       if (cleared != null) {
         response = response.mergeData(cleared.data);
         if (cleared.summaryPrefix != null) {
@@ -167,18 +188,44 @@ class TypeTool extends GlintTool {
     }
   }
 
-  /// A warning when the focused field does not hold [typed] after typing (keys swallowed while the keyboard was busy); compares letters and digits so input formatters do not count, and reports lengths only, so no password leaves the app.
-  Future<String?> _droppedKeys(GlintSession session, String typed) async {
-    final String? now;
+  static const _retypeDelayMs = 40;
+
+  Future<({String text, bool formatted})?> _fieldInfo(GlintSession session) async {
     try {
-      now = await session.focusedFieldText();
+      return await session.focusedFieldInfo();
     } on Object {
       return null;
     }
-    String core(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-    if (now == null || core(now).contains(core(typed))) return null;
-    return 'the field does not hold what was typed (${typed.length} chars typed, the field has '
-        '${now.length}): keys were dropped. Retype with clear:true and keyDelayMs:40';
+  }
+
+  /// Whether the focused field holds what was typed. A field without its own formatters must be [before] with [typed] inserted at one place; one with formatters only has to keep the typed letters and digits. Lengths only, so no password leaves the app.
+  Future<({String? problem, bool retryable, int got})> _check(
+      GlintSession session, ({String text, bool formatted})? before, String typed) async {
+    final after = await _fieldInfo(session);
+    if (before == null || after == null) return (problem: null, retryable: false, got: 0);
+    final got = after.text.length;
+    final exact = !before.formatted && !after.formatted && !typed.contains(RegExp('[\n\t]'));
+    if (!exact) {
+      String core(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (core(after.text).contains(core(typed))) return (problem: null, retryable: false, got: got);
+      return (
+        problem: 'the field does not hold what was typed (${typed.length} chars typed, the field has $got): keys were dropped',
+        retryable: false,
+        got: got,
+      );
+    }
+    if (holdsTyped(before.text, after.text, typed)) return (problem: null, retryable: false, got: got);
+    final want = before.text.length + typed.length;
+    final why = got > want
+        ? 'keys repeated (a key held too long repeats, and iOS turns a repeated space into ". ")'
+        : got < want
+            ? 'keys were dropped'
+            : 'different characters landed';
+    return (
+      problem: 'the field holds $got chars where $want were expected: $why',
+      retryable: before.text.isEmpty,
+      got: got,
+    );
   }
 
   /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focused. clear does a blind select-all + backspace first.
@@ -301,6 +348,25 @@ class TypeTool extends GlintTool {
     }
     return false;
   }
+}
+
+/// Whether [after] is [before] with [typed] inserted at one place, once iOS smart quotes and dashes are undone.
+bool holdsTyped(String before, String after, String typed) {
+  String plain(String v) => v
+      .replaceAll(RegExp('[\u2018\u2019]'), "'")
+      .replaceAll(RegExp('[\u201C\u201D]'), '"')
+      .replaceAll('\u2014', '--')
+      .replaceAll('\u2013', '-');
+  final b = plain(before), a = plain(after), t = plain(typed);
+  if (a.length != b.length + t.length) return false;
+  for (var i = 0; i <= b.length; i++) {
+    if (a.substring(0, i) == b.substring(0, i) &&
+        a.substring(i, i + t.length) == t &&
+        a.substring(i + t.length) == b.substring(i)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// What `type clear:true` did: an optional summary prefix, warnings, and data fields to merge.
