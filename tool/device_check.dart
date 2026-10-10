@@ -55,6 +55,7 @@ Future<void> main(List<String> args) async {
         {'focus': field ?? 'missing-field', 'text': 'hello glint'}, (r, _) => _data(r)['changed'] == true);
     await step('the field holds the typed text', 'get_scene', {'glintId': field ?? 'missing-field'},
         (_, text) => text.contains('hello glint'));
+    if (failed && opts['platform'] == 'ios') await _probeTyping(server, opts['device'] as String, opts['vm-uri'] as String?, field);
 
     await step('scroll down moves the page', 'scroll', {'direction': 'down'},
         (r, _) => _data(r)['changed'] == true);
@@ -63,6 +64,37 @@ Future<void> main(List<String> args) async {
   }
   stdout.writeln(failed ? 'device check FAILED' : 'device check passed');
   exit(failed ? 1 : 0);
+}
+
+Future<void> _probeTyping(_Server server, String udid, String? vmUri, String? field) async {
+  Future<void> sh(String label, List<String> cmd) async {
+    final r = await Process.run(cmd.first, cmd.skip(1).toList());
+    stdout.writeln('PROBE $label: ${(r.stdout as String).trim()} ${(r.stderr as String).trim()}'.trim());
+  }
+
+  Future<void> call(String label, String tool, Map<String, Object?> input) async {
+    final watch = Stopwatch()..start();
+    final (r, text) = await server.call(tool, input);
+    stdout.writeln('PROBE $label (${watch.elapsedMilliseconds}ms) ek=${_data(r)['errorKind']}: '
+        '${text.split('\n').where((l) => l.trim().isNotEmpty).take(6).join(' | ')}');
+  }
+
+  await sh('dtuhidd.active', ['xcrun', 'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.coredevice.dtuhidd.active']);
+  await sh('hid', ['packages/glint_mcp/native/ios_sim_bridge/.build/debug/glint-iossim', 'hid', udid]);
+  await sh('dtuhidd procs', ['pgrep', '-fl', 'dtuhid']);
+  await call('retype slow', 'type', {'focus': field, 'text': 'abc', 'clear': true, 'keyDelayMs': 40});
+  await call('one key', 'key', {'key': 'backspace'});
+  await call('field', 'get_scene', {'glintId': field});
+  await call('tap field again', 'tap', {'glintId': field});
+  await call('type after tap', 'type', {'text': 'xy'});
+  await call('field', 'get_scene', {'glintId': field});
+  await call('reattach dtuhid', 'attach', {'device': udid, if (vmUri != null) 'vmUri': vmUri, 'iosInput': 'dtuhid'});
+  await call('type dtuhid', 'type', {'focus': field, 'text': 'dtu', 'clear': true});
+  await call('field', 'get_scene', {'glintId': field});
+  await sh('dtuhidd.active after', ['xcrun', 'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.coredevice.dtuhidd.active']);
+  await call('reattach indigo', 'attach', {'device': udid, if (vmUri != null) 'vmUri': vmUri, 'iosInput': 'indigo'});
+  await call('type indigo again', 'type', {'focus': field, 'text': 'ind', 'clear': true});
+  await call('field', 'get_scene', {'glintId': field});
 }
 
 Map<String, Object?> _data(Map<String, Object?> result) =>
