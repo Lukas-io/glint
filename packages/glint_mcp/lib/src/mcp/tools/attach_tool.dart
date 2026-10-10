@@ -230,6 +230,7 @@ class AttachTool extends GlintTool {
         return _selection(picked.reason!, scan,
             running: running,
             session: session,
+            onDevice: deviceArg,
             leadSteps: goneFrom == null ? const [] : _relaunchSteps(session, goneFrom));
       }
       vmUri = picked.app!.vmUri;
@@ -1466,25 +1467,36 @@ class AttachTool extends GlintTool {
     List<RunningApp>? running,
     GlintSession? session,
     List<String> leadSteps = const [],
+    String? onDevice,
   }) {
     final pooled = session?.apps ?? const <AppSession>[];
+    final here = onDevice == null || running == null
+        ? running
+        : running.where((r) => r.deviceId == onDevice).toList();
+    final elsewhere = onDevice == null || running == null
+        ? const <RunningApp>[]
+        : running.where((r) => r.deviceId != onDevice).toList();
     return StructuredResponse(
       summary: summary,
       nextSteps: [
         ...leadSteps,
-        if (running != null)
-          for (final r in running)
+        if (here != null)
+          for (final r in here)
             r.label != null &&
-                    running.where((o) => o.label == r.label).length > 1
+                    here.where((o) => o.label == r.label).length > 1
                 ? 'attach vmUri:"${r.vmUri}"  (${r.label} on ${r.deviceName ?? r.deviceId ?? "device unknown"})'
                 : r.label != null
                 ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
                 : r.deviceId != null
                     ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
                     : 'attach vmUri:"${r.vmUri}"  (device not correlated)',
+        if (elsewhere.isNotEmpty)
+          'not on $onDevice, so only if you mean another device: '
+              '${elsewhere.map((r) => '"${r.label ?? r.vmUri}" (${r.deviceName ?? r.deviceId ?? "device unknown"})').join(", ")}',
         if (running == null) for (final u in d.vmUris) 'vmUri: "$u"',
-        for (final dev in d.devices)
-          'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
+        if (onDevice == null)
+          for (final dev in d.devices)
+            'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
         for (final a in pooled)
           'already attached: app:"${a.label}" on ${a.deviceName ?? a.id}',
       ],
