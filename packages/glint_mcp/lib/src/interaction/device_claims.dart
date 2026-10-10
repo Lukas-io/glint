@@ -25,8 +25,9 @@ class DeviceClaims {
 
   File _file(String deviceId) => File('$dir/${deviceId.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')}.json');
 
-  /// Marks [deviceId] as driven by this process; best effort, since a claim only guards against accidents.
+  /// Marks [deviceId] as driven by this process, unless another live session holds it (that claim stays theirs); best effort, since a claim only guards against accidents.
   void claim(String deviceId, {String? app}) {
+    if (heldByOther(deviceId) != null) return;
     try {
       Directory(dir).createSync(recursive: true);
       _file(deviceId).writeAsStringSync(jsonEncode({
