@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'backend.dart';
+import 'ios_toolchain.dart';
 
 /// How far glint has proven one device setup.
 enum SetupStatus { verified, partial, untested }
@@ -88,6 +89,16 @@ const List<TestedSetup> testedSetups = [
     status: SetupStatus.verified,
     checkedOn: '2026-10-07',
     evidence: 'tap (40 in a row) and type live on iPhone 17, iOS 26.5, with dtuhidd active',
+  ),
+  TestedSetup(
+    platform: 'ios',
+    backend: 'device',
+    runtimeMajor: 27,
+    xcodeMajor: 27,
+    hostMajor: 27,
+    status: SetupStatus.verified,
+    checkedOn: '2026-10-11',
+    evidence: 'attach, get_scene, screenshot and hot_reload on a paired iPhone 15 Pro, iOS 27.0, over USB (#136); input is refused by design',
   ),
   TestedSetup(
     platform: 'ios',
@@ -258,6 +269,19 @@ Future<DeviceSetup> readIosSetup(String udid, int? xcodeMajor,
     runtimeMajor: runtimeMajor,
     runtime: runtime,
     xcodeMajor: xcodeMajor,
+    hostMajor: await _hostMajor(run),
+  );
+}
+
+/// The setup of a paired physical iPhone on [osVersion] (e.g. "iOS 27.0"), judged on its own `device` backend.
+Future<DeviceSetup> readIosDeviceSetup(String? osVersion, {ProcessRunner run = Process.run}) async {
+  final major = osVersion == null ? null : int.tryParse(osVersion.replaceFirst('iOS ', '').split('.').first);
+  return (
+    platform: 'ios',
+    backend: 'device',
+    runtimeMajor: major,
+    runtime: osVersion,
+    xcodeMajor: (await detectXcode(run: run)).major,
     hostMajor: await _hostMajor(run),
   );
 }

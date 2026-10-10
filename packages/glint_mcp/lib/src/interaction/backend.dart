@@ -90,9 +90,10 @@ class BackendCapabilities {
 }
 
 class UnsupportedBackendAction implements Exception {
-  UnsupportedBackendAction(this.backend, this.detail);
+  UnsupportedBackendAction(this.backend, this.detail, {this.nextSteps = const []});
   final String backend;
   final String detail;
+  final List<String> nextSteps;
   @override
   String toString() => 'UnsupportedBackendAction($backend): $detail';
 }
