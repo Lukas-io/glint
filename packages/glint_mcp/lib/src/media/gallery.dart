@@ -49,22 +49,6 @@ String androidDirFor(String kind) => switch (kind) {
       _ => '/sdcard/Pictures',
     };
 
-const _stubbedTrashScript = '''
-import sqlite3, sys, time
-db = sqlite3.connect(sys.argv[1], timeout=15)
-db.create_function("NSCoreDataTriggerUpdateAffectedObjectValue", -1, lambda *a: None)
-since = float(sys.argv[2])
-expired = time.time() - 978307200 - 31 * 86400
-marks = ",".join("?" * (len(sys.argv) - 3))
-cur = db.execute(
-    "update ZASSET set ZTRASHEDSTATE=1, ZTRASHEDDATE=? where ZTRASHEDSTATE=0 and ZADDEDDATE>=? and Z_PK in "
-    "(select ZASSET from ZADDITIONALASSETATTRIBUTES where ZORIGINALFILENAME in (%s))" % marks,
-    [expired, since] + sys.argv[3:],
-)
-db.commit()
-print(cur.rowcount)
-''';
-
 /// Seeds and clears gallery media on one device.
 class Gallery {
   Gallery(this.device);
@@ -74,9 +58,8 @@ class Gallery {
   Future<SeededAsset> add(File staged, {required String name, required String kind}) =>
       device.isIos ? _addIos(staged, name, kind) : _addAndroid(staged, name, kind);
 
-  /// Removes [assets] from the device gallery; returns the file names it could not remove.
-  Future<List<String>> remove(List<SeededAsset> assets) =>
-      device.isIos ? _removeIos(assets) : _removeAndroid(assets);
+  /// Removes [assets] from an Android gallery; returns the file names it could not remove. The iOS simulator has no supported way to delete from Photos.
+  Future<List<String>> remove(List<SeededAsset> assets) => _removeAndroid(assets);
 
   Future<SeededAsset> _addIos(File staged, String name, String kind) async {
     if (kind == 'audio') {
@@ -113,18 +96,6 @@ class Gallery {
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
     return null;
-  }
-
-  Future<List<String>> _removeIos(List<SeededAsset> assets) async {
-    if (assets.isEmpty) return const [];
-    final python = findHostBinary('python3');
-    if (python == null) throw MissingHostTool('python3');
-    final since = assets.map((a) => a.addedAt).reduce((a, b) => a.isBefore(b) ? a : b).subtract(const Duration(minutes: 2));
-    final coreDataSince = since.millisecondsSinceEpoch / 1000 - 978307200;
-    final run = await runHost(python, ['-c', _stubbedTrashScript, device.photosDb, '$coreDataSince', ...assets.map((a) => a.file)],
-        timeout: const Duration(seconds: 30));
-    if (!run.ok) throw GalleryError('could not update the simulator Photos library', run.errTail());
-    return const [];
   }
 
   Future<SeededAsset> _addAndroid(File staged, String name, String kind) async {

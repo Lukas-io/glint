@@ -160,7 +160,7 @@
       },
       "clear": {
         "type": "boolean",
-        "description": "seed: remove what glint seeded on this device, nothing else."
+        "description": "seed: remove what glint seeded on this device, nothing else. Android only."
       },
       "size": {
         "type": "string",

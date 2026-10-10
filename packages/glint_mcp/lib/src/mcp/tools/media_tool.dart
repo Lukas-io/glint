@@ -28,7 +28,7 @@ class MediaTool extends GlintTool {
   Tool get definition => Tool(
         name: 'media',
         description: 'Media on the device. op: seed (add a photo, video or audio to the gallery from a host file or a generator: '
-            'testcard, speech, tone; clear:true removes what glint seeded), files (what the app wrote, newest first; pull:true copies one to the host), '
+            'testcard, speech, tone; clear:true removes what glint seeded, Android only), files (what the app wrote, newest first; pull:true copies one to the host), '
             'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
@@ -39,7 +39,7 @@ class MediaTool extends GlintTool {
             'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio).'),
             'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one.'),
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
-            'clear': Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else.'),
+            'clear': Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
             'size': Schema.string(description: 'testcard: WxH, even. Default 1080x1920.'),
             'durationSec': Schema.num(description: 'testcard video or tone: seconds. Default 6.'),
             'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
@@ -109,7 +109,6 @@ class MediaTool extends GlintTool {
           if (op == 'seed') 'or pass a host file as source: it needs no ffmpeg',
         ],
       'say' => ['offline speech needs macOS `say`', 'use source:"tone" or a host audio file instead'],
-      'python3' => ['install the Xcode command line tools (xcode-select --install), then retry'],
       _ => ['install ${e.binary} on the host, then retry'],
     };
     return StructuredResponse.error(
@@ -279,7 +278,8 @@ class MediaTool extends GlintTool {
         if (device.isIos) 'open the app\'s picker (the system photo picker: Choose from library); the seeded item is the newest one'
         else 'open the app\'s picker (Photo Picker or Files); the seeded item is the newest one',
         if (kind == 'video' && generator == 'testcard') 'after the app exports it, `media op:files since:lastAction` then `media op:inspect path:<file>` decodes the card',
-        '`media op:seed clear:true` removes what glint seeded',
+        if (device.isIos) 'to remove it later, delete the glint-${first.name} item in the Photos app (the simulator offers no delete)'
+        else '`media op:seed clear:true` removes what glint seeded',
       ],
       data: {
         'device': device.id,
@@ -317,15 +317,24 @@ class MediaTool extends GlintTool {
         data: {'device': device.id, 'removed': const <Object>[], 'remaining': [for (final a in all) a.name]},
       );
     }
+    if (device.isIos) {
+      return StructuredResponse.error(
+        summary: 'the iOS simulator has no supported way to delete from Photos, so glint left ${chosen.length} seeded '
+            'asset${chosen.length == 1 ? '' : 's'} in place',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'seeded as ${chosen.map((a) => a.file).join(', ')}',
+        nextSteps: const [
+          'delete them in the Photos app (their names start with glint-): attach in device mode and drive Photos, or ask the user',
+          'or `xcrun simctl erase <udid>` when nothing else on that simulator matters (it wipes everything)',
+        ],
+      );
+    }
     final failed = await phases.during('removing ${chosen.length} seeded asset${chosen.length == 1 ? '' : 's'}', () => gallery.remove(chosen));
     final removed = [for (final a in chosen) if (!failed.contains(a.file)) a];
     ledger.save([for (final a in all) if (!removed.contains(a)) a]);
     return StructuredResponse(
       summary: 'removed ${removed.length} seeded asset${removed.length == 1 ? '' : 's'} from ${device.id}: ${removed.map((a) => a.name).join(', ')}',
       warnings: [if (failed.isNotEmpty) 'could not remove ${failed.join(', ')}; they stay listed so a retry can finish'],
-      nextSteps: [
-        if (device.isIos) 'the picker no longer lists them once reopened; they wait in Recently Deleted until the simulator purges them',
-      ],
       data: {'device': device.id, 'removed': [for (final a in removed) a.toJson()], 'failed': failed},
     );
   }
