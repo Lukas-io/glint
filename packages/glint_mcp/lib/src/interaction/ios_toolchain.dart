@@ -141,9 +141,7 @@ class IosToolchain {
 
 /// Bridge actions refused because the bridge is missing or Xcode is untested.
 class IosToolchainBlocked extends UnsupportedBackendAction {
-  IosToolchainBlocked(super.backend, super.detail, this.nextSteps);
-
-  final List<String> nextSteps;
+  IosToolchainBlocked(super.backend, super.detail, List<String> nextSteps) : super(nextSteps: nextSteps);
 }
 
 /// The last failed download and when it failed; attaches within [_retryAfter] reuse it instead of refetching.

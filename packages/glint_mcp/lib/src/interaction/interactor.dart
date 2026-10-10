@@ -33,6 +33,7 @@ class Interactor {
         summary: 'backend rejected ${action.label}: ${e.detail}',
         error: e.detail,
         errorKind: GlintErrorKind.unsupportedBackendAction,
+        nextSteps: e.nextSteps,
       );
     } on BackendToolError catch (e) {
       return ActionResult.failure(

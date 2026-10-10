@@ -392,6 +392,19 @@ class AttachTool extends GlintTool {
             devicePixelRatio: vp?.dpr ?? 1.0,
             server: androidServer,
           );
+        case DevicePlatform.ios when info?.physical ?? isPhysicalIosUdid(deviceId):
+          final probed = await _probeViewportWithRetry(probe, session.config.attachProbeTimeoutMs, onProgress);
+          final vp = probed.viewport;
+          if (vp == null) {
+            return probeFailureResponse(
+              lifecycle: await _safeProbeLifecycle(probe),
+              lastError: probed.lastError,
+              timeoutMs: session.config.attachProbeTimeoutMs,
+            );
+          }
+          device = IosDevice(udid: deviceId, logicalWidth: vp.w, logicalHeight: vp.h, devicePixelRatio: vp.dpr);
+          warnings.add('physical iPhone: get_scene, screenshots and hot_reload work, but glint cannot tap or type '
+              'on it yet; input tools say where to ask the user to tap');
         case DevicePlatform.ios:
           toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
               onPhase: (phase) => onProgress?.call(0, phase));
@@ -430,7 +443,9 @@ class AttachTool extends GlintTool {
           );
       }
 
-      final input = describeSetup(platform == DevicePlatform.ios
+      final input = describeSetup(device is IosDevice
+          ? await readIosDeviceSetup(info?.osVersion)
+          : platform == DevicePlatform.ios
           ? await readIosSetup(deviceId, toolchain?.xcode.major,
               transport: runner != null ? 'xctest' : iosTransport)
           : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb'));
@@ -558,7 +573,10 @@ class AttachTool extends GlintTool {
         warnings: warnings,
         nextSteps: [
           if (!returnScene) 'call `get_scene` to read the current screen',
-          'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
+          if (device is IosDevice)
+            'to act, ask the user to tap or type on the phone (tap and type reply with the exact point), then get_scene'
+          else
+            'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
           if (others.isNotEmpty)
             'switch with attach app:"<name>", or target once with app:"<name>" '
                 'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',

@@ -59,6 +59,8 @@ class AppSession {
       case IosSimulator():
         final id = bundleId;
         return id == null ? const [] : iosCrashes(bundleId: id, since: since);
+      case IosDevice():
+        return const [];
       case AndroidDevice():
         final reader = nativeReader;
         final pkg = (reader is AndroidNativeReader ? reader.appPackage : null) ?? package;
@@ -199,6 +201,7 @@ class AppSession {
           fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
         ),
       IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
+      IosDevice() => null,
       AndroidDevice() => AndroidNativeReader(
           serial: dev.serial,
           adbPath: dev.adbPath,

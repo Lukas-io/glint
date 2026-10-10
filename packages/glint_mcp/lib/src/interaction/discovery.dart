@@ -10,6 +10,7 @@ class BootedDevice {
     required this.id,
     required this.name,
     this.osVersion,
+    this.physical = false,
   });
 
   /// ios → simulator UDID; android → adb serial.
@@ -20,11 +21,15 @@ class BootedDevice {
   /// e.g. "iOS 26.5". Null when unknown.
   final String? osVersion;
 
+  /// A real phone rather than a simulator or emulator.
+  final bool physical;
+
   Map<String, Object?> toJson() => {
         'platform': platform.name,
         'id': id,
         'name': name,
         if (osVersion != null) 'osVersion': osVersion,
+        if (physical) 'physical': true,
       };
 }
 
@@ -176,7 +181,7 @@ class DeviceDiscovery {
 
   Future<bool> isDevicePresent(String deviceId, DevicePlatform platform) async {
     final devices = platform == DevicePlatform.ios
-        ? await _bootedIosSims()
+        ? [...await _bootedIosSims(), if (isPhysicalIosUdid(deviceId)) ...await _connectedIPhones()]
         : await _adbDevices();
     return devices.any((d) => d.id == deviceId);
   }
@@ -184,8 +189,9 @@ class DeviceDiscovery {
   Future<DiscoveryResult> scan() async {
     final vmUris = await _scanVmUris();
     final ios = await _bootedIosSims();
+    final phones = await _connectedIPhones();
     final android = await _adbDevices();
-    return DiscoveryResult(vmUris: vmUris, devices: [...ios, ...android]);
+    return DiscoveryResult(vmUris: vmUris, devices: [...ios, ...phones, ...android]);
   }
 
   // ── running Flutter VM service URIs ──────────────────────────────────────
@@ -225,6 +231,25 @@ class DeviceDiscovery {
   }
 
   // ── booted iOS simulators ────────────────────────────────────────────────
+  /// Paired iPhones connected now (USB or network), from `devicectl`.
+  Future<List<BootedDevice>> _connectedIPhones() async {
+    final out = File('${Directory.systemTemp.path}/glint-devicectl-$pid.json');
+    try {
+      final res = await Process.run('xcrun', ['devicectl', 'list', 'devices', '-q', '-j', out.path])
+          .timeout(const Duration(seconds: 15));
+      if (res.exitCode != 0 || !out.existsSync()) return const [];
+      return parseConnectedIPhones(out.readAsStringSync());
+    } on Object {
+      return const [];
+    } finally {
+      try {
+        out.deleteSync();
+      } on Object {
+        // already gone
+      }
+    }
+  }
+
   Future<List<BootedDevice>> _bootedIosSims() async {
     final ProcessResult res;
     try {
@@ -381,7 +406,7 @@ class DeviceDiscovery {
         ?.group(1)
         ?.replaceAll('"', '');
     if (flag == null) return null;
-    if (RegExp(r'^[0-9A-Fa-f-]{36}$').hasMatch(flag)) {
+    if (RegExp(r'^[0-9A-Fa-f-]{36}$').hasMatch(flag) || isPhysicalIosUdid(flag)) {
       return AppDeviceLink(deviceId: flag);
     }
     final q = flag.toLowerCase();
@@ -597,3 +622,36 @@ List<RunningApp> collapseSameApp(List<RunningApp> apps) {
         a,
   ];
 }
+
+/// A physical iPhone's UDID (`00008130-000C59A60261001C`), as opposed to a simulator's 36-character one.
+bool isPhysicalIosUdid(String id) => RegExp(r'^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}$').hasMatch(id);
+
+/// The paired, connected physical iOS devices in a `devicectl list devices -j` file.
+List<BootedDevice> parseConnectedIPhones(String json) {
+  final Object? root;
+  try {
+    root = jsonDecode(json);
+  } on Object {
+    return const [];
+  }
+  final result = root is Map ? root['result'] : null;
+  final devices = result is Map ? result['devices'] : null;
+  if (devices is! List) return const [];
+  return [
+    for (final d in devices.whereType<Map>())
+      if ((d['hardwareProperties'] as Map?)?['reality'] == 'physical' &&
+          (d['hardwareProperties'] as Map?)?['platform'] == 'iOS' &&
+          (d['connectionProperties'] as Map?)?['pairingState'] == 'paired' &&
+          (d['connectionProperties'] as Map?)?['tunnelState'] == 'connected' &&
+          (d['hardwareProperties'] as Map?)?['udid'] is String)
+        BootedDevice(
+          platform: DevicePlatform.ios,
+          id: (d['hardwareProperties'] as Map)['udid'] as String,
+          name: ((d['deviceProperties'] as Map?)?['name'] as String?) ?? 'iPhone',
+          osVersion: _iosVersion((d['deviceProperties'] as Map?)?['osVersionNumber']),
+          physical: true,
+        ),
+  ];
+}
+
+String? _iosVersion(Object? v) => v is String ? 'iOS $v' : null;
