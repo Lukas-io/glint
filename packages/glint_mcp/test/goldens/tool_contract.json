@@ -259,6 +259,78 @@
       "op"
     ]
   },
+  "location": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "set | get | clear | route | pause | resume | stop | seek"
+      },
+      "device": {
+        "type": "string",
+        "description": "Simulator UDID, iPhone UDID or emulator serial. Default: the attached device."
+      },
+      "at": {
+        "type": "string",
+        "description": "set: \"lat,lng\" in degrees, e.g. \"6.5244,3.3792\"."
+      },
+      "heading": {
+        "type": "number",
+        "description": "set: compass heading in degrees (Android only)."
+      },
+      "points": {
+        "type": "array",
+        "description": "route: waypoints as \"lat,lng\" strings, in order."
+      },
+      "file": {
+        "type": "string",
+        "description": "route: a host GPX or KML file."
+      },
+      "polyline": {
+        "type": "string",
+        "description": "route: a Google encoded polyline, as directions APIs return."
+      },
+      "speedKmh": {
+        "type": "number",
+        "description": "route: travel speed. Default 30. set: the reported speed (Android only)."
+      },
+      "durationSec": {
+        "type": "number",
+        "description": "route: travel the whole route in this many seconds instead of at speedKmh."
+      },
+      "intervalMs": {
+        "type": "integer",
+        "description": "route: time between fixes. Default 1000; at least 500 on the iOS simulator, 2000 on an iPhone."
+      },
+      "loop": {
+        "type": "boolean",
+        "description": "route: start over at the end instead of stopping."
+      },
+      "jitterM": {
+        "type": "number",
+        "description": "route: GPS noise, about this many meters. Default 0."
+      },
+      "dropout": {
+        "type": "number",
+        "description": "route: share of fixes lost, 0 to 1. Default 0."
+      },
+      "progress": {
+        "type": "number",
+        "description": "seek, or route start: 0 to 1 along the route."
+      },
+      "meters": {
+        "type": "number",
+        "description": "seek: meters along the route."
+      },
+      "waypoint": {
+        "type": "integer",
+        "description": "seek: waypoint index, 0 = start."
+      }
+    },
+    "required": [
+      "op"
+    ]
+  },
   "shutdown_sim": {
     "type": "object",
     "properties": {

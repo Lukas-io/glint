@@ -150,6 +150,9 @@ class EmulatorControl {
 
   static List<int> _lengthDelimited(int field, List<int> bytes) => [(field << 3) | 2, ..._varint(bytes.length), ...bytes];
 
+  /// Sets the emulator's GPS fix from an encoded `GpsState` message.
+  Future<void> setGps(List<int> gpsState) => _client.$createUnaryCall(_method('setGps'), gpsState, options: _options);
+
   Future<void> close() => _channel.shutdown();
 
   static List<int> _audioFormat() => [0x08, ..._varint(sampleRate), 0x10, 0, 0x18, 1];
