@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -156,9 +157,11 @@ class AndroidEmulatorLocation extends LocationBackend {
     if (endpoint == null) throw LocationFailed('found no control endpoint for $serial', 'is the emulator running?');
     final control = EmulatorControl(endpoint);
     try {
-      await control.setGps(gpsState(fix));
+      await control.setGps(gpsState(fix)).timeout(const Duration(seconds: 5));
     } on GrpcError catch (e) {
       throw LocationFailed('the emulator refused the location', '${e.message}');
+    } on TimeoutException {
+      throw LocationFailed('the emulator did not take the location', 'no answer in 5 s');
     } finally {
       await control.close();
     }

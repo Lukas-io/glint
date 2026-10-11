@@ -144,7 +144,7 @@ class LocationPlayer {
           _end(RouteState.finished);
           return;
         }
-        _send(force: true).whenComplete(() => _end(RouteState.finished));
+        _arrive();
         return;
       }
     }
@@ -168,10 +168,22 @@ class LocationPlayer {
     await _apply(fix, () => backend.set(fix));
   }
 
+  /// Sends the end of the route even when a fix is still in flight, so the device always stops on the last point.
+  Future<void> _arrive() async {
+    _timer?.cancel();
+    _timer = null;
+    for (var i = 0; _sending && i < 50; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    _sending = false;
+    await _send(force: true);
+    _end(RouteState.finished);
+  }
+
   Future<void> _apply(Fix fix, Future<void> Function() send) async {
     _sending = true;
     try {
-      await send();
+      await send().timeout(const Duration(seconds: 20), onTimeout: () => throw LocationFailed('the device did not take the fix', 'no answer in 20 s'));
       lastFix = fix;
       sent++;
       _failures = 0;
