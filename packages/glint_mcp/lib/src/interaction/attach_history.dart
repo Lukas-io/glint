@@ -39,7 +39,8 @@ class AttachRecord {
   String get key => '$appKey@$deviceId';
 
   /// Relaunchable unattended only when the project dir is known.
-  bool get launchable => projectDir != null;
+  /// A remembered app glint can start again: its project folder is known and still there.
+  bool get launchable => projectDir != null && Directory(projectDir!).existsSync();
 
   String get label => displayName ?? appKey;
 

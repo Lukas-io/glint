@@ -685,8 +685,12 @@ class AttachTool extends GlintTool {
         await downloadReleaseAsset(androidServerAssetName, dest);
         dex = dest;
       } on Object catch (e) {
-        warnings.add('the glint Android server could not be downloaded ($e); input uses adb shell input');
-        return null;
+        try {
+          dex = await buildAndroidServerDex(dest, adbPath: adbPath);
+        } on AndroidServerError catch (built) {
+          warnings.add('the glint Android server could not be downloaded ($e) or built from source (${built.message}); input uses adb shell input');
+          return null;
+        }
       }
     }
     if (dex == null) {
@@ -1159,7 +1163,7 @@ class AttachTool extends GlintTool {
       for (final r in history)
         '  ${r.label}  (${[
           r.deviceName ?? r.deviceId,
-          if (r.launchable) 'launchable' else 'no projectDir',
+          if (r.launchable) 'launchable' else if (r.projectDir == null) 'no projectDir' else 'project folder gone',
           _ago(r.lastSeen),
         ].join(", ")})',
     ].join('\n');

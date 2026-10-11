@@ -153,3 +153,67 @@ String? locateAndroidServerDex({Map<String, String>? env, String? scriptPath}) {
 /// Where the downloaded server for this glint version lives, under `~/.glint/bin`.
 String cachedAndroidServerPath({Map<String, String>? env}) =>
     '${(env ?? Platform.environment)['HOME'] ?? '.'}/.glint/bin/glint-android-server-$glintVersion.dex';
+
+/// The server's Java sources inside glint's package, found by walking up from the running script; null when this install has none.
+Directory? locateAndroidServerSources({String? scriptPath}) {
+  Directory dir;
+  try {
+    dir = File(scriptPath ?? Platform.script.toFilePath()).parent;
+  } catch (_) {
+    dir = Directory.current;
+  }
+  for (var i = 0; i < 6; i++) {
+    final src = Directory('${dir.path}/native/android_server/src');
+    if (src.existsSync()) return src;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/// Builds the server dex from glint's own sources into [dest] (javac against the newest android.jar, then d8), as `native/android_server/build.sh` does, for a glint version whose release carries no prebuilt one.
+Future<String> buildAndroidServerDex(String dest, {String? adbPath, Map<String, String>? env}) async {
+  final e = env ?? Platform.environment;
+  final src = locateAndroidServerSources();
+  if (src == null) throw AndroidServerError('this glint install has no Android server sources to build from');
+  final adb = adbPath == null ? null : File(adbPath);
+  final sdk = [
+    e['ANDROID_HOME'],
+    e['ANDROID_SDK_ROOT'],
+    if (adb != null && adb.isAbsolute) adb.parent.parent.path,
+    '${e['HOME']}/Library/Android/sdk',
+    '${e['HOME']}/Android/Sdk',
+  ].whereType<String>().where((p) => Directory('$p/platforms').existsSync()).firstOrNull;
+  if (sdk == null) throw AndroidServerError('found no Android SDK with platforms to build the server against');
+  String? newest(String dir, String file) {
+    final hits = Directory(dir).existsSync()
+        ? [for (final d in Directory(dir).listSync().whereType<Directory>()) if (File('${d.path}/$file').existsSync()) '${d.path}/$file']
+        : <String>[];
+    int version(String p) => int.tryParse(RegExp(r'(\d+)').firstMatch(p.split('/').reversed.elementAt(1))?.group(1) ?? '') ?? 0;
+    hits.sort((a, b) => version(a).compareTo(version(b)));
+    return hits.lastOrNull;
+  }
+
+  final jar = newest('$sdk/platforms', 'android.jar');
+  final d8 = newest('$sdk/build-tools', 'd8');
+  if (jar == null || d8 == null) throw AndroidServerError('the Android SDK at $sdk lacks ${jar == null ? 'a platform android.jar' : 'build-tools d8'}');
+  final javac = e['JAVA_HOME'] != null && File('${e['JAVA_HOME']}/bin/javac').existsSync() ? '${e['JAVA_HOME']}/bin/javac' : 'javac';
+  final work = await Directory.systemTemp.createTemp('glint-android-server');
+  try {
+    final sources = [for (final f in src.listSync(recursive: true)) if (f.path.endsWith('.java')) f.path];
+    final classes = Directory('${work.path}/classes')..createSync();
+    final compiled = await Process.run(javac, ['--release', '11', '-cp', jar, '-d', classes.path, ...sources]);
+    if (compiled.exitCode != 0) throw AndroidServerError('javac failed: ${'${compiled.stderr}'.trim().split('\n').take(3).join(' ')}');
+    final classFiles = [for (final f in classes.listSync(recursive: true)) if (f.path.endsWith('.class')) f.path];
+    final dexed = await Process.run(d8, ['--min-api', '26', '--lib', jar, '--output', work.path, ...classFiles]);
+    if (dexed.exitCode != 0) throw AndroidServerError('d8 failed: ${'${dexed.stderr}'.trim().split('\n').take(3).join(' ')}');
+    File(dest).parent.createSync(recursive: true);
+    File('${work.path}/classes.dex').copySync(dest);
+    return dest;
+  } on ProcessException catch (err) {
+    throw AndroidServerError('could not run the Android build tools: ${err.message}');
+  } finally {
+    work.deleteSync(recursive: true);
+  }
+}

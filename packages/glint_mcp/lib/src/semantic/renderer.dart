@@ -79,18 +79,21 @@ class PlainTextSceneRenderer extends SceneRenderer {
   /// One subtree only — no overlays, no route stack, no folding (an explicit
   /// drill-down means "show me"). [maxDepth] counts from [node] (0 = its line).
   String renderSubtree(SemanticNode node, {int? maxDepth, bool fold = false}) {
-    final w = _Writer(this, maxDepth ?? defaultMaxDepth, fold);
+    final w = _Writer(this, maxDepth ?? defaultMaxDepth, fold, full: true);
     w.write(node, depth: 0);
     return w.buf.toString();
   }
 }
 
 class _Writer {
-  _Writer(this.r, this.maxDepth, this.fold);
+  _Writer(this.r, this.maxDepth, this.fold, {this.full = false});
 
   final PlainTextSceneRenderer r;
   final int maxDepth;
   final bool fold;
+
+  /// A drill-down into one node, where every label is shown whole.
+  final bool full;
   final buf = StringBuffer();
   final runs = <FoldedRun>[];
   final _listStack = <String?>[];
@@ -153,6 +156,11 @@ class _Writer {
   // Labels longer than this are truncated to keep scene text compact.
   static const _maxLabelChars = 40;
 
+  /// On-screen text keeps more of itself than other labels, since the end of a sentence often carries its meaning.
+  static const _maxTextChars = 80;
+
+  static const _maxDrillChars = 2000;
+
   /// Map lines are coordinates and screen points glint writes itself, and every digit is needed.
   static const _maxMapLabelChars = 160;
 
@@ -173,7 +181,14 @@ class _Writer {
     if (label.isNotEmpty && label != node.role.name) {
       buf
         ..write(' ')
-        ..write(_truncate(label, max: node is SemanticMap || node is SemanticMapItem ? _maxMapLabelChars : _maxLabelChars));
+        ..write(_truncate(label,
+            max: full
+                ? _maxDrillChars
+                : switch (node) {
+                    SemanticMap() || SemanticMapItem() => _maxMapLabelChars,
+                    SemanticText() => _maxTextChars,
+                    _ => _maxLabelChars,
+                  }));
     }
     buf.writeln();
   }
