@@ -1,0 +1,28 @@
+name: media_fixture
+description: "A glint fixture that records the microphone and plays audio, for checking mic feeds and speaker capture."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  record: ^7.1.2
+  audioplayers: ^6.8.1
+  path_provider: ^2.1.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/beep.wav
