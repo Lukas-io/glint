@@ -9,6 +9,8 @@ import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
 import '../../media/media_inspect.dart';
+import '../../media/picker.dart';
+import '../../perception/runner_native_reader.dart';
 import '../../media/seed_ledger.dart';
 import '../../media/testcard_generator.dart';
 import '../envelope.dart';
@@ -29,15 +31,17 @@ class MediaTool extends GlintTool {
         name: 'media',
         description: 'Media on the device. op: seed (add a photo, video or audio to the gallery from a host file or a generator: '
             'testcard, speech, tone; clear:true removes what glint seeded, Android only), files (what the app wrote, newest first; pull:true copies one to the host), '
-            'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset). '
+            'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset), '
+            'pick (choose a photo or video in the open system picker: name, index or newest). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect'),
+            'op': Schema.string(description: 'seed | files | inspect | pick'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video.'),
             'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio).'),
-            'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one.'),
+            'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
+            'index': Schema.int(description: 'pick: position in the picker, 0 = newest. Default 0.'),
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
             'clear': Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
             'size': Schema.string(description: 'testcard: WxH, even. Default 1080x1920.'),
@@ -71,7 +75,8 @@ class MediaTool extends GlintTool {
         'seed' => await _seed(session, args, phases),
         'files' => await _files(session, args, phases),
         'inspect' => await _inspect(session, args, phases),
-        _ => _bad('op must be seed, files or inspect, got ${op ?? 'nothing'}'),
+        'pick' => await _pick(session, args),
+        _ => _bad('op must be seed, files, inspect or pick, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -265,6 +270,7 @@ class MediaTool extends GlintTool {
     final added = <SeededAsset>[];
     final all = [...ledger.load()];
     for (final (file, name) in staged) {
+      file.setLastModifiedSync(DateTime.now());
       final asset = await phases.during('adding ${file.uri.pathSegments.last} to the gallery', () => gallery.add(file, name: name, kind: kind!));
       added.add(asset);
       ledger.save(all..add(asset));
@@ -336,6 +342,99 @@ class MediaTool extends GlintTool {
       summary: 'removed ${removed.length} seeded asset${removed.length == 1 ? '' : 's'} from ${device.id}: ${removed.map((a) => a.name).join(', ')}',
       warnings: [if (failed.isNotEmpty) 'could not remove ${failed.join(', ')}; they stay listed so a retry can finish'],
       data: {'device': device.id, 'removed': [for (final a in removed) a.toJson()], 'failed': failed},
+    );
+  }
+
+  Future<StructuredResponse> _pick(GlintSession session, Map<String, Object?> args) async {
+    final app = session.active;
+    final reader = session.nativeReader;
+    if (app == null) {
+      return StructuredResponse.error(
+        summary: 'attach first: pick reads the system picker over the attached app',
+        errorKind: GlintErrorKind.sessionNotAttached,
+        nextSteps: const ['attach'],
+      );
+    }
+    if (reader == null || (session.device is IosSimulator && reader is! RunnerNativeReader)) {
+      return StructuredResponse.error(
+        summary: 'glint cannot read the iOS photo picker on this attach',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'the picker runs in its own process, and only the XCUITest runner can read it',
+        nextSteps: const ['attach iosBackend:"xctest", open the picker again, then pick'],
+      );
+    }
+    await app.refreshSceneMode();
+    final surface = app.nativeSurfaceName;
+    final cells = surface == null ? const <PickerCell>[] : pickerCells((await reader.readSnapshot()).root.children);
+    if (cells.isEmpty) {
+      return StructuredResponse.error(
+        summary: surface == null ? 'no system picker is open' : 'no photos or videos in $surface',
+        errorKind: GlintErrorKind.targetNotFound,
+        nextSteps: [
+          if (surface == null) "open the app's photo picker first (e.g. tap its Choose from library), then pick",
+          if (surface != null) 'get_scene to see what the native surface shows; `media op:seed` adds photos to choose from',
+        ],
+      );
+    }
+    final name = args['name'] as String?;
+    final int index;
+    if (name != null) {
+      final device = MediaDevice(session.device.platform, session.device.id);
+      final seeded = SeedLedger(device.id).load();
+      final asset = [for (final a in seeded) if (a.name == name || a.file == 'glint-${_safe(name)}.png' || a.file.startsWith('glint-${_safe(name)}.')) a].lastOrNull;
+      if (asset == null) {
+        return _bad('nothing seeded as "$name" on ${device.id}',
+            nextSteps: [if (seeded.isNotEmpty) 'seeded here: ${seeded.map((a) => a.name).join(', ')}', 'or pick by index:<n> (0 = newest)']);
+      }
+      final window = device.isIos ? const Duration(minutes: 1) : const Duration(seconds: 3);
+      final later = seeded.where((a) => a.addedAt.isAfter(asset.addedAt) && a.addedAt.difference(asset.addedAt) <= window).length;
+      final found = cellForAsset(cells, asset.addedAt, laterInSameWindow: later);
+      if (found == null) {
+        return StructuredResponse.error(
+          summary: 'no cell in the picker shows "$name" (seeded ${asset.addedAt.toIso8601String().substring(11, 19)})',
+          errorKind: GlintErrorKind.targetNotFound,
+          detail: 'the picker shows: ${cells.take(6).map((c) => c.label).join('; ')}',
+          nextSteps: const ['scroll the picker or switch to its Photos tab, then pick again', 'or pick by index:<n> (0 = newest)'],
+        );
+      }
+      index = found;
+    } else {
+      index = argInt(args, 'index') ?? 0;
+      if (index < 0 || index >= cells.length) {
+        return _bad('index must be 0 to ${cells.length - 1} (the picker shows ${cells.length})');
+      }
+    }
+    final cell = cells[index];
+    final dpr = session.device.devicePixelRatio;
+    await session.backend.tap(physicalX: (cell.x * dpr).round(), physicalY: (cell.y * dpr).round());
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await app.refreshSceneMode();
+    String? confirmed;
+    if (app.nativeSurfaceName != null) {
+      final confirm = (await reader.readSnapshot())
+          .root
+          .children
+          .where((n) => n.isNativeEnabled == true && n.axFrame != null && RegExp(r'^(Add|Done|Select|Choose|Open)$').hasMatch(n.textPreview ?? ''))
+          .firstOrNull;
+      if (confirm != null) {
+        final f = confirm.axFrame!;
+        await session.backend.tap(physicalX: ((f.x + f.w / 2) * dpr).round(), physicalY: ((f.y + f.h / 2) * dpr).round());
+        confirmed = confirm.textPreview;
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        await app.refreshSceneMode();
+      }
+    }
+    final closed = app.nativeSurfaceName == null;
+    return StructuredResponse(
+      summary: 'picked "${cell.label}"${name == null ? ' (index $index)' : ' (seeded "$name")'}'
+          '${confirmed == null ? '' : ', then tapped $confirmed'}'
+          '${closed ? '; the picker closed' : '; the picker is still open'}',
+      warnings: [if (!closed) 'the picker did not close: it may want more taps (a multi-select Add, or a crop step)'],
+      nextSteps: [
+        if (closed) 'get_scene to see the picked media in the app',
+        if (!closed) 'get_scene to see the picker, then tap its confirm button',
+      ],
+      data: {'picked': cell.label, 'index': index, if (confirmed != null) 'confirmed': confirmed, 'pickerClosed': closed},
     );
   }
 
