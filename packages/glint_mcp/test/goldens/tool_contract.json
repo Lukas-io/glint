@@ -136,11 +136,15 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick | permission | listen | event"
+        "description": "seed | files | inspect | pick | permission | listen | event | camera"
       },
       "stop": {
         "type": "boolean",
         "description": "listen: end the recording and report it."
+      },
+      "setup": {
+        "type": "boolean",
+        "description": "camera: true lets glint feed the AVD cameras (one emulator restart), false restores them."
       },
       "value": {
         "type": "string",
@@ -168,7 +172,7 @@
       },
       "source": {
         "type": "string",
-        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio)."
+        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard."
       },
       "name": {
         "type": "string",
