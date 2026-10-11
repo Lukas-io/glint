@@ -31,6 +31,7 @@ class _RidePageState extends State<RidePage> {
   Position? _position;
   int _updates = 0;
   String _status = 'Starting';
+  String _access = 'Permission not checked';
 
   @override
   void initState() {
@@ -39,13 +40,18 @@ class _RidePageState extends State<RidePage> {
   }
 
   Future<void> _listen() async {
+    await _positions?.cancel();
     if (!await Geolocator.isLocationServiceEnabled()) {
       setState(() => _status = 'Location services are off');
       return;
     }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    final accuracy = permission == LocationPermission.denied || permission == LocationPermission.deniedForever
+        ? null
+        : await Geolocator.getLocationAccuracy();
+    setState(() => _access = 'Permission ${permission.name}${accuracy == null ? '' : ' · ${accuracy.name}'}');
+    if (accuracy == null) {
       setState(() => _status = 'Location permission denied');
       return;
     }
@@ -59,7 +65,7 @@ class _RidePageState extends State<RidePage> {
         _status = 'Tracking';
       });
       _map?.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
-    });
+    }, onError: (Object e) => setState(() => _status = 'Location stopped: $e'));
   }
 
   @override
@@ -91,7 +97,13 @@ class _RidePageState extends State<RidePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 4,
               children: [
-                Text(_status, style: Theme.of(context).textTheme.titleMedium),
+                Row(
+                  children: [
+                    Expanded(child: Text(_status, style: Theme.of(context).textTheme.titleMedium)),
+                    TextButton(onPressed: _listen, child: const Text('Try again')),
+                  ],
+                ),
+                Text(_access),
                 Text(p == null ? 'No position yet' : 'Position ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}'),
                 Text(p == null
                     ? 'Updates 0'

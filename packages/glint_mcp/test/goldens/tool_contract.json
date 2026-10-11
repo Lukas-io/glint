@@ -264,7 +264,7 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "set | get | clear | route | pause | resume | stop | seek"
+        "description": "set | get | clear | route | pause | resume | stop | seek | permission | services | answer"
       },
       "device": {
         "type": "string",
@@ -325,6 +325,22 @@
       "waypoint": {
         "type": "integer",
         "description": "seek: waypoint index, 0 = start."
+      },
+      "value": {
+        "type": "string",
+        "description": "permission: whileUsing | always | approximate | deny | reset. services: on | off."
+      },
+      "choice": {
+        "type": "string",
+        "description": "answer: whileUsing | once | deny | always | keepWhileUsing."
+      },
+      "precise": {
+        "type": "boolean",
+        "description": "answer: pick precise (true) or approximate (false) location first, where the prompt offers it."
+      },
+      "appId": {
+        "type": "string",
+        "description": "permission: bundle id or package. Default: the attached app."
       }
     },
     "required": [
