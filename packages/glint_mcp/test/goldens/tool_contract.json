@@ -136,7 +136,7 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect"
+        "description": "seed | files | inspect | pick"
       },
       "device": {
         "type": "string",
@@ -152,7 +152,11 @@
       },
       "name": {
         "type": "string",
-        "description": "seed: asset name (also the file name). clear:true with name removes just that one."
+        "description": "seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose."
+      },
+      "index": {
+        "type": "integer",
+        "description": "pick: position in the picker, 0 = newest. Default 0."
       },
       "count": {
         "type": "integer",

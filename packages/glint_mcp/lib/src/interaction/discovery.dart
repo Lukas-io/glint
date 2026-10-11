@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'device.dart';
+import 'launcher.dart' show flutterAppProblem;
 
 /// A simulator / emulator that is currently booted and drivable.
 class BootedDevice {
@@ -482,13 +483,17 @@ class DeviceDiscovery {
   }
 
   // ── project dir (for relaunch) ───────────────────────────────────────────
-  /// Flutter project root behind a running app — the cwd of the DDS serving [vmUri] (its listener, or the DDS fronting that raw VM port), validated by pubspec.yaml.
+  /// Flutter project root behind a running app: the cwd of the DDS serving [vmUri] (its listener, or the DDS fronting that raw VM port) or of its `flutter run` parent, when that folder is a Flutter app.
   Future<String?> projectDirForVm(Uri vmUri) async {
     final port = vmUri.port;
     if (port == 0) return null;
-    for (final pid in [...await _listeningPids(port), ...await _ddsPidsFronting(port)]) {
-      final cwd = await _cwdOf(pid);
-      if (cwd != null && File('$cwd/pubspec.yaml').existsSync()) return cwd;
+    for (final start in [...await _listeningPids(port), ...await _ddsPidsFronting(port)]) {
+      int? pid = start;
+      for (var hop = 0; pid != null && pid > 1 && hop < 3; hop++) {
+        final cwd = await _cwdOf(pid);
+        if (cwd != null && flutterAppProblem(cwd) == null) return cwd;
+        pid = await _parentOf(pid);
+      }
     }
     return null;
   }
@@ -508,6 +513,15 @@ class DeviceDiscovery {
         .map((line) => int.tryParse(line.trim().split(' ').first))
         .whereType<int>()
         .toList();
+  }
+
+  Future<int?> _parentOf(int pid) async {
+    try {
+      final r = await Process.run('ps', ['-o', 'ppid=', '-p', '$pid']);
+      return r.exitCode == 0 ? int.tryParse((r.stdout as String).trim()) : null;
+    } on Object {
+      return null;
+    }
   }
 
   Future<String?> _cwdOf(int pid) async {

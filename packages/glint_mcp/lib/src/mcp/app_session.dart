@@ -326,6 +326,9 @@ class AppSession {
     final rt = runtime;
     final native = nativeReader;
     if (rt == null || native == null) return;
+    if (native is AndroidNativeReader && native.appPackage == null && bundleId != null) {
+      native.appPackage = bundleId;
+    }
     if (native is AndroidNativeReader && native.appPackage == null) {
       try {
         final s = await rt
