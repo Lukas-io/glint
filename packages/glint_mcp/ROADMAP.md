@@ -45,7 +45,7 @@ control below is still roadmapped.
 | appearance (light/dark) | `simctl ui <udid> appearance` | ✅ `device status` |
 | content size (text scale) | `simctl ui <udid> content_size` | ✅ `device status` |
 | **locked state** | SpringBoard AX snapshot | hard — needs AX inspection / private API |
-| **location** | reading current GPS | hard — `simctl location` is set-only |
+| location | what glint fed, plus the app's permission (locationd records on iOS, `dumpsys` on Android) and whether it is listening (Android) | ✅ `location op:get` |
 | **biometrics enrollment** | SimulatorKit / Features state | hard — no clean public read |
 
 ### Control (writes)
@@ -55,12 +55,26 @@ control below is still roadmapped.
 | open url / deeplink | `simctl openurl <udid> <url>` | ✅ `device openurl` |
 | privacy grant/revoke/reset | `simctl privacy <udid> grant\|revoke\|reset <service> <bundle>` | ✅ `device privacy` |
 | lock / unlock | lock = IndigoHID code 1; unlock = two keystrokes, or Darwin `pearl.match` + bottom-edge swipe | shipped in backend (not yet a `device` op) |
-| set location | `simctl location <udid> set <lat>,<lon>` (+ `run` for routes) | roadmap |
+| set location, routes | `simctl location set` / `start`, emulator gRPC `setGps`, `devicectl ... simulate location` | ✅ `location` (see §3) |
 | biometric match / non-match | `notifyutil -p com.apple.BiometricKit_Sim.pearl.match` / `.nomatch` | roadmap |
 | status bar override | `simctl status_bar <udid> override` (time/battery/cellular) | roadmap |
 | push notification | `simctl push <udid> <bundle> <payload.json>` | roadmap |
-| pasteboard / media | `simctl pbcopy\|pbpaste`, `simctl addmedia` | roadmap |
-| app lifecycle | `simctl launch\|terminate\|install\|uninstall` | roadmap |
+| media | `simctl addmedia`, MediaStore over adb | ✅ `media op:seed` |
+| pasteboard | `simctl pbcopy\|pbpaste` | roadmap |
+| app lifecycle | `simctl launch\|terminate\|install\|uninstall` | launch ✅ `attach launch:`, terminate ✅ `kill_app`; install / uninstall roadmap |
 
 Android equivalents exist for most via `adb` (`adb emu geo fix`, `pm grant`,
 `am broadcast`, `cmd appops`, etc.).
+
+## 3. Location and maps  *(SHIPPED, #148)*
+
+- ✅ `location`: set a position, play a route in the background (points, GPX, KML, encoded polyline; speed or duration, loop, noise, lost fixes; pause, resume, stop, seek), wait for arrival or for text in the app. iOS simulator, Android emulator, paired iPhone.
+- ✅ Permissions without a prompt, answering the system prompt, Android location services, and background-location signals in every reply.
+- ✅ `get_scene` reads Google maps (camera, markers with screen points, routes, areas); `map` taps markers, pans and zooms in.
+- ✅ Two-device flows in one session (`fixtures/ride_app` rider and driver with a host relay).
+
+Still open:
+- Zoom out and any two-finger map gesture: glint has one finger.
+- Map gestures on Android are unverified: the fixture has no Maps API key, so its Android map draws nothing.
+- Maps from other packages (flutter_map, Mapbox) are not read.
+- Physical Android phones take mock locations only from a selected mock-location app, which glint does not install.

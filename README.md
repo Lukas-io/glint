@@ -121,6 +121,7 @@ Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with
 - **No Flutter web or desktop yet.**
 - **Password fields show their length, never their text**, in scenes and logs.
 - **Call tools one at a time when several apps are attached.** Parallel calls can act on the wrong app; per-app serialization is planned.
+- **Maps: one finger, Google maps only.** `map` taps, pans and zooms in; zooming out needs two fingers, which glint does not have. Maps from other packages are not read.
 
 ## Privacy
 
