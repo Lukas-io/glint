@@ -87,12 +87,13 @@ class LocationTool extends GlintTool {
       }
     }
     final app = session.isAttached && session.device.id == backend.id ? session.attachedBundleId : null;
+    final lifecycle = app == null || session.active?.deviceMode == true ? null : await _lifecycle(session);
     try {
       return switch (op) {
-        'set' => await _set(backend, args, app),
-        'get' => await _get(backend, app),
+        'set' => await _set(backend, args, app, lifecycle),
+        'get' => await _get(backend, app, lifecycle),
         'clear' => await _clear(backend),
-        'route' => await _route(backend, args, app),
+        'route' => await _route(backend, args, app, lifecycle),
         'seek' => await _seek(backend, args),
         'permission' => await _permission(backend, args, app),
         'services' => await _services(backend, args),
@@ -210,6 +211,15 @@ class LocationTool extends GlintTool {
       };
 
   /// Warnings from what the device reports about location, so a fix the app never sees does not pass silently.
+  /// The app's lifecycle; an app that does not answer is suspended, which is what iOS does to a backgrounded app.
+  Future<String?> _lifecycle(GlintSession session) async {
+    try {
+      return await session.lifecycleState().timeout(const Duration(seconds: 3));
+    } on Object {
+      return 'suspended';
+    }
+  }
+
   MediaDevice _mediaDevice(LocationBackend backend) => backend is AndroidEmulatorLocation
       ? MediaDevice(DevicePlatform.android, backend.id, adbPath: backend.adbPath)
       : MediaDevice(DevicePlatform.ios, backend.id);
@@ -218,10 +228,16 @@ class LocationTool extends GlintTool {
   Future<String?> _access(LocationBackend backend, String? app) async =>
       app == null || backend is IosDeviceLocation ? null : readLocationAccess(_mediaDevice(backend), app);
 
-  Future<(List<String>, Map<String, Object?>)> _signals(LocationBackend backend, String? app) async {
+  Future<(List<String>, Map<String, Object?>)> _signals(LocationBackend backend, String? app, String? lifecycle) async {
     final s = await backend.signals(app);
     final access = await _access(backend, app);
+    final background = lifecycle == 'paused' || lifecycle == 'hidden' || lifecycle == 'suspended';
+    final capable = app == null || backend is IosDeviceLocation ? null : await readBackgroundCapable(_mediaDevice(backend), app);
     final warnings = [
+      if (background && backend is IosSimulatorLocation && !(capable == true && access == 'always'))
+        '$app is in the background${lifecycle == 'suspended' ? ' and suspended' : ''}, where iOS gives it no fixes: that needs the `location` background mode (${capable == true ? 'it has it' : 'it has none'}) and always access (it has ${access ?? 'unknown'})',
+      if (background && backend is AndroidEmulatorLocation && s.listening == false)
+        '$app is in the background and holds no location request, so it gets no fixes until it is back in front${capable == true ? '' : ' (it does not declare ACCESS_BACKGROUND_LOCATION)'}',
       if (s.servicesOn == false) 'location services are off on ${backend.label}: apps get no position at all',
       if (access == 'denied') '$app is denied location: it sees no fix; `location op:permission value:whileUsing`, or answer its prompt',
       if (access == 'notAsked') '$app has not been asked for location yet: it sees no fix until it asks and gets an answer (`location op:answer`)',
@@ -230,7 +246,13 @@ class LocationTool extends GlintTool {
     ];
     return (
       warnings,
-      {if (access != null) 'permission': access, if (s.servicesOn != null) 'servicesOn': s.servicesOn, if (s.listening != null) 'appListening': s.listening},
+      {
+        if (access != null) 'permission': access,
+        if (s.servicesOn != null) 'servicesOn': s.servicesOn,
+        if (s.listening != null) 'appListening': s.listening,
+        if (lifecycle != null) 'appInForeground': !background,
+        if (capable != null) 'backgroundLocation': capable,
+      },
     );
   }
 
@@ -465,7 +487,7 @@ class LocationTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _set(LocationBackend backend, Map<String, Object?> args, String? app) async {
+  Future<StructuredResponse> _set(LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
     final at = _parsePoint(args['at']);
     if (at == null) return _bad('set needs at:"lat,lng" in degrees, got ${args['at'] ?? 'nothing'}', nextSteps: const ['e.g. at:"6.5244,3.3792"']);
     final speed = argNum(args, 'speedKmh');
@@ -475,7 +497,7 @@ class LocationTool extends GlintTool {
     registry.stopRoute(backend.id);
     await backend.set(fix);
     registry.setFix(backend.id, fix);
-    final (warnings, signals) = await _signals(backend, app);
+    final (warnings, signals) = await _signals(backend, app, lifecycle);
     return StructuredResponse(
       summary: '${backend.label} is now at ${_fmt(at)}${wasRouting ? ' (stopped the route that was playing)' : ''}',
       warnings: warnings,
@@ -484,11 +506,11 @@ class LocationTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _get(LocationBackend backend, String? app) async {
+  Future<StructuredResponse> _get(LocationBackend backend, String? app, String? lifecycle) async {
     final registry = LocationRegistry.instance;
     final player = registry.player(backend.id);
     final fix = registry.lastFix(backend.id);
-    final (warnings, signals) = await _signals(backend, app);
+    final (warnings, signals) = await _signals(backend, app, lifecycle);
     if (player == null) {
       return StructuredResponse(
         summary: fix == null
@@ -568,7 +590,7 @@ class LocationTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _route(LocationBackend backend, Map<String, Object?> args, String? app) async {
+  Future<StructuredResponse> _route(LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
     final sources = [args['points'], args['file'], args['polyline']].where((v) => v != null).length;
     if (sources != 1) return _bad('route needs exactly one of points, file or polyline', nextSteps: const ['e.g. points:["6.5244,3.3792","6.4281,3.4219"]']);
     final List<LatLng> points;
@@ -623,7 +645,7 @@ class LocationTool extends GlintTool {
     LocationRegistry.instance.play(backend.id, player);
     await player.start();
     if (player.state == RouteState.failed) throw LocationFailed('the device refused the first fix', player.lastError ?? '');
-    final (warnings, signals) = await _signals(backend, app);
+    final (warnings, signals) = await _signals(backend, app, lifecycle);
     final noise = [if (jitterM > 0) '${jitterM.round()} m noise', if (dropout > 0) '${(dropout * 100).round()}% fixes lost'];
     return StructuredResponse(
       summary: 'playing a ${_km(path.lengthMeters)} route from $from on ${backend.label} at ${(speed * 3.6).toStringAsFixed(speed * 3.6 < 10 ? 1 : 0)} km/h, '

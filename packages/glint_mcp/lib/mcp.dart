@@ -22,6 +22,7 @@ export 'src/mcp/tools/kill_app_tool.dart';
 export 'src/mcp/tools/logs_tool.dart';
 export 'src/mcp/tools/location_tool.dart';
 export 'src/mcp/tools/long_press_tool.dart';
+export 'src/mcp/tools/map_tool.dart';
 export 'src/mcp/tools/media_tool.dart';
 export 'src/mcp/tools/record_tool.dart';
 export 'src/mcp/tools/report_issue_tool.dart';

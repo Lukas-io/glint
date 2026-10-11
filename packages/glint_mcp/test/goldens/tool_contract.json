@@ -363,6 +363,42 @@
       "op"
     ]
   },
+  "map": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "read | tap | pan | zoom"
+      },
+      "marker": {
+        "type": "string",
+        "description": "tap: the marker id to tap. pan: the marker to center."
+      },
+      "to": {
+        "type": "string",
+        "description": "pan: \"lat,lng\" to center."
+      },
+      "dx": {
+        "type": "number",
+        "description": "pan: move the map content this many logical points right (negative: left)."
+      },
+      "dy": {
+        "type": "number",
+        "description": "pan: move the map content this many logical points down (negative: up)."
+      },
+      "direction": {
+        "type": "string",
+        "description": "zoom: in | out."
+      },
+      "index": {
+        "type": "integer",
+        "description": "Which map when the screen has several, 0 = first. Default 0."
+      }
+    },
+    "required": [
+      "op"
+    ]
+  },
   "shutdown_sim": {
     "type": "object",
     "properties": {
