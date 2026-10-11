@@ -9,7 +9,7 @@ import '../../media/app_files.dart';
 import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
-import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorEndpoint;
+import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorInstance;
 import '../../media/emulator_audio.dart';
 import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
@@ -505,7 +505,12 @@ class MediaTool extends GlintTool {
     }
   }
 
-  ({EmulatorAudio? audio, StructuredResponse? error}) _emulatorAudio(GlintSession session, Map<String, Object?> args) {
+  String _adbPath(GlintSession session) {
+    final attached = session.isAttached ? session.device : null;
+    return attached is AndroidDevice ? attached.adbPath : (resolveAdbPath(null) ?? 'adb');
+  }
+
+  Future<({EmulatorAudio? audio, StructuredResponse? error})> _emulatorAudio(GlintSession session, Map<String, Object?> args) async {
     final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
     if (id == null) return (audio: null, error: _bad('no device: attach first, or pass device:"emulator-5554"'));
     if (!id.startsWith('emulator-')) {
@@ -522,22 +527,28 @@ class MediaTool extends GlintTool {
       );
     }
     final audio = EmulatorAudio.forSerial(id);
-    if (audio == null) {
-      return (
-        audio: null,
-        error: StructuredResponse.error(
-          summary: 'found no control endpoint for $id',
-          errorKind: GlintErrorKind.targetNotFound,
-          detail: 'every emulator writes its gRPC port and token to the AVD running directory; none named $id',
-          nextSteps: const ['check the emulator is running (adb devices), then retry'],
-        ),
-      );
-    }
-    return (audio: audio, error: null);
+    if (audio != null) return (audio: audio, error: null);
+    final emulator = await EmulatorInstance.locate(id, adbPath: _adbPath(session));
+    return (
+      audio: null,
+      error: emulator == null
+          ? StructuredResponse.error(
+              summary: 'found no emulator behind $id',
+              errorKind: GlintErrorKind.deviceGone,
+              detail: 'neither a running record nor the emulator console answered for $id',
+              nextSteps: const ['check the emulator is running (adb devices), then retry'],
+            )
+          : StructuredResponse.error(
+              summary: 'cannot record $id: it has no gRPC control',
+              errorKind: GlintErrorKind.unsupportedBackendAction,
+              detail: emulator.noControlReason,
+              nextSteps: emulator.controlSteps,
+            ),
+    );
   }
 
   Future<StructuredResponse> _listen(GlintSession session, Map<String, Object?> args) async {
-    final found = _emulatorAudio(session, args);
+    final found = await _emulatorAudio(session, args);
     final audio = found.audio;
     if (audio == null) return found.error!;
     if (!(argBool(args, 'stop') ?? false)) {
@@ -625,17 +636,20 @@ class MediaTool extends GlintTool {
         nextSteps: const ['run the camera flow on an Android emulator', 'or `media op:seed` a photo and pick it from the gallery instead'],
       );
     }
-    final endpoint = EmulatorEndpoint.find(id);
-    final avdDir = endpoint?.avdDir;
-    final avdName = endpoint?.avdName;
-    if (avdDir == null || avdName == null) {
+    final emulator = await EmulatorInstance.locate(id, adbPath: _adbPath(session));
+    final avdDir = emulator?.avdDir;
+    final avdName = emulator?.avdName;
+    if (emulator == null || avdDir == null || avdName == null) {
       return StructuredResponse.error(
         summary: 'could not find the AVD behind $id',
         errorKind: GlintErrorKind.targetNotFound,
-        detail: 'every emulator records its AVD folder in the AVD running directory; none named $id',
+        detail: 'neither a running record nor the emulator console of $id named its AVD',
         nextSteps: const ['check the emulator is running (adb devices), then retry'],
       );
     }
+    final restart = emulator.grpc == null
+        ? emulator.controlSteps
+        : const ['restart the emulator once (close it, start it again)'];
     final cam = EmulatorCamera(avdDir: avdDir, avdName: avdName);
     final setup = argBool(args, 'setup');
     if (setup == true) {
@@ -644,8 +658,9 @@ class MediaTool extends GlintTool {
       return StructuredResponse(
         summary: already
             ? 'glint already feeds the $avdName cameras'
-            : 'glint can now feed the $avdName cameras; restart the emulator once (close it, start it again) so it picks this up',
+            : 'glint can now feed the $avdName cameras once the emulator restarts and picks this up',
         nextSteps: [
+          if (!already) ...restart,
           if (!already) 'after the restart, `media op:camera source:"testcard"` (or an image or video path) sets what the cameras see',
           '`media op:camera setup:false` puts the original cameras back',
         ],
@@ -670,8 +685,18 @@ class MediaTool extends GlintTool {
         detail: 'an emulator camera only takes a live feed in environment mode, which it reads at launch',
         nextSteps: [
           if (!cam.configured('back')) '`media op:camera setup:true` once',
-          'restart the emulator once (close it, start it again), then set the source',
+          ...restart,
+          'then set the source',
         ],
+      );
+    }
+    final grpc = emulator.grpc;
+    if (grpc == null) {
+      return StructuredResponse.error(
+        summary: 'cannot feed the $avdName cameras: $id has no gRPC control',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: emulator.noControlReason,
+        nextSteps: emulator.controlSteps,
       );
     }
     final source = (args['source'] as String?) ?? 'testcard';
@@ -685,7 +710,7 @@ class MediaTool extends GlintTool {
       if (!file.existsSync()) return _bad('camera source must be testcard or an image or video path; "$source" does not exist');
       label = file.uri.pathSegments.last;
     }
-    final control = EmulatorControl(endpoint!);
+    final control = EmulatorControl(grpc);
     try {
       final fed = await phases.during('fitting $label for the camera', () => cam.feed(file, control));
       return StructuredResponse(
