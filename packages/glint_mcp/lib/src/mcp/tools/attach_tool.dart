@@ -685,8 +685,12 @@ class AttachTool extends GlintTool {
         await downloadReleaseAsset(androidServerAssetName, dest);
         dex = dest;
       } on Object catch (e) {
-        warnings.add('the glint Android server could not be downloaded ($e); input uses adb shell input');
-        return null;
+        try {
+          dex = await buildAndroidServerDex(dest, adbPath: adbPath);
+        } on AndroidServerError catch (built) {
+          warnings.add('the glint Android server could not be downloaded ($e) or built from source (${built.message}); input uses adb shell input');
+          return null;
+        }
       }
     }
     if (dex == null) {
@@ -1159,7 +1163,7 @@ class AttachTool extends GlintTool {
       for (final r in history)
         '  ${r.label}  (${[
           r.deviceName ?? r.deviceId,
-          if (r.launchable) 'launchable' else 'no projectDir',
+          if (r.projectGone) 'project folder gone' else if (r.launchable) 'launchable' else 'no projectDir',
           _ago(r.lastSeen),
         ].join(", ")})',
     ].join('\n');
@@ -1492,7 +1496,7 @@ class AttachTool extends GlintTool {
   /// Most-recent launchable history record for [deviceId].
   AttachRecord? _historyForDevice(GlintSession session, String deviceId) {
     for (final r in session.attachHistory.load()) {
-      if (r.deviceId == deviceId && r.launchable) return r;
+      if (r.deviceId == deviceId && r.launchable && !r.projectGone) return r;
     }
     return null;
   }
@@ -1504,7 +1508,7 @@ class AttachTool extends GlintTool {
     String? prefix,
   }) {
     final history = session.attachHistory.load();
-    final launchable = history.where((r) => r.launchable).toList();
+    final launchable = history.where((r) => r.launchable && !r.projectGone).toList();
 
     if (launchable.isEmpty && scan.devices.isEmpty) {
       return StructuredResponse.error(

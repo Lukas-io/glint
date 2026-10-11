@@ -41,6 +41,9 @@ class AttachRecord {
   /// Relaunchable unattended only when the project dir is known.
   bool get launchable => projectDir != null;
 
+  /// The project folder is known but no longer exists, so glint cannot start the app from it.
+  bool get projectGone => projectDir != null && !Directory(projectDir!).existsSync();
+
   String get label => displayName ?? appKey;
 
   Map<String, Object?> toJson() => {

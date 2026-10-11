@@ -36,6 +36,9 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- `get_scene` cut every label at 40 characters, so a sentence lost its end ("… heading 1…"), even when drilling into that one node. On-screen text now keeps up to 80 characters in a full scene, other labels stay at 40, and `get_scene glintId:` shows the node's text whole.
+- On Android, every attach warned that the glint Android server could not be downloaded, and input fell back to `adb shell input`: the 0.2.0 release predates the server, so it has no prebuilt `glint-android-server.dex`. When the download fails, glint now builds the server from its own sources (javac against the newest `android.jar`, then `d8`, as `native/android_server/build.sh` does) and caches it in `~/.glint/bin`. The warning remains only when no Android SDK or JDK is there to build with.
+- `attach` counted a remembered app whose project folder had since been deleted as launchable, then failed with "could not start `flutter run`: No such file or directory". glint no longer starts or offers such records, and `attach dryRun:true` marks them "project folder gone".
 - Segmented controls (`SegmentedButton`, the Cupertino segmented controls) were invisible: Flutter builds each segment's button inside the framework, so only an unknown node reached the scene, and an app bar dropped it. Each segment's label is now a tappable button, and a selected segment reads `[selected]`.
 - A route on the Android emulator could stop moving partway while still reporting progress: one `setGps` call that never returned left the route waiting on it forever, so later fixes were skipped and the device kept the old position. Each emulator call now has a 5 s deadline, every fix a 20 s one, and the end of a route is always sent.
 - Markers, routes and areas under a map no longer fold into "… N more like it"; each is its own line.
