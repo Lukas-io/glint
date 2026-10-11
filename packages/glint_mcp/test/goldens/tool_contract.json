@@ -136,11 +136,19 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick | permission | listen"
+        "description": "seed | files | inspect | pick | permission | listen | event"
       },
       "stop": {
         "type": "boolean",
         "description": "listen: end the recording and report it."
+      },
+      "value": {
+        "type": "string",
+        "description": "event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far."
+      },
+      "number": {
+        "type": "string",
+        "description": "event call, endCall, sms: the caller. Default 5551234."
       },
       "permission": {
         "type": "string",
@@ -156,7 +164,7 @@
       },
       "kind": {
         "type": "string",
-        "description": "seed: photo | video | audio. Default: from source, else video."
+        "description": "seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms."
       },
       "source": {
         "type": "string",
@@ -196,7 +204,7 @@
       },
       "text": {
         "type": "string",
-        "description": "speech: what to say."
+        "description": "speech: what to say. event sms: the message."
       },
       "voice": {
         "type": "string",

@@ -9,6 +9,7 @@ import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
 import '../../media/emulator_audio.dart';
+import '../../media/emulator_events.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
 import '../../media/picker.dart';
@@ -36,16 +37,19 @@ class MediaTool extends GlintTool {
             'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset), '
             'pick (choose a photo or video in the open system picker: name, index or newest), '
             'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited), '
-            'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences). '
+            'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
+            'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen'),
+            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | event'),
             'stop': Schema.bool(description: 'listen: end the recording and report it.'),
+            'value': Schema.string(description: 'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
+            'number': Schema.string(description: 'event call, endCall, sms: the caller. Default 5551234.'),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
             'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
-            'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video.'),
+            'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
             'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio).'),
             'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
             'index': Schema.int(description: 'pick: position in the picker, 0 = newest. Default 0.'),
@@ -55,7 +59,7 @@ class MediaTool extends GlintTool {
             'durationSec': Schema.num(description: 'testcard video or tone: seconds. Default 6.'),
             'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
             'rotation': Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
-            'text': Schema.string(description: 'speech: what to say.'),
+            'text': Schema.string(description: 'speech: what to say. event sms: the message.'),
             'voice': Schema.string(description: 'speech: a macOS voice name.'),
             'hz': Schema.num(description: 'tone: frequency. Default 440.'),
             'since': Schema.string(description: 'files: lastAction (since the last tap, type, swipe ...) or an ISO time.'),
@@ -85,7 +89,8 @@ class MediaTool extends GlintTool {
         'pick' => await _pick(session, args),
         'permission' => await _permission(session, args),
         'listen' => await _listen(session, args),
-        _ => _bad('op must be seed, files, inspect, pick, permission or listen, got ${op ?? 'nothing'}'),
+        'event' => await _event(session, args),
+        _ => _bad('op must be seed, files, inspect, pick, permission, listen or event, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -563,6 +568,42 @@ class MediaTool extends GlintTool {
         'silences': [for (final (a, b) in stats.silences) '${at(a)}-${at(b)} s'],
       },
     );
+  }
+
+  Future<StructuredResponse> _event(GlintSession session, Map<String, Object?> args) async {
+    final kind = args['kind'] as String?;
+    if (!eventKinds.contains(kind)) return _bad('event needs kind: ${eventKinds.join(' | ')}');
+    final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
+    if (id == null) return _bad('no device: attach first, or pass device:"emulator-5554"');
+    if (!id.startsWith('emulator-')) {
+      return StructuredResponse.error(
+        summary: 'events go to Android emulators only',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: MediaDevice.platformOf(id) == DevicePlatform.ios
+            ? 'the iOS simulator has no way to rotate, set sensors, ring or text from outside'
+            : 'a physical phone takes no injected sensor, call or SMS events',
+        nextSteps: const ['run this flow on an Android emulator', 'or ask the user to do it on the device'],
+      );
+    }
+    final device = MediaDevice(DevicePlatform.android, id, adbPath: session.isAttached && session.device is AndroidDevice
+        ? (session.device as AndroidDevice).adbPath
+        : resolveAdbPath(null) ?? 'adb');
+    try {
+      final said = await sendEvent(device, kind!,
+          value: args['value']?.toString(), number: args['number'] as String?, text: args['text'] as String?);
+      return StructuredResponse(
+        summary: said,
+        nextSteps: const ['get_scene to see how the app reacted'],
+        data: {'device': id, 'kind': kind, if (args['value'] != null) 'value': args['value']},
+      );
+    } on EventFailed catch (e) {
+      return StructuredResponse.error(
+        summary: e.summary,
+        errorKind: e.invalid ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
+        detail: e.detail,
+        nextSteps: [if (!e.invalid) 'check the emulator is running (adb devices), then retry'],
+      );
+    }
   }
 
   DateTime? _sinceTime(GlintSession session, String? since, List<StructuredResponse> failure) {
