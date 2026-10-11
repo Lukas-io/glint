@@ -264,7 +264,7 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "set | get | clear | route | pause | resume | stop | seek | permission | services | answer"
+        "description": "set | get | clear | route | pause | resume | stop | seek | wait | permission | services | answer"
       },
       "device": {
         "type": "string",
@@ -341,6 +341,22 @@
       "appId": {
         "type": "string",
         "description": "permission: bundle id or package. Default: the attached app."
+      },
+      "until": {
+        "type": "string",
+        "description": "wait: arrived | progress | waypoint | near (with progress, waypoint, or at and withinM). Default arrived; omit with text alone to wait for the app."
+      },
+      "withinM": {
+        "type": "number",
+        "description": "wait until:near: meters from at. Default 50."
+      },
+      "text": {
+        "type": "string",
+        "description": "wait: text the attached app must also show (case-insensitive), e.g. \"Driver arrived\"."
+      },
+      "timeoutSec": {
+        "type": "number",
+        "description": "wait: give up after this long. Default 120, max 600."
       }
     },
     "required": [

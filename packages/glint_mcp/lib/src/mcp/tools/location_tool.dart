@@ -17,7 +17,8 @@ import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
-const _ops = ['set', 'get', 'clear', 'route', 'pause', 'resume', 'stop', 'seek', 'permission', 'services', 'answer'];
+const _ops = ['set', 'get', 'clear', 'route', 'pause', 'resume', 'stop', 'seek', 'wait', 'permission', 'services', 'answer'];
+const _waits = ['arrived', 'progress', 'waypoint', 'near'];
 const _feeding = {'set', 'route', 'seek', 'resume'};
 
 /// `location` sets where the device thinks it is, or drives it along a route in the background while the agent keeps using the app.
@@ -32,7 +33,8 @@ class LocationTool extends GlintTool {
             'clear (stop simulating), route (travel points, a GPX or KML file, or an encoded polyline in the background, at speedKmh or over durationSec; '
             'loop, jitterM noise, dropout lost fixes), pause, resume, stop, seek (progress 0 to 1, meters or waypoint), '
             'permission (value: whileUsing | always | approximate | deny | reset, without a prompt), services (value: on | off, Android), '
-            'answer (tap the open system location prompt: choice whileUsing | once | deny | always | keepWhileUsing, precise). '
+            'answer (tap the open system location prompt: choice whileUsing | once | deny | always | keepWhileUsing, precise), '
+            'wait (block until the route arrives, reaches progress or a waypoint, or the position is near "at", optionally until the app also shows text). '
             'Replies say the app\'s permission when glint can read it. errorKind: invalidArgument, deviceGone, deviceClaimed, unsupportedBackendAction, targetNotFound, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
@@ -56,6 +58,10 @@ class LocationTool extends GlintTool {
             'choice': Schema.string(description: 'answer: whileUsing | once | deny | always | keepWhileUsing.'),
             'precise': Schema.bool(description: 'answer: pick precise (true) or approximate (false) location first, where the prompt offers it.'),
             'appId': Schema.string(description: 'permission: bundle id or package. Default: the attached app.'),
+            'until': Schema.string(description: 'wait: ${_waits.join(' | ')} (with progress, waypoint, or at and withinM). Default arrived; omit with text alone to wait for the app.'),
+            'withinM': Schema.num(description: 'wait until:near: meters from at. Default 50.'),
+            'text': Schema.string(description: 'wait: text the attached app must also show (case-insensitive), e.g. "Driver arrived".'),
+            'timeoutSec': Schema.num(description: 'wait: give up after this long. Default 120, max 600.'),
           },
           required: ['op'],
         ),
@@ -91,6 +97,7 @@ class LocationTool extends GlintTool {
         'permission' => await _permission(backend, args, app),
         'services' => await _services(backend, args),
         'answer' => await _answer(session, backend, args, app),
+        'wait' => await _wait(session, request, backend, args),
         _ => await _control(backend, op!),
       };
     } on PermissionUnsupported catch (e) {
@@ -281,6 +288,111 @@ class LocationTool extends GlintTool {
       nextSteps: const ['get_scene to see how the app reacts'],
       data: {'device': backend.id, 'servicesOn': value == 'on'},
     );
+  }
+
+  Future<StructuredResponse> _wait(GlintSession session, CallToolRequest request, LocationBackend backend, Map<String, Object?> args) async {
+    final text = (args['text'] as String?)?.trim();
+    final until = args['until'] as String? ?? (text != null && text.isNotEmpty ? null : 'arrived');
+    if (until != null && !_waits.contains(until)) return _bad('until must be ${_waits.join(', ')}; got $until');
+    final timeoutSec = argNum(args, 'timeoutSec') ?? 120;
+    if (timeoutSec <= 0 || timeoutSec > 600) return _bad('timeoutSec must be above 0 and at most 600');
+    final progress = argNum(args, 'progress');
+    final waypoint = argInt(args, 'waypoint');
+    final target = _parsePoint(args['at']);
+    final withinM = argNum(args, 'withinM') ?? 50;
+    if (until == 'progress' && (progress == null || progress < 0 || progress > 1)) return _bad('until:progress needs progress 0 to 1');
+    if (until == 'waypoint' && waypoint == null) return _bad('until:waypoint needs waypoint');
+    if (until == 'near' && target == null) return _bad('until:near needs at:"lat,lng"');
+    final registry = LocationRegistry.instance;
+    final player = registry.player(backend.id);
+    if ((until == 'arrived' || until == 'progress' || until == 'waypoint') && player == null) return _noRoute(backend);
+    if (until == 'waypoint' && (waypoint! < 0 || waypoint >= player!.path.points.length)) {
+      return _bad('waypoint must be 0 to ${player!.path.points.length - 1}');
+    }
+    final watching = text != null && text.isNotEmpty;
+    if (watching && !(session.isAttached && session.device.id == backend.id)) {
+      return StructuredResponse.error(
+        summary: 'attach the app on ${backend.id} to wait for text in it',
+        errorKind: GlintErrorKind.sessionNotAttached,
+        nextSteps: ['attach device:"${backend.id}"', 'or wait on the route alone, without text'],
+      );
+    }
+    final what = [
+      if (until == 'arrived') 'the route to arrive',
+      if (until == 'progress') 'the route to reach ${(progress! * 100).round()}%',
+      if (until == 'waypoint') 'waypoint $waypoint',
+      if (until == 'near') 'the position within ${withinM.round()} m of ${_fmt(target!)}',
+      if (watching) 'the app to show "$text"',
+    ].join(', then ');
+    final lapsAtStart = player?.laps ?? 0;
+    bool reached() => switch (until) {
+          'arrived' => player!.state == RouteState.finished || player.laps > lapsAtStart,
+          'progress' => player!.fraction >= progress!,
+          'waypoint' => player!.meters >= player.path.metersAtWaypoint(waypoint!) - 1,
+          'near' => registry.lastFix(backend.id) != null && distanceMeters(registry.lastFix(backend.id)!.at, target!) <= withinM,
+          _ => true,
+        };
+    final sink = _progressSink(session, request);
+    final clock = Stopwatch()..start();
+    var lastReport = Duration.zero;
+    var located = false;
+    var shown = false;
+    while (clock.elapsed.inMilliseconds < timeoutSec * 1000) {
+      located = located || reached();
+      if (located && watching) shown = await _appShows(session, text);
+      if (located && (!watching || shown)) {
+        return StructuredResponse(
+          summary: 'reached after ${_dur(clock.elapsed)}: $what'
+              '${player == null ? '' : '; ${_routeLine(backend, player)}'}',
+          nextSteps: const ['get_scene to read the app now'],
+          data: {'device': backend.id, 'waitedSec': clock.elapsed.inSeconds, if (player != null) ..._routeData(player)},
+        );
+      }
+      if (player != null && (player.state == RouteState.stopped || player.state == RouteState.failed) && !located) {
+        return StructuredResponse.error(
+          summary: 'the route ${player.state.name} before $what',
+          errorKind: GlintErrorKind.targetNeverReady,
+          detail: _routeLine(backend, player),
+          nextSteps: const ['`location op:route` starts it again'],
+        );
+      }
+      if (clock.elapsed - lastReport >= const Duration(seconds: 15)) {
+        lastReport = clock.elapsed;
+        sink?.call(clock.elapsed.inSeconds,
+            'waiting for $what${player == null ? '' : ' (${(player.fraction * 100).round()}%, ${_km(player.path.lengthMeters - player.meters)} to go)'}');
+      }
+      await Future<void>.delayed(Duration(milliseconds: located ? 1000 : 400));
+    }
+    return StructuredResponse.error(
+      summary: 'gave up after ${timeoutSec.round()} s waiting for $what',
+      errorKind: GlintErrorKind.targetNeverReady,
+      detail: [
+        if (player != null) _routeLine(backend, player),
+        if (located && watching) 'the location part was met, but the app never showed "$text"',
+      ].join('; '),
+      nextSteps: [
+        if (located && watching) 'get_scene to see what the app shows instead',
+        if (!located && player != null) '`location op:get` for progress; a longer timeoutSec, or `location op:seek` closer',
+      ],
+    );
+  }
+
+  /// Whether the attached app's screen shows [text] anywhere, case-insensitively.
+  Future<bool> _appShows(GlintSession session, String text) async {
+    final needle = text.toLowerCase();
+    final scene = await session.reader.readSummary();
+    try {
+      return scene.root.walk().any((n) => !n.isOffstage && (n.textPreview ?? '').toLowerCase().contains(needle));
+    } finally {
+      await scene.dispose();
+    }
+  }
+
+  void Function(int, String)? _progressSink(GlintSession session, CallToolRequest request) {
+    final token = request.meta?.progressToken;
+    final notifier = session.progressNotifier;
+    if (token == null || notifier == null) return null;
+    return (sec, phase) => notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
   }
 
   Future<StructuredResponse> _answer(GlintSession session, LocationBackend backend, Map<String, Object?> args, String? app) async {

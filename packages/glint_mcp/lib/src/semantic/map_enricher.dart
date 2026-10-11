@@ -37,14 +37,15 @@ class MapEnricher implements SemanticEnricher {
       r"for (final c in w.circles) box.add('A\u001f$i\u001f${c.circleId.value}\u001fcircle ${c.radius.round()} m around\u001f${ll(c.center)}'); "
       r'final s = (e as StatefulElement).state as _GoogleMapState; '
       r"if (!s._controller.isCompleted) box.add('N\u001f$i\u001fnot ready yet'); "
-      r's._controller.future.then((c) async { '
+      r's._controller.future.then((c) async { try { '
       r'final r = await c.getVisibleRegion(); final z = await c.getZoomLevel(); '
       r'final mid = LatLng((r.northeast.latitude + r.southwest.latitude) / 2, (r.northeast.longitude + r.southwest.longitude) / 2); '
       r"box.add('C\u001f$i\u001f${ll(mid)}\u001f$z\u001f${f(r.southwest.latitude)}..${f(r.northeast.latitude)}, ${f(r.southwest.longitude)}..${f(r.northeast.longitude)}'); "
-      r'for (final m in shown) { final p = await c.getScreenCoordinate(m.position); '
+      r'} catch (_) {} '
+      r'for (final m in shown) { try { final p = await c.getScreenCoordinate(m.position); '
       r'final x = android ? p.x / dpr : p.x.toDouble(); final y = android ? p.y / dpr : p.y.toDouble(); '
       r'final on = x >= 0 && y >= 0 && x <= size.width && y <= size.height; '
-      r"box.add('P\u001f$i\u001f${m.markerId.value}\u001f${(o.dx + x).round()},${(o.dy + y).round()}\u001f$on'); } "
+      r"box.add('P\u001f$i\u001f${m.markerId.value}\u001f${(o.dx + x).round()},${(o.dy + y).round()}\u001f$on'); } catch (_) {} } "
       r"box.add('D\u001f$i'); }); } return box; })()";
 
   @override

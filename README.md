@@ -28,6 +28,18 @@ It works by reading the **live state of your running app** (via the Dart VM serv
 - **Orients**: knows the navigation stack, including dialogs and bottom sheets, not just routes.
 - **Describes**: gives the agent a compact plain-language scene, not a coordinate dump.
 - **Scrolls to find**: virtualized lists only build what's near the viewport — glint will scroll to bring an off-screen item into the tree as a first-class action.
+- **Location and maps**: `location` sets the GPS position or plays a route in the background (points, GPX, KML or a polyline), sets or answers location permissions, and waits for arrival. `get_scene` reads a Google map's camera, markers, routes and areas, with the screen point of each marker.
+
+## Two devices at once (rider and driver)
+
+One glint session can hold apps on several devices; `attach` again adds one, and `device:` on `location` picks which device moves. A ride-hailing flow looks like this:
+
+1. `attach device:"<simulator>"` for the rider app and `attach device:"emulator-5554"` for the driver app.
+2. `location op:route device:"emulator-5554" points:[...] durationSec:60` moves the driver in the background.
+3. `location op:wait device:"<simulator>" text:"Driver arrived"` blocks until the rider app shows it, with progress every 15 s.
+4. `location op:wait device:"emulator-5554" until:"near" at:"lat,lng"` checks where the driver ended up.
+
+`fixtures/ride_app` is a rider and driver app built for this, with a small relay the two copies share.
 
 ## What makes it fast
 

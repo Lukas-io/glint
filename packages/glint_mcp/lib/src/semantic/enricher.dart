@@ -431,9 +431,13 @@ class SemanticsFlagEnricher implements SemanticEnricher {
   final FlutterRuntime runtime;
   final int maxNodes;
 
+  /// A segment's selection sits on the `Semantics(selected:)` (older Flutter: `checked:`) wrapped around each segment, about 40 elements above its label and below the SegmentedButton.
   static const _flags = '(Element e) { bool? s; bool? c; '
       'try { s = (e.widget as dynamic).selected as bool?; } catch (_) {} '
-      'var n = 0; e.visitAncestorElements((a) { n++; final w = a.widget; '
+      'bool? seg; var k = 0; e.visitAncestorElements((a) { k++; final w = a.widget; '
+      'if (w is Semantics) seg ??= w.properties.selected ?? w.properties.checked; '
+      "if (w.runtimeType.toString().startsWith('SegmentedButton')) { s ??= seg; return false; } return k < 80; }); "
+      'var n = 0; if (s == null) e.visitAncestorElements((a) { n++; final w = a.widget; '
       'if (w is Semantics) { s ??= w.properties.selected; c ??= w.properties.checked ?? w.properties.toggled; return false; } '
       'return n < 6; }); '
       "return (s == null ? '' : s.toString()) + ',' + (c == null ? '' : c.toString()); }";

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -33,11 +35,52 @@ class _RidePageState extends State<RidePage> {
   int _updates = 0;
   String _status = 'Starting';
   String _access = 'Permission not checked';
+  bool _driver = false;
+  LatLng? _driverAt;
+  String _trip = 'No driver yet';
+  Timer? _follow;
+  final _http = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+
+  /// The relay on the host: the Android emulator reaches it at 10.0.2.2; `--dart-define=RELAY=host:port` for a phone.
+  static const _relayFlag = String.fromEnvironment('RELAY');
+  static final _relay = Uri.parse('http://${_relayFlag.isNotEmpty ? _relayFlag : (Platform.isAndroid ? '10.0.2.2:8790' : '127.0.0.1:8790')}');
 
   @override
   void initState() {
     super.initState();
     _listen();
+    _follow = Timer.periodic(const Duration(seconds: 1), (_) => _driver ? null : _pollDriver());
+  }
+
+  Future<void> _sendDriver(Position p) async {
+    try {
+      final req = await _http.postUrl(_relay.resolve('/driver'));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode({'lat': p.latitude, 'lng': p.longitude, 'heading': p.heading}));
+      await (await req.close()).drain<void>();
+    } on Object catch (e) {
+      setState(() => _trip = 'Relay unreachable: $e');
+    }
+  }
+
+  Future<void> _pollDriver() async {
+    try {
+      final res = await (await _http.getUrl(_relay.resolve('/driver'))).close();
+      final body = await utf8.decodeStream(res);
+      if (res.statusCode != 200) {
+        setState(() => _trip = 'No driver yet');
+        return;
+      }
+      final d = jsonDecode(body) as Map<String, dynamic>;
+      final at = LatLng((d['lat'] as num).toDouble(), (d['lng'] as num).toDouble());
+      final meters = Geolocator.distanceBetween(at.latitude, at.longitude, _start.latitude, _start.longitude);
+      setState(() {
+        _driverAt = at;
+        _trip = meters <= 50 ? 'Driver arrived' : 'Driver ${meters >= 1000 ? '${(meters / 1000).toStringAsFixed(1)} km' : '${meters.round()} m'} away';
+      });
+    } on Object catch (e) {
+      setState(() => _trip = 'Relay unreachable: $e');
+    }
   }
 
   Future<void> _listen() async {
@@ -65,12 +108,15 @@ class _RidePageState extends State<RidePage> {
         _updates++;
         _status = 'Tracking';
       });
+      if (_driver) _sendDriver(p);
       _map?.animateCamera(CameraUpdate.newLatLng(LatLng(p.latitude, p.longitude)));
     }, onError: (Object e) => setState(() => _status = 'Location stopped: $e'));
   }
 
   @override
   void dispose() {
+    _follow?.cancel();
+    _http.close(force: true);
     _positions?.cancel();
     super.dispose();
   }
@@ -80,7 +126,26 @@ class _RidePageState extends State<RidePage> {
     final p = _position;
     final here = p == null ? _start : LatLng(p.latitude, p.longitude);
     return Scaffold(
-      appBar: AppBar(title: const Text('Ride Fixture')),
+      appBar: AppBar(
+        title: const Text('Ride Fixture'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Rider')),
+                ButtonSegment(value: true, label: Text('Driver')),
+              ],
+              selected: {_driver},
+              onSelectionChanged: (v) => setState(() {
+                _driver = v.first;
+                _driverAt = null;
+                _trip = _driver ? 'Sharing your position' : 'No driver yet';
+              }),
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -90,6 +155,7 @@ class _RidePageState extends State<RidePage> {
                 if (p != null) Marker(markerId: const MarkerId('me'), position: here, infoWindow: const InfoWindow(title: 'You')),
                 const Marker(markerId: MarkerId('pickup'), position: _start, infoWindow: InfoWindow(title: 'Pickup')),
                 const Marker(markerId: MarkerId('dropoff'), position: _dropoff, infoWindow: InfoWindow(title: 'Drop-off')),
+                if (_driverAt != null) Marker(markerId: const MarkerId('driver'), position: _driverAt!, infoWindow: const InfoWindow(title: 'Driver')),
               },
               polylines: {
                 const Polyline(polylineId: PolylineId('trip'), points: [_start, LatLng(6.4550, 3.3941), _dropoff], width: 5),
@@ -113,6 +179,7 @@ class _RidePageState extends State<RidePage> {
                   ],
                 ),
                 Text(_access),
+                Text(_trip),
                 Text(p == null ? 'No position yet' : 'Position ${p.latitude.toStringAsFixed(5)}, ${p.longitude.toStringAsFixed(5)}'),
                 Text(p == null
                     ? 'Updates 0'

@@ -23,6 +23,8 @@ String structuralSignature(SemanticNode node) {
         ..write(i.error != null ? 'E' : '');
     case SemanticUnknown u:
       b.write(':${u.label}');
+    case SemanticMapItem m:
+      b.write(':${m.label}');
     default:
       break;
   }

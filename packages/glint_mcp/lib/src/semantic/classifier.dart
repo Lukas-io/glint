@@ -22,6 +22,7 @@ class ClassifierRegistry {
         InputClassifier(),
         ToggleClassifier(),
         ButtonClassifier(),
+        SegmentedClassifier(),
         ListClassifier(),
         TextClassifier(),
         IconClassifier(),
@@ -188,6 +189,27 @@ class ToggleClassifier extends WidgetClassifier {
       label: _firstTextIn(children),
       isToggle: true,
     );
+  }
+}
+
+/// A segmented control: Flutter builds each segment's button itself, so only the app's segment labels reach the scene; each label becomes the button to tap.
+class SegmentedClassifier extends WidgetClassifier {
+  const SegmentedClassifier();
+
+  @override
+  int get priority => 45;
+
+  @override
+  bool matches(SceneNode node) =>
+      _labelOneOf(node, const {'SegmentedButton', 'CupertinoSegmentedControl', 'CupertinoSlidingSegmentedControl'});
+
+  @override
+  SemanticNode build(SceneNode node, List<SemanticNode> children) {
+    List<SemanticNode> segments(List<SemanticNode> ns) => [
+          for (final n in ns)
+            if (n is SemanticText) SemanticButton(glintId: n.glintId, label: n.content) else if (n is SemanticButton) n else ...segments(n.children),
+        ];
+    return SemanticContainer(glintId: node.glintId, hint: 'segments', children: segments(children));
   }
 }
 
