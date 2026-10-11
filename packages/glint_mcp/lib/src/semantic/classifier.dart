@@ -26,6 +26,7 @@ class ClassifierRegistry {
         TextClassifier(),
         IconClassifier(),
         ImageClassifier(),
+        MapClassifier(),
         ContainerClassifier(),
         UnknownClassifier(),
       ]);
@@ -345,6 +346,20 @@ class ImageClassifier extends WidgetClassifier {
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
     return SemanticImage(glintId: node.glintId);
   }
+}
+
+/// A Google map: a platform view whose widget subtree says nothing; `MapEnricher` reads what it shows.
+class MapClassifier extends WidgetClassifier {
+  const MapClassifier();
+
+  @override
+  int get priority => 85;
+
+  @override
+  bool matches(SceneNode node) => _labelOneOf(node, const {'GoogleMap'});
+
+  @override
+  SemanticNode build(SceneNode node, List<SemanticNode> children) => SemanticMap(glintId: node.glintId);
 }
 
 class ContainerClassifier extends WidgetClassifier {

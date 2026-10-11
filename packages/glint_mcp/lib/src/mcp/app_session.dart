@@ -43,6 +43,7 @@ class AppSession {
   ToggleEnricher? toggleEnricher;
   SemanticsFlagEnricher? flagEnricher;
   ImageEnricher? imageEnricher;
+  MapEnricher? mapEnricher;
   IconEnricher? iconEnricher;
   LinkEnricher? linkEnricher;
   NavigationEnricher? navEnricher;
@@ -186,6 +187,7 @@ class AppSession {
     toggleEnricher = ToggleEnricher(runtime: rt);
     flagEnricher = SemanticsFlagEnricher(runtime: rt);
     imageEnricher = ImageEnricher(runtime: rt);
+    mapEnricher = MapEnricher(runtime: rt);
     iconEnricher = IconEnricher(runtime: rt);
     linkEnricher = LinkEnricher(runtime: rt);
     navEnricher = NavigationEnricher(runtime: rt);
