@@ -1163,7 +1163,7 @@ class AttachTool extends GlintTool {
       for (final r in history)
         '  ${r.label}  (${[
           r.deviceName ?? r.deviceId,
-          if (r.launchable) 'launchable' else if (r.projectDir == null) 'no projectDir' else 'project folder gone',
+          if (r.projectGone) 'project folder gone' else if (r.launchable) 'launchable' else 'no projectDir',
           _ago(r.lastSeen),
         ].join(", ")})',
     ].join('\n');
@@ -1496,7 +1496,7 @@ class AttachTool extends GlintTool {
   /// Most-recent launchable history record for [deviceId].
   AttachRecord? _historyForDevice(GlintSession session, String deviceId) {
     for (final r in session.attachHistory.load()) {
-      if (r.deviceId == deviceId && r.launchable) return r;
+      if (r.deviceId == deviceId && r.launchable && !r.projectGone) return r;
     }
     return null;
   }
@@ -1508,7 +1508,7 @@ class AttachTool extends GlintTool {
     String? prefix,
   }) {
     final history = session.attachHistory.load();
-    final launchable = history.where((r) => r.launchable).toList();
+    final launchable = history.where((r) => r.launchable && !r.projectGone).toList();
 
     if (launchable.isEmpty && scan.devices.isEmpty) {
       return StructuredResponse.error(
