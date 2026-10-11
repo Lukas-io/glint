@@ -97,7 +97,7 @@
       },
       "service": {
         "type": "string",
-        "description": "privacy: photos | camera | location | contacts | …"
+        "description": "privacy: a simctl service: photos | microphone | location | contacts | … (no camera; `media op:permission` covers camera, mic and photos on both platforms)."
       },
       "bundleId": {
         "type": "string",
@@ -136,7 +136,15 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick"
+        "description": "seed | files | inspect | pick | permission"
+      },
+      "permission": {
+        "type": "string",
+        "description": "permission: camera | microphone | photos."
+      },
+      "action": {
+        "type": "string",
+        "description": "permission: grant | deny | reset (ask again) | limited (photos, Android 14+)."
       },
       "device": {
         "type": "string",
@@ -216,7 +224,7 @@
       },
       "appId": {
         "type": "string",
-        "description": "files: bundle id or package. Default: the attached app."
+        "description": "files, permission: bundle id or package. Default: the attached app."
       },
       "frames": {
         "type": "array",

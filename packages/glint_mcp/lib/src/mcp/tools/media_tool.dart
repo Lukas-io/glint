@@ -9,6 +9,7 @@ import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
 import '../../media/media_inspect.dart';
+import '../../media/permissions.dart';
 import '../../media/picker.dart';
 import '../../perception/runner_native_reader.dart';
 import '../../media/seed_ledger.dart';
@@ -32,11 +33,14 @@ class MediaTool extends GlintTool {
         description: 'Media on the device. op: seed (add a photo, video or audio to the gallery from a host file or a generator: '
             'testcard, speech, tone; clear:true removes what glint seeded, Android only), files (what the app wrote, newest first; pull:true copies one to the host), '
             'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset), '
-            'pick (choose a photo or video in the open system picker: name, index or newest). '
+            'pick (choose a photo or video in the open system picker: name, index or newest), '
+            'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick'),
+            'op': Schema.string(description: 'seed | files | inspect | pick | permission'),
+            'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
+            'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video.'),
             'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio).'),
@@ -56,7 +60,7 @@ class MediaTool extends GlintTool {
             'limit': Schema.int(description: 'files: cap on the list. Default 50, max 200.'),
             'pull': Schema.bool(description: 'files: copy path to the host and return the host path.'),
             'path': Schema.string(description: 'files pull / inspect: a host path, or a path from files.'),
-            'appId': Schema.string(description: 'files: bundle id or package. Default: the attached app.'),
+            'appId': Schema.string(description: 'files, permission: bundle id or package. Default: the attached app.'),
             'frames': Schema.list(description: 'inspect: times to return as images, seconds or start | middle | end (max $_maxFramesReturned).'),
             'probe': Schema.bool(description: 'inspect: false leaves out the metadata and loudness lines. Default true.'),
             'maxSize': Schema.int(description: 'inspect: longest side of returned frames (0 = full). Default: screenshotMaxSize.'),
@@ -76,7 +80,8 @@ class MediaTool extends GlintTool {
         'files' => await _files(session, args, phases),
         'inspect' => await _inspect(session, args, phases),
         'pick' => await _pick(session, args),
-        _ => _bad('op must be seed, files, inspect or pick, got ${op ?? 'nothing'}'),
+        'permission' => await _permission(session, args),
+        _ => _bad('op must be seed, files, inspect, pick or permission, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -436,6 +441,53 @@ class MediaTool extends GlintTool {
       ],
       data: {'picked': cell.label, 'index': index, if (confirmed != null) 'confirmed': confirmed, 'pickerClosed': closed},
     );
+  }
+
+  Future<StructuredResponse> _permission(GlintSession session, Map<String, Object?> args) async {
+    final permission = args['permission'] as String?;
+    final action = args['action'] as String?;
+    if (!permissionNames.contains(permission) || !permissionActions.contains(action)) {
+      return _bad('unknown permission or action', detail: permissionUsage());
+    }
+    final failure = <StructuredResponse>[];
+    final device = await _device(session, args, failure);
+    if (device == null) return failure.single;
+    final appId = _appId(session, device, args);
+    if (appId == null) {
+      return _bad('no app to set $permission for: the attached app has no known ${device.isIos ? 'bundle id' : 'package'}',
+          nextSteps: const ['pass appId:"<bundle id or package>"']);
+    }
+    try {
+      final done = await setPermission(device, appId, permission!, action!);
+      final verb = switch (action) { 'grant' => 'granted', 'deny' => 'denied', 'reset' => 'reset (the app will ask again)', _ => 'set to limited' };
+      return StructuredResponse(
+        summary: '$permission $verb for $appId on ${device.id}',
+        warnings: [if (done.caution != null) done.caution!],
+        nextSteps: const ['get_scene, then drive the flow that uses it'],
+        data: {'permission': permission, 'action': action, 'appId': appId, 'device': device.id, 'applied': done.applied},
+      );
+    } on PermissionUnsupported catch (e) {
+      return StructuredResponse.error(
+        summary: 'cannot set $permission to $action here: ${e.reason}',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        nextSteps: e.nextSteps,
+      );
+    } on PermissionRefused catch (e) {
+      return StructuredResponse.error(
+        summary: e.unknownApp
+            ? '$appId is not installed on ${device.id}'
+            : e.notDeclared
+                ? '$appId does not declare the $permission permission, so the system cannot ${action == 'limited' ? 'limit' : action} it'
+                : 'the device refused to ${action == 'limited' ? 'limit' : action} $permission for $appId',
+        errorKind: e.unknownApp ? GlintErrorKind.targetNotFound : e.notDeclared ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
+        detail: e.detail,
+        nextSteps: [
+          if (e.unknownApp) 'pass the installed package as appId',
+          if (e.notDeclared) 'nothing to set: the app never asks for $permission, so it has no access either way',
+          if (!e.unknownApp && !e.notDeclared) 'check the device is booted, then retry',
+        ],
+      );
+    }
   }
 
   DateTime? _sinceTime(GlintSession session, String? since, List<StructuredResponse> failure) {
