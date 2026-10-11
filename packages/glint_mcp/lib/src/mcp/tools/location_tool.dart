@@ -6,13 +6,19 @@ import '../../../interaction.dart';
 import '../../interaction/emulator_control.dart' show EmulatorInstance;
 import '../../location/geo.dart';
 import '../../location/location_backend.dart';
+import '../../location/location_permission.dart';
 import '../../location/location_player.dart';
+import '../../location/location_prompt.dart';
+import '../../media/gallery.dart' show MediaDevice;
+import '../../media/permissions.dart' show PermissionRefused, PermissionUnsupported;
+import '../../perception/runner_native_reader.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
-const _ops = ['set', 'get', 'clear', 'route', 'pause', 'resume', 'stop', 'seek'];
+const _ops = ['set', 'get', 'clear', 'route', 'pause', 'resume', 'stop', 'seek', 'permission', 'services', 'answer'];
+const _feeding = {'set', 'route', 'seek', 'resume'};
 
 /// `location` sets where the device thinks it is, or drives it along a route in the background while the agent keeps using the app.
 class LocationTool extends GlintTool {
@@ -24,8 +30,10 @@ class LocationTool extends GlintTool {
         description: 'Simulated GPS on the iOS simulator, Android emulator or a paired iPhone. op: '
             'set (one position: at "lat,lng"), get (what glint feeds now, route progress, and on Android whether the app is listening), '
             'clear (stop simulating), route (travel points, a GPX or KML file, or an encoded polyline in the background, at speedKmh or over durationSec; '
-            'loop, jitterM noise, dropout lost fixes), pause, resume, stop, seek (progress 0 to 1, meters or waypoint). '
-            'The app sees each fix as a real GPS update. errorKind: invalidArgument, deviceGone, deviceClaimed, backendToolError.',
+            'loop, jitterM noise, dropout lost fixes), pause, resume, stop, seek (progress 0 to 1, meters or waypoint), '
+            'permission (value: whileUsing | always | approximate | deny | reset, without a prompt), services (value: on | off, Android), '
+            'answer (tap the open system location prompt: choice whileUsing | once | deny | always | keepWhileUsing, precise). '
+            'Replies say the app\'s permission when glint can read it. errorKind: invalidArgument, deviceGone, deviceClaimed, unsupportedBackendAction, targetNotFound, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: _ops.join(' | ')),
@@ -44,6 +52,10 @@ class LocationTool extends GlintTool {
             'progress': Schema.num(description: 'seek, or route start: 0 to 1 along the route.'),
             'meters': Schema.num(description: 'seek: meters along the route.'),
             'waypoint': Schema.int(description: 'seek: waypoint index, 0 = start.'),
+            'value': Schema.string(description: 'permission: whileUsing | always | approximate | deny | reset. services: on | off.'),
+            'choice': Schema.string(description: 'answer: whileUsing | once | deny | always | keepWhileUsing.'),
+            'precise': Schema.bool(description: 'answer: pick precise (true) or approximate (false) location first, where the prompt offers it.'),
+            'appId': Schema.string(description: 'permission: bundle id or package. Default: the attached app.'),
           },
           required: ['op'],
         ),
@@ -57,7 +69,7 @@ class LocationTool extends GlintTool {
     final failure = <StructuredResponse>[];
     final backend = await _backend(session, args, failure);
     if (backend == null) return failure.single;
-    if (backend is AndroidEmulatorLocation && op != 'get' && op != 'clear') {
+    if (backend is AndroidEmulatorLocation && _feeding.contains(op)) {
       final emulator = await EmulatorInstance.locate(backend.id, adbPath: backend.adbPath);
       if (emulator != null && emulator.grpc == null) {
         return StructuredResponse.error(
@@ -76,8 +88,27 @@ class LocationTool extends GlintTool {
         'clear' => await _clear(backend),
         'route' => await _route(backend, args, app),
         'seek' => await _seek(backend, args),
+        'permission' => await _permission(backend, args, app),
+        'services' => await _services(backend, args),
+        'answer' => await _answer(session, backend, args, app),
         _ => await _control(backend, op!),
       };
+    } on PermissionUnsupported catch (e) {
+      return StructuredResponse.error(
+        summary: 'cannot set that on ${backend.label}: ${e.reason}',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        nextSteps: e.nextSteps,
+      );
+    } on PermissionRefused catch (e) {
+      return StructuredResponse.error(
+        summary: e.unknownApp ? '${args['appId'] ?? app} is not installed on ${backend.label}' : 'the device refused the permission change',
+        errorKind: e.notDeclared || e.unknownApp ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
+        detail: e.detail,
+        nextSteps: [
+          if (e.notDeclared) 'the app must declare the permission in its AndroidManifest.xml; this is an app bug or a missing feature',
+          if (e.unknownApp) 'pass appId:"<the installed package>"',
+        ],
+      );
     } on LocationFailed catch (e) {
       return StructuredResponse.error(
         summary: '${backend.label}: ${e.summary}',
@@ -172,13 +203,154 @@ class LocationTool extends GlintTool {
       };
 
   /// Warnings from what the device reports about location, so a fix the app never sees does not pass silently.
+  MediaDevice _mediaDevice(LocationBackend backend) => backend is AndroidEmulatorLocation
+      ? MediaDevice(DevicePlatform.android, backend.id, adbPath: backend.adbPath)
+      : MediaDevice(DevicePlatform.ios, backend.id);
+
+  /// The app's location permission, which only the simulator and the emulator let glint read.
+  Future<String?> _access(LocationBackend backend, String? app) async =>
+      app == null || backend is IosDeviceLocation ? null : readLocationAccess(_mediaDevice(backend), app);
+
   Future<(List<String>, Map<String, Object?>)> _signals(LocationBackend backend, String? app) async {
     final s = await backend.signals(app);
+    final access = await _access(backend, app);
     final warnings = [
       if (s.servicesOn == false) 'location services are off on ${backend.label}: apps get no position at all',
-      if (s.listening == false) '$app has no live location request yet: it shows the fix once it asks (check its permission and that the screen that tracks location is open)',
+      if (access == 'denied') '$app is denied location: it sees no fix; `location op:permission value:whileUsing`, or answer its prompt',
+      if (access == 'notAsked') '$app has not been asked for location yet: it sees no fix until it asks and gets an answer (`location op:answer`)',
+      if (s.listening == false && access != 'denied' && access != 'notAsked')
+        '$app has no live location request yet: it shows the fix once it asks (is the screen that tracks location open?)',
     ];
-    return (warnings, {if (s.servicesOn != null) 'servicesOn': s.servicesOn, if (s.listening != null) 'appListening': s.listening});
+    return (
+      warnings,
+      {if (access != null) 'permission': access, if (s.servicesOn != null) 'servicesOn': s.servicesOn, if (s.listening != null) 'appListening': s.listening},
+    );
+  }
+
+  Future<StructuredResponse> _permission(LocationBackend backend, Map<String, Object?> args, String? app) async {
+    final value = args['value'] as String?;
+    if (!locationAccessValues.contains(value)) return _bad('permission needs value: ${locationAccessValues.join(' | ')}; got ${value ?? 'nothing'}');
+    if (backend is IosDeviceLocation) {
+      return StructuredResponse.error(
+        summary: 'glint cannot set app permissions on a physical iPhone',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'devicectl has no privacy setting; only the person holding the phone can answer or change it in Settings',
+        nextSteps: const ['ask the user to answer the prompt, or change it in Settings > Privacy & Security > Location Services'],
+      );
+    }
+    final appId = (args['appId'] as String?) ?? app;
+    if (appId == null) return _bad('no app to set location permission for', nextSteps: const ['attach the app, or pass appId:"<bundle id or package>"']);
+    final before = await _access(backend, appId);
+    final done = await setLocationAccess(_mediaDevice(backend), appId, value!);
+    final now = await _access(backend, appId);
+    return StructuredResponse(
+      summary: '$appId location permission on ${backend.label}: ${before ?? 'unknown'} -> ${now ?? value}',
+      warnings: [if (done.caution != null) done.caution!],
+      nextSteps: [
+        if (value == 'reset') 'make the app ask again (its own button, or `hot_reload restart:true`), then `location op:answer`',
+        if (value != 'reset') 'get_scene to see how the app reacts',
+      ],
+      data: {'device': backend.id, 'appId': appId, 'before': before, 'permission': now, 'applied': done.applied},
+    );
+  }
+
+  Future<StructuredResponse> _services(LocationBackend backend, Map<String, Object?> args) async {
+    final value = args['value'] as String?;
+    if (value != 'on' && value != 'off') return _bad('services needs value: on | off; got ${value ?? 'nothing'}');
+    if (backend is! AndroidEmulatorLocation) {
+      return StructuredResponse.error(
+        summary: 'glint can switch location services on an Android emulator only',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'iOS keeps that switch in Settings, out of reach of simctl and devicectl',
+        nextSteps: const ['to test "no location" on iOS, `location op:permission value:deny`'],
+      );
+    }
+    final ok = await setAndroidLocationServices(_mediaDevice(backend), value == 'on');
+    if (!ok) {
+      return StructuredResponse.error(
+        summary: 'location services on ${backend.label} did not turn $value',
+        errorKind: GlintErrorKind.backendToolError,
+        nextSteps: const ['check the emulator is running (adb devices), then retry'],
+      );
+    }
+    return StructuredResponse(
+      summary: '${backend.label}: location services are now $value',
+      warnings: [
+        if (value == 'off') 'Google Play services may put a "turn on location" dialog over the app the next time it asks; get_scene shows it',
+      ],
+      nextSteps: const ['get_scene to see how the app reacts'],
+      data: {'device': backend.id, 'servicesOn': value == 'on'},
+    );
+  }
+
+  Future<StructuredResponse> _answer(GlintSession session, LocationBackend backend, Map<String, Object?> args, String? app) async {
+    final choice = args['choice'] as String?;
+    if (!locationAnswers.containsKey(choice)) return _bad('answer needs choice: ${locationAnswers.keys.join(' | ')}; got ${choice ?? 'nothing'}');
+    final active = session.isAttached && session.device.id == backend.id ? session.active : null;
+    final reader = session.nativeReader;
+    if (active == null || reader == null) {
+      return StructuredResponse.error(
+        summary: 'attach the app first: answer reads the system prompt over it',
+        errorKind: GlintErrorKind.sessionNotAttached,
+        nextSteps: const ['attach (the app in Flutter mode)'],
+      );
+    }
+    if (session.device is IosSimulator && reader is! RunnerNativeReader) {
+      return StructuredResponse.error(
+        summary: 'glint cannot read the iOS location prompt on this attach',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'the prompt belongs to the system, and only the XCUITest runner can read it',
+        nextSteps: const ['attach iosBackend:"xctest", then answer', 'or set it without a prompt: `location op:permission`'],
+      );
+    }
+    await active.refreshSceneMode();
+    final surface = active.nativeSurfaceName;
+    final prompt = surface == null ? null : LocationPrompt.find((await reader.readSnapshot()).root.children);
+    if (prompt == null) {
+      return StructuredResponse.error(
+        summary: surface == null ? 'no system prompt is open' : '$surface is open, but it is not a location prompt',
+        errorKind: GlintErrorKind.targetNotFound,
+        nextSteps: [
+          if (surface == null) 'make the app ask for location (its own button, or `hot_reload restart:true`), then answer',
+          if (surface != null) 'get_scene to see it and answer it with tap',
+          'or set it without a prompt: `location op:permission`',
+        ],
+      );
+    }
+    final button = prompt.answers[choice];
+    if (button == null) {
+      return StructuredResponse.error(
+        summary: 'the prompt offers no "$choice"',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: 'it asks "${prompt.title}" and offers: ${prompt.answers.entries.map((e) => '${e.key} ("${e.value.label}")').join(', ')}',
+        nextSteps: [for (final k in prompt.answers.keys) 'choice:"$k"'],
+      );
+    }
+    final dpr = session.device.devicePixelRatio;
+    Future<void> tap(PromptButton b) => session.backend.tap(physicalX: (b.x * dpr).round(), physicalY: (b.y * dpr).round());
+    final precise = argBool(args, 'precise');
+    final warnings = <String>[];
+    if (precise != null) {
+      final accuracy = prompt.precision[precise];
+      if (accuracy == null) {
+        warnings.add('this prompt has no precise or approximate choice, so precise:$precise was not applied');
+      } else {
+        await tap(accuracy);
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      }
+    }
+    await tap(button);
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await active.refreshSceneMode();
+    final closed = active.nativeSurfaceName == null;
+    final now = await _access(backend, app);
+    return StructuredResponse(
+      summary: 'answered "${button.label}"${precise == null || prompt.precision.isEmpty ? '' : ' (${precise ? 'precise' : 'approximate'})'}'
+          '${closed ? '; the prompt closed' : '; a system surface is still open'}${now == null ? '' : '; $app permission: $now'}',
+      warnings: [...warnings, if (!closed) 'something is still over the app: a follow-up prompt, or the tap missed'],
+      nextSteps: [closed ? 'get_scene to see how the app reacts' : 'get_scene to see what is open'],
+      data: {'device': backend.id, 'answered': button.label, 'promptClosed': closed, if (now != null) 'permission': now},
+    );
   }
 
   Future<StructuredResponse> _set(LocationBackend backend, Map<String, Object?> args, String? app) async {
