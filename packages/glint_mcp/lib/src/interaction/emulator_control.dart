@@ -17,6 +17,12 @@ class EmulatorEndpoint {
 
   /// The endpoint of the emulator behind adb [serial] (`emulator-5554`), or null when none is running or it serves no gRPC.
   static EmulatorEndpoint? find(String serial, {Map<String, String>? env}) {
+    final record = runningRecord(serial, env: env);
+    return record == null ? null : fromRecord(record);
+  }
+
+  /// The running record (`pid_<n>.ini`) of the emulator behind [serial], parsed, or null when it wrote none where glint looks.
+  static Map<String, String>? runningRecord(String serial, {Map<String, String>? env}) {
     final consolePort = RegExp(r'^emulator-(\d+)$').firstMatch(serial)?.group(1);
     if (consolePort == null) return null;
     final e = env ?? Platform.environment;
@@ -31,20 +37,80 @@ class EmulatorEndpoint {
       final d = Directory(dir);
       if (!d.existsSync()) continue;
       for (final f in d.listSync().whereType<File>().where((f) => f.path.endsWith('.ini'))) {
-        final ini = _parseIni(f.readAsStringSync());
-        if (ini['port.serial'] != consolePort) continue;
-        final port = int.tryParse(ini['grpc.port'] ?? '');
-        if (port == null) return null;
-        return EmulatorEndpoint(port: port, token: ini['grpc.token'] ?? '', avdDir: ini['avd.dir'], avdName: ini['avd.id']);
+        final ini = parseIni(f.readAsStringSync());
+        if (ini['port.serial'] == consolePort) return ini;
       }
     }
     return null;
   }
 
-  static Map<String, String> _parseIni(String text) => {
+  static EmulatorEndpoint? fromRecord(Map<String, String> ini) {
+    final port = int.tryParse(ini['grpc.port'] ?? '');
+    if (port == null) return null;
+    return EmulatorEndpoint(port: port, token: ini['grpc.token'] ?? '', avdDir: ini['avd.dir'], avdName: ini['avd.id']);
+  }
+
+  static Map<String, String> parseIni(String text) => {
         for (final line in text.split('\n'))
           if (line.contains('=')) line.substring(0, line.indexOf('=')).trim(): line.substring(line.indexOf('=') + 1).trim(),
       };
+}
+
+/// Runs one emulator console command through `adb emu` and returns its answer lines without the closing OK; null when the console refuses or adb fails.
+Future<List<String>?> emulatorConsole(String adbPath, String serial, List<String> command) async {
+  try {
+    final r = await Process.run(adbPath, ['-s', serial, 'emu', ...command]).timeout(const Duration(seconds: 10));
+    final lines = '${r.stdout}'.split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    if (r.exitCode != 0 || lines.isEmpty || lines.last != 'OK') return null;
+    return lines.sublist(0, lines.length - 1);
+  } on Object {
+    return null;
+  }
+}
+
+/// One running emulator: its AVD, and its gRPC control when it serves one.
+class EmulatorInstance {
+  const EmulatorInstance({required this.serial, this.avdName, this.avdDir, this.grpc});
+
+  final String serial;
+  final String? avdName;
+  final String? avdDir;
+  final EmulatorEndpoint? grpc;
+
+  /// Finds [serial]'s AVD from its running record, else from its console, which answers even when a sandboxed launch could not write the record.
+  static Future<EmulatorInstance?> locate(String serial, {required String adbPath}) async {
+    if (!serial.startsWith('emulator-')) return null;
+    var record = EmulatorEndpoint.runningRecord(serial);
+    if (record == null) {
+      final elsewhere = (await emulatorConsole(adbPath, serial, ['avd', 'discoverypath']))?.firstOrNull;
+      final file = elsewhere == null ? null : File(elsewhere);
+      if (file != null && file.existsSync()) record = EmulatorEndpoint.parseIni(file.readAsStringSync());
+    }
+    if (record != null) {
+      return EmulatorInstance(
+        serial: serial,
+        avdName: record['avd.id'],
+        avdDir: record['avd.dir'],
+        grpc: EmulatorEndpoint.fromRecord(record),
+      );
+    }
+    final name = (await emulatorConsole(adbPath, serial, ['avd', 'name']))?.firstOrNull;
+    final dir = (await emulatorConsole(adbPath, serial, ['avd', 'path']))?.firstOrNull;
+    if (name == null && dir == null) return null;
+    return EmulatorInstance(serial: serial, avdName: name, avdDir: dir);
+  }
+
+  String get label => avdName == null ? serial : '$serial ($avdName)';
+
+  /// Why this emulator has no gRPC control, for replies whose feature needs it.
+  String get noControlReason => '$label runs without its gRPC control and wrote no running record: '
+      'the emulator does not always start gRPC on its own, and cannot when launched from a sandboxed shell';
+
+  /// How to get an emulator of the same AVD with its control on.
+  List<String> get controlSteps => [
+        'close it (`shutdown_sim device:"$serial"` if this session started it)',
+        if (avdName != null) 'then `attach device:"$avdName"`: glint boots the AVD from its own process, with gRPC on',
+      ];
 }
 
 /// Mono signed 16-bit little-endian PCM at [sampleRate], the one format glint feeds and captures.

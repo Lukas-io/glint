@@ -20,7 +20,7 @@
       },
       "device": {
         "type": "string",
-        "description": "iOS simulator UDID or Android serial. Omit to use the device the app runs on. A device from the \"no app running\" list starts its app there."
+        "description": "iOS simulator UDID, Android serial or AVD name (booted when not running). Omit to use the device the app runs on. A device from the \"no app running\" list starts its app there."
       },
       "launch": {
         "type": "string",

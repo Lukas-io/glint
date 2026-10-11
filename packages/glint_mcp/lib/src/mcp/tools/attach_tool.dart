@@ -55,7 +55,7 @@ class AttachTool extends GlintTool {
             ),
             'device': Schema.string(
               description:
-                  'iOS simulator UDID or Android serial. Omit to use the device the app runs on. A device from the "no app running" list starts its app there.',
+                  'iOS simulator UDID, Android serial or AVD name (booted when not running). Omit to use the device the app runs on. A device from the "no app running" list starts its app there.',
             ),
             'launch': Schema.string(
               description:
@@ -99,7 +99,7 @@ class AttachTool extends GlintTool {
   @override
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
-    final args = request.arguments ?? const {};
+    var args = request.arguments ?? const <String, Object?>{};
 
     // Validate an explicitly-passed platform before any I/O.
     final platformArg = args['platform'] as String?;
@@ -158,29 +158,65 @@ class AttachTool extends GlintTool {
     final discovery = DeviceDiscovery(adbPath: adbPath);
 
     // One scan powers discovery + identity + the correlation fallback.
-    final scan = await discovery.scan();
+    var scan = await discovery.scan();
 
     // ── dryRun: list what's attachable + launch history and stop ────────────
     if (dryRun) {
+      final idleAvds = await _idleAvds(adbPath);
       return StructuredResponse(
-        summary: _dryRunSummary(scan, session.attachHistory.load()),
+        summary: _dryRunSummary(scan, session.attachHistory.load(), idleAvds),
         data: {
           'dryRun': true,
           'apps': [for (final u in scan.vmUris) u.toString()],
           'devices': [for (final d in scan.devices) d.toJson()],
+          if (idleAvds.isNotEmpty) 'avds': idleAvds,
           'history': [for (final r in session.attachHistory.load()) r.toJson()],
         },
       );
     }
 
-    final vmUriArg = args['vmUri'] as String?;
-    final launchPath = (args['launch'] as String?)?.trim();
-    final deviceArg = args['device'] as String?;
-    final appArg = (args['app'] as String?)?.trim();
-
     // Progress sink for slow work (boot, flutter run) — emits a phase every 15s
     // when the client supplied a progress token.
     final onProgress = _progressSink(session, request);
+
+    final vmUriArg = args['vmUri'] as String?;
+    final launchPath = (args['launch'] as String?)?.trim();
+    final avdArg = args['device'] as String?;
+    String? avdLead;
+    if (avdArg != null && !scan.devices.any((d) => d.id == avdArg) && !avdArg.startsWith('emulator-')) {
+      final avds = Avds(adbPath: adbPath);
+      if ((await avds.list()).contains(avdArg)) {
+        var serial = await avds.runningSerial(avdArg);
+        if (serial == null) {
+          try {
+            serial = await avds.boot(avdArg, onProgress: onProgress);
+          } on AvdBootError catch (e) {
+            return StructuredResponse.error(
+              summary: 'could not boot $avdArg: ${e.summary}',
+              errorKind: GlintErrorKind.backendToolError,
+              detail: e.detail,
+              nextSteps: const ['`attach dryRun:true` lists what is running', 'check the AVD starts from Android Studio\'s device manager'],
+            );
+          }
+          avdLead = 'booted $avdArg as $serial';
+          scan = await discovery.scan();
+        } else {
+          avdLead = '$avdArg runs as $serial';
+        }
+        args = {...args, 'device': serial};
+      }
+    }
+    final deviceArg = args['device'] as String?;
+    if (avdLead != null && launchPath == null && vmUriArg == null && mode != 'flutter' && session.findApp(deviceArg!) == null) {
+      final apps = scan.vmUris.isEmpty ? const <RunningApp>[] : await discovery.describeRunningApps(scan);
+      if (!apps.any((a) => a.deviceId == deviceArg)) {
+        final r = await _attachDeviceMode(session, scan, args, 'android', adbPath, onProgress);
+        return r.isError ? r : _lead(r, avdLead, [
+          '`attach launch:"<project folder or app id>" device:"$deviceArg"` starts your app on it',
+        ]);
+      }
+    }
+    final appArg = (args['app'] as String?)?.trim();
 
     // ── 0. Instant switch to an app that is already attached ───────────────
     if (vmUriArg == null && launchPath == null) {
@@ -1083,7 +1119,18 @@ class AttachTool extends GlintTool {
   Future<String> _renderScene(GlintSession session) =>
       session.withScene((s) async => const PlainTextSceneRenderer().render(s));
 
-  String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history) {
+  /// AVDs that exist on this host but run nowhere, which `attach device:"<name>"` boots.
+  Future<List<String>> _idleAvds(String adbPath) async {
+    final avds = Avds(adbPath: adbPath);
+    final all = await avds.list();
+    if (all.isEmpty) return const [];
+    final running = {
+      for (final serial in await avds.runningSerials()) await avds.avdOf(serial),
+    };
+    return [for (final a in all) if (!running.contains(a)) a];
+  }
+
+  String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history, List<String> idleAvds) {
     final deviceClaims = claims ?? DeviceClaims();
     return [
       'apps (${scan.vmUris.length}):',
@@ -1096,6 +1143,7 @@ class AttachTool extends GlintTool {
           d.platform.name,
           if (deviceClaims.heldByOther(d.id) case final c?) 'driven by ${c.describe}',
         ].join(", ")})',
+      if (idleAvds.isNotEmpty) 'AVDs not running (attach device:"<name>" boots one): ${idleAvds.join(', ')}',
       'history (${history.length}):',
       for (final r in history)
         '  ${r.label}  (${[
@@ -1379,6 +1427,16 @@ class AttachTool extends GlintTool {
   }
 
   /// Builds a 15s-cadence progress sink from the request's progress token, or null.
+  StructuredResponse _lead(StructuredResponse r, String lead, List<String> firstSteps) => StructuredResponse(
+        summary: '$lead; ${r.summary}',
+        warnings: r.warnings,
+        nextSteps: [...firstSteps, ...r.nextSteps],
+        data: r.data,
+        isError: r.isError,
+        textOnly: r.textOnly,
+        imagePaths: r.imagePaths,
+      );
+
   void Function(int, String?)? _progressSink(
       GlintSession session, CallToolRequest request) {
     final token = request.meta?.progressToken;
