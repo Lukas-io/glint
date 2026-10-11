@@ -26,6 +26,7 @@ class RidePage extends StatefulWidget {
 
 class _RidePageState extends State<RidePage> {
   static const _start = LatLng(6.5244, 3.3792);
+  static const _dropoff = LatLng(6.4281, 3.4219);
   StreamSubscription<Position>? _positions;
   GoogleMapController? _map;
   Position? _position;
@@ -87,6 +88,14 @@ class _RidePageState extends State<RidePage> {
               initialCameraPosition: const CameraPosition(target: _start, zoom: 15),
               markers: {
                 if (p != null) Marker(markerId: const MarkerId('me'), position: here, infoWindow: const InfoWindow(title: 'You')),
+                const Marker(markerId: MarkerId('pickup'), position: _start, infoWindow: InfoWindow(title: 'Pickup')),
+                const Marker(markerId: MarkerId('dropoff'), position: _dropoff, infoWindow: InfoWindow(title: 'Drop-off')),
+              },
+              polylines: {
+                const Polyline(polylineId: PolylineId('trip'), points: [_start, LatLng(6.4550, 3.3941), _dropoff], width: 5),
+              },
+              circles: {
+                const Circle(circleId: CircleId('pickup_zone'), center: _start, radius: 150, strokeWidth: 1),
               },
               onMapCreated: (c) => _map = c,
             ),

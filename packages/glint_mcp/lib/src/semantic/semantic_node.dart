@@ -15,6 +15,10 @@ enum SemanticRole {
   image,
   list,
   container,
+  map,
+  marker,
+  route,
+  area,
   unknown,
 }
 
@@ -356,6 +360,54 @@ class SemanticContainer extends SemanticNode {
 
 /// Floor classifier output — a node we know about but can't classify. Keeps
 /// [label] for debugging and [glintId] so the agent can still target it.
+/// A Google map: its camera and what it draws, filled by `MapEnricher` from the widget and its controller.
+class SemanticMap extends SemanticNode {
+  SemanticMap({super.glintId}) : super(children: <SemanticNode>[]);
+
+  /// Center of the visible map, "lat, lng".
+  String? center;
+  double? zoom;
+
+  /// The visible region, "south..north, west..east".
+  String? shows;
+
+  /// Why the camera is missing, when it is.
+  String? note;
+
+  @override
+  SemanticRole get role => SemanticRole.map;
+
+  @override
+  String get displayLabel => center == null
+      ? 'map${note == null ? '' : ' ($note)'}'
+      : 'camera $center zoom ${zoom?.toStringAsFixed(1)} · shows $shows';
+
+  @override
+  Map<String, Object?> _extraJson() => {
+        if (center != null) 'center': center,
+        if (zoom != null) 'zoom': zoom,
+        if (shows != null) 'shows': shows,
+        if (note != null) 'note': note,
+      };
+}
+
+/// One thing a map draws: a marker, a route (polyline) or an area (polygon or circle).
+class SemanticMapItem extends SemanticNode {
+  SemanticMapItem({required this.role, required this.label}) : super(glintId: null, children: const []);
+
+  @override
+  final SemanticRole role;
+
+  /// Its id, title, where it is and, for a marker, the screen point to tap.
+  final String label;
+
+  @override
+  String get displayLabel => label;
+
+  @override
+  Map<String, Object?> _extraJson() => {'label': label};
+}
+
 class SemanticUnknown extends SemanticNode {
   SemanticUnknown({
     super.glintId,

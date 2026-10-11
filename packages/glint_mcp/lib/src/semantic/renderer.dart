@@ -153,6 +153,9 @@ class _Writer {
   // Labels longer than this are truncated to keep scene text compact.
   static const _maxLabelChars = 40;
 
+  /// Map lines are coordinates and screen points glint writes itself, and every digit is needed.
+  static const _maxMapLabelChars = 160;
+
   void _nodeLine(SemanticNode node, int depth) {
     buf
       ..write(' ' * (depth * r.indent))
@@ -170,18 +173,16 @@ class _Writer {
     if (label.isNotEmpty && label != node.role.name) {
       buf
         ..write(' ')
-        ..write(_truncate(label));
+        ..write(_truncate(label, max: node is SemanticMap || node is SemanticMapItem ? _maxMapLabelChars : _maxLabelChars));
     }
     buf.writeln();
   }
 
   /// Multiline labels would break the line-per-node contract — collapse all
   /// whitespace runs to a single space before truncating.
-  static String _truncate(String s) {
+  static String _truncate(String s, {int max = _maxLabelChars}) {
     final flat = s.replaceAll(RegExp(r'\s+'), ' ');
-    return flat.length <= _maxLabelChars
-        ? flat
-        : '${flat.substring(0, _maxLabelChars - 1)}…';
+    return flat.length <= max ? flat : '${flat.substring(0, max - 1)}…';
   }
 
   static String _marker(Set<Affordance> affs) {

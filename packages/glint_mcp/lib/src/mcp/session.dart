@@ -193,6 +193,8 @@ class GlintSession {
       _requireAttached(_active?.flagEnricher, 'flag enricher');
   ImageEnricher get imageEnricher =>
       _requireAttached(_active?.imageEnricher, 'image enricher');
+  MapEnricher get mapEnricher =>
+      _requireAttached(_active?.mapEnricher, 'map enricher');
   IconEnricher get iconEnricher =>
       _requireAttached(_active?.iconEnricher, 'icon enricher');
   LinkEnricher get linkEnricher =>
@@ -318,6 +320,7 @@ class GlintSession {
     if (detail == SceneDetail.full) {
       await iconEnricher.enrich(semantic);
       await linkEnricher.enrich(semantic);
+      await mapEnricher.enrich(semantic);
     }
     return semantic;
   }
