@@ -74,6 +74,8 @@ The agent, driving an app on a simulator, following a user's instruction.
 
 **Scroll-to-find as a first-class action.** Because virtualized lists only build what is near the viewport, items below the fold do not exist in the render tree until scrolled to. Reaching them is a core action, not an afterthought.
 
+**Device conditions.** What the app depends on beyond its own screen, set and read from outside with zero app code: photos and videos in the gallery, the Android emulator's camera feed, sensors, calls and SMS, permissions, the GPS position and routes across one or several devices, and what a Google map shows. These are how an agent reaches the screens a real person reaches (a photo picker with photos in it, a ride that moves).
+
 **Platform coverage.** iOS simulator and Android emulator. Debug mode.
 
 **Screenshot as a fallback only.** Not a first-class input. Available as a backup for cases the structured path cannot describe (for example custom-painted canvas content), and as a convenience, but never the primary perception channel.
@@ -100,7 +102,7 @@ These are not oversights. They are deliberate exclusions for the current stage.
 
 **App side is the focus, not the whole OS.** The primary target is interaction inside the app. The native interaction module can technically operate anywhere on the simulator, including outside the app, but driving arbitrary OS surfaces is not the focus. If the agent leaves the app, that is a different problem we are not solving first.
 
-**Real devices are out for now.** Native input injection plus debug-mode reading points us at simulators and emulators for the core.
+**Real devices are secondary.** Simulators and emulators are the core. Android phones work over adb like an emulator. A paired iPhone can be read (scene, logs, screenshots, location) but glint cannot put a finger on it yet.
 
 ---
 
