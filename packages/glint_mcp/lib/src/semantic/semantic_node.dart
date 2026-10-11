@@ -374,6 +374,12 @@ class SemanticMap extends SemanticNode {
   /// Why the camera is missing, when it is.
   String? note;
 
+  /// Where the map is on screen, in logical points.
+  ({double x, double y, double w, double h})? rect;
+
+  /// Each marker with its screen point in logical points (null when off screen or not answered).
+  final markers = <({String id, String title, String at, ({int x, int y})? screen})>[];
+
   @override
   SemanticRole get role => SemanticRole.map;
 

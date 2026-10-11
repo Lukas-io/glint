@@ -52,6 +52,8 @@ class _RidePageState extends State<RidePage> {
     _follow = Timer.periodic(const Duration(seconds: 1), (_) => _driver ? null : _pollDriver());
   }
 
+  void _tapped(String marker) => setState(() => _trip = 'Tapped $marker');
+
   Future<void> _sendDriver(Position p) async {
     try {
       final req = await _http.postUrl(_relay.resolve('/driver'));
@@ -153,8 +155,8 @@ class _RidePageState extends State<RidePage> {
               initialCameraPosition: const CameraPosition(target: _start, zoom: 15),
               markers: {
                 if (p != null) Marker(markerId: const MarkerId('me'), position: here, infoWindow: const InfoWindow(title: 'You')),
-                const Marker(markerId: MarkerId('pickup'), position: _start, infoWindow: InfoWindow(title: 'Pickup')),
-                const Marker(markerId: MarkerId('dropoff'), position: _dropoff, infoWindow: InfoWindow(title: 'Drop-off')),
+                Marker(markerId: const MarkerId('pickup'), position: _start, infoWindow: const InfoWindow(title: 'Pickup'), onTap: () => _tapped('Pickup')),
+                Marker(markerId: const MarkerId('dropoff'), position: _dropoff, infoWindow: const InfoWindow(title: 'Drop-off'), onTap: () => _tapped('Drop-off')),
                 if (_driverAt != null) Marker(markerId: const MarkerId('driver'), position: _driverAt!, infoWindow: const InfoWindow(title: 'Driver')),
               },
               polylines: {

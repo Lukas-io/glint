@@ -29,6 +29,7 @@ class MapEnricher implements SemanticEnricher {
       r'final size = ro == null || !ro.hasSize ? Size.zero : ro.size; '
       r'final dpr = View.of(e).devicePixelRatio; '
       r'final android = defaultTargetPlatform == TargetPlatform.android; '
+      r"box.add('G\u001f$i\u001f${o.dx}\u001f${o.dy}\u001f${size.width}\u001f${size.height}'); "
       'final shown = w.markers.take($maxMarkers).toList(); '
       r"for (final m in shown) box.add('M\u001f$i\u001f${m.markerId.value}\u001f${m.infoWindow.title ?? ''}\u001f${ll(m.position)}'); "
       r"if (w.markers.length > shown.length) box.add('X\u001f$i\u001f${w.markers.length - shown.length}'); "
@@ -114,8 +115,13 @@ class MapEnricher implements SemanticEnricher {
           map.note = null;
         case 'N' when map.center == null:
           map.note = 'camera ${l[2]}';
+        case 'G' when l.length >= 6:
+          final v = [for (final n in l.sublist(2, 6)) double.tryParse(n) ?? 0];
+          map.rect = (x: v[0], y: v[1], w: v[2], h: v[3]);
         case 'M' when l.length >= 5:
           final p = points[l[2]];
+          final xy = p == null || !p.onScreen ? null : p.at.split(',').map(int.tryParse).toList();
+          map.markers.add((id: l[2], title: l[3], at: l[4], screen: xy == null || xy.length != 2 || xy.contains(null) ? null : (x: xy[0]!, y: xy[1]!)));
           final where = p == null ? '' : (p.onScreen ? ' @ ${p.at}' : ' (off screen)');
           children.add(SemanticMapItem(role: SemanticRole.marker, label: '${l[2]}${l[3].isEmpty ? '' : ' "${l[3]}"'} at ${l[4]}$where'));
         case 'X':

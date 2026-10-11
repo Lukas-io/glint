@@ -142,3 +142,16 @@ Future<bool> setAndroidLocationServices(MediaDevice device, bool on) async {
   await device.adb(['shell', 'cmd', 'location', 'set-location-enabled', '$on']);
   return (await device.adb(['shell', 'cmd', 'location', 'is-location-enabled'])).text.trim() == '$on';
 }
+
+/// Whether [appId] can get location in the background at all: the `location` background mode on iOS, ACCESS_BACKGROUND_LOCATION declared on Android; null when unknown.
+Future<bool?> readBackgroundCapable(MediaDevice device, String appId) async {
+  if (!device.isIos) {
+    final dump = (await device.adb(['shell', 'dumpsys', 'package', appId])).text;
+    return dump.contains('Package [$appId]') ? requestedPermissions(dump).contains(_background) : null;
+  }
+  final container = await device.simctl(['get_app_container', device.id, appId, 'app']);
+  if (!container.ok) return null;
+  final r = await Process.run('plutil', ['-extract', 'UIBackgroundModes', 'json', '-o', '-', '${container.text.trim()}/Info.plist']);
+  if (r.exitCode != 0) return false;
+  return '${r.stdout}'.contains('"location"');
+}
