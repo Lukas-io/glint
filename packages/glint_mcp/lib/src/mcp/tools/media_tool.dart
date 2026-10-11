@@ -8,6 +8,7 @@ import '../../media/app_files.dart';
 import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
+import '../../media/emulator_audio.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
 import '../../media/picker.dart';
@@ -34,11 +35,13 @@ class MediaTool extends GlintTool {
             'testcard, speech, tone; clear:true removes what glint seeded, Android only), files (what the app wrote, newest first; pull:true copies one to the host), '
             'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset), '
             'pick (choose a photo or video in the open system picker: name, index or newest), '
-            'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited). '
+            'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited), '
+            'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick | permission'),
+            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen'),
+            'stop': Schema.bool(description: 'listen: end the recording and report it.'),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
             'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
@@ -81,7 +84,8 @@ class MediaTool extends GlintTool {
         'inspect' => await _inspect(session, args, phases),
         'pick' => await _pick(session, args),
         'permission' => await _permission(session, args),
-        _ => _bad('op must be seed, files, inspect, pick or permission, got ${op ?? 'nothing'}'),
+        'listen' => await _listen(session, args),
+        _ => _bad('op must be seed, files, inspect, pick, permission or listen, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -488,6 +492,77 @@ class MediaTool extends GlintTool {
         ],
       );
     }
+  }
+
+  ({EmulatorAudio? audio, StructuredResponse? error}) _emulatorAudio(GlintSession session, Map<String, Object?> args) {
+    final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
+    if (id == null) return (audio: null, error: _bad('no device: attach first, or pass device:"emulator-5554"'));
+    if (!id.startsWith('emulator-')) {
+      return (
+        audio: null,
+        error: StructuredResponse.error(
+          summary: 'listen works on Android emulators only',
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+          detail: MediaDevice.platformOf(id) == DevicePlatform.ios
+              ? 'the iOS simulator plays through the Mac and offers no way to record one app from outside'
+              : 'a physical phone offers no audio capture',
+          nextSteps: const ['run the audio flow on an Android emulator', 'or ask the user to speak or listen'],
+        ),
+      );
+    }
+    final audio = EmulatorAudio.forSerial(id);
+    if (audio == null) {
+      return (
+        audio: null,
+        error: StructuredResponse.error(
+          summary: 'found no control endpoint for $id',
+          errorKind: GlintErrorKind.targetNotFound,
+          detail: 'every emulator writes its gRPC port and token to the AVD running directory; none named $id',
+          nextSteps: const ['check the emulator is running (adb devices), then retry'],
+        ),
+      );
+    }
+    return (audio: audio, error: null);
+  }
+
+  Future<StructuredResponse> _listen(GlintSession session, Map<String, Object?> args) async {
+    final found = _emulatorAudio(session, args);
+    final audio = found.audio;
+    if (audio == null) return found.error!;
+    if (!(argBool(args, 'stop') ?? false)) {
+      audio.startCapture();
+      return StructuredResponse(
+        summary: 'listening to what ${audio.serial} plays',
+        nextSteps: const ['make the app play (tap play), then `media op:listen stop:true` for the recording'],
+        data: {'device': audio.serial},
+      );
+    }
+    final rec = await audio.stopCapture();
+    if (rec == null) {
+      return _bad('nothing is being recorded on ${audio.serial}', nextSteps: const ['start with `media op:listen`, play, then stop']);
+    }
+    final wav = writeWav('${mediaDir('pulled')}/${audio.serial}-speaker-${DateTime.now().millisecondsSinceEpoch}.wav', rec.pcm);
+    final stats = audioStats(rec.pcm);
+    final quiet = stats.silences.fold(Duration.zero, (sum, s) => sum + (s.$2 - s.$1));
+    final secs = rec.length.inMilliseconds / 1000;
+    final heard = (rec.length - quiet).inMilliseconds / 1000;
+    String at(Duration d) => (d.inMilliseconds / 1000).toStringAsFixed(1);
+    return StructuredResponse(
+      summary: heard <= 0.05
+          ? 'silent: nothing played during ${secs.toStringAsFixed(1)} s'
+          : 'sound for ${heard.toStringAsFixed(1)} of ${secs.toStringAsFixed(1)} s, peak ${stats.peakDb.toStringAsFixed(1)} dBFS, '
+              'average ${stats.rmsDb.toStringAsFixed(1)} dBFS',
+      nextSteps: ['`media op:inspect path:"${wav.path}"` for loudness and more'],
+      data: {
+        'device': audio.serial,
+        'wav': wav.path,
+        'seconds': secs,
+        'soundSeconds': heard,
+        'peakDb': stats.peakDb,
+        'rmsDb': stats.rmsDb,
+        'silences': [for (final (a, b) in stats.silences) '${at(a)}-${at(b)} s'],
+      },
+    );
   }
 
   DateTime? _sinceTime(GlintSession session, String? since, List<StructuredResponse> failure) {
