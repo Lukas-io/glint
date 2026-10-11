@@ -214,12 +214,15 @@ class GlintSession {
   /// Attach (or switch to) the app at [vmUri] on [device]. A pooled session
   /// bound to the same VM is activated as-is; a different app on the same
   /// device replaces the old entry. Other pooled apps stay connected.
+  /// [rebuild] replaces even a live session of the same app, to move it to another input backend.
   Future<AppSession> attach({
     required Uri vmUri,
     required DeviceTarget device,
+    bool rebuild = false,
   }) async {
     final existing = _pool[device.id];
-    if (existing != null &&
+    if (!rebuild &&
+        existing != null &&
         !existing.deviceMode &&
         existing.vmUri == vmUri &&
         existing.isLive) {

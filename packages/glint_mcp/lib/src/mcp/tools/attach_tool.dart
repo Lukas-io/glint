@@ -218,6 +218,8 @@ class AttachTool extends GlintTool {
     }
     final appArg = (args['app'] as String?)?.trim();
 
+    ({String deviceId, String label, String from, String to})? rebuild;
+
     // ── 0. Instant switch to an app that is already attached ───────────────
     if (vmUriArg == null && launchPath == null) {
       final key = appArg ?? deviceArg;
@@ -225,8 +227,16 @@ class AttachTool extends GlintTool {
       if (pooled != null &&
           pooled.isLive &&
           (mode == null || mode == 'auto' || (mode == 'device') == pooled.deviceMode)) {
-        session.activate(pooled);
-        return _switched(session, pooled, returnScene: returnScene);
+        final change = _backendChange(pooled, args);
+        if (change == null) {
+          session.activate(pooled);
+          return _switched(session, pooled, returnScene: returnScene);
+        }
+        rebuild = (deviceId: pooled.device.id, label: pooled.deviceMode ? pooled.device.id : pooled.label, from: change.from, to: change.to);
+        if (pooled.deviceMode) {
+          final r = await _attachDeviceMode(session, scan, {...args, 'device': pooled.device.id}, platformArg, adbPath, onProgress);
+          return r.isError ? r : _lead(r, _reattached(rebuild, session.device), const []);
+        }
       }
     }
 
@@ -488,7 +498,8 @@ class AttachTool extends GlintTool {
       warnings.addAll(input.warnings);
 
       // ── 7. Hand the resolved target to the session ────────────────────────
-      await session.attach(vmUri: vmUri, device: device);
+      final rebuilt = rebuild?.deviceId == deviceId;
+      await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
 
       // ── 8. Gather post-attach context ─────────────────────────────────────
       final caps = session.backend.capabilities;
@@ -599,7 +610,7 @@ class AttachTool extends GlintTool {
 
       final others = session.apps.where((a) => a.id != deviceId).toList();
       return StructuredResponse(
-        summary: 'attached to ${deviceName ?? platform.name} ($deviceId)'
+        summary: '${rebuilt ? '${_reattached(rebuild!, device)}; ' : ''}attached to ${deviceName ?? platform.name} ($deviceId)'
             '${appLabel != null ? " running $appLabel" : ""}'
             '${projectDir != null ? " from ${_tildePath(projectDir)}" : ""} '
             'at $vmUri'
@@ -1426,7 +1437,31 @@ class AttachTool extends GlintTool {
         onProgress: onProgress);
   }
 
-  /// Builds a 15s-cadence progress sink from the request's progress token, or null.
+  String? _inputOf(DeviceTarget device) => switch (device) {
+        IosSimulator(:final runner) => runner != null ? 'xctest' : 'bridge',
+        AndroidDevice(:final server) => server != null ? 'server' : 'adb',
+        _ => null,
+      };
+
+  /// Says which backend the rebuilt session really uses, since an Android server that fails to start falls back to adb.
+  String _reattached(({String deviceId, String label, String from, String to}) r, DeviceTarget now) {
+    final actual = _inputOf(now);
+    return actual == r.to
+        ? 're-attached ${r.label} on ${r.to} (was ${r.from})'
+        : 're-attached ${r.label}, but input still uses $actual: ${r.to} did not start (see warnings)';
+  }
+
+  /// The input backend [args] ask for when it differs from the one [device] was attached with, so a re-attach rebuilds instead of switching.
+  ({String from, String to})? _backendChange(AppSession app, Map<String, Object?> args) {
+    final device = app.device;
+    final ios = args['iosBackend'] as String?;
+    final now = _inputOf(device);
+    if (device is IosSimulator && ios != null && !app.deviceMode && ios != now) return (from: now!, to: ios);
+    final input = args['androidInput'] as String?;
+    if (device is AndroidDevice && input != null && input != 'auto' && input != now) return (from: now!, to: input);
+    return null;
+  }
+
   StructuredResponse _lead(StructuredResponse r, String lead, List<String> firstSteps) => StructuredResponse(
         summary: '$lead; ${r.summary}',
         warnings: r.warnings,
@@ -1437,6 +1472,7 @@ class AttachTool extends GlintTool {
         imagePaths: r.imagePaths,
       );
 
+  /// Builds a 15s-cadence progress sink from the request's progress token, or null.
   void Function(int, String?)? _progressSink(
       GlintSession session, CallToolRequest request) {
     final token = request.meta?.progressToken;
