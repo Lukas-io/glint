@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -6,9 +7,13 @@ import 'package:grpc/grpc.dart';
 
 /// The gRPC endpoint every running Android emulator serves, read from its `pid_<n>.ini` in the AVD running directory.
 class EmulatorEndpoint {
-  const EmulatorEndpoint({required this.port, required this.token});
+  const EmulatorEndpoint({required this.port, required this.token, this.avdDir, this.avdName});
   final int port;
   final String token;
+
+  /// The AVD folder and name of that emulator, from the same file.
+  final String? avdDir;
+  final String? avdName;
 
   /// The endpoint of the emulator behind adb [serial] (`emulator-5554`), or null when none is running or it serves no gRPC.
   static EmulatorEndpoint? find(String serial, {Map<String, String>? env}) {
@@ -30,7 +35,7 @@ class EmulatorEndpoint {
         if (ini['port.serial'] != consolePort) continue;
         final port = int.tryParse(ini['grpc.port'] ?? '');
         if (port == null) return null;
-        return EmulatorEndpoint(port: port, token: ini['grpc.token'] ?? '');
+        return EmulatorEndpoint(port: port, token: ini['grpc.token'] ?? '', avdDir: ini['avd.dir'], avdName: ini['avd.id']);
       }
     }
     return null;
@@ -66,6 +71,18 @@ class EmulatorControl {
   /// What the emulator plays, as PCM chunks with their capture time in microseconds since the epoch.
   ResponseStream<List<int>> streamAudio() =>
       _client.$createStreamingCall(_method('streamAudio'), Stream.value(_audioFormat()), options: _options);
+
+  /// Replaces the emulator's environment (the `environment.ini` keys behind the `environment` camera) and reloads it at once, even while a camera is open.
+  Future<void> setEnvironment(Map<String, String> entries) => _client.$createUnaryCall(
+        _method('setEnvironment'),
+        [
+          for (final e in entries.entries)
+            ..._lengthDelimited(1, [..._lengthDelimited(1, utf8.encode(e.key)), ..._lengthDelimited(2, utf8.encode(e.value))]),
+        ],
+        options: _options,
+      );
+
+  static List<int> _lengthDelimited(int field, List<int> bytes) => [(field << 3) | 2, ..._varint(bytes.length), ...bytes];
 
   Future<void> close() => _channel.shutdown();
 

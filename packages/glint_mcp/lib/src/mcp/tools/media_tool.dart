@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
+import 'package:grpc/grpc.dart' show GrpcError;
 
 import '../../../interaction.dart';
 import '../../interaction/image_size.dart';
@@ -8,7 +9,9 @@ import '../../media/app_files.dart';
 import '../../media/gallery.dart';
 import '../../media/host_tools.dart';
 import '../../media/media_generate.dart';
+import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorEndpoint;
 import '../../media/emulator_audio.dart';
+import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
@@ -38,19 +41,21 @@ class MediaTool extends GlintTool {
             'pick (choose a photo or video in the open system picker: name, index or newest), '
             'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited), '
             'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
-            'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS). '
+            'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS), '
+            'camera (Android emulator: what both cameras see now, an image, video or testcard; setup:true once). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | event'),
+            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | event | camera'),
             'stop': Schema.bool(description: 'listen: end the recording and report it.'),
+            'setup': Schema.bool(description: 'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
             'value': Schema.string(description: 'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
             'number': Schema.string(description: 'event call, endCall, sms: the caller. Default 5551234.'),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
             'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
-            'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio).'),
+            'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard.'),
             'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
             'index': Schema.int(description: 'pick: position in the picker, 0 = newest. Default 0.'),
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
@@ -90,7 +95,8 @@ class MediaTool extends GlintTool {
         'permission' => await _permission(session, args),
         'listen' => await _listen(session, args),
         'event' => await _event(session, args),
-        _ => _bad('op must be seed, files, inspect, pick, permission, listen or event, got ${op ?? 'nothing'}'),
+        'camera' => await _camera(session, args, phases),
+        _ => _bad('op must be seed, files, inspect, pick, permission, listen, event or camera, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -606,6 +612,102 @@ class MediaTool extends GlintTool {
     }
   }
 
+  Future<StructuredResponse> _camera(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
+    final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
+    if (id == null) return _bad('no device: attach first, or pass device:"emulator-5554"');
+    if (!id.startsWith('emulator-')) {
+      return StructuredResponse.error(
+        summary: 'camera feeds work on Android emulators only',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: MediaDevice.platformOf(id) == DevicePlatform.ios
+            ? 'the iOS simulator has no camera at all'
+            : 'a physical phone films what is in front of it',
+        nextSteps: const ['run the camera flow on an Android emulator', 'or `media op:seed` a photo and pick it from the gallery instead'],
+      );
+    }
+    final endpoint = EmulatorEndpoint.find(id);
+    final avdDir = endpoint?.avdDir;
+    final avdName = endpoint?.avdName;
+    if (avdDir == null || avdName == null) {
+      return StructuredResponse.error(
+        summary: 'could not find the AVD behind $id',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: 'every emulator records its AVD folder in the AVD running directory; none named $id',
+        nextSteps: const ['check the emulator is running (adb devices), then retry'],
+      );
+    }
+    final cam = EmulatorCamera(avdDir: avdDir, avdName: avdName);
+    final setup = argBool(args, 'setup');
+    if (setup == true) {
+      final already = cam.configured('back') && cam.live('back');
+      await phases.during('letting glint feed the $avdName cameras', cam.setup);
+      return StructuredResponse(
+        summary: already
+            ? 'glint already feeds the $avdName cameras'
+            : 'glint can now feed the $avdName cameras; restart the emulator once (close it, start it again) so it picks this up',
+        nextSteps: [
+          if (!already) 'after the restart, `media op:camera source:"testcard"` (or an image or video path) sets what the cameras see',
+          '`media op:camera setup:false` puts the original cameras back',
+        ],
+        data: {'device': id, 'avd': avdName, 'live': already},
+      );
+    }
+    if (setup == false) {
+      final undone = cam.undo();
+      return StructuredResponse(
+        summary: undone
+            ? 'restored the original $avdName cameras; restart the emulator once for them to apply'
+            : 'nothing to undo: glint never changed the $avdName cameras',
+        data: {'device': id, 'avd': avdName, 'undone': undone},
+      );
+    }
+    if (!cam.configured('back') || !cam.live('back')) {
+      return StructuredResponse.error(
+        summary: cam.configured('back')
+            ? 'the emulator was started before glint could feed its cameras'
+            : 'glint cannot feed the $avdName cameras yet',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: 'an emulator camera only takes a live feed in environment mode, which it reads at launch',
+        nextSteps: [
+          if (!cam.configured('back')) '`media op:camera setup:true` once',
+          'restart the emulator once (close it, start it again), then set the source',
+        ],
+      );
+    }
+    final source = (args['source'] as String?) ?? 'testcard';
+    final File file;
+    final String label;
+    if (source == 'testcard') {
+      file = await generateTestCardVideo(const TestCardSpec(width: 720, height: 1280, durationSec: 10, fps: 30), 'glint-camera-testcard', phases: phases);
+      label = 'the glint test card';
+    } else {
+      file = File(source);
+      if (!file.existsSync()) return _bad('camera source must be testcard or an image or video path; "$source" does not exist');
+      label = file.uri.pathSegments.last;
+    }
+    final control = EmulatorControl(endpoint!);
+    try {
+      final fed = await phases.during('fitting $label for the camera', () => cam.feed(file, control));
+      return StructuredResponse(
+        summary: 'both cameras now show $label, fitted whole into what an app sees',
+        nextSteps: const [
+          'the app\'s camera preview shows it already; take the photo or record, then `media op:files since:"lastAction"`',
+          '`media op:inspect` on the result decodes a test card',
+        ],
+        data: {'device': id, 'source': label, 'feed': fed},
+      );
+    } on GrpcError catch (e) {
+      return StructuredResponse.error(
+        summary: 'the emulator refused the camera source',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '${e.message}',
+        nextSteps: const ['restart the emulator once so it loads its environment, then retry'],
+      );
+    } finally {
+      await control.close();
+    }
+  }
+
   DateTime? _sinceTime(GlintSession session, String? since, List<StructuredResponse> failure) {
     if (since == null) return null;
     if (since == 'lastAction') {
@@ -710,7 +812,17 @@ class MediaTool extends GlintTool {
     final probe = await probeMedia(path);
     final showProbe = argBool(args, 'probe') ?? true;
     final loudness = showProbe && probe.hasAudio ? await phases.during('measuring loudness', () => measureLoudness(path)) : null;
-    final card = await phases.during('looking for a glint test card', () => decodeTestCard(path, probe, phases: phases));
+    var card = await phases.during('looking for a glint test card', () => decodeTestCard(path, probe, phases: phases));
+    String? barsNote;
+    if (card == null) {
+      final crop = await letterboxCrop(path, probe);
+      final inner = crop == null ? null : await cropCopy(path, crop, photo: probe.kind == 'photo');
+      if (inner != null) {
+        card = await phases.during('looking for a test card inside black bars', () async => decodeTestCard(inner, await probeMedia(inner), phases: phases));
+        if (card != null) barsNote = 'the card sits inside black bars (picture ${crop!.split(':').take(2).join('x')} at ${crop.split(':').skip(2).join(',')})';
+        File(inner).deleteSync();
+      }
+    }
 
     final images = <String>[];
     final frameNotes = <String>[];
@@ -727,7 +839,7 @@ class MediaTool extends GlintTool {
         return _bad('frames entries are seconds or start | middle | end, got "$raw"');
       }
       final out = '$framesDir/$stem-${at.label}.png';
-      final ok = await phases.during('extracting frame ${at.label}', () => extractFrame(path, at, out));
+      final ok = await phases.during('extracting frame ${at.label}', () => extractFrame(path, at, out, still: probe.kind == 'photo'));
       final size = ok ? pngSize(out) : null;
       if (size == null) {
         frameNotes.add('${at.label}: no frame there');
@@ -740,6 +852,7 @@ class MediaTool extends GlintTool {
 
     final lines = [
       if (card != null) card.summary,
+      if (barsNote != null) barsNote,
       if (showProbe) ..._probeLines(probe, loudness),
       if (frameNotes.isNotEmpty) 'frames: ${frameNotes.join(', ')}${images.isEmpty ? '' : ' (images attached in this order)'}',
       if (pulled) 'pulled from the device to $path',
@@ -748,7 +861,7 @@ class MediaTool extends GlintTool {
       summary: lines.join('\n'),
       nextSteps: [
         if (card == null && probe.hasVideo && wanted.isEmpty) 'frames:["start","middle","end"] returns pictures to look at',
-        if (card != null && !card.stats.complete) 'frames were lost or repeated: the export re-timed or trimmed the video',
+        if (card != null && !card.photo && !card.stats.complete) 'frames were lost or repeated: the export re-timed or trimmed the video',
       ],
       imagePaths: images,
       data: {

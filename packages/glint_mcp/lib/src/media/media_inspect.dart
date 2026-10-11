@@ -73,7 +73,14 @@ class MediaProbe {
   /// Width and height a viewer sees after the rotation tag is applied.
   ({int w, int h})? get displayed => hasVideo ? (w: quarterTurn ? height! : width!, h: quarterTurn ? width! : height!) : null;
 
-  String get kind => hasVideo ? (durationSec == null || (frameCount ?? 2) <= 1 ? 'photo' : 'video') : 'audio';
+  /// A still image reads as a one-frame video to ffprobe (a JPEG is `mjpeg`, 0.04 s), so an image codec without audio counts as a photo too.
+  String get kind => !hasVideo
+      ? 'audio'
+      : durationSec == null || (frameCount ?? 2) <= 1 || (!hasAudio && _stillCodecs.contains(videoCodec))
+          ? 'photo'
+          : 'video';
+
+  static const _stillCodecs = {'mjpeg', 'png', 'webp', 'bmp', 'tiff', 'gif', 'heic', 'hevc_image'};
 
   Map<String, Object?> toJson() => {
         'kind': kind,
@@ -327,6 +334,31 @@ Future<CardVerdict?> decodeTestCard(String path, MediaProbe probe, {PhaseReporte
   );
 }
 
+/// The picture inside black bars on the first frame, as an ffmpeg crop (`w:h:x:y`), or null when the picture fills the frame.
+Future<String?> letterboxCrop(String path, MediaProbe probe) async {
+  final shown = probe.displayed;
+  if (!probe.hasVideo || shown == null) return null;
+  final run = await runHost(requireHostBinary('ffmpeg'),
+      ['-v', 'info', '-i', path, '-frames:v', '2', '-vf', 'cropdetect=limit=24:round=2:reset=0:skip=0', '-f', 'null', '-'],
+      timeout: const Duration(minutes: 1));
+  final m = RegExp(r'crop=(\d+):(\d+):(\d+):(\d+)').allMatches(run.err).lastOrNull;
+  if (m == null) return null;
+  final w = int.parse(m.group(1)!), h = int.parse(m.group(2)!);
+  if (w >= shown.w * 0.97 && h >= shown.h * 0.97 || w < 16 || h < 16) return null;
+  return '$w:$h:${m.group(3)}:${m.group(4)}';
+}
+
+/// [path] cropped to [crop] in a lossless copy for decoding.
+Future<String?> cropCopy(String path, String crop, {required bool photo}) async {
+  final out = '${Directory.systemTemp.path}/glint-crop-${DateTime.now().microsecondsSinceEpoch}.${photo ? 'png' : 'mkv'}';
+  final run = await runHost(requireHostBinary('ffmpeg'), [
+    '-y', '-v', 'error', '-i', path, '-vf', 'crop=$crop',
+    if (photo) ...['-frames:v', '1'] else ...['-c:v', 'ffv1', '-c:a', 'copy'],
+    out,
+  ], timeout: const Duration(minutes: 3));
+  return run.ok && File(out).existsSync() ? out : null;
+}
+
 /// A frame time asked for: seconds, or one of start, middle, end.
 typedef FrameAt = ({String label, double? seconds, bool end});
 
@@ -345,13 +377,13 @@ FrameAt? parseFrameAt(Object? raw, double? durationSec) {
 
 String _secondsLabel(double s) => '${s.toStringAsFixed(s == s.roundToDouble() ? 0 : 2)}s';
 
-/// Extracts the frame at [at] to [out] as a PNG; false when the file has no frame there.
-Future<bool> extractFrame(String path, FrameAt at, String out) async {
+/// Extracts the frame at [at] to [out] as a PNG; false when the file has no frame there. A [still] image is never seeked, since a seek skips its only frame.
+Future<bool> extractFrame(String path, FrameAt at, String out, {bool still = false}) async {
   final file = File(out);
   if (file.existsSync()) file.deleteSync();
   final args = [
     '-y', '-hide_banner', '-loglevel', 'error',
-    if (at.end) ...['-sseof', '-0.25'] else ...['-ss', '${at.seconds}'],
+    if (!still) ...(at.end ? ['-sseof', '-0.25'] : ['-ss', '${at.seconds}']),
     '-i', path, '-an', if (at.end) ...['-update', '1'], '-frames:v', at.end ? '1000' : '1', out,
   ];
   final run = await runHost(requireHostBinary('ffmpeg'), args, timeout: const Duration(minutes: 1));
