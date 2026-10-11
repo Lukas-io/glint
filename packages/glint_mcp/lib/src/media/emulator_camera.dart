@@ -55,7 +55,7 @@ class EmulatorCamera {
     }
   }
 
-  /// Restores the cameras, `environment.ini` and the video playback setting from before [setup]; false when there was nothing to undo.
+  /// Restores the cameras, `environment.ini` and the video playback setting from before [setup], and drops glint's feed files; false when there was nothing to undo.
   bool undo() {
     if (!_saved.existsSync()) return false;
     final saved = jsonDecode(_saved.readAsStringSync()) as Map<String, Object?>;
@@ -74,6 +74,10 @@ class EmulatorCamera {
       kept.trim().isEmpty ? _features.deleteSync() : _features.writeAsStringSync('$kept\n');
     }
     _saved.deleteSync();
+    for (final f in Directory(mediaDir('camera')).listSync().whereType<File>()) {
+      final name = f.uri.pathSegments.last;
+      if (name.startsWith('$avdName-feed-') || name == '$avdName-idle.png') f.deleteSync();
+    }
     return true;
   }
 
