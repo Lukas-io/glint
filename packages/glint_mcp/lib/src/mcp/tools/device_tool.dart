@@ -57,7 +57,7 @@ class DeviceTool extends GlintTool {
               description: 'biometric: face (default) | touch.',
             ),
             'service': Schema.string(
-              description: 'privacy: photos | camera | location | contacts | …',
+              description: 'privacy: a simctl service: photos | microphone | location | contacts | … (no camera; `media op:permission` covers camera, mic and photos on both platforms).',
             ),
             'bundleId': Schema.string(
               description: 'privacy: target app bundle id (grant/revoke).',
@@ -211,7 +211,7 @@ class DeviceTool extends GlintTool {
           return _bad('op=privacy requires action: grant | revoke | reset');
         }
         if (service == null || service.isEmpty) {
-          return _bad('op=privacy requires service (e.g. photos, camera)');
+          return _bad('op=privacy requires service (e.g. photos, microphone)');
         }
         if (action != 'reset' && (bundleId == null || bundleId.isEmpty)) {
           return _bad('op=privacy $action requires bundleId');
