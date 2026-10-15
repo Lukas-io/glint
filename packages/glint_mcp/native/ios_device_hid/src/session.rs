@@ -2,7 +2,7 @@ use crate::keys;
 use idevice::{
     IdeviceService, ReadWrite, RsdService,
     core_device::{
-        CallInfoBlob, DisplayServiceClient, build_screen_audio_offer, build_screen_video_offer,
+        CallInfoBlob, DisplayServiceClient, ImageFormat, ScreenCaptureServiceClient, build_screen_audio_offer, build_screen_video_offer,
         build_start_audio_parameters, build_start_video_parameters,
         hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient},
     },
@@ -41,6 +41,7 @@ pub struct Session {
     adapter: AdapterHandle,
     handshake: RsdHandshake,
     live: Option<Live>,
+    capture: Option<ScreenCaptureServiceClient<Box<dyn ReadWrite>>>,
 }
 
 impl Session {
@@ -69,7 +70,7 @@ impl Session {
         let handshake = RsdHandshake::new(stream)
             .await
             .map_err(|e| err("tunnel", format!("service directory handshake failed: {e:?}")))?;
-        Ok(Self { adapter, handshake, live: None })
+        Ok(Self { adapter, handshake, live: None, capture: None })
     }
 
     pub async fn stream_status(&mut self) -> Result<String, SessionError> {
@@ -83,17 +84,42 @@ impl Session {
             .map_err(|e| err("stream", format!("{e:?}")))
     }
 
+    /// Writes the screen to `path` through the CoreDevice capture service, which needs no screen session.
+    async fn screenshot(&mut self, request: &Value) -> Result<Value, SessionError> {
+        let path = request["path"].as_str().ok_or_else(|| err("badRequest", "path is required"))?;
+        let started = Instant::now();
+        if self.capture.is_none() {
+            let client = ScreenCaptureServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+                .await
+                .map_err(|e| err("developerImage", format!("no screen capture service: {e:?}")))?;
+            self.capture = Some(client);
+        }
+        let bytes = match self.capture.as_mut().expect("capture").take_screenshot(None, ImageFormat::Png).await {
+            Ok(b) => b,
+            Err(e) => {
+                self.capture = None;
+                return Err(err("stream", format!("screenshot failed: {e:?}")));
+            }
+        };
+        std::fs::write(path, &bytes).map_err(|e| err("badRequest", format!("cannot write {path}: {e}")))?;
+        Ok(json!({"bytes": bytes.len(), "ms": started.elapsed().as_millis() as u64}))
+    }
+
     pub fn streaming(&self) -> bool {
         self.live.is_some()
     }
 
     pub async fn handle(&mut self, request: &Value) -> Result<Value, SessionError> {
         let cmd = request["cmd"].as_str().unwrap_or_default();
+        if cmd == "screenshot" {
+            return self.screenshot(request).await;
+        }
         let opened = self.ensure_live().await?;
         let live = self.live.as_mut().expect("ensure_live");
         let started = Instant::now();
         let result = match cmd {
             "touch" => touch(live, request).await,
+            "taps" => taps(live, request).await,
             "type" => type_text(live, request).await,
             "key" => key(live, request).await,
             "button" => button(live, request).await,
@@ -205,6 +231,26 @@ async fn touch(live: &mut Live, request: &Value) -> Result<(), SessionError> {
         live.touch.send_touchscreen(TOUCHSCREEN_STATE_CONTACT, x, y, None).await.map_err(input)?;
     }
     live.touch.send_touchscreen(TOUCHSCREEN_STATE_RELEASE, lx, ly, None).await.map_err(input)
+}
+
+/// Taps each `[x, y]` in turn, `intervalMs` apart, in one command.
+async fn taps(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let interval = Duration::from_millis(request["intervalMs"].as_u64().unwrap_or(120));
+    let points = request["points"].as_array().ok_or_else(|| err("badRequest", "points must be [[x, y], ...]"))?;
+    for (i, p) in points.iter().enumerate() {
+        let n = |k: usize| p.get(k).and_then(Value::as_f64).filter(|v| (0.0..=65535.0).contains(v));
+        let (Some(x), Some(y)) = (n(0), n(1)) else {
+            return Err(err("badRequest", "x and y must be in 0..=65535"));
+        };
+        let (x, y) = (x.round() as u16, y.round() as u16);
+        live.touch.send_touchscreen(TOUCHSCREEN_STATE_CONTACT, x, y, None).await.map_err(input)?;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        live.touch.send_touchscreen(TOUCHSCREEN_STATE_RELEASE, x, y, None).await.map_err(input)?;
+        if i + 1 < points.len() {
+            tokio::time::sleep(interval).await;
+        }
+    }
+    Ok(())
 }
 
 async fn press(indigo: &mut IndigoHidClient<Box<dyn ReadWrite>>, usage: u64, held: &[u64]) -> Result<(), SessionError> {

@@ -100,5 +100,8 @@ class XcTestBackend implements InteractionBackend {
   Future<void> close() async {}
 
   @override
+  Future<void> warm() async {}
+
+  @override
   Future<ScreenshotResult> screenshot(String path) => sim.screenshot(path);
 }

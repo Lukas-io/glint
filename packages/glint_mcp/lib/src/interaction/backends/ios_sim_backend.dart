@@ -282,6 +282,9 @@ class IosSimBackend implements InteractionBackend {
   @override
   Future<void> close() async {}
 
+  @override
+  Future<void> warm() async {}
+
   /// Reads `com.apple.springboard.<name>` inside the simulator: true when non-zero, null when unreadable.
   Future<bool?> _springboardFlag(String name) async {
     final result = await Process.run('xcrun', [

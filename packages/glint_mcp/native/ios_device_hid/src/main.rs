@@ -7,10 +7,10 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 /// Must equal `expectedDeviceHidProtocol` in lib/src/interaction/device_hid.dart.
-const PROTOCOL: u32 = 1;
+const PROTOCOL: u32 = 2;
 
 /// The display stream that unlocks input is dropped after this long without a command.
-const IDLE_STREAM: Duration = Duration::from_secs(30);
+const IDLE_STREAM: Duration = Duration::from_secs(120);
 
 #[tokio::main]
 async fn main() {

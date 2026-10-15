@@ -187,6 +187,9 @@ class AdbBackend implements InteractionBackend {
   Future<void> close() async {}
 
   @override
+  Future<void> warm() async {}
+
+  @override
   Future<void> pressHardwareButton(HardwareButton button) {
     final code = button.androidKeyCode;
     if (code == null) {

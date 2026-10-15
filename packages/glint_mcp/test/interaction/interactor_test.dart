@@ -221,6 +221,9 @@ class _FakeBackend implements InteractionBackend {
   Future<void> close() async {}
 
   @override
+  Future<void> warm() async {}
+
+  @override
   Future<void> pressHardwareButton(HardwareButton button) async {}
 
   @override
