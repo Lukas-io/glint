@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
 ### Added
 
 - glint drives a physical iPhone. Before, every gesture was refused with a point to ask the user to tap. Input now takes one of two paths, and each action reply says which in `via`:
