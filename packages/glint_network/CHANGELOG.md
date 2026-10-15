@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-15
+
 ### Changed
 
 - glint_network installs from pub.dev: `dart pub global activate glint_network`. `glint_network update` installs the newest pub.dev release (which also moves a git install over), and the daily update check asks pub.dev for the latest version.
