@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 void main() {
   test('serves the docs of this checkout, not another installed copy', () {
     expect(p.canonicalize(DocResources.resolveDocsDir()!.path),
-        p.canonicalize(p.join(Directory.current.path, 'docs')));
+        p.canonicalize(p.join(Directory.current.path, docDirName)));
   });
 
   test('discovers the tool guides + response contract as resources', () {
