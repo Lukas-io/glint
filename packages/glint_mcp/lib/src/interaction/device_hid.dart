@@ -28,6 +28,7 @@ enum DeviceHidFailure {
   tunnel,
   developerImage,
   deviceBusy,
+  callInProgress,
   unsupportedText,
   stream,
   input,
@@ -41,6 +42,7 @@ enum DeviceHidFailure {
         deviceNotFound || wifiOnly || usbmuxd || tunnel => GlintErrorKind.deviceNotConnected,
         developerImage => GlintErrorKind.developerImageMissing,
         deviceBusy => GlintErrorKind.deviceBusy,
+        callInProgress => GlintErrorKind.callInProgress,
         missing || unsupportedText => GlintErrorKind.unsupportedBackendAction,
         stream || input || badRequest => GlintErrorKind.backendToolError,
       };
@@ -60,6 +62,10 @@ enum DeviceHidFailure {
             'run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry'
           ],
         deviceBusy => const ['close Device Hub (Xcode) or any other screen viewer of this phone, then retry'],
+        callInProgress => const [
+            'targets inside the Flutter app still work during the call through input:auto; attach again with it if this session uses input:device',
+            'or end the call, then retry',
+          ],
         unsupportedText => const [
             'only printable ASCII types through the hardware keyboard; for other text focus a Flutter field and use input:auto'
           ],

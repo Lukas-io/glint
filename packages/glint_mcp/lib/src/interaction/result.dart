@@ -35,6 +35,9 @@ enum GlintErrorKind {
   /// Another host holds the phone's screen session (Xcode's Device Hub or another viewer).
   deviceBusy,
 
+  /// iOS refuses real touches while a phone or VoIP call is active; input inside the Flutter app still works.
+  callInProgress,
+
   /// This kind of device cannot do it (a physical iPhone has no notification list); `data.ability`, `data.instead`.
   notOnThisDevice,
 
