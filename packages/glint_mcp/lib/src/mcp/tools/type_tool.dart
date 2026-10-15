@@ -250,6 +250,8 @@ class TypeTool extends GlintTool {
       await session.backend.typeText(text, keyDelayMs: keyDelayMs);
     } on IosToolchainBlocked catch (e) {
       return StructuredResponse.toolchainBlocked(e);
+    } on BackendFailure catch (e) {
+      return StructuredResponse.backendError('typing failed in device mode', e);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: typing not supported',

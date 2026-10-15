@@ -9,10 +9,10 @@ import 'session.dart';
 // pixels by dpr, so passing coord * dpr cancels out. Device mode uses dpr=1 over
 // screenshot pixels; Flutter mode uses the real dpr over logical points.
 
-Map<String, Object?> _ok(GlintSession session, Map<String, Object?> extra, String? via) =>
-    {'ok': true, ...extra, if (session.isDeviceMode) 'mode': 'device', if (via != null) 'via': via};
+Map<String, Object?> _ok(GlintSession session, Map<String, Object?> extra, InputReport? input) =>
+    {'ok': true, ...extra, if (session.isDeviceMode) 'mode': 'device', if (input != null) 'input': input.toJson()};
 
-String _via(String? via) => via == null ? '' : ' · via $via';
+String _via(InputReport? input) => input == null ? '' : ' · ${input.label}';
 
 /// Runs a raw-coordinate [action] and, in Flutter mode with [returnScene], adds
 /// the changed-signal via pre/post snapshots — so a raw x,y tap answers "did
@@ -44,10 +44,10 @@ Future<StructuredResponse> coordinateTap(
   } on Object catch (e) {
     return _failed('coordinate tap', '($x, $y)', e);
   }
-  final via = session.backend.takeRoute();
+  final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: 'tapped ($x, $y)${_via(via)}',
-    data: _ok(session, {'x': x, 'y': y}, via),
+    summary: 'tapped ($x, $y)${_via(input)}',
+    data: _ok(session, {'x': x, 'y': y}, input),
   );
 }
 
@@ -63,10 +63,10 @@ Future<StructuredResponse> coordinateLongPress(
   } on Object catch (e) {
     return _failed('coordinate long-press', '($x, $y)', e);
   }
-  final via = session.backend.takeRoute();
+  final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: 'long-pressed ($x, $y) for ${durationMs}ms${_via(via)}',
-    data: _ok(session, {'x': x, 'y': y}, via),
+    summary: 'long-pressed ($x, $y) for ${durationMs}ms${_via(input)}',
+    data: _ok(session, {'x': x, 'y': y}, input),
   );
 }
 
@@ -93,24 +93,12 @@ Future<StructuredResponse> coordinateSwipe(
   } on Object catch (e) {
     return _failed(verb, '($x1,$y1)->($x2,$y2)', e);
   }
-  final via = session.backend.takeRoute();
+  final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: '$verb ($x1,$y1) -> ($x2,$y2)${_via(via)}',
-    data: _ok(session, const {}, via),
+    summary: '$verb ($x1,$y1) -> ($x2,$y2)${_via(input)}',
+    data: _ok(session, const {}, input),
   );
 }
 
-StructuredResponse _failed(String what, String where, Object e) => switch (e) {
-      IosToolchainBlocked() => StructuredResponse.toolchainBlocked(e),
-      UnsupportedBackendAction() => StructuredResponse.error(
-          summary: '$what at $where was not delivered',
-          errorKind: GlintErrorKind.unsupportedBackendAction,
-          detail: e.detail,
-          nextSteps: e.nextSteps,
-        ),
-      _ => StructuredResponse.error(
-          summary: '$what failed at $where',
-          errorKind: GlintErrorKind.backendToolError,
-          detail: '$e',
-        ),
-    };
+StructuredResponse _failed(String what, String where, Object e) =>
+    StructuredResponse.backendError('$what at $where was not delivered', e);

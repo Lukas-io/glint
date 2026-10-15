@@ -74,22 +74,21 @@ const _recovery = '''
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady` — never hittable; dismiss the cover.
 - `targetNotFound` — `scroll_to_find` miss; `detail` lists visible text.
-- `scrollLimitReached` — appeared but stayed unhittable; raise `maxScrolls`.
+- `scrollLimitReached` — stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped; re-`attach`.
 - `appUnresponsive` — suspended (locked/breakpoint); unlock, retry.
-- `deviceGone` — sim closed; `attach device:"<id>"` boots + relaunches.
+- `deviceGone` — device closed; `attach device:"<id>"` relaunches.
 - `deviceClaimed` — another agent's device; pass your own `device:`.
 - `notOwned`: not your app/device; `force:true` only if the user asked.
 - `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
 - `unknownApp` — `app:` matched none/several apps; pick from the list.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — native surface on top; dismiss, retry.
-- `geometryResolveError` — eval failed; `wait_for_settle`, retry; else re-`attach`.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` — read `detail`.
+- `geometryResolveError` — eval failed; retry, else re-`attach`.
+- `inputPartial` — part landed (`data.delivered` of `data.of`); re-read, send the rest.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` — follow `detail` + `nextSteps`.
 - `invalidArgument` — fix per tool description.
 - `internal` — glint bug. `report_issue` with the user's OK.
-
-Taps that would hit another widget refuse; `refuseNotHittable:false` forces.
 ''';
 
 const _gotchas = '''
@@ -103,7 +102,7 @@ const _gotchas = '''
 const _toolSurface = '''
 ## Tool surface
 
-`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` (focus:<id>, clear:true) · `key` backspace/enter/arrows · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
+`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` · `key` · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
 ''';
 
 const _examples = '''
@@ -121,7 +120,7 @@ attach app:"Acme Pay"
 /// Full instruction text shipped with the MCP server. Assembled from
 /// independently-editable sections above.
 const String kGlintInstructions = '''
-glint lets you drive a running Flutter app on a simulator or emulator. Every tool reply uses the same envelope: `summary`, optional `warnings`, optional `nextSteps`, and on failure an `errorKind` you can branch on.
+glint lets you drive a running Flutter app on a simulator, emulator or phone. Replies share one envelope: `summary`, `warnings`, `nextSteps`, and on failure a branchable `errorKind`.
 
 $_mindset
 $_feedback

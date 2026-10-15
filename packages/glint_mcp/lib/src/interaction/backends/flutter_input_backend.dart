@@ -2,10 +2,9 @@ import '../../runtime/flutter_runtime.dart';
 import '../action.dart';
 import '../backend.dart';
 import '../flutter_input.dart';
+import '../input_route.dart';
+import '../result.dart';
 import '../screen_recording.dart';
-
-/// How a [FlutterInputBackend] picks its path: Flutter first with the platform for the rest, the platform only, or Flutter only.
-enum InputRoute { auto, native, flutter }
 
 /// Delivers input inside the Flutter app when it can (exact, fast), and hands everything else to [native]: system surfaces, the keyboard, native views, buttons.
 class FlutterInputBackend extends InteractionBackend {
@@ -18,22 +17,22 @@ class FlutterInputBackend extends InteractionBackend {
   /// The app's VM, bound once attach connects; null in device mode.
   FlutterRuntime? runtime;
 
-  String? _lastRoute;
+  InputReport? _last;
 
   @override
   String get label => native.label;
 
   @override
-  String? takeRoute() {
-    final r = _lastRoute;
-    _lastRoute = null;
+  InputReport? takeInput() {
+    final r = _last;
+    _last = null;
     return r;
   }
 
   @override
   BackendCapabilities get capabilities {
     final n = native.capabilities;
-    final flutter = route != InputRoute.native && runtime != null;
+    final flutter = route != InputRoute.device && runtime != null;
     return BackendCapabilities(
       tap: n.tap || flutter,
       longPress: n.longPress || flutter,
@@ -46,43 +45,49 @@ class FlutterInputBackend extends InteractionBackend {
     );
   }
 
-  Future<void> _deliver(String what, Future<FlutterInputMiss?> Function(FlutterInput) viaFlutter, Future<void> Function() viaNative) async {
+  Future<void> _deliver(Future<FlutterInputMiss?> Function(FlutterInput) viaFlutter, Future<void> Function() viaNative) async {
+    final clock = Stopwatch()..start();
     final rt = runtime;
-    if (route == InputRoute.native || rt == null || !rt.isAttached) {
-      _lastRoute = route == InputRoute.native ? 'device input' : null;
-      return viaNative();
+    if (route == InputRoute.device || rt == null || !rt.isAttached) {
+      await viaNative();
+      _last = (path: InputPath.device, reason: null, ms: clock.elapsedMilliseconds);
+      return;
     }
     final input = FlutterInput(rt);
     final miss = await viaFlutter(input);
     if (miss == null) {
-      _lastRoute = 'flutter';
+      _last = (path: InputPath.app, reason: null, ms: clock.elapsedMilliseconds);
       return;
     }
-    if (miss == FlutterInputMiss.evalFailed || miss == FlutterInputMiss.partial) {
-      throw UnsupportedBackendAction(label, '$what: ${miss.reason}${input.lastError == null ? '' : ': ${input.lastError}'}',
-          nextSteps: const ['call get_scene to see what landed, then send only the rest; it is not retried, so nothing lands twice']);
+    final why = input.lastError == null ? '' : ': ${input.lastError}';
+    switch (miss) {
+      case FlutterInputMiss.partial:
+        final p = input.lastPartial;
+        throw BackendFailure(GlintErrorKind.inputPartial, '${miss.reason}$why',
+            nextSteps: const ['call get_scene to see what landed, then send only the rest; nothing was retried, so nothing landed twice'],
+            data: {if (p != null) 'delivered': p.delivered, if (p != null) 'of': p.of});
+      case FlutterInputMiss.evalFailed:
+        throw BackendFailure(GlintErrorKind.backendToolError, '${miss.reason}$why',
+            nextSteps: const ['call get_scene: if the app answers, retry once; it was not sent another way, so it did not land twice']);
+      case _ when route == InputRoute.app:
+        throw BackendFailure(GlintErrorKind.unsupportedBackendAction, 'the app could not take it: ${miss.reason}',
+            nextSteps: const ['attach again with input:auto so real touches handle what the app cannot'],
+            data: {'reason': miss.name});
+      case _:
+        await viaNative();
+        _last = (path: InputPath.device, reason: miss, ms: clock.elapsedMilliseconds);
     }
-    if (route == InputRoute.flutter) {
-      throw UnsupportedBackendAction(label, '$what: Flutter could not take it, ${miss.reason}',
-          nextSteps: const ['attach again with iosInput:auto to let device input handle what Flutter cannot']);
-    }
-    await viaNative();
-    _lastRoute = 'device input (${miss.reason})';
   }
 
   ({double x, double y, int ms}) _logical(int x, int y, int ms) => (x: x / devicePixelRatio, y: y / devicePixelRatio, ms: ms);
 
   @override
-  Future<void> tap({required int physicalX, required int physicalY}) => _deliver(
-        'tap',
-        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
+  Future<void> tap({required int physicalX, required int physicalY}) => _deliver((f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
         () => native.tap(physicalX: physicalX, physicalY: physicalY),
       );
 
   @override
-  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) => _deliver(
-        'long press',
-        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
+  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) => _deliver((f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
         () => native.longPress(physicalX: physicalX, physicalY: physicalY, durationMs: durationMs),
       );
 
@@ -96,9 +101,7 @@ class FlutterInputBackend extends InteractionBackend {
     int holdMs = 0,
   }) {
     final steps = (durationMs / 16).ceil().clamp(2, 400);
-    return _deliver(
-      'swipe',
-      (f) => f.touch([
+    return _deliver((f) => f.touch([
         _logical(physicalX1, physicalY1, 0),
         if (holdMs > 0) _logical(physicalX1, physicalY1, holdMs),
         for (var i = 1; i <= steps; i++)
@@ -122,21 +125,17 @@ class FlutterInputBackend extends InteractionBackend {
   Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) => tapEachInTurn(this, points, intervalMs);
 
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) => _deliver(
-        'type',
-        (f) => f.type(text, gapMs: keyDelayMs ?? 0),
+  Future<void> typeText(String text, {int? keyDelayMs}) => _deliver((f) => f.type(text, gapMs: keyDelayMs ?? 0),
         () => native.typeText(text, keyDelayMs: keyDelayMs),
       );
 
   @override
-  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) => _deliver(
-        'key ${key.name}',
-        (f) async => modifiers.isEmpty ? f.key(key.name, count: count) : FlutterInputMiss.unsupportedKey,
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) => _deliver((f) async => modifiers.isEmpty ? f.key(key.name, count: count) : FlutterInputMiss.unsupportedKey,
         () => native.pressKey(key, count: count, modifiers: modifiers),
       );
 
   @override
-  Future<void> selectAll() => _deliver('select all', (f) => f.selectAll(), native.selectAll);
+  Future<void> selectAll() => _deliver((f) => f.selectAll(), native.selectAll);
 
   @override
   Future<void> pressHardwareButton(HardwareButton button) => native.pressHardwareButton(button);

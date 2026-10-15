@@ -1,4 +1,5 @@
 import 'action.dart';
+import 'input_route.dart';
 
 /// Closed set of failure modes — interaction, perception, MCP all use this.
 enum GlintErrorKind {
@@ -22,6 +23,14 @@ enum GlintErrorKind {
   connectionLost,
   /// The isolate stopped answering: device locked, app suspended by the OS, or paused at a breakpoint.
   appUnresponsive,
+  /// A physical device stopped answering glint's device input: unplugged, locked before trust, or out of Developer Mode.
+  deviceNotConnected,
+  /// The phone has no developer disk image mounted, so its input and screen services are missing.
+  developerImageMissing,
+  /// Another host holds the phone's screen session (Xcode's Device Hub or another viewer).
+  deviceBusy,
+  /// Only part of a text edit landed; `data.delivered` of `data.of`, and nothing was retried.
+  inputPartial,
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
   /// Another live glint session is driving the device attach would have picked.
@@ -49,8 +58,9 @@ class ActionResult {
     this.hittable,
     this.warnings = const [],
     this.nextSteps = const [],
-    this.via,
+    this.input,
   })  : ok = true,
+        extra = const {},
         error = null,
         errorKind = null;
 
@@ -65,8 +75,9 @@ class ActionResult {
     this.hittable,
     this.warnings = const [],
     this.nextSteps = const [],
+    this.extra = const {},
   }) : ok = false,
-        via = null;
+        input = null;
 
   final Action action;
   final bool ok;
@@ -80,20 +91,23 @@ class ActionResult {
   final String? error;
   final GlintErrorKind? errorKind;
 
-  /// The input path a routed backend used (`flutter`, `device input (...)`); null for single-path backends.
-  final String? via;
+  /// How a routed backend delivered the input; null for single-path backends.
+  final InputReport? input;
 
-  /// This success with [via] recorded.
-  ActionResult withVia(String via) => ActionResult.success(
+  /// Branchable numbers a failure carries (how much landed, which teams).
+  final Map<String, Object?> extra;
+
+  /// This success with [input] recorded.
+  ActionResult withInput(InputReport input) => ActionResult.success(
         action: action,
-        summary: '$summary · via $via',
+        summary: '$summary · ${input.label}',
         physicalCenter: physicalCenter,
         devicePixelRatio: devicePixelRatio,
         painted: painted,
         hittable: hittable,
         warnings: warnings,
         nextSteps: nextSteps,
-        via: via,
+        input: input,
       );
 
   Map<String, Object?> toJson() => {
@@ -109,6 +123,7 @@ class ActionResult {
         if (nextSteps.isNotEmpty) 'nextSteps': nextSteps,
         if (error != null) 'error': error,
         if (errorKind != null) 'errorKind': errorKind!.name,
-        if (via != null) 'via': via,
+        if (input != null) 'input': input!.toJson(),
+        ...extra,
       };
 }

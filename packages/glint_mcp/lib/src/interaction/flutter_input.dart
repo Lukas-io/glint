@@ -4,7 +4,7 @@ import '../runtime/flutter_runtime.dart';
 
 /// Why Flutter could not take an input itself; the caller hands it to the platform instead.
 enum FlutterInputMiss {
-  inactive('a system surface (alert, sheet, permission prompt) is over the app'),
+  systemSurface('a system surface (alert, sheet, permission prompt) is over the app'),
   keyboard('the point is on the on-screen keyboard'),
   platformView('the point is on a native view embedded in the app'),
   outside('the point is outside the app'),
@@ -37,7 +37,7 @@ class FlutterInput {
       final view = b.platformDispatcher.implicitView;
       if (view == null) return 'outside';
       final life = b.lifecycleState;
-      if (life != null && life != AppLifecycleState.resumed) return 'inactive';
+      if (life != null && life != AppLifecycleState.resumed) return 'systemSurface';
       final pts = <List<num>>[$pts];
       final dpr = view.devicePixelRatio;
       final size = view.physicalSize / dpr;
@@ -95,7 +95,7 @@ class FlutterInput {
             n++;
           }
         } catch (e) {
-          return 'partial:typed \$n of \${cs.length} characters, then \$e';
+          return 'partial:\$n:\${cs.length}:\$e';
         }
       } else {
         for (var i = 0; i < cs.length; i++) {
@@ -136,7 +136,7 @@ class FlutterInput {
           final sel = v.selection.isValid ? v.selection : TextSelection.collapsed(offset: v.text.length);
           $edit
         } catch (e) {
-          return 'partial:pressed \$i of $count times, then \$e';
+          return 'partial:\$i:$count:\$e';
         }
       }
       return 'ok';
@@ -152,7 +152,7 @@ class FlutterInput {
 
   String _focused() => '''
       final life = WidgetsBinding.instance.lifecycleState;
-      if (life != null && life != AppLifecycleState.resumed) return 'inactive';
+      if (life != null && life != AppLifecycleState.resumed) return 'systemSurface';
       final ctx = FocusManager.instance.primaryFocus?.context;
       final s = ctx?.findAncestorStateOfType<EditableTextState>();
       if (s == null) return 'noFocus';
@@ -162,8 +162,12 @@ class FlutterInput {
   /// The eval's own error after an [FlutterInputMiss.evalFailed], for the reply.
   String? lastError;
 
+  /// How much of the last partial edit landed: `delivered` of `of`.
+  ({int delivered, int of})? lastPartial;
+
   Future<FlutterInputMiss?> _eval(String library, String expression) async {
     lastError = null;
+    lastPartial = null;
     final String? status;
     try {
       status = (await runtime.evaluateIn(expression.replaceAll('\n', ' '), librarySuffix: library)).valueAsString;
@@ -173,7 +177,9 @@ class FlutterInput {
     }
     if (status == 'ok') return null;
     if (status != null && status.startsWith('partial:')) {
-      lastError = status.substring('partial:'.length);
+      final parts = status.split(':');
+      lastPartial = (delivered: int.tryParse(parts[1]) ?? 0, of: int.tryParse(parts[2]) ?? 0);
+      lastError = parts.skip(3).join(':');
       return FlutterInputMiss.partial;
     }
     final miss = FlutterInputMiss.values.where((m) => m.name == status).firstOrNull;

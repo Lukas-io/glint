@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../action.dart';
 import '../backend.dart';
+import '../input_route.dart';
 import '../image_size.dart';
 import '../ios_toolchain.dart';
 import '../key_codes.dart';
@@ -276,7 +277,7 @@ class IosSimBackend implements InteractionBackend {
   Future<bool?> lockState() => _springboardFlag('lockstate');
 
   @override
-  String? takeRoute() => null;
+  InputReport? takeInput() => null;
 
   @override
   Future<void> close() async {}

@@ -1,6 +1,8 @@
 import 'dart:io' show Process, ProcessResult;
 
 import 'action.dart';
+import 'input_route.dart';
+import 'result.dart';
 import 'screen_recording.dart';
 
 /// Runs one child process; injected so tests can capture argv without a device. Defaults to [Process.run].
@@ -54,8 +56,8 @@ abstract class InteractionBackend {
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
 
-  /// The path the last input took (`flutter`, `device input (...)`), cleared on read; null for single-path backends.
-  String? takeRoute() => null;
+  /// How the last input was delivered, cleared on read; null for single-path backends.
+  InputReport? takeInput() => null;
 
   /// Releases helper processes this backend started.
   Future<void> close() async {}
@@ -102,6 +104,17 @@ class UnsupportedBackendAction implements Exception {
   final List<String> nextSteps;
   @override
   String toString() => 'UnsupportedBackendAction($backend): $detail';
+}
+
+/// A failure the agent can branch on: [kind] says what to do, [data] carries the numbers (how much landed, which teams).
+class BackendFailure implements Exception {
+  BackendFailure(this.kind, this.detail, {this.nextSteps = const [], this.data = const {}});
+  final GlintErrorKind kind;
+  final String detail;
+  final List<String> nextSteps;
+  final Map<String, Object?> data;
+  @override
+  String toString() => 'BackendFailure(${kind.name}): $detail';
 }
 
 class BackendToolError implements Exception {

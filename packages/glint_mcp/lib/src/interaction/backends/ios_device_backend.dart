@@ -44,7 +44,8 @@ class IosDeviceBackend extends InteractionBackend {
     try {
       await hid.call(request, timeout: Duration(milliseconds: 20000 + extraMs));
     } on DeviceHidError catch (e) {
-      throw UnsupportedBackendAction(label, '${request['cmd']} on the iPhone failed (${e.kind}): ${e.detail}', nextSteps: e.nextSteps);
+      throw BackendFailure(e.failure.errorKind, '${request['cmd']} on the iPhone failed: ${e.detail}',
+          nextSteps: e.nextSteps, data: {'deviceInput': e.failure.name});
     }
   }
 

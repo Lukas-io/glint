@@ -230,7 +230,7 @@ typedef DeviceSetup = ({
       ],
   };
   return (
-    line: 'input: $here · ${v.status.name}',
+    line: 'setup: $here · ${v.status.name}',
     warnings: warnings,
     json: {
       'backend': setup.backend,

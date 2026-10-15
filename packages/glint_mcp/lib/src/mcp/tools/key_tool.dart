@@ -111,7 +111,9 @@ class KeyTool extends GlintTool {
             .pressKey(key, count: count, modifiers: modifiers);
       } on IosToolchainBlocked catch (e) {
         return StructuredResponse.toolchainBlocked(e);
-      } on UnsupportedBackendAction catch (e) {
+      } on BackendFailure catch (e) {
+      return StructuredResponse.backendError('key ${key.name} failed in device mode', e);
+    } on UnsupportedBackendAction catch (e) {
         return StructuredResponse.error(
           summary: '${session.backend.label}: key not supported',
           errorKind: GlintErrorKind.unsupportedBackendAction,

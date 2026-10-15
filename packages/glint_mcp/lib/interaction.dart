@@ -21,6 +21,7 @@ export 'src/interaction/device_claims.dart';
 export 'src/interaction/device_hid.dart';
 export 'src/interaction/discovery.dart';
 export 'src/interaction/flutter_input.dart';
+export 'src/interaction/input_route.dart';
 export 'src/interaction/image_out.dart';
 export 'src/interaction/ocr.dart';
 export 'src/interaction/installed_app.dart';
