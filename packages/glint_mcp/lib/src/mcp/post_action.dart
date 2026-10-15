@@ -31,7 +31,7 @@ Future<ActionScene> openActionScene(GlintSession session,
     return ActionScene(
       scene: scene,
       semantic: semantic,
-      pre: snapshotOf(semantic),
+      pre: snapshotOf(semantic, paintHash: await paintSignature(session)),
     );
   } on Object {
     await scene.dispose();
@@ -69,11 +69,15 @@ class SceneSnapshot {
     required this.routeName,
     required this.hasOverlay,
     required this.contentHash,
+    this.paintHash,
   });
 
   final String routeName;
   final bool hasOverlay;
   final int contentHash;
+
+  /// What the render tree paints beyond text (fills, opacity, elevation), so a colour-only change still registers.
+  final int? paintHash;
 
   /// Hashes the WHOLE tree (id, role, text, input value, button label/toggle)
   /// plus overlay content — a deep change (tab swap, text edit, toggle flip)
@@ -129,7 +133,7 @@ class SceneSnapshot {
 /// [SceneSnapshot.from] plus the on-viewport state of each page in a
 /// PageView / TabBarView (set by [PagedViewportEnricher]), so a tab switch
 /// registers as a change even though the tree is identical before and after.
-SceneSnapshot snapshotOf(SemanticScene semantic) {
+SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
   final base = SceneSnapshot.from(semantic);
   var hash = base.contentHash;
   void mix(String s) {
@@ -147,7 +151,27 @@ SceneSnapshot snapshotOf(SemanticScene semantic) {
     routeName: base.routeName,
     hasOverlay: base.hasOverlay,
     contentHash: hash,
+    paintHash: paintHash,
   );
+}
+
+/// Walks the render tree once and hashes decorations, opacity and physical-model colour and elevation; type names are compared as strings so it compiles in any eval library.
+const _paintExpr = '(() { var h = 0; void v(dynamic r) { final t = r.runtimeType.toString(); String s = ""; '
+    'if (t == "RenderDecoratedBox") { s = r.decoration.toString(); } '
+    'else if (t == "RenderOpacity") { s = r.opacity.toString(); } '
+    'else if (t == "RenderAnimatedOpacity") { s = r.opacity.value.toString(); } '
+    'else if (t == "RenderPhysicalModel" || t == "RenderPhysicalShape") { s = r.color.toString() + r.elevation.toString(); } '
+    'if (s.isNotEmpty) h = (h * 31 + s.hashCode) & 0x7fffffff; r.visitChildren(v); } '
+    'for (final view in RendererBinding.instance.renderViews) { v(view); } return h.toString(); })()';
+
+/// The paint signature of the live app, or null when it cannot be read (device mode, eval failure).
+Future<int?> paintSignature(GlintSession session) async {
+  try {
+    final raw = await session.runtime.evaluateString(_paintExpr);
+    return raw == null ? null : int.tryParse(raw);
+  } on Object {
+    return null;
+  }
 }
 
 /// Detect what category of change occurred between [before] and [after].
@@ -156,6 +180,8 @@ String changeCategory(SceneSnapshot before, SceneSnapshot after) {
   if (!before.hasOverlay && after.hasOverlay) return 'overlayAppeared';
   if (before.hasOverlay && !after.hasOverlay) return 'overlayDismissed';
   if (before.contentHash != after.contentHash) return 'contentChanged';
+  final paintBefore = before.paintHash, paintAfter = after.paintHash;
+  if (paintBefore != null && paintAfter != null && paintBefore != paintAfter) return 'contentChanged';
   return 'nothing';
 }
 
@@ -213,7 +239,7 @@ class PostActionState {
 Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
     return await session.withScene(
-      (semantic) async => snapshotOf(semantic),
+      (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session)),
       detail: SceneDetail.interactive,
     );
   } on Object {
@@ -260,7 +286,7 @@ Future<PostActionState?> readPostActionState(
     }
     Future<PostActionState> readOnce() => session.withScene(
           (semantic) async {
-            final post = snapshotOf(semantic);
+            final post = snapshotOf(semantic, paintHash: pre?.paintHash == null ? null : await paintSignature(session));
             final category = pre != null ? changeCategory(pre, post) : 'unknown';
             return PostActionState(
               changed: category != 'nothing',
