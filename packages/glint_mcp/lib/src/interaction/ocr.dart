@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'shipped_files.dart';
+
 /// One line of text found on a screenshot, with its box in image pixels.
 typedef OcrLine = ({String text, double x, double y, double w, double h});
 
@@ -50,12 +52,4 @@ Future<String> _helper() async {
   return out;
 }
 
-String? _locateSource() {
-  var dir = File(Platform.script.toFilePath()).parent;
-  for (var i = 0; i < 6; i++) {
-    final f = File('${dir.path}/$kOcrSource');
-    if (f.existsSync()) return f.path;
-    dir = dir.parent;
-  }
-  return null;
-}
+String? _locateSource() => shippedPath(kOcrSource);

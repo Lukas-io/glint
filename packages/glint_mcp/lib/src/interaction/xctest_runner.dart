@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'shipped_files.dart';
+
 /// Must equal `runnerProtocol` in native/ios_xctest_runner/UITests/Router.swift.
 const int expectedRunnerProtocol = 4;
 
@@ -205,20 +207,5 @@ class XcTestRunner {
   }
 }
 
-/// Walks up from the running script to glint's package and returns the runner's Xcode project, or null.
-String? locateRunnerProject({String? scriptPath}) {
-  Directory dir;
-  try {
-    dir = File(scriptPath ?? Platform.script.toFilePath()).parent;
-  } catch (_) {
-    return null;
-  }
-  for (var i = 0; i < 6; i++) {
-    final p = '${dir.path}/$kRunnerProject';
-    if (Directory(p).existsSync()) return p;
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  return null;
-}
+/// The runner's Xcode project shipped with glint, or null.
+String? locateRunnerProject({String? scriptPath}) => shippedPath(kRunnerProject, scriptPath: scriptPath);

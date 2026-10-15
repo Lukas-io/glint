@@ -4,6 +4,14 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- glint installs from pub.dev: `dart pub global activate glint_mcp`, then point your agent at the `glint` command. Each release tag now publishes to pub.dev after the GitHub Release.
+
+### Fixed
+
+- The phone's OCR reader and the XCTest runner looked for their sources only by walking up from the running script, which finds nothing in a pub.dev install. They now also look in the installed package.
+
 ## [0.4.1] - 2026-10-15
 
 ### Fixed

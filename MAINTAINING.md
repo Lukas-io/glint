@@ -66,7 +66,10 @@ Each package has its own version, changelog and tags. Versions follow semver wit
 
 1. On an up-to-date `main`, run `dart run tool/release.dart prepare <package> <x.y.z>`. It bumps the package's version files, moves its Unreleased entries under a dated heading, and commits on `release/<package>-v<x.y.z>`. Open a PR from that branch and merge it once green.
 2. Back on `main`, run `dart run tool/release.dart tag <package>`. It creates and pushes the tag `<package>-v<x.y.z>`.
-3. The `Release` workflow checks the tag against the package's `pubspec.yaml`, runs the package's tests, and publishes a GitHub Release with that version's changelog section as notes. A `glint_mcp` release also attaches the universal `glint-iossim-macos` bridge and its sha256.
+3. The `Release` workflow checks the tag against the package's `pubspec.yaml`, runs the package's tests, and publishes a GitHub Release with that version's changelog section as notes. A `glint_mcp` release also attaches the universal `glint-iossim-macos` bridge, the `glint-devicehid-macos` helper and `glint-android-server.dex`, each with its sha256.
+4. When the release succeeds, its `publish` job publishes the package to pub.dev from the same tag. pub.dev accepts it because the package's admin page allows publishing from this repository's GitHub Actions for tags `<package>-v{{version}}`. glint_network is not on pub.dev yet and is skipped.
+
+A package's first version on pub.dev has to be published by hand: `dart pub publish` in its directory, `glint_core` before the packages that depend on it. Then enable automated publishing on its pub.dev admin page.
 
 The release tool refuses to release a package that depends on `glint_core` while `glint_core` has unreleased changes. Release `glint_core` first, then raise the constraint in the dependent package.
 
