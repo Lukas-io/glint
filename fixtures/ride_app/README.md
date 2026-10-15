@@ -14,4 +14,4 @@ dart run relay/relay.dart        # listens on :8790
 
 The Android emulator reaches the host at `10.0.2.2:8790` and the iOS simulator at `127.0.0.1:8790`. For a phone, build with `--dart-define=RELAY=<host ip>:8790`. `curl -X DELETE http://127.0.0.1:8790/driver` forgets the driver.
 
-The Maps API key is the placeholder `no-key`, so the map tiles stay blank. glint reads markers and the camera from the Dart side, so that does not matter for tests. For real tiles, put a key in `android/app/src/main/AndroidManifest.xml` and `ios/Runner/AppDelegate.swift`.
+Without a Maps API key the tiles stay blank. glint reads markers and the camera from the Dart side, so reading works either way, but on Android a keyless map takes no gestures. For Android, put `MAPS_API_KEY=<key>` in `android/local.properties` (git-ignored) or set it in the environment; the build passes it to the manifest. For iOS, put a key in `ios/Runner/AppDelegate.swift`.
