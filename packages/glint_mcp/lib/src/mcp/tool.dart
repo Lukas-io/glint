@@ -174,6 +174,7 @@ abstract class GlintTool {
     final target =
         routesByApp ? (request.arguments?['app'] as String?) : null;
     var app = session.active;
+    if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {
       if (target == null) {
         response = await handle(session, request);
