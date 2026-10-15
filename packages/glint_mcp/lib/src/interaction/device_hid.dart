@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../version.dart';
 import 'bridge_download.dart';
+import 'phone_status.dart';
 import 'result.dart';
 
 /// Must equal `PROTOCOL` in native/ios_device_hid/src/main.rs.
@@ -22,6 +23,7 @@ const String deviceHidAssetName = 'glint-devicehid-macos';
 enum DeviceHidFailure {
   missing,
   deviceNotFound,
+  wifiOnly,
   usbmuxd,
   tunnel,
   developerImage,
@@ -36,7 +38,7 @@ enum DeviceHidFailure {
 
   /// The error kind an agent branches on.
   GlintErrorKind get errorKind => switch (this) {
-        deviceNotFound || usbmuxd || tunnel => GlintErrorKind.deviceNotConnected,
+        deviceNotFound || wifiOnly || usbmuxd || tunnel => GlintErrorKind.deviceNotConnected,
         developerImage => GlintErrorKind.developerImageMissing,
         deviceBusy => GlintErrorKind.deviceBusy,
         missing || unsupportedText => GlintErrorKind.unsupportedBackendAction,
@@ -46,7 +48,8 @@ enum DeviceHidFailure {
   /// What the agent can do about it.
   List<String> get nextSteps => switch (this) {
         missing => const ['build it with `cargo build --release` in packages/glint_mcp/$deviceHidBuildDir, or set $deviceHidEnv'],
-        deviceNotFound || usbmuxd => const ['connect the iPhone by cable (or the same Wi-Fi with "Connect via network" on), unlock it, then retry'],
+        deviceNotFound || usbmuxd => const ['connect the iPhone by cable and unlock it, then retry'],
+        wifiOnly => const ['plug the iPhone in by cable and unlock it, then retry', 'over Wi-Fi alone, `device op:screenshot` and `device op:status` still work'],
         tunnel => const ['unlock the iPhone and confirm it trusts this Mac and has Developer Mode on, then retry'],
         developerImage => const ['run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry'],
         deviceBusy => const ['close Device Hub (Xcode) or any other screen viewer of this phone, then retry'],
@@ -107,7 +110,11 @@ class DeviceHid {
     }
     if (first['ok'] == false) {
       process.kill();
-      throw DeviceHidError(DeviceHidFailure.parse(first['kind']), '${first['error']}');
+      final failure = DeviceHidFailure.parse(first['kind']);
+      if (failure == DeviceHidFailure.deviceNotFound && await phoneTransport(udid) == 'localNetwork') {
+        throw DeviceHidError(DeviceHidFailure.wifiOnly, 'the iPhone is connected over Wi-Fi only, and touches, keys and buttons need the cable');
+      }
+      throw DeviceHidError(failure, '${first['error']}');
     }
     if (first['ready'] != expectedDeviceHidProtocol) {
       process.kill();

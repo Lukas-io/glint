@@ -39,3 +39,18 @@ Future<Map<String, Object?>?> phoneStatus(String udid) async {
     await tmp.delete(recursive: true);
   }
 }
+
+/// How the iPhone reaches this Mac (`wired` or `localNetwork`), from `devicectl`; null when it does not answer.
+Future<String?> phoneTransport(String udid) async {
+  final tmp = await Directory.systemTemp.createTemp('glint-phone-');
+  try {
+    final details = '${tmp.path}/details.json';
+    await Process.run('xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
+    final d = (jsonDecode(File(details).readAsStringSync()) as Map)['result'] as Map?;
+    return (d?['connectionProperties'] as Map?)?['transportType'] as String?;
+  } on Object {
+    return null;
+  } finally {
+    await tmp.delete(recursive: true);
+  }
+}
