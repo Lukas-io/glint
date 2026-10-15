@@ -8,6 +8,7 @@ import '../image_size.dart';
 import '../phone_status.dart';
 import '../result.dart';
 import '../screen_recording.dart';
+import '../touch_path.dart';
 
 /// A paired physical iPhone driven like a hand would: real touches, keys and buttons through Xcode's Device Hub service, screenshots through `devicectl`.
 class IosDeviceBackend extends InteractionBackend {
@@ -26,8 +27,6 @@ class IosDeviceBackend extends InteractionBackend {
   final double pixelHeight;
   final DeviceHid hid;
   final ProcessRunner run;
-
-  static const _frameMs = 16;
 
   @override
   String get label => 'ios-device($udid)';
@@ -81,16 +80,9 @@ class IosDeviceBackend extends InteractionBackend {
     required int durationMs,
     int holdMs = 0,
   }) {
-    final steps = (durationMs / _frameMs).ceil().clamp(2, 400);
     return _touch([
-      _point(physicalX1, physicalY1, 0),
-      if (holdMs > 0) _point(physicalX1, physicalY1, holdMs),
-      for (var i = 1; i <= steps; i++)
-        _point(
-          (physicalX1 + (physicalX2 - physicalX1) * i / steps).round(),
-          (physicalY1 + (physicalY2 - physicalY1) * i / steps).round(),
-          holdMs + (durationMs * i / steps).round(),
-        ),
+      for (final p in dragPath(physicalX1, physicalY1, physicalX2, physicalY2, durationMs: durationMs, holdMs: holdMs))
+        _point(p.x, p.y, p.ms),
     ]);
   }
 
@@ -143,11 +135,9 @@ class IosDeviceBackend extends InteractionBackend {
 
   /// A real drag between two fractions of the screen, [ms] long; a back swipe from x = 0 registers, a drag from the bottom edge does not.
   Future<void> _edgeDrag(double fx1, double fy1, double fx2, double fy2, {int ms = 300}) {
-    final steps = (ms / _frameMs).ceil();
-    return _touch([
-      for (var i = 0; i <= steps; i++)
-        _point(((fx1 + (fx2 - fx1) * i / steps) * pixelWidth).round(), ((fy1 + (fy2 - fy1) * i / steps) * pixelHeight).round(), ms * i ~/ steps),
-    ]);
+    int px(double f) => (f * pixelWidth).round();
+    int py(double f) => (f * pixelHeight).round();
+    return _touch([for (final p in dragPath(px(fx1), py(fy1), px(fx2), py(fy2), durationMs: ms)) _point(p.x, p.y, p.ms)]);
   }
 
   @override

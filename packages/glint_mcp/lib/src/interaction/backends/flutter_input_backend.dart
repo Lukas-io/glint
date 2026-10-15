@@ -5,6 +5,7 @@ import '../flutter_input.dart';
 import '../input_route.dart';
 import '../result.dart';
 import '../screen_recording.dart';
+import '../touch_path.dart';
 
 /// Delivers input inside the Flutter app when it can (exact, fast), and hands everything else to [native]: system surfaces, the keyboard, native views, buttons.
 class FlutterInputBackend extends InteractionBackend {
@@ -100,17 +101,8 @@ class FlutterInputBackend extends InteractionBackend {
     required int durationMs,
     int holdMs = 0,
   }) {
-    final steps = (durationMs / 16).ceil().clamp(2, 400);
-    return _deliver((f) => f.touch([
-        _logical(physicalX1, physicalY1, 0),
-        if (holdMs > 0) _logical(physicalX1, physicalY1, holdMs),
-        for (var i = 1; i <= steps; i++)
-          _logical(
-            (physicalX1 + (physicalX2 - physicalX1) * i / steps).round(),
-            (physicalY1 + (physicalY2 - physicalY1) * i / steps).round(),
-            holdMs + (durationMs * i / steps).round(),
-          ),
-      ]),
+    final path = dragPath(physicalX1, physicalY1, physicalX2, physicalY2, durationMs: durationMs, holdMs: holdMs);
+    return _deliver((f) => f.touch([for (final p in path) _logical(p.x, p.y, p.ms)]),
       () => native.swipe(
           physicalX1: physicalX1,
           physicalY1: physicalY1,

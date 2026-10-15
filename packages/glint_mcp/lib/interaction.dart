@@ -38,4 +38,5 @@ export 'src/interaction/result.dart';
 export 'src/interaction/sim_control.dart';
 export 'src/interaction/target.dart';
 export 'src/interaction/tested_matrix.dart';
+export 'src/interaction/touch_path.dart';
 export 'src/interaction/xctest_runner.dart';

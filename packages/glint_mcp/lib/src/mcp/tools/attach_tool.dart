@@ -75,7 +75,7 @@ class AttachTool extends GlintTool {
               description:
                   'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
                   'touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. '
-                  'Default auto on a physical iPhone, device elsewhere. Replies say which in data.input.',
+                  'Default auto on iOS (simulator and phone), device on Android. Replies say which in data.input.',
             ),
             'iosInput': Schema.string(
               description:
@@ -523,7 +523,7 @@ class AttachTool extends GlintTool {
             toolchain: toolchain,
             hidMode: iosTransport,
             runner: runner,
-            route: requestedRoute ?? InputRoute.device,
+            route: requestedRoute ?? InputRoute.auto,
           );
       }
 

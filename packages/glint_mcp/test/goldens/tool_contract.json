@@ -36,7 +36,7 @@
       },
       "input": {
         "type": "string",
-        "description": "auto | app | device: where gestures go. app = inside the Flutter app; device = real touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. Default auto on a physical iPhone, device elsewhere. Replies say which in data.input."
+        "description": "auto | app | device: where gestures go. app = inside the Flutter app; device = real touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. Default auto on iOS (simulator and phone), device on Android. Replies say which in data.input."
       },
       "iosInput": {
         "type": "string",
