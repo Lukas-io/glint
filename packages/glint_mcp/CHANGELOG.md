@@ -6,6 +6,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `device op:privacy` works on Android (pass the adb serial as `udid`; `bundleId` defaults to the attached app). Services keep the iOS names where they exist: notifications, microphone, camera, contacts, location, location-always, photos, media-library, calendar, motion, plus phone, sms and all. `grant`, `revoke` (marked as the user's answer) and `reset` (the app asks again) go through `pm`, after checking the app declares the permission, and are read back. `screen-capture` sets the MediaProjection app op (`appops set <package> PROJECT_MEDIA allow|ignore|default`). Before, every Android call failed with simctl's "Invalid device"; the other `device` ops now say they are iOS-only (#166).
 - `map`, a new tool that drives a Google map like a finger (#148, phase 5):
   - `op:read` gives the camera and the markers with their screen points.
   - `op:tap marker:` taps a marker where it is drawn.

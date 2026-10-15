@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../media/android_privacy.dart';
+import '../../media/gallery.dart' show MediaDevice;
+import '../../media/permissions.dart' show PermissionRefused, PermissionUnsupported;
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -19,7 +22,7 @@ class DeviceTool extends GlintTool {
   Tool get definition => Tool(
         name: 'device',
         description:
-            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless), privacy, biometric; each argument names the ops it serves. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed).',
+            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless), privacy, biometric; each argument names the ops it serves. On Android (udid: an adb serial) op:privacy sets runtime permissions and screen-capture consent. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed), unsupportedBackendAction.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
@@ -57,10 +60,10 @@ class DeviceTool extends GlintTool {
               description: 'biometric: face (default) | touch.',
             ),
             'service': Schema.string(
-              description: 'privacy: a simctl service: photos | microphone | location | contacts | … (no camera; `media op:permission` covers camera, mic and photos on both platforms).',
+              description: 'privacy: a simctl service: photos | microphone | location | location-always | contacts | notifications | … On Android also camera, phone, sms, screen-capture (the MediaProjection app op) and all.',
             ),
             'bundleId': Schema.string(
-              description: 'privacy: target app bundle id (grant/revoke).',
+              description: 'privacy: target app bundle id or Android package (grant/revoke). Default on Android: the attached app.',
             ),
           },
         ),
@@ -82,6 +85,8 @@ class DeviceTool extends GlintTool {
         ],
       );
     }
+
+    if (_isAndroid(udid)) return _android(session, udid, op, args);
 
     const sim = SimControl();
     switch (op) {
@@ -223,6 +228,52 @@ class DeviceTool extends GlintTool {
       default:
         return _bad('unknown op: $op '
             '(use status | appearance | openurl | screenshot | privacy)');
+    }
+  }
+
+  bool _isAndroid(String id) => !RegExp(r'^[0-9A-Fa-f-]{25,36}$').hasMatch(id);
+
+  Future<StructuredResponse> _android(GlintSession session, String serial, String op, Map<String, Object?> args) async {
+    if (op != 'privacy') {
+      return StructuredResponse.error(
+        summary: 'device op:$op is iOS simulator only; on Android only op:privacy is here',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        nextSteps: const ['`media op:event` rotates and sends sensor, call and SMS events to an emulator', '`hardware_button` and `key` work on Android'],
+      );
+    }
+    final action = args['action'] as String?;
+    final service = args['service'] as String?;
+    if (!const {'grant', 'revoke', 'reset'}.contains(action)) return _bad('op=privacy requires action: grant | revoke | reset');
+    if (service == null || service.isEmpty) return _bad('op=privacy requires service (e.g. notifications, microphone, location, screen-capture)');
+    final attached = session.isAttached && session.device.id == serial ? session.device : null;
+    final appId = (args['bundleId'] as String?) ?? (attached != null ? session.attachedBundleId : null);
+    if (appId == null || appId.isEmpty) return _bad('op=privacy needs bundleId: the Android package (or attach the app)');
+    final device = MediaDevice(DevicePlatform.android, serial,
+        adbPath: attached is AndroidDevice ? attached.adbPath : (resolveAdbPath(null) ?? 'adb'));
+    try {
+      final done = await setAndroidPrivacy(device, appId, action!, service);
+      return StructuredResponse(
+        summary: '$appId on $serial · ${done.state}',
+        warnings: [if (done.caution != null) done.caution!],
+        nextSteps: const ['get_scene to see how the app reacts'],
+        data: {'device': serial, 'appId': appId, 'service': service, 'action': action, 'applied': done.applied},
+      );
+    } on PermissionUnsupported catch (e) {
+      return StructuredResponse.error(summary: e.reason, errorKind: GlintErrorKind.unsupportedBackendAction, nextSteps: e.nextSteps);
+    } on PermissionRefused catch (e) {
+      return StructuredResponse.error(
+        summary: e.unknownApp
+            ? '$appId is not installed on $serial'
+            : e.notDeclared
+                ? '$appId does not declare the permission for $service'
+                : 'the device refused the change',
+        errorKind: e.notDeclared || e.unknownApp ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
+        detail: e.detail,
+        nextSteps: [
+          if (e.notDeclared) 'the app must declare the permission in its AndroidManifest.xml; Android ignores grants for undeclared ones',
+          if (e.unknownApp) 'pass bundleId:"<the installed package>"',
+        ],
+      );
     }
   }
 
