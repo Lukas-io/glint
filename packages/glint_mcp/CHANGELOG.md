@@ -6,6 +6,14 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- More tools work on a physical iPhone:
+  - **`record`** records the phone's screen. glint's Device Hub helper writes the display stream to a file on a fresh screen session, so it opens on a keyframe. glint wraps it as an `hvc1` mp4 without re-encoding, so frame extraction and QuickTime both read it.
+  - **`device op:status`** reports the phone from `devicectl`: name, model, iOS and build, connection, Developer Mode, whether the developer image is mounted, and whether a passcode is set.
+  - **`sensors op:read`** gives the phone's interface orientation, from SpringBoard through the helper. `op:set` answers `notOnThisDevice`, since glint cannot turn a phone yet.
+  - **`app_logs native:true`** lists the app's crash reports from the phone (`devicectl` crash logs since attach), as it does on the simulator.
+
+  attach's `not on this device` line drops record, sensors and device status. The helper speaks protocol 4.
+
 - `attach launch:"<project>"` builds and runs on a physical iPhone. It no longer tries to boot the phone as a simulator.
   - **Signing without file edits.** glint passes the team to Xcode through `FLUTTER_XCODE_DEVELOPMENT_TEAM` and picks it in this order:
     1. `signingTeam:`;

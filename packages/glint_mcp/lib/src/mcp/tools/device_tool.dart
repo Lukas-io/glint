@@ -113,6 +113,23 @@ class DeviceTool extends GlintTool {
       );
     }
 
+    if (isPhysicalIosUdid(udid) && op == 'status') {
+      final status = await phoneStatus(udid);
+      if (status == null) {
+        return StructuredResponse.error(
+          summary: 'the iPhone $udid did not answer devicectl',
+          errorKind: GlintErrorKind.deviceNotConnected,
+          nextSteps: const ['connect and unlock the iPhone, then retry'],
+        );
+      }
+      return StructuredResponse(
+        summary: '${status['name']} · ${status['model']} · ${status['os']} (${status['build']}) · '
+            '${status['connection']}, tunnel ${status['tunnel']} · developer mode ${status['developerMode']}'
+            '${status['developerImage'] == true ? '' : ' · developer image not mounted'}'
+            '${status['passcodeRequired'] == true ? ' · passcode set' : ''}',
+        data: {'udid': udid, ...status},
+      );
+    }
     if (isPhysicalIosUdid(udid)) {
       final ability = switch (op) {
         'status' => Ability.deviceStatus,

@@ -41,11 +41,8 @@ class DeviceAbilities {
 /// A paired physical iPhone: what glint cannot reach on it yet.
 const iphoneAbilities = DeviceAbilities({
   Ability.notifications: (reason: 'a physical iPhone gives glint no notification list', instead: 'test notifications on the iOS simulator'),
-  Ability.sensors: (reason: 'a physical iPhone exposes no motion state to glint', instead: 'turn the phone yourself, or test rotation on the simulator'),
-  Ability.record: (reason: 'recording a physical iPhone is not built yet', instead: 'device op:screenshot for single frames'),
   Ability.media: (reason: 'a phone has no simctl or adb to seed photos or set media permissions', instead: 'media op:pick still chooses in the open photo picker'),
   Ability.locationPermission: (reason: 'devicectl has no privacy setting; only the person holding the phone can change it', instead: 'answer the prompt with tap text:"Allow"'),
-  Ability.deviceStatus: (reason: 'device status reads a simulator', instead: null),
   Ability.deviceAppearance: (reason: 'dark mode and text size are set in the phone\'s Settings', instead: null),
   Ability.deviceOpenUrl: (reason: 'opening a URL on a phone is not built yet', instead: null),
   Ability.devicePrivacy: (reason: 'devicectl has no privacy setting', instead: 'answer the app\'s prompt with tap text:"Allow"'),

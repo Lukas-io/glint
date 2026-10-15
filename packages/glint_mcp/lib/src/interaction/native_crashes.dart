@@ -173,3 +173,30 @@ List<NativeCrash> parseAndroidCrashes(String logcat, {required String package}) 
   flush();
   return out;
 }
+
+/// Crash reports a physical iPhone holds for [bundleId] since [since], newest first, fetched with devicectl.
+Future<List<NativeCrash>> phoneCrashes({required String udid, required String bundleId, required DateTime since}) async {
+  final tmp = await Directory.systemTemp.createTemp('glint-crashes-');
+  try {
+    final list = '${tmp.path}/files.json';
+    await Process.run('xcrun', ['devicectl', 'device', 'info', 'files', '--device', udid, '--domain-type', 'systemCrashLogs', '--json-output', list, '-q']);
+    final files = ((jsonDecode(File(list).readAsStringSync()) as Map)['result']?['files'] as List?) ?? const [];
+    final out = <NativeCrash>[];
+    for (final f in files.cast<Map>()) {
+      final name = '${f['relativePath']}';
+      final modified = DateTime.tryParse('${(f['metadata'] as Map?)?['lastModDate']}');
+      if (!name.endsWith('.ips') || modified == null || modified.isBefore(since)) continue;
+      final local = '${tmp.path}/${name.replaceAll('/', '_')}';
+      await Process.run('xcrun', ['devicectl', 'device', 'copy', 'from', '--device', udid, '--domain-type', 'systemCrashLogs', '--source', name, '--destination', local, '-q']);
+      final file = File(local);
+      if (!file.existsSync()) continue;
+      final crash = parseIpsCrash(file.readAsStringSync(), bundleId: bundleId, path: 'iPhone:$name');
+      if (crash != null && !crash.time.isBefore(since)) out.add(crash);
+    }
+    return out..sort((a, b) => b.time.compareTo(a.time));
+  } on Object {
+    return const [];
+  } finally {
+    await tmp.delete(recursive: true);
+  }
+}
