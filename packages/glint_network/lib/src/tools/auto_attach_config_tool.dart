@@ -8,31 +8,26 @@ import 'result.dart';
 
 final autoAttachConfigTool = Tool(
   name: 'auto_attach_config',
-  description:
-      'Read or persist the auto-attach allowlist at '
+  description: 'Read or persist the auto-attach allowlist at '
       '<data-dir>/auto-attach.json. Lets the agent honor an '
       'autoAttachSuggestion without the user editing shell rc (confirm '
       'first, then action:"add").',
   inputSchema: Schema.object(
     properties: {
       'action': Schema.string(
-        description:
-            '"list" (default), "add", "remove", "clear", "set" (persist '
+        description: '"list" (default), "add", "remove", "clear", "set" (persist '
             'logBufferSize / nativeLogs for every attach, auto or manual).',
       ),
       'logBufferSize': Schema.int(
-        description:
-            'With action:"set": log ring capacity for every attach '
+        description: 'With action:"set": log ring capacity for every attach '
             '(50–20000). Default 2000.',
       ),
       'nativeLogs': Schema.bool(
-        description:
-            'With action:"set": also stream the device\'s native log '
+        description: 'With action:"set": also stream the device\'s native log '
             '(simctl log stream / adb logcat) into every attach.',
       ),
       'app': Schema.string(
-        description:
-            'Allowlist pattern (case-insensitive substring of the app name, '
+        description: 'Allowlist pattern (case-insensitive substring of the app name, '
             'e.g. "eats_mobile"). Required for add/remove.',
       ),
       'deny': Schema.string(
@@ -113,8 +108,7 @@ CallToolResult _list() {
     'enabled': AutoAttachConfig.isEnabled,
     'allowed': AutoAttachConfig.allowedPatterns,
     'denied': AutoAttachConfig.deniedPatterns,
-    if (AutoAttachConfig.logBufferSize != null)
-      'logBufferSize': AutoAttachConfig.logBufferSize,
+    if (AutoAttachConfig.logBufferSize != null) 'logBufferSize': AutoAttachConfig.logBufferSize,
     if (AutoAttachConfig.nativeLogs) 'nativeLogs': true,
     'filePath': AutoAttachConfig.filePath(),
     'nextSteps': const [
@@ -143,8 +137,7 @@ CallToolResult _add({required String? app, required String? deny}) {
   if (!alreadyPresent) current.add(app);
 
   final currentDeny = AutoAttachConfig.deniedPatterns.toList();
-  if (deny != null && deny.isNotEmpty &&
-      !currentDeny.any((d) => d.toLowerCase() == deny.toLowerCase())) {
+  if (deny != null && deny.isNotEmpty && !currentDeny.any((d) => d.toLowerCase() == deny.toLowerCase())) {
     currentDeny.add(deny);
   }
 
@@ -199,8 +192,7 @@ CallToolResult _remove({required String? app}) {
       if (!removed)
         'No matching entry to remove. Existing allowlist: '
             '${current.join(", ")}',
-      if (removed)
-        'Effective on next MCP-host restart unless overridden by env / flag.',
+      if (removed) 'Effective on next MCP-host restart unless overridden by env / flag.',
     ],
   });
 }

@@ -37,7 +37,9 @@ Future<List<OcrLine>> readText(String image) async {
 
 Future<String> _helper() async {
   final source = _locateSource();
-  if (source == null) throw OcrError('the OCR helper source is not part of this glint install', 'looked for $kOcrSource');
+  if (source == null) {
+    throw OcrError('the OCR helper source is not part of this glint install', 'looked for $kOcrSource');
+  }
   var h = 0x811c9dc5;
   for (final b in File(source).readAsBytesSync()) {
     h = ((h ^ b) * 0x01000193) & 0xffffffff;
@@ -47,7 +49,8 @@ Future<String> _helper() async {
   Directory(File(out).parent.path).createSync(recursive: true);
   final r = await Process.run('xcrun', ['swiftc', '-O', source, '-o', out]);
   if (r.exitCode != 0 || !File(out).existsSync()) {
-    throw OcrError('could not build the OCR helper with the Xcode toolchain', '${r.stderr}'.trim().split('\n').take(3).join(' | '));
+    throw OcrError('could not build the OCR helper with the Xcode toolchain',
+        '${r.stderr}'.trim().split('\n').take(3).join(' | '));
   }
   return out;
 }

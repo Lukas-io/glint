@@ -16,8 +16,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('alert_idem_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
   });
 
   tearDown(() {
@@ -36,12 +35,10 @@ void main() {
       );
 
   int occ() => CapturesDatabase.instance.raw
-      .select('SELECT occurrence_count FROM alerts WHERE session_id=?', [sid])
-      .first['occurrence_count'] as int;
+      .select('SELECT occurrence_count FROM alerts WHERE session_id=?', [sid]).first['occurrence_count'] as int;
 
-  int rowCount() => CapturesDatabase.instance.raw
-      .select('SELECT COUNT(*) c FROM alerts WHERE session_id=?', [sid])
-      .first['c'] as int;
+  int rowCount() =>
+      CapturesDatabase.instance.raw.select('SELECT COUNT(*) c FROM alerts WHERE session_id=?', [sid]).first['c'] as int;
 
   test('first fire inserts one row, occurrence 1', () {
     expect(fire(sourceId: 'req-1'), isTrue);
@@ -74,10 +71,8 @@ void main() {
 
   test('after drain, a new occurrence starts a fresh pending row', () {
     fire(sourceId: 'req-1');
-    CapturesDatabase.instance.raw
-        .execute('UPDATE alerts SET drained=1 WHERE session_id=?', [sid]);
-    expect(fire(sourceId: 'req-2'), isTrue,
-        reason: 'a fresh pending alert after the old one was handled');
+    CapturesDatabase.instance.raw.execute('UPDATE alerts SET drained=1 WHERE session_id=?', [sid]);
+    expect(fire(sourceId: 'req-2'), isTrue, reason: 'a fresh pending alert after the old one was handled');
     expect(rowCount(), 2, reason: 'one drained + one new pending');
   });
 }

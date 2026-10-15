@@ -37,8 +37,7 @@ void main() {
       await proc.exitCode;
     });
 
-    Future<Map<String, Object?>> request(
-        String method, Map<String, Object?> params) async {
+    Future<Map<String, Object?>> request(String method, Map<String, Object?> params) async {
       final id = nextId++;
       proc.stdin.writeln(jsonEncode({
         'jsonrpc': '2.0',
@@ -59,8 +58,7 @@ void main() {
         'capabilities': const {},
         'clientInfo': {'name': 'glint-test', 'version': '0'},
       });
-      expect(initResp['error'], isNull,
-          reason: 'initialize must succeed: $initResp');
+      expect(initResp['error'], isNull, reason: 'initialize must succeed: $initResp');
 
       // The initialize result must carry the Module D instruction text.
       final initResult = initResp['result'] as Map<String, Object?>;
@@ -107,8 +105,7 @@ void main() {
       );
     });
 
-    test('calling get_scene before attach returns SessionNotAttached',
-        () async {
+    test('calling get_scene before attach returns SessionNotAttached', () async {
       await request('initialize', {
         'protocolVersion': '2024-11-05',
         'capabilities': const {},

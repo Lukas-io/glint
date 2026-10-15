@@ -5,8 +5,7 @@ import 'package:test/test.dart';
 Map<String, Object?> _structured(CallToolResult r) => r.structuredContent!;
 
 void main() {
-  test('the action log keeps the length of typed text, never the text',
-      () async {
+  test('the action log keeps the length of typed text, never the text', () async {
     final session = GlintSession();
     await const TypeTool().invoke(
       session,
@@ -22,8 +21,7 @@ void main() {
     expect(const LogRenderer().render([entry]), isNot(contains('hunter2')));
   });
 
-  test('report_issue attaches no context by default and redacts secrets',
-      () async {
+  test('report_issue attaches no context by default and redacts secrets', () async {
     final session = GlintSession();
     await const TypeTool().invoke(
       session,
@@ -34,8 +32,7 @@ void main() {
       CallToolRequest(name: 'report_issue', arguments: const {
         'type': 'bug',
         'title': 'login fails with password=hunter2',
-        'body':
-            'Authorization: Bearer abcdef1234567890 at /Users/someone/code/app/lib/main.dart',
+        'body': 'Authorization: Bearer abcdef1234567890 at /Users/someone/code/app/lib/main.dart',
         'dryRun': true,
       }),
     );

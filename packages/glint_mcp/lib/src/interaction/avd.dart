@@ -92,7 +92,15 @@ class Avds {
     final log = File('${Directory.systemTemp.path}/glint-emulator-$avd.log');
     await Process.start(
       '/bin/sh',
-      ['-c', r'exec "$0" -avd "$1" -port "$2" -grpc "$3" -grpc-use-token > "$4" 2>&1', exe, avd, '$port', '$grpcPort', log.path],
+      [
+        '-c',
+        r'exec "$0" -avd "$1" -port "$2" -grpc "$3" -grpc-use-token > "$4" 2>&1',
+        exe,
+        avd,
+        '$port',
+        '$grpcPort',
+        log.path
+      ],
       mode: ProcessStartMode.detached,
     );
 
@@ -118,7 +126,8 @@ class Avds {
 
   Future<bool> _booted(String serial) async {
     try {
-      final r = await Process.run(adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed']).timeout(const Duration(seconds: 10));
+      final r = await Process.run(adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'])
+          .timeout(const Duration(seconds: 10));
       return '${r.stdout}'.trim() == '1';
     } on Object {
       return false;

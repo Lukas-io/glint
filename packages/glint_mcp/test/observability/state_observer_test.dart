@@ -7,8 +7,7 @@ import 'package:test/test.dart';
 
 import '../perception/fake_scene.dart';
 
-SemanticNode _pageWith(List<SemanticNode> body) =>
-    SemanticPage(glintId: 'page', appBar: null, body: body);
+SemanticNode _pageWith(List<SemanticNode> body) => SemanticPage(glintId: 'page', appBar: null, body: body);
 
 void main() {
   group('StateObserver', () {

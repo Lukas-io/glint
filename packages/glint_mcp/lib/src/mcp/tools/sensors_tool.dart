@@ -25,10 +25,13 @@ class SensorsTool extends GlintTool {
           properties: {
             'op': Schema.string(description: 'read (default) | set | script'),
             'orientation': Schema.string(
-                description: 'set: portrait | portraitUpsideDown | landscapeLeft | landscapeRight | faceUp | faceDown.'),
-            'acceleration': Schema.list(items: Schema.num(), description: 'set (Android emulator): [x, y, z] in m/s², Android axes.'),
+                description:
+                    'set: portrait | portraitUpsideDown | landscapeLeft | landscapeRight | faceUp | faceDown.'),
+            'acceleration': Schema.list(
+                items: Schema.num(), description: 'set (Android emulator): [x, y, z] in m/s², Android axes.'),
             'steps': Schema.list(
-              description: 'script: up to $_maxSteps of {orientation}, {acceleration:[x,y,z]}, {waitMs} (up to 10000) or {shake:true}.',
+              description:
+                  'script: up to $_maxSteps of {orientation}, {acceleration:[x,y,z]}, {waitMs} (up to 10000) or {shake:true}.',
               items: ObjectSchema(properties: {
                 'orientation': Schema.string(),
                 'acceleration': Schema.list(items: Schema.num()),
@@ -55,7 +58,8 @@ class SensorsTool extends GlintTool {
     };
     if (motion == null) {
       return StructuredResponse.refuse(dev, Ability.sensors) ??
-          StructuredResponse.error(summary: 'sensors are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice);
+          StructuredResponse.error(
+              summary: 'sensors are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice);
     }
     if (motion is _IosMotion && motion.error != null) return motion.error!;
 
@@ -87,7 +91,8 @@ class SensorsTool extends GlintTool {
       default:
         final raw = args['steps'];
         if (raw is! List || raw.isEmpty || raw.length > _maxSteps) {
-          return _bad('op:script needs 1-$_maxSteps steps', 'steps:[{orientation:"faceUp"},{waitMs:2000},{orientation:"portrait"}]');
+          return _bad('op:script needs 1-$_maxSteps steps',
+              'steps:[{orientation:"faceUp"},{waitMs:2000},{orientation:"portrait"}]');
         }
         final steps = <Map<String, Object?>>[];
         for (final (i, s) in raw.indexed) {
@@ -107,7 +112,8 @@ class SensorsTool extends GlintTool {
             ? null
             : Timer.periodic(const Duration(seconds: 15), (_) {
                 final sec = DateTime.now().difference(began).inSeconds;
-                notifier(ProgressNotification(progressToken: token, progress: sec, message: 'step $at of ${steps.length} (${sec}s)'));
+                notifier(ProgressNotification(
+                    progressToken: token, progress: sec, message: 'step $at of ${steps.length} (${sec}s)'));
               });
         final done = <String>[];
         try {
@@ -120,8 +126,14 @@ class SensorsTool extends GlintTool {
               continue;
             }
             final refused = await motion.apply(s);
-            if (refused != null) return refused.copyWith(summary: 'step $at: ${refused.summary}').mergeData({'completed': done});
-            done.add(s['shake'] == true ? 'shook' : s['orientation'] != null ? '${s['orientation']}' : 'acceleration ${s['acceleration']}');
+            if (refused != null) {
+              return refused.copyWith(summary: 'step $at: ${refused.summary}').mergeData({'completed': done});
+            }
+            done.add(s['shake'] == true
+                ? 'shook'
+                : s['orientation'] != null
+                    ? '${s['orientation']}'
+                    : 'acceleration ${s['acceleration']}');
           }
         } finally {
           ticker?.cancel();
@@ -137,14 +149,27 @@ class SensorsTool extends GlintTool {
     final wait = s['waitMs'];
     final shake = s['shake'] == true;
     final given = [orientation != null, acc != null, wait != null, shake].where((b) => b).length;
-    if (given != 1) return (step: null, error: _bad('give exactly one of orientation, acceleration, waitMs or shake', 'e.g. {orientation:"faceUp"}'));
+    if (given != 1) {
+      return (
+        step: null,
+        error: _bad('give exactly one of orientation, acceleration, waitMs or shake', 'e.g. {orientation:"faceUp"}')
+      );
+    }
     if (orientation != null && !restingAcceleration.containsKey(orientation)) {
-      return (step: null, error: _bad('unknown orientation "$orientation"', 'one of ${restingAcceleration.keys.join(', ')}'));
+      return (
+        step: null,
+        error: _bad('unknown orientation "$orientation"', 'one of ${restingAcceleration.keys.join(', ')}')
+      );
     }
     if (acc != null && (acc is! List || acc.length != 3 || acc.any((v) => v is! num))) {
-      return (step: null, error: _bad('acceleration is [x, y, z] in m/s²', 'e.g. acceleration:[0, 0, 9.81] lies it face up'));
+      return (
+        step: null,
+        error: _bad('acceleration is [x, y, z] in m/s²', 'e.g. acceleration:[0, 0, 9.81] lies it face up')
+      );
     }
-    if (wait != null && (wait is! num || wait < 0 || wait > 10000)) return (step: null, error: _bad('waitMs must be 0-10000', 'split a longer pause'));
+    if (wait != null && (wait is! num || wait < 0 || wait > 10000)) {
+      return (step: null, error: _bad('waitMs must be 0-10000', 'split a longer pause'));
+    }
     return (
       step: {
         if (orientation != null) 'orientation': orientation,
@@ -162,7 +187,8 @@ class SensorsTool extends GlintTool {
       summary: [
         '$did: device ${s.deviceOrientation ?? 'unknown'}, interface ${s.interfaceOrientation ?? 'unknown'}'
             '${s.rotationLocked == null ? '' : s.rotationLocked! ? ', rotation locked' : ', auto-rotate on'}',
-        if (s.accelerometer != null) 'accelerometer ${v(s.accelerometer)} m/s²${s.sampledAt == null ? '' : ' at ${s.sampledAt}'}',
+        if (s.accelerometer != null)
+          'accelerometer ${v(s.accelerometer)} m/s²${s.sampledAt == null ? '' : ' at ${s.sampledAt}'}',
         if (s.gyroscope != null) 'gyroscope ${v(s.gyroscope)} rad/s',
       ].join('\n'),
       warnings: [...warnings, ...s.notes],
@@ -241,14 +267,19 @@ class _AndroidMotion extends _Motion {
     return _MotionState(
       deviceOrientation: acc == null ? null : orientationFromAcceleration(acc),
       interfaceOrientation: rotation == null ? null : interfaceOrientationFor(rotation),
-      rotationLocked: auto == '0' ? true : auto == '1' ? false : null,
+      rotationLocked: auto == '0'
+          ? true
+          : auto == '1'
+              ? false
+              : null,
       accelerometer: acc,
       gyroscope: gyro,
       magneticField: samples['magneticField']?.values,
       sampledAt: _emulator ? null : samples['accelerometer']?.wall,
       source: _emulator ? 'emulator sensors' : 'dumpsys sensorservice',
       notes: [
-        if (acc == null) 'no app is reading the accelerometer, so Android keeps no recent sample; turn auto-rotate on or open a screen that uses motion',
+        if (acc == null)
+          'no app is reading the accelerometer, so Android keeps no recent sample; turn auto-rotate on or open a screen that uses motion',
       ],
     );
   }
@@ -265,7 +296,8 @@ class _AndroidMotion extends _Motion {
   @override
   Future<StructuredResponse?> _apply(Map<String, Object?> step) async {
     if (step['shake'] == true) {
-      final base = _console('${(await _adb(['emu', 'sensor', 'get', 'acceleration'])).stdout}') ?? restingAcceleration['portrait']!;
+      final base = _console('${(await _adb(['emu', 'sensor', 'get', 'acceleration'])).stdout}') ??
+          restingAcceleration['portrait']!;
       for (var i = 0; i < 6; i++) {
         final x = i.isEven ? 18.0 : -18.0;
         if (!await _set([base[0] + x, base[1], base[2]])) return _failed();
@@ -317,7 +349,8 @@ class _PhoneMotion extends _Motion {
   StructuredResponse? refuses(Map<String, Object?> step) => _turnable.contains(step['orientation'])
       ? null
       : StructuredResponse.error(
-          summary: 'a physical iPhone turns to portrait, portraitUpsideDown, landscapeLeft or landscapeRight only; it has no motion sensors glint can set',
+          summary:
+              'a physical iPhone turns to portrait, portraitUpsideDown, landscapeLeft or landscapeRight only; it has no motion sensors glint can set',
           errorKind: GlintErrorKind.notOnThisDevice,
           nextSteps: const ['use an orientation step, or the Android emulator for acceleration and shake'],
         ).mergeData({'ability': 'sensors'});
@@ -339,7 +372,9 @@ class _PhoneMotion extends _Motion {
         return StructuredResponse.error(
           summary: 'the iPhone has rotation lock on, so it stays $now',
           errorKind: GlintErrorKind.notOnThisDevice,
-          nextSteps: const ['turn rotation lock off in Control Center (swipe down from the top-right, tap the lock), then retry'],
+          nextSteps: const [
+            'turn rotation lock off in Control Center (swipe down from the top-right, tap the lock), then retry'
+          ],
         ).mergeData({'ability': 'sensors'});
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -348,7 +383,9 @@ class _PhoneMotion extends _Motion {
       summary: 'the iPhone did not turn to $want',
       errorKind: GlintErrorKind.notOnThisDevice,
       detail: 'the app in front may support fewer orientations; the interface stays as the app allows',
-      nextSteps: const ['read the orientations the app declares (UISupportedInterfaceOrientations), or try another app'],
+      nextSteps: const [
+        'read the orientations the app declares (UISupportedInterfaceOrientations), or try another app'
+      ],
     ).mergeData({'ability': 'sensors'});
   }
 }
@@ -397,7 +434,8 @@ class _IosMotion extends _Motion {
       await runner!.call('POST', '/orientation', body: {'orientation': orientation});
       return null;
     } on XcTestRunnerError catch (e) {
-      return StructuredResponse.error(summary: e.message, errorKind: GlintErrorKind.backendToolError, detail: e.detail, nextSteps: e.nextSteps);
+      return StructuredResponse.error(
+          summary: e.message, errorKind: GlintErrorKind.backendToolError, detail: e.detail, nextSteps: e.nextSteps);
     }
   }
 }

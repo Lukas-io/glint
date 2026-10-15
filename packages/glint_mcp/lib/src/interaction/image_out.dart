@@ -33,9 +33,13 @@ Future<ModelImage> prepareModelImage(
     final r = Platform.isMacOS
         ? await run('sips', [
             if (size.width != width) ...['-Z', '$longest'],
-            '-s', 'format', jpeg ? 'jpeg' : 'png',
+            '-s',
+            'format',
+            jpeg ? 'jpeg' : 'png',
             if (jpeg) ...['-s', 'formatOptions', '$quality'],
-            src, '--out', dst,
+            src,
+            '--out',
+            dst,
           ])
         : await run('convert', [
             src,
@@ -145,9 +149,14 @@ Future<String?> composeSideBySide(
     if (!Platform.isMacOS) {
       final r = await run('convert', [
         ...srcs,
-        '-resize', 'x$height',
-        '-bordercolor', 'white', '-border', '${gap ~/ 2}x0',
-        '+append', dst,
+        '-resize',
+        'x$height',
+        '-bordercolor',
+        'white',
+        '-border',
+        '${gap ~/ 2}x0',
+        '+append',
+        dst,
       ]);
       return r.exitCode == 0 && File(dst).existsSync() ? dst : null;
     }

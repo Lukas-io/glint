@@ -84,12 +84,10 @@ void main() {
   });
 
   test('find: null/true/last → most recent; appKey → exact; basename → path', () {
-    history.record(_rec('acme_pay', 'd1',
-        projectDir: '/Users/x/StudioProjects/acme_pay',
-        at: DateTime(2026, 6, 21, 9)));
-    history.record(_rec('eats', 'd2',
-        projectDir: '/Users/x/StudioProjects/eats_mobile',
-        at: DateTime(2026, 6, 21, 11)));
+    history
+        .record(_rec('acme_pay', 'd1', projectDir: '/Users/x/StudioProjects/acme_pay', at: DateTime(2026, 6, 21, 9)));
+    history
+        .record(_rec('eats', 'd2', projectDir: '/Users/x/StudioProjects/eats_mobile', at: DateTime(2026, 6, 21, 11)));
     expect(history.find(null)?.appKey, 'eats');
     expect(history.find('true')?.appKey, 'eats');
     expect(history.find('acme_pay')?.appKey, 'acme_pay');

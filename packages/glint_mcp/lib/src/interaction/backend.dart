@@ -6,8 +6,7 @@ import 'result.dart';
 import 'screen_recording.dart';
 
 /// Runs one child process; injected so tests can capture argv without a device. Defaults to [Process.run].
-typedef ProcessRunner = Future<ProcessResult> Function(
-    String executable, List<String> arguments);
+typedef ProcessRunner = Future<ProcessResult> Function(String executable, List<String> arguments);
 
 /// Platform-native input layer. Speaks physical pixels; the Interactor
 /// resolves symbolic targets before calling here.
@@ -33,8 +32,7 @@ abstract class InteractionBackend {
   });
 
   /// Taps each physical point in order with [intervalMs] between taps.
-  Future<void> tapSequence(List<({int x, int y})> points,
-      {required int intervalMs});
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs});
 
   /// Types [text]; [keyDelayMs] widens the gap between keys for fields whose formatter drops fast input.
   Future<void> typeText(String text, {int? keyDelayMs});
@@ -42,19 +40,19 @@ abstract class InteractionBackend {
   Future<void> pressHardwareButton(HardwareButton button);
 
   /// Presses [key] [count] times, each press bracketed by [modifiers]. Throws [UnsupportedBackendAction] when the backend has no keyboard.
-  Future<void> pressKey(KeyName key,
-          {int count = 1, Set<KeyModifier> modifiers = const {}}) async =>
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) async =>
       throw UnsupportedBackendAction(label, 'pressKey: no keyboard on this backend');
 
   /// Selects all text in the focused field (cmd+A on iOS, ctrl+A on Android).
-  Future<void> selectAll() async =>
-      throw UnsupportedBackendAction(label, 'selectAll: no keyboard on this backend');
+  Future<void> selectAll() async => throw UnsupportedBackendAction(label, 'selectAll: no keyboard on this backend');
+
   /// Starts recording the display into [path]. Throws [UnsupportedBackendAction] when the backend cannot record.
   Future<ScreenRecording> startRecording(String path) async =>
       throw UnsupportedBackendAction(label, 'startRecording: this backend cannot record the display');
 
   /// Two fingers around a physical point, spreading or closing until their span is [scale] times what it was.
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+  Future<void> pinch(
+          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
       throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
 
   /// A system gesture from [edge] (back, home, app switcher, Control Center, Notification Center).
@@ -140,13 +138,11 @@ class BackendToolError implements Exception {
   final int exitCode;
   final String stderr;
   @override
-  String toString() =>
-      'BackendToolError($backend, $command, exit=$exitCode): $stderr';
+  String toString() => 'BackendToolError($backend, $command, exit=$exitCode): $stderr';
 }
 
 /// [InteractionBackend.tapSequence] as one tap call per point, for backends with no batched form.
-Future<void> tapEachInTurn(InteractionBackend backend,
-    List<({int x, int y})> points, int intervalMs) async {
+Future<void> tapEachInTurn(InteractionBackend backend, List<({int x, int y})> points, int intervalMs) async {
   for (var i = 0; i < points.length; i++) {
     await backend.tap(physicalX: points[i].x, physicalY: points[i].y);
     if (i < points.length - 1 && intervalMs > 0) {

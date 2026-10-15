@@ -47,8 +47,7 @@ class CaptureFilter {
     Set<String>? allowEntries,
     List<String>? allowOverride,
   }) {
-    final allowRaw = allowOverride ??
-        <String>{...?allowEntries, ..._allowFromEnv()}.toList();
+    final allowRaw = allowOverride ?? <String>{...?allowEntries, ..._allowFromEnv()}.toList();
     return CaptureFilter._(
       [for (final e in denyEntries) _Pattern.parse(e)],
       [for (final e in allowRaw) _Pattern.parse(e)],

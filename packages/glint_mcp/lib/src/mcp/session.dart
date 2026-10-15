@@ -36,8 +36,7 @@ class GlintSession {
         actionLog = ActionLog(),
         sessions = SessionManager(),
         usage = usage ?? UsageRecorder.fromEnv(),
-        attachHistory =
-            attachHistory ?? AttachHistory(dataDir: resolveDataDir()),
+        attachHistory = attachHistory ?? AttachHistory(dataDir: resolveDataDir()),
         _runtimeFactory = runtimeFactory ?? VmServiceRuntime.new {
     usageReporter = UsageReporter(this.usage);
   }
@@ -104,11 +103,9 @@ class GlintSession {
   AppSession? get active => _active;
 
   /// Every attached app, most recently attached first.
-  List<AppSession> get apps => _pool.values.toList()
-    ..sort((a, b) => b.attachedAt.compareTo(a.attachedAt));
+  List<AppSession> get apps => _pool.values.toList()..sort((a, b) => b.attachedAt.compareTo(a.attachedAt));
 
-  List<Map<String, Object?>> appsJson() =>
-      [for (final a in apps) a.toJson(active: identical(a, _active))];
+  List<Map<String, Object?>> appsJson() => [for (final a in apps) a.toJson(active: identical(a, _active))];
 
   AppSession? appFor(String deviceId) => _pool[deviceId];
   bool hasApp(String deviceId) => _pool.containsKey(deviceId);
@@ -172,45 +169,26 @@ class GlintSession {
 
   FlutterRuntime get runtime => _requireAttached(_active?.runtime, 'runtime');
   DeviceTarget get device => _requireAttached(_active?.device, 'device');
-  InteractionBackend get backend =>
-      _requireAttached(_active?.backend, 'backend');
-  InspectorClient get inspector =>
-      _requireAttached(_active?.inspector, 'inspector');
+  InteractionBackend get backend => _requireAttached(_active?.backend, 'backend');
+  InspectorClient get inspector => _requireAttached(_active?.inspector, 'inspector');
   SceneReader get reader => _requireAttached(_active?.reader, 'scene reader');
-  CoordinateResolver get resolver =>
-      _requireAttached(_active?.resolver, 'resolver');
-  Interactor get interactor =>
-      _requireAttached(_active?.interactor, 'interactor');
-  Semanticizer get semanticizer =>
-      _requireAttached(_active?.semanticizer, 'semanticizer');
-  OverlayEnricher get overlayEnricher =>
-      _requireAttached(_active?.overlayEnricher, 'overlay enricher');
-  InputEnricher get inputEnricher =>
-      _requireAttached(_active?.inputEnricher, 'input enricher');
-  ToggleEnricher get toggleEnricher =>
-      _requireAttached(_active?.toggleEnricher, 'toggle enricher');
-  SemanticsFlagEnricher get flagEnricher =>
-      _requireAttached(_active?.flagEnricher, 'flag enricher');
-  ButtonFactsEnricher get buttonEnricher =>
-      _requireAttached(_active?.buttonEnricher, 'button enricher');
-  TabLabelEnricher get tabEnricher =>
-      _requireAttached(_active?.tabEnricher, 'tab enricher');
-  ImageEnricher get imageEnricher =>
-      _requireAttached(_active?.imageEnricher, 'image enricher');
-  MapEnricher get mapEnricher =>
-      _requireAttached(_active?.mapEnricher, 'map enricher');
-  IconEnricher get iconEnricher =>
-      _requireAttached(_active?.iconEnricher, 'icon enricher');
-  LinkEnricher get linkEnricher =>
-      _requireAttached(_active?.linkEnricher, 'link enricher');
-  NavigationEnricher get navEnricher =>
-      _requireAttached(_active?.navEnricher, 'nav enricher');
-  PagedViewportEnricher get pagedEnricher =>
-      _requireAttached(_active?.pagedEnricher, 'paged enricher');
-  ReadinessGate get readinessGate =>
-      _requireAttached(_active?.readinessGate, 'readiness gate');
-  SettleDetector get settleDetector =>
-      _requireAttached(_active?.settleDetector, 'settle detector');
+  CoordinateResolver get resolver => _requireAttached(_active?.resolver, 'resolver');
+  Interactor get interactor => _requireAttached(_active?.interactor, 'interactor');
+  Semanticizer get semanticizer => _requireAttached(_active?.semanticizer, 'semanticizer');
+  OverlayEnricher get overlayEnricher => _requireAttached(_active?.overlayEnricher, 'overlay enricher');
+  InputEnricher get inputEnricher => _requireAttached(_active?.inputEnricher, 'input enricher');
+  ToggleEnricher get toggleEnricher => _requireAttached(_active?.toggleEnricher, 'toggle enricher');
+  SemanticsFlagEnricher get flagEnricher => _requireAttached(_active?.flagEnricher, 'flag enricher');
+  ButtonFactsEnricher get buttonEnricher => _requireAttached(_active?.buttonEnricher, 'button enricher');
+  TabLabelEnricher get tabEnricher => _requireAttached(_active?.tabEnricher, 'tab enricher');
+  ImageEnricher get imageEnricher => _requireAttached(_active?.imageEnricher, 'image enricher');
+  MapEnricher get mapEnricher => _requireAttached(_active?.mapEnricher, 'map enricher');
+  IconEnricher get iconEnricher => _requireAttached(_active?.iconEnricher, 'icon enricher');
+  LinkEnricher get linkEnricher => _requireAttached(_active?.linkEnricher, 'link enricher');
+  NavigationEnricher get navEnricher => _requireAttached(_active?.navEnricher, 'nav enricher');
+  PagedViewportEnricher get pagedEnricher => _requireAttached(_active?.pagedEnricher, 'paged enricher');
+  ReadinessGate get readinessGate => _requireAttached(_active?.readinessGate, 'readiness gate');
+  SettleDetector get settleDetector => _requireAttached(_active?.settleDetector, 'settle detector');
 
   /// Null when the active device is not an iOS simulator.
   NativeReader? get nativeReader => _active?.nativeReader;
@@ -227,11 +205,7 @@ class GlintSession {
     bool rebuild = false,
   }) async {
     final existing = _pool[device.id];
-    if (!rebuild &&
-        existing != null &&
-        !existing.deviceMode &&
-        existing.vmUri == vmUri &&
-        existing.isLive) {
+    if (!rebuild && existing != null && !existing.deviceMode && existing.vmUri == vmUri && existing.isLive) {
       _active = existing;
       return existing;
     }
@@ -351,26 +325,24 @@ class GlintSession {
     );
     final raw = await runtime.evaluateString(
       '((FocusManager.instance.primaryFocus?.context?.widget.runtimeType.toString() ?? "")'
-          ' + "|" + '
-          '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
-          ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString())'
-          ' + "|" + '
-          '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
-          ' : WidgetsBinding.instance.platformDispatcher.views.first.physicalSize.aspectRatio.toString())'
-          ' + "|" + '
-          'WidgetsBinding.instance.platformDispatcher.platformBrightness.name'
-          ' + "|" + '
-          'WidgetsBinding.instance.platformDispatcher.locale.toString())',
+      ' + "|" + '
+      '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+      ' : WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom.toString())'
+      ' + "|" + '
+      '(WidgetsBinding.instance.platformDispatcher.views.isEmpty ? "0"'
+      ' : WidgetsBinding.instance.platformDispatcher.views.first.physicalSize.aspectRatio.toString())'
+      ' + "|" + '
+      'WidgetsBinding.instance.platformDispatcher.platformBrightness.name'
+      ' + "|" + '
+      'WidgetsBinding.instance.platformDispatcher.locale.toString())',
     );
     if (raw == null) return empty;
     final parts = raw.split('|');
     final focusedType = parts[0].isEmpty ? null : parts[0];
     final kb = parts.length > 1 ? double.tryParse(parts[1]) ?? 0.0 : 0.0;
     final aspect = parts.length > 2 ? double.tryParse(parts[2]) ?? 0 : 0;
-    final orientation =
-        aspect == 0 ? null : (aspect > 1 ? 'landscape' : 'portrait');
-    final brightness =
-        parts.length > 3 && parts[3].isNotEmpty ? parts[3] : null;
+    final orientation = aspect == 0 ? null : (aspect > 1 ? 'landscape' : 'portrait');
+    final brightness = parts.length > 3 && parts[3].isNotEmpty ? parts[3] : null;
     final locale = parts.length > 4 && parts[4].isNotEmpty ? parts[4] : null;
     return (
       focusedType: focusedType,
@@ -383,8 +355,7 @@ class GlintSession {
 
   /// One of: resumed, inactive, paused, detached, hidden. Null when unset.
   Future<String?> lifecycleState() async {
-    final s = await runtime
-        .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
+    final s = await runtime.evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
     return (s == null || s.isEmpty) ? null : s;
   }
 
@@ -412,8 +383,7 @@ class GlintSession {
 
   /// Logical viewport size + DPR, probed via geometry resolver on any
   /// addressable node. Used by direction-based scroll tools.
-  Future<({double logicalW, double logicalH, double dpr})>
-      probeViewport() async {
+  Future<({double logicalW, double logicalH, double dpr})> probeViewport() async {
     final scene = await reader.readSummary();
     try {
       return await viewportIn(scene);
@@ -424,8 +394,7 @@ class GlintSession {
 
   /// [probeViewport] against a scene the caller already holds. The implicit
   /// view answers without a node; a selected node is the fallback.
-  Future<({double logicalW, double logicalH, double dpr})> viewportIn(
-      Scene scene) async {
+  Future<({double logicalW, double logicalH, double dpr})> viewportIn(Scene scene) async {
     try {
       final v = await resolver.resolveViewportNodeFree();
       return (logicalW: v.w, logicalH: v.h, dpr: v.dpr);
@@ -434,8 +403,7 @@ class GlintSession {
     }
     final probeId = scene.firstAddressableId();
     if (probeId == null) {
-      throw GeometryResolveError(
-          'no addressable node in scene to probe viewport from');
+      throw GeometryResolveError('no addressable node in scene to probe viewport from');
     }
     final c = await resolver.resolve(scene, probeId);
     return (
@@ -460,8 +428,7 @@ class GlintSession {
   }
 
   /// [probeScrollAnchor] against a scene + semantic view the caller holds; the anchor is scrolled content, never the viewport itself, whose center stays put.
-  Future<ScrollAnchor?> scrollAnchorIn(
-      Scene scene, SemanticScene semantic) async {
+  Future<ScrollAnchor?> scrollAnchorIn(Scene scene, SemanticScene semantic) async {
     final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
     if (list == null) return null;
     for (final n in list.walk()) {
@@ -480,8 +447,7 @@ class GlintSession {
   }
 
   /// [path] shrunk for the model per the screenshot settings, with how its pixels map to `tap x,y`; [maxSize] overrides the configured cap.
-  Future<({ModelImage image, String coordinates})> modelImage(String path,
-      {int? maxSize}) async {
+  Future<({ModelImage image, String coordinates})> modelImage(String path, {int? maxSize}) async {
     final size = pngSize(path);
     if (size == null) {
       return (
@@ -518,6 +484,5 @@ class SessionNotAttachedError implements Exception {
   final String missing;
 
   @override
-  String toString() =>
-      'glint session is not attached; call `attach` before using `$missing`';
+  String toString() => 'glint session is not attached; call `attach` before using `$missing`';
 }

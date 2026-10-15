@@ -76,12 +76,17 @@ bool _isKeyboard(Map<String, Object?> n) {
   return n['type'] == 'keyboard' || id == 'inputView' || id == 'SystemInputAssistantView';
 }
 
-List<Map<String, Object?>> _children(Map<String, Object?> n) =>
-    [for (final c in (n['children'] as List? ?? const [])) if (c is Map) c.cast<String, Object?>()];
+List<Map<String, Object?>> _children(Map<String, Object?> n) => [
+      for (final c in (n['children'] as List? ?? const []))
+        if (c is Map) c.cast<String, Object?>()
+    ];
 
 /// What covers the app in a runner `/tree` reply: a system alert, else the window's top-level view holding the UIKit-only elements (Flutter's own sit in another, or are hidden by a full-screen modal); null when only Flutter and the keyboard are on screen.
 ({String name, List<Map<String, Object?>> roots})? findNativeSurface(Map<String, Object?> reply) {
-  final alerts = [for (final a in (reply['alerts'] as List? ?? const [])) if (a is Map) a.cast<String, Object?>()];
+  final alerts = [
+    for (final a in (reply['alerts'] as List? ?? const []))
+      if (a is Map) a.cast<String, Object?>()
+  ];
   if (alerts.isNotEmpty) {
     final label = alerts.first['label'] as String?;
     return (name: label == null || label.isEmpty ? 'a system alert' : 'alert "$label"', roots: alerts);
@@ -123,7 +128,10 @@ String _surfaceName(List<Map<String, Object?>> marks) {
 
   final bar = marks.where((n) => n['type'] == 'navigationBar').firstOrNull;
   if (bar != null) return 'native screen "${labelOf(bar) ?? 'untitled'}"';
-  final items = [for (final n in marks) if (n['type'] == 'menuItem') labelOf(n)].whereType<String>();
+  final items = [
+    for (final n in marks)
+      if (n['type'] == 'menuItem') labelOf(n)
+  ].whereType<String>();
   if (items.isNotEmpty) return 'menu (${items.take(4).join(' · ')})';
   final first = marks.first;
   final label = labelOf(first);
@@ -148,11 +156,14 @@ List<NativeNode> nativeElements(List<Map<String, Object?>> roots, {({double w, d
     final label = (n['label'] as String?) ?? (n['value'] as String?) ?? (n['placeholder'] as String?) ?? '';
     final tappable = _tappable.contains(type) || (type == 'image' && label.isNotEmpty);
     final f = n['frame'];
-    if (f is List && f.length == 4 && (tappable || (type == 'text' && !insideTappable)) && (tappable || label.isNotEmpty)) {
+    if (f is List &&
+        f.length == 4 &&
+        (tappable || (type == 'text' && !insideTappable)) &&
+        (tappable || label.isNotEmpty)) {
       final [x, y, w, h] = [for (final v in f) (v as num).toDouble()];
       final key = '$type|$label|${x.round()},${y.round()}';
-      final onScreen = screen == null ||
-          (x + w / 2 >= 0 && y + h / 2 >= 0 && x + w / 2 <= screen.w && y + h / 2 <= screen.h);
+      final onScreen =
+          screen == null || (x + w / 2 >= 0 && y + h / 2 >= 0 && x + w / 2 <= screen.w && y + h / 2 <= screen.h);
       if (w > 0 && h > 0 && onScreen && seen.add(key)) {
         out.add((
           cls: type,

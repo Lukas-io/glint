@@ -108,9 +108,7 @@ class CapturesDao {
   Set<int> sessionsCapturedElsewhere() {
     _pruneDeadAttachments();
     return {
-      for (final r in _db.select(
-          'SELECT DISTINCT session_id FROM session_attachments WHERE pid<>?',
-          [io.pid]))
+      for (final r in _db.select('SELECT DISTINCT session_id FROM session_attachments WHERE pid<>?', [io.pid]))
         r['session_id'] as int,
     };
   }
@@ -141,10 +139,12 @@ class CapturesDao {
     const orphan = 'ended_at IS NULL AND id NOT IN '
         '(SELECT session_id FROM session_attachments)';
     final now = DateTime.now().millisecondsSinceEpoch;
-    final n = _db.select(
-      'SELECT COUNT(*) AS n FROM sessions WHERE $orphan$placeholders',
-      keepOpen.toList(),
-    ).first['n'] as int;
+    final n = _db
+        .select(
+          'SELECT COUNT(*) AS n FROM sessions WHERE $orphan$placeholders',
+          keepOpen.toList(),
+        )
+        .first['n'] as int;
     if (n == 0) return 0;
     _db.execute(
       "UPDATE sessions SET ended_at=?, note=COALESCE(note || ' ', '') || '[orphaned]' "
@@ -261,15 +261,13 @@ class CapturesDao {
     final headersResp = r.response != null && !r.response!.hasError
         ? jsonEncode(redactHeaderValues(r.response!.headers ?? {}, secretNames))
         : null;
-    final contentType = _firstHeader(r.response?.headers, 'content-type') ??
-        _firstHeader(r.request?.headers, 'content-type');
+    final contentType =
+        _firstHeader(r.response?.headers, 'content-type') ?? _firstHeader(r.request?.headers, 'content-type');
     // D7/F22: dart:io collapses a followed redirect chain into ONE profile
     // entry; the hops live in response.redirects. Persist them so
     // network_get can show the chain and HAR export can fill redirectURL.
     final redirects = r.response?.redirects;
-    final redirectsJson = (redirects != null && redirects.isNotEmpty)
-        ? jsonEncode(redirects)
-        : null;
+    final redirectsJson = (redirects != null && redirects.isNotEmpty) ? jsonEncode(redirects) : null;
     // RC1: exchange end, not request-upload end — see util/http_timing.dart.
     // In-flight requests persist NULL end/duration; the poller's
     // updatedSince cursor re-delivers them when the response completes and
@@ -647,9 +645,7 @@ class CapturesDao {
         .map((r) => r['conn_key'] as String)
         .toList();
     if (candidates.isEmpty) return null;
-    final gap = lowerOpened == null
-        ? null
-        : connectionId - (lower!['connection_id'] as int) - 1;
+    final gap = lowerOpened == null ? null : connectionId - (lower!['connection_id'] as int) - 1;
     final byGap = gap != null && gap >= 0 && gap < candidates.length;
     final inferred = candidates.length > 1 && !byGap;
     final key = candidates[byGap ? gap : 0];
@@ -716,8 +712,7 @@ class CapturesDao {
   }
 
   /// Records a transport error on an open connection.
-  void wsConnectionError(int sessionId,
-      {required String connKey, required String error}) {
+  void wsConnectionError(int sessionId, {required String connKey, required String error}) {
     _db.execute(
       'UPDATE websocket_connections SET error=COALESCE(error, ?), '
       "state=CASE WHEN state='closed' THEN state ELSE 'error' END "
@@ -847,11 +842,8 @@ class CapturesDao {
       clauses.add('LOWER(logger) LIKE ?');
       params.add('%${loggerContains.toLowerCase()}%');
     }
-    final msgTerms = messageContains
-            ?.where((t) => t.trim().isNotEmpty)
-            .map((t) => t.toLowerCase())
-            .toList() ??
-        const [];
+    final msgTerms =
+        messageContains?.where((t) => t.trim().isNotEmpty).map((t) => t.toLowerCase()).toList() ?? const [];
     if (msgTerms.isNotEmpty) {
       final ors = List.filled(msgTerms.length, 'LOWER(message) LIKE ?');
       clauses.add('(${ors.join(' OR ')})');
@@ -990,10 +982,7 @@ class CapturesDao {
   /// Most-recent raw events for `usage show`.
   List<Map<String, Object?>> recentToolEvents({int? sinceMs, int limit = 50}) {
     if (sinceMs == null) {
-      return _db
-          .select('SELECT * FROM tool_events ORDER BY id DESC LIMIT ?', [limit])
-          .map(_rowToMap)
-          .toList();
+      return _db.select('SELECT * FROM tool_events ORDER BY id DESC LIMIT ?', [limit]).map(_rowToMap).toList();
     }
     return _db
         .select(
@@ -1049,8 +1038,7 @@ class CapturesDao {
   }
 
   /// The highest `tool_events.id`; 0 when the table is empty.
-  int maxToolEventId() =>
-      (_db.select('SELECT COALESCE(MAX(id), 0) AS m FROM tool_events').first['m'] as int?) ?? 0;
+  int maxToolEventId() => (_db.select('SELECT COALESCE(MAX(id), 0) AS m FROM tool_events').first['m'] as int?) ?? 0;
 
   /// Inserts or merges an alert.
   ///
@@ -1098,13 +1086,9 @@ class CapturesDao {
       // contradicting the detector's "dedupe repeat evaluations of the same
       // source" contract. Only bump for a genuinely NEW source; a repeat of
       // the last source just refreshes last_seen_ms.
-      final isSameSource =
-          sourceId != null && sourceId == (row['last_source_id'] as String?);
+      final isSameSource = sourceId != null && sourceId == (row['last_source_id'] as String?);
       final existingSeverity = row['severity'] as String;
-      final escalated =
-          _severityRank(level) > _severityRank(existingSeverity)
-              ? level
-              : existingSeverity;
+      final escalated = _severityRank(level) > _severityRank(existingSeverity) ? level : existingSeverity;
       _db.execute(
         'UPDATE alerts SET '
         '  occurrence_count = occurrence_count + ?, '
@@ -1135,8 +1119,7 @@ class CapturesDao {
         'detail, source_kind, source_id, signature, occurrence_count, '
         'last_seen_ms, last_source_id) '
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
-        [sessionId, ts, effectiveSeverity, kind, title, detail, sourceKind,
-         sourceId, signature, ts, sourceId],
+        [sessionId, ts, effectiveSeverity, kind, title, detail, sourceKind, sourceId, signature, ts, sourceId],
       );
       return true;
     } on sql.SqliteException catch (e) {
@@ -1387,8 +1370,7 @@ class CapturesDao {
   // ----- Capture allowlist (#64 follow-up): persistent, tool-managed -----
 
   bool addCaptureAllow(String pattern, {String? reason}) {
-    final before =
-        _db.select('SELECT 1 FROM capture_allow WHERE pattern=?', [pattern]);
+    final before = _db.select('SELECT 1 FROM capture_allow WHERE pattern=?', [pattern]);
     final isNew = before.isEmpty;
     _db.execute(
       'INSERT OR REPLACE INTO capture_allow(pattern, added_at, reason) VALUES (?,?,?)',
@@ -1398,8 +1380,7 @@ class CapturesDao {
   }
 
   bool removeCaptureAllow(String pattern) {
-    final before =
-        _db.select('SELECT 1 FROM capture_allow WHERE pattern=?', [pattern]);
+    final before = _db.select('SELECT 1 FROM capture_allow WHERE pattern=?', [pattern]);
     if (before.isEmpty) return false;
     _db.execute('DELETE FROM capture_allow WHERE pattern=?', [pattern]);
     return true;
@@ -1489,8 +1470,7 @@ class CapturesDao {
   }
 
   /// Method, URL, host, path, status and timing of [vmIds] in [sessionId], keyed by vm_id.
-  Map<String, Map<String, Object?>> requestSummaries(
-      int sessionId, Iterable<String> vmIds) {
+  Map<String, Map<String, Object?>> requestSummaries(int sessionId, Iterable<String> vmIds) {
     final ids = vmIds.toSet().toList();
     if (ids.isEmpty) return const {};
     final rows = _db.select(
@@ -1618,10 +1598,12 @@ class CapturesDao {
     }
     // Count first (DELETE doesn't report affected rows through this driver
     // uniformly), then delete in one statement.
-    final n = _db.select(
-      'SELECT COUNT(*) AS c FROM alerts WHERE $where',
-      params,
-    ).first['c'] as int;
+    final n = _db
+        .select(
+          'SELECT COUNT(*) AS c FROM alerts WHERE $where',
+          params,
+        )
+        .first['c'] as int;
     if (n == 0) return 0;
     _db.execute('DELETE FROM alerts WHERE $where', params);
     return n;
@@ -1647,9 +1629,7 @@ class CapturesDao {
       params,
     );
     if (targets.isEmpty) return (purged: 0, sessions: const <int>{});
-    final before = _db
-        .select('SELECT COUNT(*) AS n FROM http_bodies$where', params)
-        .first['n'] as int;
+    final before = _db.select('SELECT COUNT(*) AS n FROM http_bodies$where', params).first['n'] as int;
     _db.execute('BEGIN');
     try {
       _db.execute('DELETE FROM http_bodies$where', params);
@@ -1669,8 +1649,7 @@ class CapturesDao {
 
   /// Marks [requests] as having no stored bodies and blanks their body text in the search index, keeping the URL.
   void _forgetBodies(Iterable<(int, String)> requests) {
-    final unfetch = _db.prepare(
-        'UPDATE http_requests SET bodies_fetched=0 WHERE session_id=? AND vm_id=?');
+    final unfetch = _db.prepare('UPDATE http_requests SET bodies_fetched=0 WHERE session_id=? AND vm_id=?');
     final unindex = _db.prepare(
       "UPDATE http_search SET content_request='', content_response='' "
       'WHERE rowid IN (SELECT rowid FROM http_search_map '
@@ -1734,8 +1713,7 @@ class CapturesDao {
       clauses.add(_severityRankSql('severity', '>=', rank));
     }
     final where = clauses.isEmpty ? '' : ' WHERE ${clauses.join(' AND ')}';
-    final before =
-        _db.select('SELECT COUNT(*) AS n FROM alerts$where', params).first['n'] as int;
+    final before = _db.select('SELECT COUNT(*) AS n FROM alerts$where', params).first['n'] as int;
     if (before == 0) return 0;
     _db.execute('DELETE FROM alerts$where', params);
     return before;
@@ -1770,13 +1748,8 @@ class CapturesDao {
     final pageSize = _db.select('PRAGMA page_size').first['page_size'] as int;
     final journalMode = _db.select('PRAGMA journal_mode').first['journal_mode'];
     final fileBytes = pageCount * pageSize;
-    final bodiesBytes = _db
-            .select('SELECT COALESCE(SUM(size),0) AS n FROM http_bodies')
-            .first['n'] as int? ??
-        0;
-    final undrainedAlerts =
-        _db.select('SELECT COUNT(*) AS n FROM alerts WHERE drained=0').first['n']
-            as int;
+    final bodiesBytes = _db.select('SELECT COALESCE(SUM(size),0) AS n FROM http_bodies').first['n'] as int? ?? 0;
+    final undrainedAlerts = _db.select('SELECT COUNT(*) AS n FROM alerts WHERE drained=0').first['n'] as int;
     return {
       'rowCounts': counts,
       'sizeBytes': fileBytes,
@@ -1854,8 +1827,7 @@ class CapturesDao {
   }) {
     if (maxRows <= 0) return 0;
     final notIn = _notInClause('session_id', protectedSessionIds);
-    final before =
-        _db.select('SELECT COUNT(*) AS n FROM log_records').first['n'] as int;
+    final before = _db.select('SELECT COUNT(*) AS n FROM log_records').first['n'] as int;
     _db.execute(
       'DELETE FROM log_records WHERE id IN ('
       '  SELECT id FROM log_records '
@@ -1864,8 +1836,7 @@ class CapturesDao {
       ')',
       [maxRows],
     );
-    final after =
-        _db.select('SELECT COUNT(*) AS n FROM log_records').first['n'] as int;
+    final after = _db.select('SELECT COUNT(*) AS n FROM log_records').first['n'] as int;
     return before - after;
   }
 
@@ -1938,8 +1909,7 @@ class CapturesDao {
   /// [redactedHeaderSet], re-read at most every 30 s so the capture path does not query it per request.
   Set<String> _cachedRedactedHeaderSet() {
     final cached = _redactedCache;
-    if (cached != null &&
-        DateTime.now().difference(cached.at) < const Duration(seconds: 30)) {
+    if (cached != null && DateTime.now().difference(cached.at) < const Duration(seconds: 30)) {
       return cached.names;
     }
     final names = redactedHeaderSet();
@@ -1983,8 +1953,7 @@ class CapturesDao {
   }
 
   List<Map<String, Object?>> listAlertPatterns() {
-    final rows = _db
-        .select('SELECT id, kind, regex, severity, label, added_at FROM alert_patterns ORDER BY id');
+    final rows = _db.select('SELECT id, kind, regex, severity, label, added_at FROM alert_patterns ORDER BY id');
     return rows.map(_rowToMap).toList();
   }
 
@@ -2024,8 +1993,7 @@ class CapturesDao {
     return redactSecrets(v);
   }
 
-  Map<String, Object?> _capRow(
-      sql.Row r, int cellMaxChars, Set<String> secretNames) {
+  Map<String, Object?> _capRow(sql.Row r, int cellMaxChars, Set<String> secretNames) {
     final out = <String, Object?>{};
     for (final k in r.keys) {
       var v = r[k];
@@ -2173,7 +2141,6 @@ class CapturesDao {
     return missing.length;
   }
 
-
   Map<String, Object?> _rowToMap(sql.Row r) {
     return {for (final k in r.keys) k: r[k]};
   }
@@ -2194,7 +2161,10 @@ class CapturesDao {
 
 /// Of the pids in [attachedAt] (pid to when it attached, epoch ms), those still held by the process that attached: running and started before the attach, since a reused pid starts later. One `ps` scan covers them all (macOS `ps -p` prints nothing when any listed pid is gone). A failed scan counts every pid as alive, so a session another process may still use is never ended on a guess.
 Set<int> livePids(Map<int, int> attachedAt) {
-  final others = [for (final pid in attachedAt.keys) if (pid != io.pid) pid];
+  final others = [
+    for (final pid in attachedAt.keys)
+      if (pid != io.pid) pid
+  ];
   final alive = {if (attachedAt.containsKey(io.pid)) io.pid};
   if (others.isEmpty) return alive;
   final String out;
@@ -2212,8 +2182,7 @@ Set<int> livePids(Map<int, int> attachedAt) {
     if (pid == null || !wanted.contains(pid)) continue;
     final elapsed = parseElapsed(parts[1]);
     // etime has one-second resolution.
-    if (elapsed == null ||
-        now - elapsed.inMilliseconds <= attachedAt[pid]! + 2000) {
+    if (elapsed == null || now - elapsed.inMilliseconds <= attachedAt[pid]! + 2000) {
       alive.add(pid);
     }
   }

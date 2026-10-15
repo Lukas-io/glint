@@ -132,8 +132,7 @@ Scene sceneFromUiDump(String xml, double dpr) {
   final nodes = <NativeNode>[];
   for (final m in RegExp(r'<node ([^>]*?)/?>').allMatches(xml)) {
     final a = {
-      for (final kv in RegExp(r'([\w-]+)="([^"]*)"').allMatches(m.group(1)!))
-        kv.group(1)!: _unescape(kv.group(2)!),
+      for (final kv in RegExp(r'([\w-]+)="([^"]*)"').allMatches(m.group(1)!)) kv.group(1)!: _unescape(kv.group(2)!),
     };
     final text = a['text'] ?? '';
     final b = RegExp(r'\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]').firstMatch(a['bounds'] ?? '');

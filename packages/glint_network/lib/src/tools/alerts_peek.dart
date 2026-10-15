@@ -11,14 +11,12 @@ import 'result.dart';
 
 final alertsPeekTool = Tool(
   name: 'alerts_peek',
-  description:
-      'Pending alerts WITHOUT draining them (read-only sibling of '
+  description: 'Pending alerts WITHOUT draining them (read-only sibling of '
       'alerts_drain). Use to triage before committing.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(

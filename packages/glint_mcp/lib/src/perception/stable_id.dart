@@ -164,15 +164,9 @@ class _Snake {
       final c = s[i];
       final isUpper = c.toUpperCase() == c && c.toLowerCase() != c;
       if (isUpper) {
-        final prevLower = i > 0 &&
-            s[i - 1].toLowerCase() == s[i - 1] &&
-            s[i - 1] != '_';
-        final nextLower = i + 1 < s.length &&
-            s[i + 1].toLowerCase() == s[i + 1] &&
-            s[i + 1] != '_';
-        final prevUpper = i > 0 &&
-            s[i - 1].toUpperCase() == s[i - 1] &&
-            s[i - 1].toLowerCase() != s[i - 1];
+        final prevLower = i > 0 && s[i - 1].toLowerCase() == s[i - 1] && s[i - 1] != '_';
+        final nextLower = i + 1 < s.length && s[i + 1].toLowerCase() == s[i + 1] && s[i + 1] != '_';
+        final prevUpper = i > 0 && s[i - 1].toUpperCase() == s[i - 1] && s[i - 1].toLowerCase() != s[i - 1];
         if (out.isNotEmpty && (prevLower || (prevUpper && nextLower))) {
           out.write('_');
         }

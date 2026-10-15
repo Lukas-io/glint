@@ -9,8 +9,7 @@ import 'result.dart';
 
 final usageStatsTool = Tool(
   name: 'usage_stats',
-  description:
-      'How agents use this MCP: per tool, call count, outcome (ok/error/'
+  description: 'How agents use this MCP: per tool, call count, outcome (ok/error/'
       'empty), error/empty rates, error breakdown by kind (errorKinds), '
       'degraded/fallback count, p50/p95 latency, avg result size, estimated '
       'token cost (avgEstimatedTokens / totalEstimatedTokens), the '
@@ -87,8 +86,7 @@ FutureOr<CallToolResult> usageStats(CallToolRequest request) async {
 Map<String, Object?>? _highestErrorRate(List<Map<String, Object?>> tools) {
   Map<String, Object?>? worst;
   for (final t in tools) {
-    if (worst == null ||
-        (t['errorRate'] as num) > (worst['errorRate'] as num)) {
+    if (worst == null || (t['errorRate'] as num) > (worst['errorRate'] as num)) {
       worst = t;
     }
   }

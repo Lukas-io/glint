@@ -17,8 +17,7 @@ const int _kDefaultHeadBytes = 512;
 
 final networkBodyOutlineTool = Tool(
   name: 'network_body_outline',
-  description:
-      'Structural skeleton of a (large) body: keys, value types, array '
+  description: 'Structural skeleton of a (large) body: keys, value types, array '
       'lengths, and per-branch byte sizes, with NO values. Understand a '
       '1-2 MB JSON response and see WHERE the bytes are in a few hundred '
       'tokens, then network_body exactly the slice you need. Non-JSON falls '
@@ -30,8 +29,7 @@ final networkBodyOutlineTool = Tool(
         description: '"response" (default) or "request".',
       ),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
@@ -58,38 +56,31 @@ FutureOr<CallToolResult> networkBodyOutline(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final id = args['id'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — list captured requests and pick an id',
-            'network_search query:"..." — find a request by content',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — list captured requests and pick an id',
+        'network_search query:"..." — find a request by content',
+      ],
+    });
   }
   final whichArg = (args['which'] as String?) ?? 'response';
   if (whichArg != 'request' && whichArg != 'response') {
-    return errorResult('`which` must be "request" or "response".',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with which:"response" (default)'],
-        });
+    return errorResult('`which` must be "request" or "response".', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with which:"response" (default)'],
+    });
   }
   final which = whichArg;
   final maxDepth = (args['maxDepth'] as int?) ?? 6;
   final maxKeys = (args['maxKeys'] as int?) ?? 60;
   final headBytesArg = (args['headBytes'] as int?) ?? _kDefaultHeadBytes;
-  final headBytes = headBytesArg <= 0
-      ? _kDefaultHeadBytes
-      : (headBytesArg > 4096 ? 4096 : headBytesArg);
+  final headBytes = headBytesArg <= 0 ? _kDefaultHeadBytes : (headBytesArg > 4096 ? 4096 : headBytesArg);
 
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
   scope!;
 
   try {
-    final fetch = await fetchBodyBytes(scope, id, which,
-        isolateId: args['isolateId'] as String?);
+    final fetch = await fetchBodyBytes(scope, id, which, isolateId: args['isolateId'] as String?);
     if (fetch.error != null) return fetch.error!;
     final bytes = fetch.bytes;
     final mimeType = fetch.mimeType;
@@ -124,8 +115,7 @@ FutureOr<CallToolResult> networkBodyOutline(CallToolRequest request) async {
         ...decryption,
         'scope': scope.toBlock(),
         'sessionId': scope.sessionId,
-        'summary':
-            'No JSON outline for $which body of $id ($parseError) — showing a $headBytes-byte head.',
+        'summary': 'No JSON outline for $which body of $id ($parseError) — showing a $headBytes-byte head.',
         'id': id,
         'which': which,
         'bodyStatus': 'stored',
@@ -148,8 +138,7 @@ FutureOr<CallToolResult> networkBodyOutline(CallToolRequest request) async {
       ...decryption,
       'scope': scope.toBlock(),
       'sessionId': scope.sessionId,
-      'summary':
-          'Structural outline of $which body for $id ($total bytes, $shapeKind). '
+      'summary': 'Structural outline of $which body for $id ($total bytes, $shapeKind). '
           'No values; `bytes` per branch shows where to drill, then network_body the slice.',
       'id': id,
       'which': which,
@@ -165,15 +154,13 @@ FutureOr<CallToolResult> networkBodyOutline(CallToolRequest request) async {
       ],
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('outline failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'id': id,
-          'which': which,
-          'nextSteps': const [
-            'network_get id:<id> — confirm the request still exists',
-            'network_body id:<id> which:response — fetch raw bytes instead',
-          ],
-        });
+    return errorResult('outline failed: $e', kind: ErrorKind.internal, extra: {
+      'id': id,
+      'which': which,
+      'nextSteps': const [
+        'network_get id:<id> — confirm the request still exists',
+        'network_body id:<id> which:response — fetch raw bytes instead',
+      ],
+    });
   }
 }

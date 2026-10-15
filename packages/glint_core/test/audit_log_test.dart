@@ -45,8 +45,7 @@ void main() {
         AuditLog.append(dir.path, '{"first":true}');
         final entries = AuditLog.readAll(dir.path);
         expect(entries, hasLength(1));
-        expect(entries.first!.prevHash,
-            '0000000000000000000000000000000000000000000000000000000000000000');
+        expect(entries.first!.prevHash, '0000000000000000000000000000000000000000000000000000000000000000');
       } finally {
         dir.deleteSync(recursive: true);
       }
@@ -137,8 +136,7 @@ void main() {
     addTearDown(() => dir.deleteSync(recursive: true));
     final workers = await Future.wait([
       for (var w = 0; w < 4; w++)
-        Process.start(Platform.resolvedExecutable,
-            ['run', 'test/support/append_worker.dart', dir.path, '$w', '25']),
+        Process.start(Platform.resolvedExecutable, ['run', 'test/support/append_worker.dart', dir.path, '$w', '25']),
     ]);
     final codes = await Future.wait(workers.map((w) => w.exitCode));
     expect(codes, everyElement(0));
@@ -172,8 +170,7 @@ void main() {
 
     test('a link to no line at all is still a break', () {
       AuditLog.append(dir.path, '{"a":1}');
-      File(p.join(dir.path, AuditLog.fileName))
-          .writeAsStringSync(forged('f' * 64, '{"c":3}'), mode: FileMode.append);
+      File(p.join(dir.path, AuditLog.fileName)).writeAsStringSync(forged('f' * 64, '{"c":3}'), mode: FileMode.append);
       final r = AuditLog.verify(dir.path);
       expect(r.intact, isFalse);
       expect(r.brokenAtIndex, 1);

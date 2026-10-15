@@ -83,12 +83,10 @@ List<MigrationPlan> planMigrations({
 /// Opt out with `GLINT_NETWORK_NO_AUTO_MIGRATE=true`. Poll interval:
 /// `GLINT_NETWORK_MIGRATE_POLL_MS` (1000-60000, default 5000).
 class SessionMigrator {
-  SessionMigrator({this.defaultDtdUri, Duration? pollInterval})
-      : pollInterval = pollInterval ?? _envPollInterval();
+  SessionMigrator({this.defaultDtdUri, Duration? pollInterval}) : pollInterval = pollInterval ?? _envPollInterval();
 
   static Duration _envPollInterval() {
-    final raw =
-        networkEnv['GLINT_NETWORK_MIGRATE_POLL_MS'];
+    final raw = networkEnv['GLINT_NETWORK_MIGRATE_POLL_MS'];
     final parsed = raw == null ? null : int.tryParse(raw);
     if (parsed == null) return const Duration(seconds: 5);
     final clamped = parsed < 1000 ? 1000 : (parsed > 60000 ? 60000 : parsed);
@@ -155,8 +153,7 @@ class SessionMigrator {
 
     registry.recordLiveApps(liveByUri);
     final attached = [
-      for (final s in registry.attached.values)
-        (id: s.id, uri: s.vmServiceUri, appName: s.appName),
+      for (final s in registry.attached.values) (id: s.id, uri: s.vmServiceUri, appName: s.appName),
     ];
 
     for (final plan in planMigrations(attached: attached, liveByUri: liveByUri)) {

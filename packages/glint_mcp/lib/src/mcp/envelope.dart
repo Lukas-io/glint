@@ -38,8 +38,7 @@ class StructuredResponse {
   }
 
   /// A bridge action refused by the iOS toolchain check.
-  factory StructuredResponse.toolchainBlocked(IosToolchainBlocked e) =>
-      StructuredResponse.error(
+  factory StructuredResponse.toolchainBlocked(IosToolchainBlocked e) => StructuredResponse.error(
         summary: 'refused: ${e.detail}',
         errorKind: GlintErrorKind.unsupportedToolchain,
         detail: e.detail,
@@ -62,11 +61,14 @@ class StructuredResponse {
   /// A backend exception as a reply: a [BackendFailure] keeps its kind, data and next steps; anything unknown is a `backendToolError`.
   factory StructuredResponse.backendError(String summary, Object e) => switch (e) {
         IosToolchainBlocked() => StructuredResponse.toolchainBlocked(e),
-        BackendFailure() => StructuredResponse.error(
-            summary: summary, errorKind: e.kind, detail: e.detail, nextSteps: e.nextSteps)
-          .mergeData(e.data),
+        BackendFailure() =>
+          StructuredResponse.error(summary: summary, errorKind: e.kind, detail: e.detail, nextSteps: e.nextSteps)
+              .mergeData(e.data),
         UnsupportedBackendAction() => StructuredResponse.error(
-            summary: summary, errorKind: GlintErrorKind.unsupportedBackendAction, detail: e.detail, nextSteps: e.nextSteps),
+            summary: summary,
+            errorKind: GlintErrorKind.unsupportedBackendAction,
+            detail: e.detail,
+            nextSteps: e.nextSteps),
         _ => StructuredResponse.error(summary: summary, errorKind: GlintErrorKind.backendToolError, detail: '$e'),
       };
 
@@ -84,8 +86,7 @@ class StructuredResponse {
     const geometry = {'painted', 'hittable', 'physicalCenter'};
     final data = <String, Object?>{
       for (final e in r.toJson().entries)
-        if (!dup.contains(e.key) && (detail || !geometry.contains(e.key)))
-          e.key: e.value,
+        if (!dup.contains(e.key) && (detail || !geometry.contains(e.key))) e.key: e.value,
     };
     if (r.error != null) data['detail'] = r.error;
     return StructuredResponse(
@@ -132,13 +133,10 @@ class StructuredResponse {
       );
 
   /// Bytes the client receives: the structured payload, or the text alone.
-  int get wireBytes => textOnly
-      ? renderText().length
-      : jsonEncode(toStructuredContent()).length;
+  int get wireBytes => textOnly ? renderText().length : jsonEncode(toStructuredContent()).length;
 
   /// Merges [extra] into [data] (extra keys win).
-  StructuredResponse mergeData(Map<String, Object?> extra) =>
-      copyWith(data: {...?data, ...extra});
+  StructuredResponse mergeData(Map<String, Object?> extra) => copyWith(data: {...?data, ...extra});
 
   /// Appends [extra] to [warnings] (no-op when empty).
   StructuredResponse addWarnings(List<String> extra) =>
@@ -200,10 +198,7 @@ class StructuredResponse {
         for (final path in imagePaths)
           if (_base64File(path) case final data?)
             Content.image(
-                data: data,
-                mimeType: path.endsWith('.jpg') || path.endsWith('.jpeg')
-                    ? 'image/jpeg'
-                    : 'image/png'),
+                data: data, mimeType: path.endsWith('.jpg') || path.endsWith('.jpeg') ? 'image/jpeg' : 'image/png'),
       ],
       structuredContent: textOnly ? null : toStructuredContent(),
       isError: isError,
@@ -221,11 +216,7 @@ String? _base64File(String path) {
 
 /// The line of [detail] that carries the reason: a VM header like "Unhandled exception:" is joined to the line after it, capped at 240 chars.
 String reasonLine(String detail) {
-  final lines = detail
-      .split('\n')
-      .map((l) => l.trim())
-      .where((l) => l.isNotEmpty)
-      .toList();
+  final lines = detail.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
   if (lines.isEmpty) return '';
   var line = lines.first;
   if (line.endsWith(':') && lines.length > 1) line = '$line ${lines[1]}';

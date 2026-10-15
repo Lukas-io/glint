@@ -15,14 +15,14 @@ void main() {
     dir = Directory.systemTemp.createTempSync('ignored_count_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     void req(String vmId, String host) {
       CapturesDatabase.instance.raw.execute(
         'INSERT INTO http_requests(session_id, vm_id, host) VALUES (?,?,?)',
         [sid, vmId, host],
       );
     }
+
     req('a', 'h.com');
     req('b', 'h.com');
     req('c', 'other.com');
@@ -48,9 +48,7 @@ void main() {
     final n = dao.countRequestsForHost("h.com'; DROP TABLE http_requests;--");
     expect(n, 0);
     // the table must still exist and keep its rows
-    final still = CapturesDatabase.instance.raw
-        .select('SELECT COUNT(*) AS n FROM http_requests')
-        .first['n'];
+    final still = CapturesDatabase.instance.raw.select('SELECT COUNT(*) AS n FROM http_requests').first['n'];
     expect(still, 3);
   });
 }

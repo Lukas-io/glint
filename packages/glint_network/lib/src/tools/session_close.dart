@@ -7,8 +7,7 @@ import 'result.dart';
 
 final sessionCloseTool = Tool(
   name: 'session_close',
-  description:
-      'Reverts the read pointer to the live attached session (or no session '
+  description: 'Reverts the read pointer to the live attached session (or no session '
       'if not attached). Does not modify any data. No-op if not currently '
       'viewing history.',
   inputSchema: Schema.object(properties: {}),
@@ -30,8 +29,7 @@ FutureOr<CallToolResult> sessionClose(CallToolRequest request) async {
     'previousViewedSessionId': previous,
     'liveSessionId': live,
     'nextSteps': [
-      if (live != null) 'network_list — read live captures'
-      else 'network_attach — connect to a running app',
+      if (live != null) 'network_list — read live captures' else 'network_attach — connect to a running app',
       'session_list — see what other sessions exist',
     ],
   });

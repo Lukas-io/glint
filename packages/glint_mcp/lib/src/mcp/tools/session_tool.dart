@@ -15,8 +15,7 @@ class SessionTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'session',
-        description:
-            'Session status and named runs. Ops: status (default: attached apps, '
+        description: 'Session status and named runs. Ops: status (default: attached apps, '
             'active run, call counts), open (start a named run), close, note '
             '(annotate active), list (history), export (action-log slice for '
             'one run).',
@@ -39,8 +38,7 @@ class SessionTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'status';
     final mgr = session.sessions;
@@ -56,9 +54,7 @@ class SessionTool extends GlintTool {
             apps.isEmpty
                 ? 'not attached'
                 : 'attached: ${apps.map((a) => '${a.label} on ${a.deviceName ?? a.id}${identical(a, active) ? " (active)" : ""}').join(", ")}',
-            run == null
-                ? 'no named run open'
-                : 'run "${run.name}" open since seq=${run.firstSeq}',
+            run == null ? 'no named run open' : 'run "${run.name}" open since seq=${run.firstSeq}',
             '$seq tool call(s) logged this process',
           ].join('\n'),
           data: {
@@ -66,8 +62,7 @@ class SessionTool extends GlintTool {
             'activeApp': active?.id,
             'run': run?.toJson(),
             'calls': seq,
-            if (session.reconnectCount > 0)
-              'reconnectCount': session.reconnectCount,
+            if (session.reconnectCount > 0) 'reconnectCount': session.reconnectCount,
           },
         );
 
@@ -85,8 +80,7 @@ class SessionTool extends GlintTool {
       case 'close':
         final s = mgr.close(seq);
         if (s == null) {
-          return _bad('no active session to close',
-              const ['open one first: session op:open name:"..."']);
+          return _bad('no active session to close', const ['open one first: session op:open name:"..."']);
         }
         return StructuredResponse(
           summary: 'closed session "${s.name}" (id=${s.id}); '
@@ -101,8 +95,7 @@ class SessionTool extends GlintTool {
         }
         final ok = mgr.note(text);
         if (!ok) {
-          return _bad('no active session to note',
-              const ['open one first: session op:open name:"..."']);
+          return _bad('no active session to note', const ['open one first: session op:open name:"..."']);
         }
         return StructuredResponse(
           summary: 'noted: $text',
@@ -114,15 +107,16 @@ class SessionTool extends GlintTool {
         return StructuredResponse(
           summary: all.isEmpty
               ? '(no sessions)'
-              : all.map((s) => '${s.isActive ? "* " : "  "}'
-                  '${s.id} "${s.name}" '
-                  'seq=${s.firstSeq}..${s.lastSeq ?? "—"}').join('\n'),
+              : all
+                  .map((s) => '${s.isActive ? "* " : "  "}'
+                      '${s.id} "${s.name}" '
+                      'seq=${s.firstSeq}..${s.lastSeq ?? "—"}')
+                  .join('\n'),
           data: {
             'count': all.length,
             'active': mgr.active?.id,
             'sessions': all.map((s) => s.toJson()).toList(),
-            if (session.reconnectCount > 0)
-              'reconnectCount': session.reconnectCount,
+            if (session.reconnectCount > 0) 'reconnectCount': session.reconnectCount,
           },
         );
 
@@ -146,13 +140,11 @@ class SessionTool extends GlintTool {
         );
 
       default:
-        return _bad(
-            'unknown op: $op (use one of status / open / close / note / list / export)');
+        return _bad('unknown op: $op (use one of status / open / close / note / list / export)');
     }
   }
 
-  StructuredResponse _bad(String msg, [List<String> nextSteps = const []]) =>
-      StructuredResponse.error(
+  StructuredResponse _bad(String msg, [List<String> nextSteps = const []]) => StructuredResponse.error(
         summary: msg,
         errorKind: GlintErrorKind.invalidArgument,
         nextSteps: nextSteps,

@@ -44,8 +44,7 @@ void main() {
     expect(schema['http_requests'], contains('session_id'));
     // sqlite internals + FTS shadow tables must not leak.
     expect(schema.keys.any((k) => k.startsWith('sqlite_')), isFalse);
-    expect(schema.keys.any((k) => k.contains('_fts') || k == 'http_search'),
-        isFalse);
+    expect(schema.keys.any((k) => k.contains('_fts') || k == 'http_search'), isFalse);
   });
 
   test('distinctHosts returns captured hosts busiest-first', () {

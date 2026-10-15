@@ -57,10 +57,7 @@ class SessionStateView {
         final row = dao.getSession(sessionId);
         endedAtMs = row?['ended_at'] as int?;
         ended = endedAtMs != null;
-        elsewhere = row != null &&
-            !ended &&
-            !attached &&
-            dao.otherAttachedProcesses(sessionId) > 0;
+        elsewhere = row != null && !ended && !attached && dao.otherAttachedProcesses(sessionId) > 0;
       } catch (_) {/* DB closing — treat as unknown */}
     }
     return SessionStateView._(

@@ -54,8 +54,7 @@ class InspectorClient {
     }
   }
 
-  Future<void> disposeGroup(String groupName) =>
-      _runtime.disposeInspectorGroup(groupName);
+  Future<void> disposeGroup(String groupName) => _runtime.disposeInspectorGroup(groupName);
 
   Future<SceneNode> _readTree({
     required String groupName,
@@ -75,8 +74,7 @@ class InspectorClient {
 }
 
 class _SceneNodeParser {
-  SceneNode parse(Map<String, Object?> json) =>
-      _node(json, depth: 0, indexInParent: -1);
+  SceneNode parse(Map<String, Object?> json) => _node(json, depth: 0, indexInParent: -1);
 
   SceneNode _node(
     Map<String, Object?> json, {

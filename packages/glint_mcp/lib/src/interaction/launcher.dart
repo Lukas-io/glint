@@ -21,8 +21,8 @@ class LaunchError implements Exception {
 String? flutterAppProblem(String dir) {
   final pubspec = File('$dir/pubspec.yaml');
   if (!pubspec.existsSync()) return 'no pubspec.yaml in $dir';
-  final declaresFlutter = RegExp(r'^\s+flutter:\s*\n\s+sdk:\s*flutter', multiLine: true)
-      .hasMatch(pubspec.readAsStringSync());
+  final declaresFlutter =
+      RegExp(r'^\s+flutter:\s*\n\s+sdk:\s*flutter', multiLine: true).hasMatch(pubspec.readAsStringSync());
   if (!declaresFlutter) return '$dir/pubspec.yaml does not depend on the flutter SDK';
   if (!File('$dir/lib/main.dart').existsSync()) return 'no lib/main.dart in $dir';
   return null;
@@ -33,12 +33,14 @@ Future<List<({int pid, String dir})>> flutterRunsOn(String deviceId, {Set<int> e
   final ps = await Process.run('ps', ['-Ao', 'pid=,command=']);
   final runs = <({int pid, String dir})>[];
   for (final line in '${ps.stdout}'.split('\n')) {
-    final m = RegExp(r'^\s*(\d+)\s+.*flutter_tools\.snapshot (?:run|attach) .*-d ' + RegExp.escape(deviceId)).firstMatch(line);
+    final m = RegExp(r'^\s*(\d+)\s+.*flutter_tools\.snapshot (?:run|attach) .*-d ' + RegExp.escape(deviceId))
+        .firstMatch(line);
     if (m == null) continue;
     final pid = int.parse(m.group(1)!);
     if (except.contains(pid)) continue;
     final cwd = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
-    final dir = '${cwd.stdout}'.split('\n').where((l) => l.startsWith('n')).map((l) => l.substring(1)).firstOrNull ?? '?';
+    final dir =
+        '${cwd.stdout}'.split('\n').where((l) => l.startsWith('n')).map((l) => l.substring(1)).firstOrNull ?? '?';
     runs.add((pid: pid, dir: dir));
   }
   return runs;
@@ -90,7 +92,12 @@ class AppLauncher {
     try {
       proc = await Process.start(
         flutterPath,
-        [verb, '-d', deviceId, if (attachTo != null) ...['--debug-url', '$attachTo']],
+        [
+          verb,
+          '-d',
+          deviceId,
+          if (attachTo != null) ...['--debug-url', '$attachTo']
+        ],
         workingDirectory: projectDir,
         environment: environment,
       );
@@ -139,11 +146,7 @@ class AppLauncher {
 
   /// Current `flutter run` phase — the last build/launch-phase line, else the last line.
   static String? _phase(String text) {
-    final lines = text
-        .split(RegExp(r'[\r\n]'))
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    final lines = text.split(RegExp(r'[\r\n]')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     if (lines.isEmpty) return null;
     for (final l in lines.reversed) {
       if (_phaseHints.any(l.contains)) return l;
@@ -152,22 +155,26 @@ class AppLauncher {
   }
 
   static const _phaseHints = [
-    'Launching', 'Running Xcode', 'Xcode build', 'Building', 'Syncing',
-    'Installing', 'Compiling', 'Resolving', 'Waiting for',
+    'Launching',
+    'Running Xcode',
+    'Xcode build',
+    'Building',
+    'Syncing',
+    'Installing',
+    'Compiling',
+    'Resolving',
+    'Waiting for',
   ];
 
   /// Terminate an app: `simctl terminate` (iOS) / `am force-stop` (Android); null on success.
-  Future<String?> terminateApp(
-      DevicePlatform platform, String deviceId, String appId,
-      {String adbPath = 'adb'}) async {
+  Future<String?> terminateApp(DevicePlatform platform, String deviceId, String appId, {String adbPath = 'adb'}) async {
     if (platform == DevicePlatform.ios && RegExp(r'^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}$').hasMatch(deviceId)) {
       return phoneTerminate(deviceId, appId);
     }
     try {
       final r = platform == DevicePlatform.ios
           ? await Process.run('xcrun', ['simctl', 'terminate', deviceId, appId])
-          : await Process.run(
-              adbPath, ['-s', deviceId, 'shell', 'am', 'force-stop', appId]);
+          : await Process.run(adbPath, ['-s', deviceId, 'shell', 'am', 'force-stop', appId]);
       if (r.exitCode != 0) {
         final err = ((r.stderr as String?) ?? '').trim();
         return err.isEmpty ? 'exit ${r.exitCode}' : err;
@@ -179,8 +186,7 @@ class AppLauncher {
   }
 
   /// Shut down a device: `simctl shutdown` (iOS) / `adb emu kill` (Android); null on success.
-  Future<String?> shutdown(DevicePlatform platform, String deviceId,
-      {String adbPath = 'adb'}) async {
+  Future<String?> shutdown(DevicePlatform platform, String deviceId, {String adbPath = 'adb'}) async {
     try {
       final r = platform == DevicePlatform.ios
           ? await Process.run('xcrun', ['simctl', 'shutdown', deviceId])

@@ -49,8 +49,7 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  int session(String uri) => dao.createSession(
-      appName: 'app', vmServiceUri: uri, isolateId: null, projectPath: null);
+  int session(String uri) => dao.createSession(appName: 'app', vmServiceUri: uri, isolateId: null, projectPath: null);
 
   int sharedWithOtherProcess() {
     final id = session('ws://shared');
@@ -58,8 +57,8 @@ void main() {
     return id;
   }
 
-  Future<CallToolResult> delete(int id) => Future.value(sessionDelete(
-      CallToolRequest(name: 'session_delete', arguments: {'id': id, 'confirm': true})));
+  Future<CallToolResult> delete(int id) =>
+      Future.value(sessionDelete(CallToolRequest(name: 'session_delete', arguments: {'id': id, 'confirm': true})));
 
   group('session_delete', () {
     test('refuses one of several sessions attached here', () async {
@@ -99,8 +98,7 @@ void main() {
       final orphan = session('ws://orphan');
       final res = await sessionList(CallToolRequest(name: 'session_list'));
       final rows = {
-        for (final s in (res.structuredContent!['sessions'] as List).cast<Map<String, Object?>>())
-          s['id']: s,
+        for (final s in (res.structuredContent!['sessions'] as List).cast<Map<String, Object?>>()) s['id']: s,
       };
       expect(rows[id]!['status'], 'live');
       expect(rows[id]!['capturedElsewhere'], isTrue);
@@ -110,8 +108,7 @@ void main() {
 
     test('in session_open and SessionStateView', () async {
       final id = sharedWithOtherProcess();
-      final res = await sessionOpen(
-          CallToolRequest(name: 'session_open', arguments: {'id': id}));
+      final res = await sessionOpen(CallToolRequest(name: 'session_open', arguments: {'id': id}));
       expect(res.structuredContent!['summary'], contains('captured by another server process'));
       expect(res.structuredContent!['capturedElsewhere'], isTrue);
 

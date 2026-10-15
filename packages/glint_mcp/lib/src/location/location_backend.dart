@@ -74,7 +74,8 @@ class IosSimulatorLocation extends LocationBackend {
   Duration get minInterval => const Duration(milliseconds: 500);
 
   @override
-  Future<void> set(Fix fix) => _run('xcrun', ['simctl', 'location', udid, 'set', '${_n(fix.at.lat)},${_n(fix.at.lng)}'], 'the location');
+  Future<void> set(Fix fix) =>
+      _run('xcrun', ['simctl', 'location', udid, 'set', '${_n(fix.at.lat)},${_n(fix.at.lng)}'], 'the location');
 
   @override
   Future<bool> clear() async {
@@ -91,8 +92,13 @@ class IosSimulatorLocation extends LocationBackend {
     final Process process;
     try {
       process = await Process.start('xcrun', [
-        'simctl', 'location', udid, 'start', '--speed=${speed.toStringAsFixed(2)}',
-        '--interval=${(interval.inMilliseconds / 1000).toStringAsFixed(1)}', '-',
+        'simctl',
+        'location',
+        udid,
+        'start',
+        '--speed=${speed.toStringAsFixed(2)}',
+        '--interval=${(interval.inMilliseconds / 1000).toStringAsFixed(1)}',
+        '-',
       ]);
     } on Object catch (e) {
       throw LocationFailed('could not run xcrun for the route', '$e');
@@ -122,14 +128,28 @@ class IosDeviceLocation extends LocationBackend {
   Duration get minInterval => const Duration(seconds: 2);
 
   @override
-  Future<void> set(Fix fix) => _run('xcrun', [
-        'devicectl', 'device', 'simulate', 'location', 'coordinate', '--device', udid,
-        '--latitude', _n(fix.at.lat), '--longitude', _n(fix.at.lng), '-q',
-      ], 'the location');
+  Future<void> set(Fix fix) => _run(
+      'xcrun',
+      [
+        'devicectl',
+        'device',
+        'simulate',
+        'location',
+        'coordinate',
+        '--device',
+        udid,
+        '--latitude',
+        _n(fix.at.lat),
+        '--longitude',
+        _n(fix.at.lng),
+        '-q',
+      ],
+      'the location');
 
   @override
   Future<bool> clear() async {
-    await _run('xcrun', ['devicectl', 'device', 'simulate', 'location', 'clear', '--device', udid, '-q'], 'clearing the location');
+    await _run('xcrun', ['devicectl', 'device', 'simulate', 'location', 'clear', '--device', udid, '-q'],
+        'clearing the location');
     return true;
   }
 }
@@ -199,14 +219,16 @@ class AndroidEmulatorLocation extends LocationBackend {
 
   /// A `GpsState` message (speed in knots, as the emulator reads it) with passive updates off so the emulator's own location panel does not override it.
   static List<int> gpsState(Fix fix) {
-    List<int> f64(int field, double v) => [(field << 3) | 1, ...(ByteData(8)..setFloat64(0, v, Endian.little)).buffer.asUint8List()];
+    List<int> f64(int field, double v) =>
+        [(field << 3) | 1, ...(ByteData(8)..setFloat64(0, v, Endian.little)).buffer.asUint8List()];
     return [
       ...f64(2, fix.at.lat),
       ...f64(3, fix.at.lng),
       if (fix.speed != null) ...f64(4, fix.speed! / _metersPerSecondPerKnot),
       if (fix.heading != null) ...f64(5, fix.heading!),
       if (fix.altitude != null) ...f64(6, fix.altitude!),
-      0x38, 8,
+      0x38,
+      8,
     ];
   }
 }

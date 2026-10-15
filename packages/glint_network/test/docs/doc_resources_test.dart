@@ -15,17 +15,14 @@ void main() {
   test('discovers the tool guides + response contract as resources', () {
     final resources = DocResources.discover();
     // Running from source (dart test), the repo docs/ is present.
-    expect(resources, isNotEmpty,
-        reason: 'docs/tools/** should resolve when running from source');
+    expect(resources, isNotEmpty, reason: 'docs/tools/** should resolve when running from source');
 
     final uris = resources.map((r) => r.uri).toSet();
     expect(uris.any((u) => u.toLowerCase().contains('response_contract')), isTrue,
         reason: 'the response contract must be served');
-    expect(
-        uris.any((u) => u.startsWith('glint-network://docs/tools/')), isTrue);
+    expect(uris.any((u) => u.startsWith('glint-network://docs/tools/')), isTrue);
     // The network_query guide the tool description points at must exist.
-    expect(
-        uris.any((u) => u.contains('network_query.md')), isTrue,
+    expect(uris.any((u) => u.contains('network_query.md')), isTrue,
         reason: 'the schema guide referenced by network_query must be served');
 
     // Every resource points at a real, readable markdown file.

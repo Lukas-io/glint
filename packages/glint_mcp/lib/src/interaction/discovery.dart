@@ -110,8 +110,7 @@ class DiscoveryResult {
   final List<Uri> vmUris;
   final List<BootedDevice> devices;
 
-  List<BootedDevice> devicesFor(DevicePlatform p) =>
-      devices.where((d) => d.platform == p).toList();
+  List<BootedDevice> devicesFor(DevicePlatform p) => devices.where((d) => d.platform == p).toList();
 }
 
 /// Where `adb` lives: [explicit] first, then PATH, then the usual SDK homes
@@ -156,11 +155,9 @@ class DeviceDiscovery {
   /// The package in front on Android device [serial] (e.g. the launcher), or null when adb cannot tell.
   Future<String?> foregroundPackage(String serial) async {
     try {
-      final res = await Process.run(adbPath,
-              ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
+      final res = await Process.run(adbPath, ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
           .timeout(const Duration(seconds: 3));
-      final m = RegExp(r'topResumedActivity=ActivityRecord\{\S+ \S+ ([\w.]+)/')
-          .firstMatch(res.stdout as String);
+      final m = RegExp(r'topResumedActivity=ActivityRecord\{\S+ \S+ ([\w.]+)/').firstMatch(res.stdout as String);
       return m?.group(1);
     } on Object {
       return null;
@@ -170,8 +167,7 @@ class DeviceDiscovery {
   /// The Android package whose process is [pid] on [serial], or null when adb cannot tell.
   Future<String?> androidPackageForPid(String serial, int pid) async {
     try {
-      final res = await Process.run(
-              adbPath, ['-s', serial, 'shell', 'cat', '/proc/$pid/cmdline'])
+      final res = await Process.run(adbPath, ['-s', serial, 'shell', 'cat', '/proc/$pid/cmdline'])
           .timeout(const Duration(seconds: 3));
       final name = (res.stdout as String).replaceAll('\u0000', '').trim().split(':').first;
       return RegExp(r'^[A-Za-z][\w]*(\.\w+)+$').hasMatch(name) ? name : null;
@@ -359,8 +355,7 @@ class DeviceDiscovery {
   /// command line names the target with `-d <udid|name>`; the app path form
   /// (`CoreSimulator/Devices/<udid>/…/X.app`) is checked first where present.
   /// Walks up to three parents in case the listener is a helper child.
-  Future<AppDeviceLink?> _correlateIosSim(
-      int port, List<BootedDevice> booted) async {
+  Future<AppDeviceLink?> _correlateIosSim(int port, List<BootedDevice> booted) async {
     var pid = await _listeningPid(port);
     for (var hop = 0; pid != null && hop < 4; hop++) {
       final ProcessResult ps;
@@ -388,13 +383,10 @@ class DeviceDiscovery {
     List<BootedDevice> booted,
     Future<(String?, String?)?> Function(String appPath) readBundle,
   ) async {
-    final pathUdid = RegExp(r'CoreSimulator/Devices/([0-9A-Fa-f-]{36})')
-        .firstMatch(cmd)
-        ?.group(1);
+    final pathUdid = RegExp(r'CoreSimulator/Devices/([0-9A-Fa-f-]{36})').firstMatch(cmd)?.group(1);
     if (pathUdid != null) {
       final appMatch = RegExp(r'(\S*/([^/]+)\.app)').firstMatch(cmd);
-      final info =
-          appMatch != null ? await readBundle(appMatch.group(1)!) : null;
+      final info = appMatch != null ? await readBundle(appMatch.group(1)!) : null;
       return AppDeviceLink(
         deviceId: pathUdid,
         appName: appMatch?.group(2),
@@ -402,10 +394,8 @@ class DeviceDiscovery {
         displayName: info?.$2,
       );
     }
-    final flag = RegExp(r'(?:^|\s)(?:-d|--device-id)[=\s]+("[^"]+"|\S+)')
-        .firstMatch(cmd)
-        ?.group(1)
-        ?.replaceAll('"', '');
+    final flag =
+        RegExp(r'(?:^|\s)(?:-d|--device-id)[=\s]+("[^"]+"|\S+)').firstMatch(cmd)?.group(1)?.replaceAll('"', '');
     if (flag == null) return null;
     if (RegExp(r'^[0-9A-Fa-f-]{36}$').hasMatch(flag) || isPhysicalIosUdid(flag)) {
       return AppDeviceLink(deviceId: flag);
@@ -459,8 +449,7 @@ class DeviceDiscovery {
     return null;
   }
 
-  Future<int?> _listeningPid(int port) async =>
-      (await _listeningPids(port)).firstOrNull;
+  Future<int?> _listeningPid(int port) async => (await _listeningPids(port)).firstOrNull;
 
   Future<List<int>> _listeningPids(int port) async {
     final ProcessResult res;
@@ -637,10 +626,7 @@ List<RunningApp> collapseSameApp(List<RunningApp> apps) {
   final seen = <String>{};
   return [
     for (final a in apps)
-      if (a.deviceId == null ||
-          a.bundleId == null ||
-          seen.add('${a.deviceId}|${a.bundleId}'))
-        a,
+      if (a.deviceId == null || a.bundleId == null || seen.add('${a.deviceId}|${a.bundleId}')) a,
   ];
 }
 

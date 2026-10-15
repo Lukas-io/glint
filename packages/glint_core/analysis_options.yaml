@@ -1,0 +1,10 @@
+include: package:lints/recommended.yaml
+
+formatter:
+  page_width: 120
+
+linter:
+  rules:
+    - prefer_single_quotes
+    - unawaited_futures
+    - unintended_html_in_doc_comment

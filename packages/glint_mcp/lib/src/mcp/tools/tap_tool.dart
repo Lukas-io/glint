@@ -24,15 +24,14 @@ class TapTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(
-              description: 'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
+              description:
+                  'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
             ),
             'glintId': Schema.string(
-              description:
-                  'Stable id from `get_scene`, e.g. floating_action_button',
+              description: 'Stable id from `get_scene`, e.g. floating_action_button',
             ),
             'x': Schema.num(
-              description:
-                  'Raw x coordinate (with y). Device mode: screenshot pixels; '
+              description: 'Raw x coordinate (with y). Device mode: screenshot pixels; '
                   'flutter mode: logical points. Bypasses glintId.',
             ),
             'y': Schema.num(
@@ -58,31 +57,26 @@ class TapTool extends GlintTool {
                   'true refuses any target that may not be hittable, false never refuses (errorKind=notHittable). Default: refuse only when Flutter\'s hit test shows the tap would land on another widget.',
             ),
             'awaitReady': Schema.bool(
-              description:
-                  'Wait until the target is on screen and hittable, then act. Default false.',
+              description: 'Wait until the target is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
-              description:
-                  'Include geometry (painted, hittable, physicalCenter). Default false.',
+              description: 'Include geometry (painted, hittable, physicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final t = readTargetedArgs(args, session.config);
     if (args['sequence'] != null) {
@@ -97,9 +91,7 @@ class TapTool extends GlintTool {
         );
       }
       return runTapSequence(session, parsed.steps!,
-          intervalMs: intervalMs,
-          returnScene: t.returnScene,
-          fetchScene: t.fetchScene);
+          intervalMs: intervalMs, returnScene: t.returnScene, fetchScene: t.fetchScene);
     }
 
     // Coordinate tap — bypasses scene resolution; the only path in device mode.
@@ -115,8 +107,8 @@ class TapTool extends GlintTool {
       );
     }
 
-    final native = await resolveNativeTarget(session,
-        glintId: args['glintId'] as String?, text: args['text'] as String?);
+    final native =
+        await resolveNativeTarget(session, glintId: args['glintId'] as String?, text: args['text'] as String?);
     if (native != null) {
       final hit = native.hit;
       if (hit == null) return native.error!;
@@ -148,8 +140,7 @@ class TapTool extends GlintTool {
       final interactor = session.interactor..refuseNotHittable = refuse;
       final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
       interactor.refuseNotHittable = null;
-      var response =
-          StructuredResponse.fromActionResult(result, detail: t.detail);
+      var response = StructuredResponse.fromActionResult(result, detail: t.detail);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
       if (!result.ok) {

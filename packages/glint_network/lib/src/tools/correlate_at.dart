@@ -11,24 +11,20 @@ import 'result.dart';
 
 final correlateAtTool = Tool(
   name: 'correlate_at',
-  description:
-      'Logs and HTTP requests within +/- windowMs of an anchor timestamp, '
+  description: 'Logs and HTTP requests within +/- windowMs of an anchor timestamp, '
       'each with a signed deltaMs, nearest-first. Answers "which request '
       'fired closest to this log line?"',
   inputSchema: Schema.object(
     properties: {
       'tsMs': Schema.int(
-        description:
-            'Anchor timestamp (ms since epoch), e.g. a log entry\'s timestampMs.',
+        description: 'Anchor timestamp (ms since epoch), e.g. a log entry\'s timestampMs.',
       ),
       'windowMs': Schema.int(
-        description:
-            'Half-width window in ms (anchor +/- windowMs). Default 1000, cap '
+        description: 'Half-width window in ms (anchor +/- windowMs). Default 1000, cap '
             '30000.',
       ),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
@@ -72,13 +68,9 @@ FutureOr<CallToolResult> correlateAt(CallToolRequest request) async {
   scope!;
 
   final windowRaw = (args['windowMs'] as int?) ?? _kWindowDefault;
-  final windowMs = windowRaw <= 0
-      ? _kWindowDefault
-      : (windowRaw > _kWindowHardCap ? _kWindowHardCap : windowRaw);
+  final windowMs = windowRaw <= 0 ? _kWindowDefault : (windowRaw > _kWindowHardCap ? _kWindowHardCap : windowRaw);
   final limitRaw = (args['limit'] as int?) ?? _kLimitDefault;
-  final limit = limitRaw <= 0
-      ? _kLimitDefault
-      : (limitRaw > _kLimitHardCap ? _kLimitHardCap : limitRaw);
+  final limit = limitRaw <= 0 ? _kLimitDefault : (limitRaw > _kLimitHardCap ? _kLimitHardCap : limitRaw);
   final isolateId = args['isolateId'] as String?;
 
   final logsOn = caps.isEnabled(Category.logs);
@@ -125,15 +117,13 @@ FutureOr<CallToolResult> correlateAt(CallToolRequest request) async {
   Map<String, Object?>? nearest;
   String? nearestKind;
   for (final e in logs) {
-    if (nearest == null ||
-        (e['deltaMs'] as int).abs() < (nearest['deltaMs'] as int).abs()) {
+    if (nearest == null || (e['deltaMs'] as int).abs() < (nearest['deltaMs'] as int).abs()) {
       nearest = e;
       nearestKind = 'log';
     }
   }
   for (final e in requests) {
-    if (nearest == null ||
-        (e['deltaMs'] as int).abs() < (nearest['deltaMs'] as int).abs()) {
+    if (nearest == null || (e['deltaMs'] as int).abs() < (nearest['deltaMs'] as int).abs()) {
       nearest = e;
       nearestKind = 'request';
     }
@@ -155,8 +145,7 @@ FutureOr<CallToolResult> correlateAt(CallToolRequest request) async {
     nextSteps.add('Raise windowMs (hard cap $_kWindowHardCap) to widen the search');
   } else {
     if (nearestKind == 'request' && httpOn) {
-      nextSteps.add(
-          'network_get id:"${nearest!['id']}" — full detail on the nearest request');
+      nextSteps.add('network_get id:"${nearest!['id']}" — full detail on the nearest request');
     }
     if (requests.isNotEmpty && httpOn) {
       nextSteps.add('network_replay id:"${requests.first['id']}" — reproduce the nearest request');
@@ -182,8 +171,7 @@ Map<String, Object?> _logEntry(Map<String, Object?> r, int anchorMs) {
   final error = r['error'] as String?;
   final err = error == null ? null : truncateMessage(error, _kErrorCap);
   final stackTrace = r['stack_trace'] as String?;
-  final stack =
-      stackTrace == null ? null : truncateMessage(stackTrace, _kStackCap);
+  final stack = stackTrace == null ? null : truncateMessage(stackTrace, _kStackCap);
   return {
     'id': r['id'],
     'timestampMs': ts,
@@ -198,8 +186,7 @@ Map<String, Object?> _logEntry(Map<String, Object?> r, int anchorMs) {
     if (err != null) 'error': err.message,
     if (err != null && err.truncated) 'errorTotalLength': err.totalLength,
     if (stack != null) 'stackTrace': stack.message,
-    if (stack != null && stack.truncated)
-      'stackTraceTotalLength': stack.totalLength,
+    if (stack != null && stack.truncated) 'stackTraceTotalLength': stack.totalLength,
   };
 }
 

@@ -5,8 +5,7 @@ import 'scene_node.dart';
 /// Closest glintIds to a stale or mistyped one, so a failed lookup names the
 /// likely replacement instead of sending the agent back to a full re-read.
 /// Same base name (before `#hash`) wins, then small edit distance, then prefix.
-List<String> suggestIds(Iterable<String> candidates, String wanted,
-    {int max = 3}) {
+List<String> suggestIds(Iterable<String> candidates, String wanted, {int max = 3}) {
   final want = wanted.trim();
   if (want.isEmpty) return const [];
   final wantBase = _base(want);
@@ -39,11 +38,9 @@ String _base(String id) {
   return hash < 0 ? id : id.substring(0, hash);
 }
 
-
 /// "did you mean" nextStep line, or null when there is nothing to suggest.
-String? didYouMean(List<String> suggestions) => suggestions.isEmpty
-    ? null
-    : 'did you mean: ${suggestions.map((s) => '"$s"').join(', ')}';
+String? didYouMean(List<String> suggestions) =>
+    suggestions.isEmpty ? null : 'did you mean: ${suggestions.map((s) => '"$s"').join(', ')}';
 
 /// The glintId to use when [wanted] is visible text rather than an id: the nearest tappable ancestor of the matching text, else the text itself; pages under the active one are skipped.
 String? idForLabel(SceneNode root, String wanted) {
@@ -64,6 +61,7 @@ String? idForLabel(SceneNode root, String wanted) {
     }
     return null;
   }
+
   return visit(root, null, false);
 }
 
@@ -78,6 +76,7 @@ SceneNode? _activePage(SceneNode root) {
     }
     n.children.forEach(visit);
   }
+
   visit(root);
   return last;
 }
@@ -100,8 +99,7 @@ String? tapTargetFor(Iterable<SceneNode> roots, SceneNode node) {
 
 bool _tappable(String label) =>
     label.endsWith('Button') ||
-    const {'InkWell', 'InkResponse', 'GestureDetector', 'ListTile', 'Checkbox', 'Switch'}
-        .contains(label);
+    const {'InkWell', 'InkResponse', 'GestureDetector', 'ListTile', 'Checkbox', 'Switch'}.contains(label);
 
 /// nextStep naming the id behind a label the agent passed as a glintId, or null.
 String? labelHint(SceneNode root, String wanted) {

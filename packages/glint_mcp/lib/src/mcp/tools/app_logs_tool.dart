@@ -16,8 +16,7 @@ class AppLogsTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'app_logs',
-        description:
-            'Query the running app\'s log buffer (FlutterError dumps + '
+        description: 'Query the running app\'s log buffer (FlutterError dumps + '
             'developer.log + stderr writes). Use `errorsOnly` to surface only '
             'entries that look like exceptions / stack traces.',
         inputSchema: ObjectSchema(
@@ -35,7 +34,8 @@ class AppLogsTool extends GlintTool {
               description: 'Filter: stderr or logging.',
             ),
             'native': Schema.bool(
-              description: 'Native crashes of the app since attach (iOS crash reports, Android crash buffer) instead of Dart logs.',
+              description:
+                  'Native crashes of the app since attach (iOS crash reports, Android crash buffer) instead of Dart logs.',
             ),
             'sinceSeq': Schema.int(
               description: 'Return entries with sequence >= sinceSeq.',
@@ -45,8 +45,7 @@ class AppLogsTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final limit = argInt(args, 'limit') ?? 50;
     final errorsOnly = argBool(args, 'errorsOnly') ?? false;
@@ -57,9 +56,7 @@ class AppLogsTool extends GlintTool {
 
     AppLogStream? streamFilter;
     if (streamName != null) {
-      streamFilter = AppLogStream.values
-          .where((s) => s.name == streamName)
-          .firstOrNull;
+      streamFilter = AppLogStream.values.where((s) => s.name == streamName).firstOrNull;
       if (streamFilter == null) {
         return StructuredResponse.error(
           summary: 'unknown stream: $streamName',
@@ -78,9 +75,7 @@ class AppLogsTool extends GlintTool {
         )
         .toList();
 
-    final summary = entries.isEmpty
-        ? '(no entries)${_whyEmpty(session)}'
-        : entries.map(_renderEntry).join('\n');
+    final summary = entries.isEmpty ? '(no entries)${_whyEmpty(session)}' : entries.map(_renderEntry).join('\n');
 
     return StructuredResponse(
       summary: summary,
@@ -141,8 +136,7 @@ class AppLogsTool extends GlintTool {
   }
 
   String _renderEntry(AppLogEntry e) {
-    final tag = e.loggerName != null ? '${e.stream.name}:${e.loggerName}'
-        : e.stream.name;
+    final tag = e.loggerName != null ? '${e.stream.name}:${e.loggerName}' : e.stream.name;
     return '[seq=${e.sequence} ${e.timestamp.toIso8601String()} $tag] ${e.content}';
   }
 }

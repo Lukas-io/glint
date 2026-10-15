@@ -53,9 +53,7 @@ void main() {
 
     test('times out with errorKind timeout when no app registers', () async {
       final r = await networkWaitForApp(
-        CallToolRequest(
-            name: 'network_wait_for_app',
-            arguments: const {'timeoutMs': 1000}),
+        CallToolRequest(name: 'network_wait_for_app', arguments: const {'timeoutMs': 1000}),
         null,
       );
       final sc = r.structuredContent!;
@@ -89,8 +87,7 @@ void main() {
     test('sends nothing without a progress token', () async {
       final sent = <ProgressNotification>[];
       await networkWaitForApp(
-        CallToolRequest(
-            name: 'network_wait_for_app', arguments: const {'timeoutMs': 1000}),
+        CallToolRequest(name: 'network_wait_for_app', arguments: const {'timeoutMs': 1000}),
         null,
         notifyProgress: sent.add,
         progressEvery: const Duration(milliseconds: 200),

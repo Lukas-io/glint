@@ -28,7 +28,9 @@ Iterable<Map<String, Object?>> _walk(Map<String, Object?> n) sync* {
   }
 }
 
-List<double> _frame(Map<String, Object?> n) => [for (final v in (n['frame'] as List? ?? const [0, 0, 0, 0])) (v as num).toDouble()];
+List<double> _frame(Map<String, Object?> n) => [
+      for (final v in (n['frame'] as List? ?? const [0, 0, 0, 0])) (v as num).toDouble()
+    ];
 
 /// Banners and Notification Center cells in a runner `/tree?app=com.apple.springboard` reply, top first.
 List<ShownNotification> parseSpringboardNotifications(Map<String, Object?> tree) {
@@ -43,7 +45,12 @@ List<ShownNotification> parseSpringboardNotifications(Map<String, Object?> tree)
       if (d['id'] == 'TextContent.Primary') body ??= d['label'] as String?;
     }
     final label = n['label'] as String? ?? '';
-    out.add(ShownNotification(app: label.split(', ').first, frame: _frame(n), title: title, body: body, grouped: label.contains(', Grouped, ')));
+    out.add(ShownNotification(
+        app: label.split(', ').first,
+        frame: _frame(n),
+        title: title,
+        body: body,
+        grouped: label.contains(', Grouped, ')));
   }
   out.sort((a, b) => a.frame[1].compareTo(b.frame[1]));
   return out;
@@ -54,7 +61,8 @@ List<SpringboardButton> springboardButtons(Map<String, Object?> tree) => [
       for (final key in const ['alerts', 'app'])
         for (final r in [if (tree[key] is Map) tree[key], if (tree[key] is List) ...(tree[key] as List)])
           for (final n in _walk((r as Map).cast<String, Object?>()))
-            if (n['type'] == 'button' && (n['label'] as String? ?? '').isNotEmpty) (label: n['label']! as String, frame: _frame(n)),
+            if (n['type'] == 'button' && (n['label'] as String? ?? '').isNotEmpty)
+              (label: n['label']! as String, frame: _frame(n)),
     ];
 
 /// The title of the alert SpringBoard shows over the app, if any.

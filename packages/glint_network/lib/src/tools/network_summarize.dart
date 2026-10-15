@@ -12,16 +12,14 @@ import 'result.dart';
 
 final networkSummarizeTool = Tool(
   name: 'network_summarize',
-  description:
-      'One digest row per endpoint: count, status distribution, p50/p95 '
+  description: 'One digest row per endpoint: count, status distribution, p50/p95 '
       'latency, error rate, by (method, host, pathTemplate). Path templates '
       'collapse ids (/api/users/42 and /91 -> /api/users/N). Good first call '
       'after network_status for the session shape; cheaper than network_list.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
@@ -59,13 +57,10 @@ FutureOr<CallToolResult> networkSummarize(CallToolRequest request) async {
   // days ago, plus a "drive the app" hint. Default to the whole session
   // when this isn't a live attach.
   final summarizeState = SessionStateView.of(scope.sessionId);
-  final sinceMsRaw = (args['sinceMs'] as int?) ??
-      (summarizeState.canGenerateTraffic ? _kSinceMsDefault : 0);
+  final sinceMsRaw = (args['sinceMs'] as int?) ?? (summarizeState.canGenerateTraffic ? _kSinceMsDefault : 0);
   final hostContains = args['hostContains'] as String?;
   final limitRaw = (args['limit'] as int?) ?? _kLimitDefault;
-  final limit = limitRaw <= 0
-      ? _kLimitDefault
-      : (limitRaw > _kLimitHardCap ? _kLimitHardCap : limitRaw);
+  final limit = limitRaw <= 0 ? _kLimitDefault : (limitRaw > _kLimitHardCap ? _kLimitHardCap : limitRaw);
   final minCount = (args['minCount'] as int?) ?? 1;
 
   final nowUs = DateTime.now().microsecondsSinceEpoch;
@@ -80,27 +75,21 @@ FutureOr<CallToolResult> networkSummarize(CallToolRequest request) async {
       limit: _kRawRowsCap,
     );
   } catch (e) {
-    return errorResult('network_summarize query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': scope.sessionId,
-          'nextSteps': const [
-            'network_status — confirm the session is reachable',
-            'network_list — try the raw list to isolate the issue',
-          ],
-        });
+    return errorResult('network_summarize query failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': scope.sessionId,
+      'nextSteps': const [
+        'network_status — confirm the session is reachable',
+        'network_list — try the raw list to isolate the issue',
+      ],
+    });
   }
 
   final endpoints = summarizeRequests(rows, minCount: minCount);
   final truncated = endpoints.length > limit;
   final returned = truncated ? endpoints.sublist(0, limit) : endpoints;
 
-  final windowDesc = sinceMsRaw <= 0
-      ? 'entire session'
-      : _formatWindow(sinceMsRaw);
-  final hostDesc = hostContains == null || hostContains.isEmpty
-      ? ''
-      : ' (host contains "$hostContains")';
+  final windowDesc = sinceMsRaw <= 0 ? 'entire session' : _formatWindow(sinceMsRaw);
+  final hostDesc = hostContains == null || hostContains.isEmpty ? '' : ' (host contains "$hostContains")';
   final hitRawCap = rows.length >= _kRawRowsCap;
 
   final summary = endpoints.isEmpty
@@ -179,10 +168,7 @@ List<Map<String, Object?>> summarizeRequests(
     );
     bucket.add(row);
   }
-  final out = buckets.values
-      .where((b) => b.count >= minCount)
-      .map((b) => b.toJson())
-      .toList()
+  final out = buckets.values.where((b) => b.count >= minCount).map((b) => b.toJson()).toList()
     ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
   return out;
 }
@@ -252,9 +238,7 @@ int? _percentile(List<int> sorted, double p) {
   if (sorted.isEmpty) return null;
   if (sorted.length == 1) return sorted.first;
   final rank = (sorted.length * p).floor();
-  final clamped = rank < 0
-      ? 0
-      : (rank >= sorted.length ? sorted.length - 1 : rank);
+  final clamped = rank < 0 ? 0 : (rank >= sorted.length ? sorted.length - 1 : rank);
   return sorted[clamped];
 }
 

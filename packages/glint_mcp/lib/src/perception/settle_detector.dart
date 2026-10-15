@@ -75,9 +75,7 @@ class SettleDetector {
       } else if (!stabilityChecked && elapsed >= graceMs) {
         stabilityChecked = true;
         if (await _treeIsStable()) {
-          spinnersSeen = checkLoadingAffordances
-              ? await _findLoadingAffordances()
-              : const [];
+          spinnersSeen = checkLoadingAffordances ? await _findLoadingAffordances() : const [];
           elapsed = DateTime.now().difference(start).inMilliseconds;
           if (spinnersSeen.isEmpty) {
             return SettleResult.animatingButStable(elapsedMs: elapsed);
@@ -89,8 +87,7 @@ class SettleDetector {
       if (elapsed >= ceilingMs) {
         return spinnersSeen.isEmpty
             ? SettleResult.timedOut(elapsedMs: elapsed)
-            : SettleResult.loadingStable(
-                elapsedMs: elapsed, loadingAffordances: spinnersSeen);
+            : SettleResult.loadingStable(elapsedMs: elapsed, loadingAffordances: spinnersSeen);
       }
       await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
     }
@@ -113,8 +110,7 @@ class SettleDetector {
   /// `hasScheduledFrame`: VM-connected debug apps keep a frame perpetually
   /// scheduled (hot reload / devtools), so that flag never goes false.
   Future<bool> _isIdle() async {
-    final s = await runtime
-        .evaluateString('WidgetsBinding.instance.schedulerPhase.toString()');
+    final s = await runtime.evaluateString('WidgetsBinding.instance.schedulerPhase.toString()');
     return s == 'SchedulerPhase.idle';
   }
 
@@ -160,8 +156,7 @@ sealed class SettleResult {
   const SettleResult({required this.elapsedMs});
 
   factory SettleResult.settled({required int elapsedMs}) = SettledOk;
-  factory SettleResult.animatingButStable({required int elapsedMs}) =
-      SettledAnimating;
+  factory SettleResult.animatingButStable({required int elapsedMs}) = SettledAnimating;
   factory SettleResult.loadingStable({
     required int elapsedMs,
     required List<String> loadingAffordances,

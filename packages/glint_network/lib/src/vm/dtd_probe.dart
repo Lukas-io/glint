@@ -84,19 +84,14 @@ class DtdProbe {
   static Future<List<DtdAppListing>> probeAll({
     Duration cacheTtl = const Duration(seconds: 30),
   }) async {
-    final candidates = DtdDiscovery.discover(cwd: null)
-        .where((c) => c.isLive)
-        .toList();
+    final candidates = DtdDiscovery.discover(cwd: null).where((c) => c.isLive).toList();
 
     final key = _buildKey(candidates);
     final now = DateTime.now();
     final cached = _cached;
     final cachedKey = _cachedKey;
     final cachedAt = _cachedAt;
-    if (cached != null &&
-        cachedKey == key &&
-        cachedAt != null &&
-        now.difference(cachedAt) < cacheTtl) {
+    if (cached != null && cachedKey == key && cachedAt != null && now.difference(cachedAt) < cacheTtl) {
       return cached;
     }
 
@@ -118,10 +113,7 @@ class DtdProbe {
   }
 
   static String _buildKey(List<DtdCandidate> candidates) {
-    final pairs = candidates
-        .map((c) => '${c.pid}:${c.epoch.millisecondsSinceEpoch}')
-        .toList()
-      ..sort();
+    final pairs = candidates.map((c) => '${c.pid}:${c.epoch.millisecondsSinceEpoch}').toList()..sort();
     return pairs.join('|');
   }
 

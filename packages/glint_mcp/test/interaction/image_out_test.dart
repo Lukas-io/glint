@@ -26,12 +26,8 @@ void main() {
       final src = '${dir.path}/shot.png';
       File(src).writeAsBytesSync([0]);
       late List<String> args;
-      final out = await prepareModelImage(src,
-          width: 1206,
-          height: 2622,
-          maxSize: 1024,
-          format: 'jpeg',
-          quality: 75, run: (_, a) async {
+      final out = await prepareModelImage(src, width: 1206, height: 2622, maxSize: 1024, format: 'jpeg', quality: 75,
+          run: (_, a) async {
         args = a;
         File(a.last).writeAsBytesSync([0]);
         return ProcessResult(0, 0, '', '');
@@ -58,8 +54,7 @@ void main() {
     test('a small PNG that needs no change is sent as it is', () async {
       final src = '${dir.path}/small.png';
       var ran = false;
-      final out = await prepareModelImage(src,
-          width: 400, height: 800, maxSize: 1024, format: 'png', quality: 75,
+      final out = await prepareModelImage(src, width: 400, height: 800, maxSize: 1024, format: 'png', quality: 75,
           run: (_, __) async {
         ran = true;
         return ProcessResult(0, 0, '', '');

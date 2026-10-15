@@ -25,13 +25,11 @@ class BatchTool extends GlintTool {
           properties: {
             'steps': batchStepsSchema(
               _maxSteps,
-              description:
-                  'Ordered steps, each {tool: "<name>", args: {…}} with the '
+              description: 'Ordered steps, each {tool: "<name>", args: {…}} with the '
                   'same args the tool takes on its own, plus app:"<name>" to run that step on another attached app. Max $_maxSteps.',
             ),
             'stopOnNoChange': Schema.bool(
-              description:
-                  'Stop when a step reports changed:false. Default true.',
+              description: 'Stop when a step reports changed:false. Default true.',
             ),
             'returnScene': Schema.bool(
               description: 'Append the final scene text. Default true.',
@@ -42,8 +40,7 @@ class BatchTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final stopOnNoChange = argBool(args, 'stopOnNoChange') ?? true;
     final returnScene = argBool(args, 'returnScene') ?? true;
@@ -60,8 +57,7 @@ class BatchTool extends GlintTool {
     String? scene;
     if (returnScene && !session.isDeviceMode) {
       try {
-        scene = await session.withScene(
-            (s) async => const PlainTextSceneRenderer().render(s));
+        scene = await session.withScene((s) async => const PlainTextSceneRenderer().render(s));
       } on Object {
         scene = null;
       }

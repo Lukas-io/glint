@@ -11,15 +11,13 @@ import 'result.dart';
 
 final networkDetachTool = Tool(
   name: 'network_detach',
-  description:
-      'Stop capture for one attached session (or all with all:true). Ends '
+  description: 'Stop capture for one attached session (or all with all:true). Ends '
       'the DB session (rows stay queryable). DTD disconnects when nothing '
       'remains. Zero-arg works only when exactly one session is attached.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Attached session to detach. Omit when exactly one is attached. '
+        description: 'Attached session to detach. Omit when exactly one is attached. '
             'Ignored when all:true.',
       ),
       'appNameContains': Schema.string(
@@ -29,8 +27,7 @@ final networkDetachTool = Tool(
         description: 'Detach every attached session.',
       ),
       'keep': Schema.bool(
-        description:
-            'Free the slot but do NOT end the DB session, so it stays open '
+        description: 'Free the slot but do NOT end the DB session, so it stays open '
             'for a later reattach. Default false.',
       ),
     },
@@ -71,8 +68,7 @@ FutureOr<CallToolResult> networkDetach(CallToolRequest request) async {
         kind: ErrorKind.notFound,
         extra: {
           'attached': [
-            for (final a in registry.attached.values)
-              {'sessionId': a.id, 'appName': a.appName},
+            for (final a in registry.attached.values) {'sessionId': a.id, 'appName': a.appName},
           ],
           'nextSteps': const [
             'network_status — list attached sessions',
@@ -90,8 +86,7 @@ FutureOr<CallToolResult> networkDetach(CallToolRequest request) async {
         kind: ErrorKind.notFound,
         extra: {
           'attached': [
-            for (final a in registry.attached.values)
-              {'sessionId': a.id, 'appName': a.appName},
+            for (final a in registry.attached.values) {'sessionId': a.id, 'appName': a.appName},
           ],
           'nextSteps': const [
             'Try a different substring or sessionId',
@@ -107,8 +102,7 @@ FutureOr<CallToolResult> networkDetach(CallToolRequest request) async {
         kind: ErrorKind.badArgument,
         extra: {
           'matches': [
-            for (final m in matches)
-              {'sessionId': m.id, 'appName': m.appName},
+            for (final m in matches) {'sessionId': m.id, 'appName': m.appName},
           ],
           'nextSteps': const [
             'Pass sessionId:<N> for one specific match',
@@ -126,8 +120,7 @@ FutureOr<CallToolResult> networkDetach(CallToolRequest request) async {
         kind: ErrorKind.badArgument,
         extra: {
           'attached': [
-            for (final a in registry.attached.values)
-              {'sessionId': a.id, 'appName': a.appName},
+            for (final a in registry.attached.values) {'sessionId': a.id, 'appName': a.appName},
           ],
           'nextSteps': [
             for (final a in registry.attached.values)
@@ -219,15 +212,13 @@ FutureOr<CallToolResult> networkDetach(CallToolRequest request) async {
     'captured': {'http': totalHttp, 'logs': totalLogs, 'alerts': totalAlerts},
     'nextSteps': remaining == 0
         ? [
-            for (final d in detached)
-              'session_open id:${d['sessionId']} — view what was captured',
+            for (final d in detached) 'session_open id:${d['sessionId']} — view what was captured',
             'session_list — see all sessions including these',
             'network_attach — reconnect to capture more (or a different app)',
           ]
         : [
             'network_status — see remaining attached sessions',
-            for (final d in detached)
-              'session_open id:${d['sessionId']} — view what was captured',
+            for (final d in detached) 'session_open id:${d['sessionId']} — view what was captured',
           ],
   });
 }

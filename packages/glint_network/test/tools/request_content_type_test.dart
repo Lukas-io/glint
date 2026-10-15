@@ -19,8 +19,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('request_ct_test_');
     CapturesDatabase.open(dataDir: dir.path);
-    sid = CapturesDao().createSession(
-        appName: 'app', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = CapturesDao().createSession(appName: 'app', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     final raw = CapturesDatabase.instance.raw;
     raw.execute(
       'INSERT INTO http_requests(session_id, vm_id, method, url, status_code, '
@@ -35,8 +34,12 @@ void main() {
         1000,
         2000,
         'image/png',
-        jsonEncode({'content-type': ['application/json']}),
-        jsonEncode({'content-type': ['image/png']}),
+        jsonEncode({
+          'content-type': ['application/json']
+        }),
+        jsonEncode({
+          'content-type': ['image/png']
+        }),
       ],
     );
     final body = Uint8List.fromList(utf8.encode(requestJson));

@@ -25,8 +25,7 @@ class ScrollToFindTool extends GlintTool {
               description: 'Stable id to find. Mutually exclusive with `targetTextContent`.',
             ),
             'targetTextContent': Schema.string(
-              description:
-                  'Case-insensitive substring to match against any text '
+              description: 'Case-insensitive substring to match against any text '
                   'node\'s content. Useful when the compact renderer collapsed '
                   'the id you wanted.',
             ),
@@ -43,25 +42,21 @@ class ScrollToFindTool extends GlintTool {
               description: 'Scroll size per step. Default 0.6.',
             ),
             'tap': Schema.bool(
-              description: 'Tap it once found (its nearest tappable ancestor when the match is text) and return the tap result. Default false.',
+              description:
+                  'Tap it once found (its nearest tappable ancestor when the match is text) and return the tap result. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final targetGlintId = args['targetGlintId'] as String?;
-    final targetText =
-        (args['targetTextContent'] as String?) ?? (args['text'] as String?);
+    final targetText = (args['targetTextContent'] as String?) ?? (args['text'] as String?);
     final dirName = (args['direction'] as String?) ?? 'down';
-    final maxScrolls =
-        argInt(args, 'maxScrolls') ?? session.config.scrollMaxScrolls;
-    final amount = (argNum(args, 'amountFraction') ??
-            session.config.scrollAmountFraction)
-        .toDouble();
+    final maxScrolls = argInt(args, 'maxScrolls') ?? session.config.scrollMaxScrolls;
+    final amount = (argNum(args, 'amountFraction') ?? session.config.scrollAmountFraction).toDouble();
     final tap = argBool(args, 'tap') ?? false;
 
     if ((targetGlintId == null) == (targetText == null)) {
@@ -84,11 +79,9 @@ class ScrollToFindTool extends GlintTool {
       'amountFraction': amount,
     });
     final scroller = const ScrollTool();
-    final criterion = targetGlintId != null
-        ? 'glintId=$targetGlintId'
-        : 'text~"$targetText"';
+    final criterion = targetGlintId != null ? 'glintId=$targetGlintId' : 'text~"$targetText"';
 
-    var seenInTree = false;   // target appeared in scene at least once
+    var seenInTree = false; // target appeared in scene at least once
     var seenInOverlay = false; // target found in overlay (not in scrollable content)
     var lastTexts = const <String>[];
     var lastIds = const <String>[];
@@ -100,9 +93,7 @@ class ScrollToFindTool extends GlintTool {
       try {
         lastTexts = _visibleTexts(scene.root);
         lastIds = scene.glintIds;
-        final hit = targetGlintId != null
-            ? scene.findByGlintId(targetGlintId)
-            : _findTextNode(scene.root, targetText!);
+        final hit = targetGlintId != null ? scene.findByGlintId(targetGlintId) : _findTextNode(scene.root, targetText!);
         if (hit != null && hit.glintId != null) {
           seenInTree = true;
           // Check if it's in the overlay layer rather than the scrollable base.
@@ -150,8 +141,7 @@ class ScrollToFindTool extends GlintTool {
     }
 
     if (tapId != null && foundReply != null) {
-      final tapped = await const TapTool()
-          .handle(session, CallToolRequest(name: 'tap', arguments: {'glintId': tapId}));
+      final tapped = await const TapTool().handle(session, CallToolRequest(name: 'tap', arguments: {'glintId': tapId}));
       return tapped.copyWith(summary: '${foundReply.summary}, ${tapped.summary}').mergeData({'found': foundReply.data});
     }
 
@@ -180,9 +170,7 @@ class ScrollToFindTool extends GlintTool {
         ],
       );
     }
-    final hint = targetGlintId != null
-        ? didYouMean(suggestIds(lastIds, targetGlintId))
-        : null;
+    final hint = targetGlintId != null ? didYouMean(suggestIds(lastIds, targetGlintId)) : null;
     return StructuredResponse.error(
       summary: '$criterion was not found in any scene during $maxScrolls scroll(s) '
           'in $dirName — target is not in this list',

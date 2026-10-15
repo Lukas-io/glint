@@ -74,10 +74,8 @@ class AttachRecord {
       deviceName: j['deviceName'] as String?,
       osVersion: j['osVersion'] as String?,
       projectDir: j['projectDir'] as String?,
-      firstSeen: DateTime.tryParse(j['firstSeen'] as String? ?? '') ??
-          DateTime.fromMillisecondsSinceEpoch(0),
-      lastSeen: DateTime.tryParse(j['lastSeen'] as String? ?? '') ??
-          DateTime.fromMillisecondsSinceEpoch(0),
+      firstSeen: DateTime.tryParse(j['firstSeen'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
+      lastSeen: DateTime.tryParse(j['lastSeen'] as String? ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
       attachCount: (j['attachCount'] as int?) ?? 1,
     );
   }
@@ -156,8 +154,7 @@ class AttachHistory {
     final file = File(_path);
     if (!file.parent.existsSync()) file.parent.createSync(recursive: true);
     file.writeAsStringSync(
-      const JsonEncoder.withIndent('  ')
-          .convert(list.map((r) => r.toJson()).toList()),
+      const JsonEncoder.withIndent('  ').convert(list.map((r) => r.toJson()).toList()),
     );
   }
 }

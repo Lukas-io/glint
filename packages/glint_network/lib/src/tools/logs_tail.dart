@@ -18,36 +18,31 @@ const int _kSevereLevel = 1200;
 
 final logsTailTool = Tool(
   name: 'logs_tail',
-  description:
-      'Read recent app logs (print, developer.log, stdout, stderr), '
+  description: 'Read recent app logs (print, developer.log, stdout, stderr), '
       'newest-first. Filter by levelMin or messageContains (one tag or a '
       'list, OR-matched) when loggers are unnamed. After session_open, reads '
       'history.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'since': Schema.int(
-        description:
-            'Cursor (a prior nextCursor). Omit for the most recent up to limit.',
+        description: 'Cursor (a prior nextCursor). Omit for the most recent up to limit.',
       ),
       'levelMin': Schema.int(
-        description:
-            'Min severity (logging scale: WARNING 900, SEVERE 1200). Logging '
+        description: 'Min severity (logging scale: WARNING 900, SEVERE 1200). Logging '
             'records only, not stdout/stderr.',
       ),
       'loggerContains': Schema.string(
         description: 'Case-insensitive substring on the logger name.',
       ),
       'messageContains': Schema.list(
-        description:
-            'Substring(s) on the message body, OR-matched. One tag or a list, '
+        description: 'Substring(s) on the message body, OR-matched. One tag or a list, '
             'e.g. ["EventTracker","KycTier"]. Use when loggers are unnamed.',
         items: Schema.string(),
       ),
@@ -56,21 +51,18 @@ final logsTailTool = Tool(
             'when the attach requested nativeLogs). Omit for all.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to merge '
+        description: 'Restrict to one isolate (id from network_status). Omit to merge '
             'all isolates.',
       ),
       'limit': Schema.int(
         description: 'Max records (default 100, cap 500).',
       ),
       'messageTruncateBytes': Schema.int(
-        description:
-            'Cut each message at this many characters (default 2048, '
+        description: 'Cut each message at this many characters (default 2048, '
             '64-65536). A cut record carries truncated:true and totalLength.',
       ),
       'maxTokens': Schema.int(
-        description:
-            'Token budget for this response; keeps the newest records that '
+        description: 'Token budget for this response; keeps the newest records that '
             'fit and reports budget.dropped. Overrides the session_configure '
             'maxResponseTokens default.',
       ),
@@ -79,8 +71,7 @@ final logsTailTool = Tool(
 );
 
 /// Message cut for one record: the text to return plus the flags.
-({String message, bool truncated, int totalLength}) truncateMessage(
-    String msg, int max) {
+({String message, bool truncated, int totalLength}) truncateMessage(String msg, int max) {
   final cut = msg.length > max;
   var end = max;
   // Never split an emoji or other astral character in half.
@@ -101,21 +92,14 @@ FutureOr<CallToolResult> logsTail(CallToolRequest request) async {
 
   final sf = SessionFilters.instance;
   final sinceId = args['since'] as int?;
-  final levelMin =
-      args.containsKey('levelMin') ? args['levelMin'] as int? : sf.levelMin;
-  final loggerContains = args.containsKey('loggerContains')
-      ? args['loggerContains'] as String?
-      : sf.loggerContains;
-  final messageContains = args.containsKey('messageContains')
-      ? readStringList(args['messageContains'])
-      : sf.messageContains;
-  final source =
-      args.containsKey('source') ? args['source'] as String? : sf.source;
+  final levelMin = args.containsKey('levelMin') ? args['levelMin'] as int? : sf.levelMin;
+  final loggerContains = args.containsKey('loggerContains') ? args['loggerContains'] as String? : sf.loggerContains;
+  final messageContains =
+      args.containsKey('messageContains') ? readStringList(args['messageContains']) : sf.messageContains;
+  final source = args.containsKey('source') ? args['source'] as String? : sf.source;
   final isolateFilter = args['isolateId'] as String?;
   final limit = clampLimit(args['limit'] as int?, fallback: 100, hardMax: 500);
-  final truncateAt =
-      ((args['messageTruncateBytes'] as int?) ?? _kMessageTruncateBytes)
-          .clamp(64, 65536);
+  final truncateAt = ((args['messageTruncateBytes'] as int?) ?? _kMessageTruncateBytes).clamp(64, 65536);
   final maxTokens = args['maxTokens'] as int? ?? sf.maxResponseTokens;
 
   if (!scope.isLive) {
@@ -132,20 +116,23 @@ FutureOr<CallToolResult> logsTail(CallToolRequest request) async {
         limit: limit,
       );
       final out = [for (final r in rows) _historyEntry(r, truncateAt)];
-      return jsonResult(_buildResponse(
-        scope: scope,
-        source: 'history',
-        entries: out,
-        maxTokens: maxTokens,
-        bufferSize: null,
-        bufferCapacity: null,
-        streamActive: null,
-        levelMin: levelMin,
-        loggerContains: loggerContains,
-        messageContains: messageContains,
-        sourceFilter: source,
-        caps: caps,
-      ), scopeSessionId: scope.sessionId, scopeNote: scope.note);
+      return jsonResult(
+          _buildResponse(
+            scope: scope,
+            source: 'history',
+            entries: out,
+            maxTokens: maxTokens,
+            bufferSize: null,
+            bufferCapacity: null,
+            streamActive: null,
+            levelMin: levelMin,
+            loggerContains: loggerContains,
+            messageContains: messageContains,
+            sourceFilter: source,
+            caps: caps,
+          ),
+          scopeSessionId: scope.sessionId,
+          scopeNote: scope.note);
     } catch (e) {
       return errorResult('history query failed: $e', kind: ErrorKind.internal, extra: {
         'sessionId': sid,
@@ -158,8 +145,7 @@ FutureOr<CallToolResult> logsTail(CallToolRequest request) async {
   }
 
   final attached = SessionRegistry.instance.attachedById(scope.sessionId)!;
-  final droppedSinceLastRead =
-      attached.logBuffer.droppedTotal - attached.lastReportedDropped;
+  final droppedSinceLastRead = attached.logBuffer.droppedTotal - attached.lastReportedDropped;
   attached.lastReportedDropped = attached.logBuffer.droppedTotal;
   final entries = attached.logBuffer.tail(
     sinceId: sinceId,
@@ -200,8 +186,7 @@ FutureOr<CallToolResult> logsTail(CallToolRequest request) async {
   if (droppedSinceLastRead > 0) {
     response['droppedSinceLastRead'] = droppedSinceLastRead;
   }
-  return jsonResult(response,
-      scopeSessionId: scope.sessionId, scopeNote: scope.note);
+  return jsonResult(response, scopeSessionId: scope.sessionId, scopeNote: scope.note);
 }
 
 Map<String, Object?> _historyEntry(Map<String, Object?> r, int max) {
@@ -263,15 +248,10 @@ Map<String, Object?> _buildResponse({
   if (budgetDropped > 0) {
     entries.removeRange(budgetTrim.kept.length, entries.length);
   }
-  final severeCount = entries
-      .where((e) => ((e['level'] as int?) ?? 0) >= _kSevereLevel)
-      .length;
-  final filters =
-      _filterDesc(levelMin, loggerContains, messageContains, sourceFilter);
-  final nearCapacity = source == 'live' &&
-      bufferSize != null &&
-      bufferCapacity != null &&
-      bufferSize >= (bufferCapacity * 0.8).floor();
+  final severeCount = entries.where((e) => ((e['level'] as int?) ?? 0) >= _kSevereLevel).length;
+  final filters = _filterDesc(levelMin, loggerContains, messageContains, sourceFilter);
+  final nearCapacity =
+      source == 'live' && bufferSize != null && bufferCapacity != null && bufferSize >= (bufferCapacity * 0.8).floor();
   final summary = entries.isEmpty
       ? (source == 'live' && streamActive == false
           ? 'Log stream not active — buffer is empty.'
@@ -309,9 +289,8 @@ Map<String, Object?> _buildResponse({
   final nextSteps = <String>[];
   if (entries.isEmpty) {
     final state = SessionStateView.of(scope.sessionId);
-    nextSteps.add(state.canGenerateTraffic
-        ? 'Drive the app to generate logs'
-        : emptyCaptureHint(state, reRun: 'logs_tail'));
+    nextSteps
+        .add(state.canGenerateTraffic ? 'Drive the app to generate logs' : emptyCaptureHint(state, reRun: 'logs_tail'));
     if (filters.isNotEmpty) {
       nextSteps.add('Drop filters to broaden the search');
     }
@@ -340,8 +319,7 @@ Map<String, Object?> _buildResponse({
     if (streamActive != null) 'streamActive': streamActive,
     if (severeCount > 0) 'severeCount': severeCount,
     'nextCursor': nextCursor,
-    if (maxTokens != null && maxTokens > 0)
-      'budget': {'maxTokens': maxTokens, 'dropped': budgetDropped},
+    if (maxTokens != null && maxTokens > 0) 'budget': {'maxTokens': maxTokens, 'dropped': budgetDropped},
     if (warnings.isNotEmpty) 'warnings': warnings,
     'nextSteps': nextSteps,
     'entries': entries,
@@ -357,8 +335,7 @@ String _filterDesc(
   final parts = <String>[];
   if (levelMin != null) parts.add('level≥$levelMin');
   if (loggerContains != null && loggerContains.isNotEmpty) parts.add('logger~"$loggerContains"');
-  final msgTerms =
-      messageContains?.where((t) => t.trim().isNotEmpty).toList() ?? const [];
+  final msgTerms = messageContains?.where((t) => t.trim().isNotEmpty).toList() ?? const [];
   if (msgTerms.isNotEmpty) {
     parts.add(msgTerms.length == 1
         ? 'message~"${msgTerms.single}"'

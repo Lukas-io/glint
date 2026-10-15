@@ -2,8 +2,7 @@ import 'package:dart_mcp/server.dart';
 import 'package:glint_mcp/glint.dart';
 import 'package:test/test.dart';
 
-Map<String, Object?> _structured(CallToolResult r) =>
-    r.structuredContent as Map<String, Object?>;
+Map<String, Object?> _structured(CallToolResult r) => r.structuredContent as Map<String, Object?>;
 
 void main() {
   final session = GlintSession();
@@ -11,8 +10,7 @@ void main() {
 
   group('batch validation', () {
     test('empty steps → invalidArgument', () async {
-      final r = await tool.invoke(
-          session, CallToolRequest(name: 'batch', arguments: const {'steps': []}));
+      final r = await tool.invoke(session, CallToolRequest(name: 'batch', arguments: const {'steps': []}));
       expect(_structured(r)['errorKind'], 'invalidArgument');
     });
 
@@ -30,13 +28,15 @@ void main() {
       expect(s['summary'], contains('step 1'));
     });
 
-    test('a valid step on an unattached session → sessionNotAttached',
-        () async {
+    test('a valid step on an unattached session → sessionNotAttached', () async {
       final r = await tool.invoke(
         session,
         CallToolRequest(name: 'batch', arguments: const {
           'steps': [
-            {'tool': 'tap', 'args': {'glintId': 'x'}},
+            {
+              'tool': 'tap',
+              'args': {'glintId': 'x'}
+            },
           ],
         }),
       );

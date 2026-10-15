@@ -22,12 +22,10 @@ class WaitForSettleTool extends GlintTool {
               description: 'Hard cap on wait time. Default 5000.',
             ),
             'quietFrames': Schema.int(
-              description:
-                  'Consecutive quiet polls required to declare settled. Default 3.',
+              description: 'Consecutive quiet polls required to declare settled. Default 3.',
             ),
             'checkLoadingAffordances': Schema.bool(
-              description:
-                  'When true, frame-quiet still polls if any CircularProgressIndicator / '
+              description: 'When true, frame-quiet still polls if any CircularProgressIndicator / '
                   'LinearProgressIndicator / RefreshIndicator is in the scene. Default true.',
             ),
           },
@@ -35,13 +33,10 @@ class WaitForSettleTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final ceilingMs =
-        argInt(args, 'ceilingMs') ?? session.config.settleCeilingMs;
-    final quietFrames =
-        argInt(args, 'quietFrames') ?? session.config.settleQuietFrames;
+    final ceilingMs = argInt(args, 'ceilingMs') ?? session.config.settleCeilingMs;
+    final quietFrames = argInt(args, 'quietFrames') ?? session.config.settleQuietFrames;
     final checkAffordances = argBool(args, 'checkLoadingAffordances') ?? true;
 
     final result = await session.settleDetector.awaitSettle(

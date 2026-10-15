@@ -60,8 +60,7 @@ class Semanticizer {
     final children = node.children
         .expand((child) => _compactor.expandChild(
               _classify(child, imageCandidates),
-              imageCandidate:
-                  imageCandidates && _compactor.paintsDecorationImage(child),
+              imageCandidate: imageCandidates && _compactor.paintsDecorationImage(child),
             ))
         .toList();
     final classifier = _registry.classifierFor(node);

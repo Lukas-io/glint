@@ -12,16 +12,11 @@ Map<String, dynamic> redactHeaderValues(
 ) =>
     {
       for (final e in headers.entries)
-        e.key: names.contains(e.key.toLowerCase())
-            ? (e.value is List ? [redactedValue] : redactedValue)
-            : e.value,
+        e.key: names.contains(e.key.toLowerCase()) ? (e.value is List ? [redactedValue] : redactedValue) : e.value,
     };
 
 /// True when the user asked to keep secret header values in the capture database (`GLINT_NETWORK_STORE_SECRETS`).
 bool storeSecrets([Map<String, String>? env]) {
-  final v =
-      (env ?? networkEnv)['GLINT_NETWORK_STORE_SECRETS']
-          ?.trim()
-          .toLowerCase();
+  final v = (env ?? networkEnv)['GLINT_NETWORK_STORE_SECRETS']?.trim().toLowerCase();
   return v == 'true' || v == '1' || v == 'yes' || v == 'on';
 }

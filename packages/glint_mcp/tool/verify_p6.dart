@@ -17,8 +17,7 @@ void main(List<String> argv) async {
         ..addOption('device', defaultsTo: '791A0611-C553-445E-87E6-4BA41F6A9143'))
       .parse(argv);
 
-  final proc = await Process.start(Platform.resolvedExecutable,
-      ['run', 'bin/glint.dart'],
+  final proc = await Process.start(Platform.resolvedExecutable, ['run', 'bin/glint.dart'],
       workingDirectory: Directory.current.path);
   unawaited(proc.stderr.transform(utf8.decoder).forEach(stderr.write));
 
@@ -31,14 +30,12 @@ void main(List<String> argv) async {
   var nextId = 1;
   Future<Map<String, Object?>> req(String m, Map<String, Object?> p) async {
     final id = nextId++;
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': m, 'params': p}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': m, 'params': p}));
     await proc.stdin.flush();
     return incoming.firstWhere((x) => x['id'] == id);
   }
 
-  Map<String, Object?> sc(Map<String, Object?> r) =>
-      (r['result'] as Map)['structuredContent'] as Map<String, Object?>;
+  Map<String, Object?> sc(Map<String, Object?> r) => (r['result'] as Map)['structuredContent'] as Map<String, Object?>;
   String txt(Map<String, Object?> r) {
     final c = (r['result'] as Map)['content'] as List?;
     return c?.firstOrNull is Map ? (c!.first as Map)['text'] as String : '';
@@ -51,8 +48,7 @@ void main(List<String> argv) async {
       'capabilities': const {},
       'clientInfo': {'name': 'verify_p6', 'version': '0'},
     });
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
     await proc.stdin.flush();
 
     stdout.writeln('== attach ==');

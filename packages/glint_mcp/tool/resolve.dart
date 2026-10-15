@@ -24,8 +24,7 @@ Future<void> main(List<String> args) async {
   try {
     final resolver = CoordinateResolver(vm);
     final res = await resolver.resolve(scene, opts['id'] as String);
-    stdout.writeln(
-        const JsonEncoder.withIndent('  ').convert(res.toJson()));
+    stdout.writeln(const JsonEncoder.withIndent('  ').convert(res.toJson()));
   } finally {
     await scene.dispose();
     await vm.disconnect();

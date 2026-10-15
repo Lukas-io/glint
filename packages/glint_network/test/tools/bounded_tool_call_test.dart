@@ -11,8 +11,8 @@ void main() {
   test('a call past the deadline returns errorKind timeout, not a hang', () async {
     final r = await boundedToolCall(
       'logs_tail',
-      () => Future.delayed(const Duration(seconds: 2),
-          () => CallToolResult(content: const [], structuredContent: const {})),
+      () => Future.delayed(
+          const Duration(seconds: 2), () => CallToolResult(content: const [], structuredContent: const {})),
       deadline: const Duration(milliseconds: 50),
     );
     expect(r.isError, isTrue);

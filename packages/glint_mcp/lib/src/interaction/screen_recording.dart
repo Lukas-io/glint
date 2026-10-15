@@ -90,8 +90,7 @@ class SimctlRecording implements ScreenRecording {
 
 /// Records an Android device via `adb shell screenrecord`, pulled to the local path on stop.
 class AdbRecording implements ScreenRecording {
-  AdbRecording._(this._process, this._adbPath, this._serial, this.path,
-      this.startedAt);
+  AdbRecording._(this._process, this._adbPath, this._serial, this.path, this.startedAt);
 
   static const remotePath = '/sdcard/glint-rec.mp4';
 
@@ -106,14 +105,10 @@ class AdbRecording implements ScreenRecording {
         '-s', serial, 'shell', 'screenrecord', //
         '--time-limit', '30', remotePath,
       ];
-  static List<String> existsArgs(String serial) =>
-      ['-s', serial, 'shell', 'ls', remotePath];
-  static List<String> stopArgs(String serial) =>
-      ['-s', serial, 'shell', 'pkill', '-l', 'INT', 'screenrecord'];
-  static List<String> pullArgs(String serial, String local) =>
-      ['-s', serial, 'pull', remotePath, local];
-  static List<String> removeArgs(String serial) =>
-      ['-s', serial, 'shell', 'rm', '-f', remotePath];
+  static List<String> existsArgs(String serial) => ['-s', serial, 'shell', 'ls', remotePath];
+  static List<String> stopArgs(String serial) => ['-s', serial, 'shell', 'pkill', '-l', 'INT', 'screenrecord'];
+  static List<String> pullArgs(String serial, String local) => ['-s', serial, 'pull', remotePath, local];
+  static List<String> removeArgs(String serial) => ['-s', serial, 'shell', 'rm', '-f', remotePath];
 
   static Future<AdbRecording> start({
     required String adbPath,
@@ -125,9 +120,7 @@ class AdbRecording implements ScreenRecording {
     final proc = await Process.start(adbPath, startArgs(serial));
     final deadline = DateTime.now().add(startTimeout);
     while (DateTime.now().isBefore(deadline)) {
-      if ((await proc.exitCode.timeout(const Duration(milliseconds: 1),
-              onTimeout: () => -999)) !=
-          -999) {
+      if ((await proc.exitCode.timeout(const Duration(milliseconds: 1), onTimeout: () => -999)) != -999) {
         throw BackendToolError(
           backend: 'adb($serial)',
           command: 'adb shell screenrecord',
@@ -136,8 +129,7 @@ class AdbRecording implements ScreenRecording {
         );
       }
       final ls = await Process.run(adbPath, existsArgs(serial));
-      if (ls.exitCode == 0 &&
-          !(ls.stdout as String).contains('No such file')) {
+      if (ls.exitCode == 0 && !(ls.stdout as String).contains('No such file')) {
         return AdbRecording._(proc, adbPath, serial, localPath, DateTime.now());
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));

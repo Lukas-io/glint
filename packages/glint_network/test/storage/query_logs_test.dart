@@ -41,8 +41,7 @@ void main() {
     });
 
     test('case-insensitive substring on message body (single term)', () {
-      final rows =
-          dao.queryLogs(sessionId: sid, messageContains: ['eventtracker']);
+      final rows = dao.queryLogs(sessionId: sid, messageContains: ['eventtracker']);
       expect(rows, hasLength(1));
       expect(rows.single['message'], contains('EventTracker'));
     });
@@ -60,8 +59,7 @@ void main() {
     });
 
     test('empty / whitespace-only terms are ignored (no filter)', () {
-      expect(dao.queryLogs(sessionId: sid, messageContains: ['', '  ']),
-          hasLength(3));
+      expect(dao.queryLogs(sessionId: sid, messageContains: ['', '  ']), hasLength(3));
     });
 
     test('no match returns empty', () {

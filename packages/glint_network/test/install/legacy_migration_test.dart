@@ -20,7 +20,8 @@ void main() {
     });
 
     test('pub\'s flutter_network_mcp wrapper is recognised as the old command', () {
-      final use = detectLegacyUse(env: const {}, parentCommand: 'sh /Users/me/.pub-cache/bin/flutter_network_mcp --auto-attach=x');
+      final use = detectLegacyUse(
+          env: const {}, parentCommand: 'sh /Users/me/.pub-cache/bin/flutter_network_mcp --auto-attach=x');
       expect(use.oldCommand, isTrue);
       expect(use.notice, contains('rename the server entry to "glint-network"'));
     });
@@ -44,10 +45,9 @@ void main() {
     setUp(() => git = Directory.systemTemp.createTempSync('pubgit'));
     tearDown(() => git.deleteSync(recursive: true));
 
-    File entry(String path, DateTime modified) =>
-        File('${git.path}/$path')
-          ..createSync(recursive: true)
-          ..setLastModifiedSync(modified);
+    File entry(String path, DateTime modified) => File('${git.path}/$path')
+      ..createSync(recursive: true)
+      ..setLastModifiedSync(modified);
 
     test('finds the glint repository layout and the old root layout, newest first', () {
       final old = entry('flutter_network_mcp-aaa/bin/flutter_network_mcp.dart', DateTime(2026, 9));

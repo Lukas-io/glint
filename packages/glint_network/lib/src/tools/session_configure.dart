@@ -11,8 +11,7 @@ import 'result.dart';
 
 final sessionConfigureTool = Tool(
   name: 'session_configure',
-  description:
-      'Set process-wide sticky default filters that logs_tail and '
+  description: 'Set process-wide sticky default filters that logs_tail and '
       'network_list inherit when you omit the matching arg (set levelMin / '
       'messageContains / statusMin once, then read without repeating them). '
       'An arg you pass still wins. Pass null to unset a field, clear:true to '
@@ -20,8 +19,7 @@ final sessionConfigureTool = Tool(
   inputSchema: Schema.object(
     properties: {
       'levelMin': Schema.int(description: 'Default logs_tail levelMin.'),
-      'loggerContains':
-          Schema.string(description: 'Default logs_tail loggerContains.'),
+      'loggerContains': Schema.string(description: 'Default logs_tail loggerContains.'),
       'messageContains': Schema.list(
         description: 'Default logs_tail messageContains (OR-matched list).',
         items: Schema.string(),
@@ -33,13 +31,11 @@ final sessionConfigureTool = Tool(
         description: 'Default network_list HTTP method(s).',
         items: Schema.string(),
       ),
-      'hostContains':
-          Schema.string(description: 'Default network_list hostContains.'),
+      'hostContains': Schema.string(description: 'Default network_list hostContains.'),
       'statusMin': Schema.int(description: 'Default network_list statusMin.'),
       'statusMax': Schema.int(description: 'Default network_list statusMax.'),
       'maxResponseTokens': Schema.int(
-        description:
-            'Per-response token budget. network_list / logs_tail trim their '
+        description: 'Per-response token budget. network_list / logs_tail trim their '
             'arrays to fit (newest-first) and report budget.dropped. Keeps '
             'big reads from flooding the agent context.',
       ),
@@ -52,11 +48,9 @@ final sessionConfigureTool = Tool(
             'the key. Replay and export keep the original bytes. {off:true} '
             'turns it off and drops the plaintext index.',
         properties: {
-          'algorithm': Schema.string(
-              description: 'aes-256-ctr (default) or aes-128-ctr.'),
+          'algorithm': Schema.string(description: 'aes-256-ctr (default) or aes-128-ctr.'),
           'key': Schema.string(description: 'The app\'s key.'),
-          'keyEncoding':
-              Schema.string(description: 'utf8 (default), hex or base64.'),
+          'keyEncoding': Schema.string(description: 'utf8 (default), hex or base64.'),
           'encoding': Schema.string(
               description: 'How the body holds the payload: hex (default), '
                   'base64 or raw bytes.'),
@@ -111,14 +105,12 @@ FutureOr<CallToolResult> sessionConfigure(CallToolRequest request) async {
   } else if (decryptionArg != null) {
     final parsed = BodyDecryption.parse(decryptionArg);
     if (parsed.error != null) {
-      return errorResult('bodyDecryption: ${parsed.error}',
-          kind: ErrorKind.badArgument,
-          extra: {
-            'nextSteps': const [
-              'session_configure bodyDecryption:{key:"<32-char key>", '
-                  'encoding:"hex", ivMode:"infused", ivOffset:10, ivLength:32}',
-            ],
-          });
+      return errorResult('bodyDecryption: ${parsed.error}', kind: ErrorKind.badArgument, extra: {
+        'nextSteps': const [
+          'session_configure bodyDecryption:{key:"<32-char key>", '
+              'encoding:"hex", ivMode:"infused", ivOffset:10, ivLength:32}',
+        ],
+      });
     }
     _setDecryption(parsed.config);
   }

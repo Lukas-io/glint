@@ -41,15 +41,13 @@ List<DtdAppCandidate> matchAppsAcrossDtds(
 /// Stable logical identity for an app across hot restarts (issue #16). Two
 /// attaches with the same identity are the same logical app even though
 /// their VM service URIs differ (every hot restart rotates the URI). Parses
-/// the DTD app-name shape "Kind: Flutter - Device: <device> - Package: <pkg>"
-/// into "<pkg>@<device>"; falls back to the whole lowercased name when the
+/// the DTD app-name shape `Kind: Flutter - Device: <device> - Package: <pkg>`
+/// into `<pkg>@<device>`; falls back to the whole lowercased name when the
 /// shape does not match. Returns null for an empty / null name.
 String? appSessionIdentity(String? appName) {
   if (appName == null || appName.trim().isEmpty) return null;
-  final device =
-      RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
-  final pkg =
-      RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
+  final device = RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
+  final pkg = RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
   if (device != null && pkg != null) {
     return '${pkg.trim()}@${device.trim()}'.toLowerCase();
   }
@@ -58,8 +56,7 @@ String? appSessionIdentity(String? appName) {
 
 final networkAttachTool = Tool(
   name: 'network_attach',
-  description:
-      'Start capturing HTTP, sockets, and logs from a running app (call '
+  description: 'Start capturing HTTP, sockets, and logs from a running app (call '
       'after network_status lists it under knownApps). Several apps can be '
       'attached at once; use the returned scope.sessionId to route later '
       'reads. Re-attaching the same app is a no-op.',
@@ -69,30 +66,25 @@ final networkAttachTool = Tool(
         description: 'DTD WebSocket URI; overrides the default.',
       ),
       'vmServiceUri': Schema.string(
-        description:
-            'VM service URI; bypasses DTD. Takes priority over dtdUri and '
+        description: 'VM service URI; bypasses DTD. Takes priority over dtdUri and '
             'appNameContains.',
       ),
       'appNameContains': Schema.string(
-        description:
-            'Case-insensitive substring of the app name (from '
+        description: 'Case-insensitive substring of the app name (from '
             'network_status.knownApps). Use when several apps are connected.',
       ),
       'logBufferSize': Schema.int(
-        description:
-            'Per-session log ring capacity (50-20000). Overrides the env '
+        description: 'Per-session log ring capacity (50-20000). Overrides the env '
             'default (2000, or auto_attach_config logBufferSize); raise it '
             'for chatty apps.',
       ),
       'reattach': Schema.bool(
-        description:
-            'Reuse an existing session id across a hot restart (same '
+        description: 'Reuse an existing session id across a hot restart (same '
             'package+device) instead of starting a new one. Pair with '
             'appNameContains.',
       ),
       'nativeLogs': Schema.bool(
-        description:
-            'Also stream the device\'s native log for this app (simctl log '
+        description: 'Also stream the device\'s native log for this app (simctl log '
             'stream / adb logcat) into logs_tail as source:"native", so '
             'native SDK output is readable. Default: auto_attach_config '
             'nativeLogs (false).',
@@ -158,8 +150,7 @@ void closeStaleViewAfterAttach(Map<String, Object?> result) {
   final viewed = Session.instance.viewedSessionId;
   if (viewed == null) return;
   Session.instance.viewedSessionId = null;
-  final warnings =
-      (result['warnings'] as List?)?.cast<String>().toList() ?? <String>[];
+  final warnings = (result['warnings'] as List?)?.cast<String>().toList() ?? <String>[];
   warnings.add(
     'Closed the open history view of session $viewed — reads now target '
     'the live session; session_open id:$viewed to reopen it.',
@@ -197,14 +188,12 @@ Future<Map<String, Object?>> performAttach({
   }
   if (registry.liveCount >= maxAttach) {
     return {
-      'error':
-          'Reached max attached sessions ($maxAttach live). Detach one first '
+      'error': 'Reached max attached sessions ($maxAttach live). Detach one first '
           '(network_detach keep:true frees the slot without ending the '
           'session) or raise GLINT_NETWORK_MAX_ATTACH.',
       'errorKind': ErrorKind.badArgument.wire,
       'attached': [
-        for (final a in registry.attached.values)
-          {'sessionId': a.id, 'appName': a.appName},
+        for (final a in registry.attached.values) {'sessionId': a.id, 'appName': a.appName},
       ],
       'maxAttach': maxAttach,
       'retryable': false,
@@ -216,8 +205,8 @@ Future<Map<String, Object?>> performAttach({
     };
   }
 
-  final requestKey = vmServiceUri ??
-      (appNameContains != null ? 'app:$appNameContains' : 'dtd:${dtdUri ?? defaultDtdUri ?? ""}');
+  final requestKey =
+      vmServiceUri ?? (appNameContains != null ? 'app:$appNameContains' : 'dtd:${dtdUri ?? defaultDtdUri ?? ""}');
   final inFlight = AttachInFlight.instance;
   if (!inFlight.claim(requestKey)) {
     return {
@@ -275,7 +264,6 @@ Future<Map<String, Object?>> _performAttachLocked({
   required bool Function(String resolvedUri) onResolved,
   required void Function(int sid) onSessionCreated,
 }) async {
-
   // Per-attach resources are constructed locally and only become visible
   // to other tools after the AttachedSession is registered. If anything
   // fails mid-setup, the catch block tears them down directly so nothing
@@ -311,9 +299,7 @@ Future<Map<String, Object?>> _performAttachLocked({
           }
         }
       } catch (_) {/* best-effort name resolution */}
-    } else if (appNameContains != null &&
-        appNameContains.isNotEmpty &&
-        dtdUri == null) {
+    } else if (appNameContains != null && appNameContains.isNotEmpty && dtdUri == null) {
       // #14: network_status.knownApps aggregates apps across EVERY discovered
       // DTD (each `flutter run` spawns its own), but a single-DTD
       // getConnectedApps() only sees apps under the default DTD. Resolving
@@ -323,8 +309,7 @@ Future<Map<String, Object?>> _performAttachLocked({
       final listings = await DtdProbe.probeAll();
       final apps = <DtdAppCandidate>[
         for (final l in listings)
-          for (final a in l.apps)
-            (name: a.name, uri: a.uri, dtdUri: l.dtdUri),
+          for (final a in l.apps) (name: a.name, uri: a.uri, dtdUri: l.dtdUri),
       ];
       final allNames = [for (final a in apps) a.name ?? '(unnamed)'];
       final matches = matchAppsAcrossDtds(apps, appNameContains);
@@ -337,8 +322,7 @@ Future<Map<String, Object?>> _performAttachLocked({
                   'Visible apps: ${allNames.join(', ')}.',
           'errorKind': ErrorKind.notFound.wire,
           'apps': [
-            for (final a in apps)
-              {'name': a.name, 'uri': a.uri, 'dtdUri': a.dtdUri.toString()},
+            for (final a in apps) {'name': a.name, 'uri': a.uri, 'dtdUri': a.dtdUri.toString()},
           ],
           'nextSteps': const [
             'network_status to see the current knownApps list across all DTDs',
@@ -354,8 +338,7 @@ Future<Map<String, Object?>> _performAttachLocked({
           'errorKind': ErrorKind.badArgument.wire,
           'retryable': false,
           'apps': [
-            for (final m in matches)
-              {'name': m.name, 'uri': m.uri, 'dtdUri': m.dtdUri.toString()},
+            for (final m in matches) {'name': m.name, 'uri': m.uri, 'dtdUri': m.dtdUri.toString()},
           ],
           'nextSteps': const [
             'network_attach appNameContains:"<unique substring>"',
@@ -376,8 +359,7 @@ Future<Map<String, Object?>> _performAttachLocked({
       final useDtd = dtdUri ?? defaultDtdUri;
       if (useDtd == null) {
         return {
-          'error':
-              'No DTD URI provided and no default configured. Pass '
+          'error': 'No DTD URI provided and no default configured. Pass '
               '`dtdUri` or `vmServiceUri`, or have the user configure '
               'a default at server startup.',
           'errorKind': ErrorKind.badArgument.wire,
@@ -404,13 +386,10 @@ Future<Map<String, Object?>> _performAttachLocked({
       var filtered = apps;
       if (appNameContains != null && appNameContains.isNotEmpty) {
         final needle = appNameContains.toLowerCase();
-        filtered = apps
-            .where((a) => (a.name ?? '').toLowerCase().contains(needle))
-            .toList();
+        filtered = apps.where((a) => (a.name ?? '').toLowerCase().contains(needle)).toList();
         if (filtered.isEmpty) {
           return {
-            'error':
-                'No DTD app name contains "$appNameContains". '
+            'error': 'No DTD app name contains "$appNameContains". '
                 'Visible apps: ${apps.map((a) => a.name).join(', ')}.',
             'errorKind': ErrorKind.notFound.wire,
             'apps': [
@@ -483,8 +462,7 @@ Future<Map<String, Object?>> _performAttachLocked({
     final vm = localVm = VmClient();
     final captureWriter = localCaptureWriter = CaptureWriter();
     final logBuffer = LogBuffer(
-      capacity: (logBufferSize ?? AutoAttachConfig.logBufferSize)
-          ?.clamp(50, LogBuffer.maxCapacity),
+      capacity: (logBufferSize ?? AutoAttachConfig.logBufferSize)?.clamp(50, LogBuffer.maxCapacity),
     );
     final logStream = localLogStream = LogStreamSubscriber();
 
@@ -548,8 +526,7 @@ Future<Map<String, Object?>> _performAttachLocked({
       final identity = appSessionIdentity(appName);
       if (identity != null) {
         for (final s in registry.attached.values) {
-          if (s.vmServiceUri != resolvedVmServiceUri &&
-              appSessionIdentity(s.appName) == identity) {
+          if (s.vmServiceUri != resolvedVmServiceUri && appSessionIdentity(s.appName) == identity) {
             reattachPrior = s;
             break;
           }
@@ -701,8 +678,7 @@ Future<Map<String, Object?>> _performAttachLocked({
     if (httpEnabled) captured.add('HTTP');
     if (socketEnabled) captured.add('sockets');
     if (logStream.isActive) captured.add('logs');
-    final what =
-        captured.isEmpty ? 'no streams (degraded)' : captured.join('+');
+    final what = captured.isEmpty ? 'no streams (degraded)' : captured.join('+');
     final String summary;
     if (reattachPrior != null) {
       summary = 'Reattached to ${appName ?? "app"} after a hot restart; '
@@ -712,8 +688,7 @@ Future<Map<String, Object?>> _performAttachLocked({
       summary = 'Attached to ${appName ?? "app"}, capturing $what into session '
           '$sid. ${registry.attachedCount} sessions now attached.';
     } else {
-      summary =
-          'Attached to ${appName ?? "app"}, capturing $what into session $sid.';
+      summary = 'Attached to ${appName ?? "app"}, capturing $what into session $sid.';
     }
 
     final autoAttachSuggestion = _buildAutoAttachSuggestion(appName);
@@ -750,12 +725,10 @@ Future<Map<String, Object?>> _performAttachLocked({
                 '(package + device) under a stale VM URI — a NEW session '
                 'was started',
       },
-      if (previousVmServiceUri != null)
-        'previousVmServiceUri': previousVmServiceUri,
+      if (previousVmServiceUri != null) 'previousVmServiceUri': previousVmServiceUri,
       'socketProfilingEnabled': socketEnabled,
       // F17: machine-readable companion to the pre-attach warning above.
-      if (preAttachMs != null && reattachPrior == null)
-        'preAttachUptimeMs': preAttachMs,
+      if (preAttachMs != null && reattachPrior == null) 'preAttachUptimeMs': preAttachMs,
       if (nativeSource != null)
         'nativeLogs': {
           'active': true,
@@ -766,8 +739,7 @@ Future<Map<String, Object?>> _performAttachLocked({
       if (capState.degraded.isNotEmpty) 'degraded': capState.degraded,
       'attachedCount': registry.attachedCount,
       if (warnings.isNotEmpty) 'warnings': warnings,
-      if (autoAttachSuggestion != null)
-        'autoAttachSuggestion': autoAttachSuggestion,
+      if (autoAttachSuggestion != null) 'autoAttachSuggestion': autoAttachSuggestion,
       'nextSteps': [
         'Drive the app to generate traffic',
         if (registry.attachedCount > 1)
@@ -858,20 +830,20 @@ Map<String, Object?>? _buildAutoAttachSuggestion(String? appName) {
 
   final agentAction = enabled
       ? 'Auto-attach is enabled but "$pattern" isn\'t in the current '
-        'allowlist (${currentAllowlist.join(", ")}). ASK THE USER: '
-        '"Would you like glint_network to auto-attach to $pattern '
-        'on future MCP launches?" If they confirm, append the '
-        'suggestedShellLine below to their shell rc (e.g. ~/.zshrc on '
-        'macOS, ~/.bashrc on Linux), then have them restart their MCP '
-        'host (e.g. /quit then re-open Claude Code). DO NOT edit the '
-        'rc file without explicit user confirmation.'
+          'allowlist (${currentAllowlist.join(", ")}). ASK THE USER: '
+          '"Would you like glint_network to auto-attach to $pattern '
+          'on future MCP launches?" If they confirm, append the '
+          'suggestedShellLine below to their shell rc (e.g. ~/.zshrc on '
+          'macOS, ~/.bashrc on Linux), then have them restart their MCP '
+          'host (e.g. /quit then re-open Claude Code). DO NOT edit the '
+          'rc file without explicit user confirmation.'
       : 'Auto-attach isn\'t configured yet. ASK THE USER: "Would you like '
-        'glint_network to auto-attach to $pattern on future MCP '
-        'launches? This means future sessions will skip the manual '
-        'network_attach step." If they confirm, append the '
-        'suggestedShellLine below to their shell rc (e.g. ~/.zshrc on '
-        'macOS, ~/.bashrc on Linux), then have them restart their MCP '
-        'host. DO NOT edit the rc file without explicit user confirmation.';
+          'glint_network to auto-attach to $pattern on future MCP '
+          'launches? This means future sessions will skip the manual '
+          'network_attach step." If they confirm, append the '
+          'suggestedShellLine below to their shell rc (e.g. ~/.zshrc on '
+          'macOS, ~/.bashrc on Linux), then have them restart their MCP '
+          'host. DO NOT edit the rc file without explicit user confirmation.';
 
   return {
     'enabled': enabled,

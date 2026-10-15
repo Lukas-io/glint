@@ -8,8 +8,7 @@ import 'result.dart';
 
 final sessionNoteTool = Tool(
   name: 'session_note',
-  description:
-      'Sets (or clears) a freeform note on a capture session. Helps you '
+  description: 'Sets (or clears) a freeform note on a capture session. Helps you '
       'find sessions later via session_list. Pass an empty string to clear.',
   inputSchema: Schema.object(
     properties: {
@@ -56,8 +55,7 @@ FutureOr<CallToolResult> sessionNote(CallToolRequest request) async {
     'note': cleared ? null : note,
     'nextSteps': [
       'session_list — confirm the note shows up',
-      if (!cleared)
-        'session_export id:$id format:"har" outPath:"..." — share with the note as context',
+      if (!cleared) 'session_export id:$id format:"har" outPath:"..." — share with the note as context',
     ],
   });
 }

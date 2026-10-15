@@ -25,7 +25,18 @@ import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
-const _actionTools = {'tap', 'long_press', 'swipe', 'drag', 'scroll', 'scroll_to_find', 'type', 'key', 'hardware_button', 'batch'};
+const _actionTools = {
+  'tap',
+  'long_press',
+  'swipe',
+  'drag',
+  'scroll',
+  'scroll_to_find',
+  'type',
+  'key',
+  'hardware_button',
+  'batch'
+};
 const _generators = {'testcard', 'speech', 'tone'};
 const _maxFramesReturned = 6;
 
@@ -36,7 +47,8 @@ class MediaTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'media',
-        description: 'Media on the device. op: seed (add a photo, video or audio to the gallery from a host file or a generator: '
+        description:
+            'Media on the device. op: seed (add a photo, video or audio to the gallery from a host file or a generator: '
             'testcard, speech, tone; clear:true removes what glint seeded, Android only), files (what the app wrote, newest first; pull:true copies one to the host), '
             'inspect (ffprobe, loudness, frames as images; a glint testcard also decodes to rotation, mirror, scale, dropped frames, audio offset), '
             'pick (choose a photo or video in the open system picker: name, index or newest), '
@@ -48,36 +60,59 @@ class MediaTool extends GlintTool {
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
-            'stop': Schema.bool(description: 'listen: end the recording and report it. mic: stop feeding and report what was fed.'),
-            'setup': Schema.bool(description: 'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
-            'value': Schema.string(description: 'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
+            'op': Schema.string(
+                description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
+            'stop': Schema.bool(
+                description: 'listen: end the recording and report it. mic: stop feeding and report what was fed.'),
+            'setup': Schema.bool(
+                description:
+                    'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
+            'value': Schema.string(
+                description:
+                    'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
             'number': Schema.string(description: 'event call, endCall, sms: the caller. Default 5551234.'),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
-            'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
+            'action': Schema.string(
+                description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
-            'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
-            'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file.'),
-            'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
+            'kind': Schema.string(
+                description:
+                    'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
+            'source': Schema.string(
+                description:
+                    'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file.'),
+            'name': Schema.string(
+                description:
+                    'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
             'index': Schema.int(description: 'pick: position in the picker, 0 = newest. Default 0.'),
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
-            'clear': Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
+            'clear':
+                Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
             'size': Schema.string(description: 'testcard: WxH, even. Default 1080x1920.'),
-            'durationSec': Schema.num(description: 'testcard video or tone: seconds. Default 6. mic: how long the feed runs, up to 600. Default 60.'),
+            'durationSec': Schema.num(
+                description:
+                    'testcard video or tone: seconds. Default 6. mic: how long the feed runs, up to 600. Default 60.'),
             'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
-            'rotation': Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
+            'rotation':
+                Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
             'text': Schema.string(description: 'speech: what to say. event sms: the message.'),
             'voice': Schema.string(description: 'speech: a macOS voice name.'),
             'hz': Schema.num(description: 'tone: frequency. Default 440 (mic: 1000).'),
-            'since': Schema.string(description: 'files: lastAction (since the last tap, type, swipe ...) or an ISO time.'),
-            'glob': Schema.string(description: 'files: e.g. *.mp4 (matches the file name, or the path when it has a /).'),
+            'since':
+                Schema.string(description: 'files: lastAction (since the last tap, type, swipe ...) or an ISO time.'),
+            'glob':
+                Schema.string(description: 'files: e.g. *.mp4 (matches the file name, or the path when it has a /).'),
             'limit': Schema.int(description: 'files: cap on the list. Default 50, max 200.'),
             'pull': Schema.bool(description: 'files: copy path to the host and return the host path.'),
             'path': Schema.string(description: 'files pull / inspect: a host path, or a path from files.'),
             'appId': Schema.string(description: 'files, permission: bundle id or package. Default: the attached app.'),
-            'frames': Schema.list(description: 'inspect: times to return as images, seconds or start | middle | end (max $_maxFramesReturned).'),
-            'probe': Schema.bool(description: 'inspect: false leaves out the metadata and loudness lines. Default true.'),
-            'maxSize': Schema.int(description: 'inspect: longest side of returned frames (0 = full). Default: screenshotMaxSize.'),
+            'frames': Schema.list(
+                description:
+                    'inspect: times to return as images, seconds or start | middle | end (max $_maxFramesReturned).'),
+            'probe':
+                Schema.bool(description: 'inspect: false leaves out the metadata and loudness lines. Default true.'),
+            'maxSize': Schema.int(
+                description: 'inspect: longest side of returned frames (0 = full). Default: screenshotMaxSize.'),
           },
           required: ['op'],
         ),
@@ -115,7 +150,9 @@ class MediaTool extends GlintTool {
         summary: 'that file is not readable as media',
         errorKind: GlintErrorKind.invalidArgument,
         detail: e.detail,
-        nextSteps: const ['pass a video, photo or audio file; for a file the app wrote, list it with `media op:files` first'],
+        nextSteps: const [
+          'pass a video, photo or audio file; for a file the app wrote, list it with `media op:files` first'
+        ],
       );
     }
   }
@@ -124,11 +161,13 @@ class MediaTool extends GlintTool {
     final token = request.meta?.progressToken;
     final notifier = session.progressNotifier;
     if (token == null || notifier == null) return null;
-    return (elapsedSec, phase) => notifier(ProgressNotification(progressToken: token, progress: elapsedSec, message: '$phase (${elapsedSec}s)'));
+    return (elapsedSec, phase) =>
+        notifier(ProgressNotification(progressToken: token, progress: elapsedSec, message: '$phase (${elapsedSec}s)'));
   }
 
   StructuredResponse _bad(String summary, {String? detail, List<String> nextSteps = const []}) =>
-      StructuredResponse.error(summary: summary, errorKind: GlintErrorKind.invalidArgument, detail: detail, nextSteps: nextSteps);
+      StructuredResponse.error(
+          summary: summary, errorKind: GlintErrorKind.invalidArgument, detail: detail, nextSteps: nextSteps);
 
   StructuredResponse _missingTool(MissingHostTool e, String? op) {
     final steps = switch (e.binary) {
@@ -147,7 +186,8 @@ class MediaTool extends GlintTool {
     );
   }
 
-  Future<MediaDevice?> _device(GlintSession session, Map<String, Object?> args, List<StructuredResponse> failure) async {
+  Future<MediaDevice?> _device(
+      GlintSession session, Map<String, Object?> args, List<StructuredResponse> failure) async {
     final given = args['device'] as String?;
     final attached = session.isAttached ? session.device : null;
     final String id;
@@ -218,7 +258,8 @@ class MediaTool extends GlintTool {
     return '${two(n.month)}${two(n.day)}-${two(n.hour)}${two(n.minute)}${two(n.second)}';
   }
 
-  String _humanSize(int bytes) => bytes >= 1 << 20 ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB' : '${(bytes / 1024).toStringAsFixed(0)} KB';
+  String _humanSize(int bytes) =>
+      bytes >= 1 << 20 ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB' : '${(bytes / 1024).toStringAsFixed(0)} KB';
 
   static const _kinds = {'photo', 'video', 'audio'};
 
@@ -249,7 +290,10 @@ class MediaTool extends GlintTool {
     final generator = hostSource != null ? null : (rawSource ?? (kind == 'audio' ? 'tone' : 'testcard'));
     kind ??= generator == 'speech' || generator == 'tone' ? 'audio' : 'video';
     if (!_kinds.contains(kind)) return _bad('kind must be photo, video or audio, got $kind');
-    if (generator == 'testcard' && kind == 'audio') return _bad('a testcard is a photo or video, not audio', nextSteps: const ['use kind:"video" or "photo", or source:"speech" | "tone" for audio']);
+    if (generator == 'testcard' && kind == 'audio') {
+      return _bad('a testcard is a photo or video, not audio',
+          nextSteps: const ['use kind:"video" or "photo", or source:"speech" | "tone" for audio']);
+    }
     if ((generator == 'speech' || generator == 'tone') && kind != 'audio') {
       return _bad('$generator makes audio, not $kind', nextSteps: const ['use kind:"audio"']);
     }
@@ -258,7 +302,10 @@ class MediaTool extends GlintTool {
         summary: 'an iOS simulator gallery takes photos and videos, not audio files',
         errorKind: GlintErrorKind.unsupportedBackendAction,
         detail: 'simctl addmedia rejects audio, and the Photos library holds none',
-        nextSteps: const ['on Android, seed kind:"audio" lands in Music', 'on iOS pass a video that carries the audio (kind:"video" with a host file)'],
+        nextSteps: const [
+          'on Android, seed kind:"audio" lands in Music',
+          'on iOS pass a video that carries the audio (kind:"video" with a host file)'
+        ],
       );
     }
 
@@ -283,14 +330,20 @@ class MediaTool extends GlintTool {
           staged.add((await generateTestCardVideo(spec!, 'glint-$base', phases: phases), base));
         case 'speech':
           final text = args['text'] as String?;
-          if (text == null || text.trim().isEmpty) return _bad('source speech needs text', nextSteps: const ['pass text:"what to say"']);
-          staged.add((await generateSpeech(text, 'glint-$base', voice: args['voice'] as String?, phases: phases), base));
+          if (text == null || text.trim().isEmpty) {
+            return _bad('source speech needs text', nextSteps: const ['pass text:"what to say"']);
+          }
+          staged
+              .add((await generateSpeech(text, 'glint-$base', voice: args['voice'] as String?, phases: phases), base));
         case 'tone':
           final duration = argNum(args, 'durationSec') ?? 6;
-          if (duration <= 0 || duration > 600) return _bad('durationSec must be above 0 and at most 600, got $duration');
+          if (duration <= 0 || duration > 600) {
+            return _bad('durationSec must be above 0 and at most 600, got $duration');
+          }
           staged.add((await generateTone(argNum(args, 'hz') ?? 440, duration, 'glint-$base', phases: phases), base));
         default:
-          return _bad('unknown source: $rawSource', nextSteps: const ['use testcard | speech | tone, or a host file path']);
+          return _bad('unknown source: $rawSource',
+              nextSteps: const ['use testcard | speech | tone, or a host file path']);
       }
     }
 
@@ -298,21 +351,28 @@ class MediaTool extends GlintTool {
     final all = [...ledger.load()];
     for (final (file, name) in staged) {
       file.setLastModifiedSync(DateTime.now());
-      final asset = await phases.during('adding ${file.uri.pathSegments.last} to the gallery', () => gallery.add(file, name: name, kind: kind!));
+      final asset = await phases.during(
+          'adding ${file.uri.pathSegments.last} to the gallery', () => gallery.add(file, name: name, kind: kind!));
       added.add(asset);
       ledger.save(all..add(asset));
     }
     final where = device.isIos ? 'Photos library' : 'MediaStore';
     final first = added.first;
     return StructuredResponse(
-      summary: 'seeded ${added.length == 1 ? '${first.kind} "${first.name}" (${_humanSize(first.sizeBytes)})' : '${added.length} ${first.kind}s "${first.name}"..."${added.last.name}"'} '
+      summary:
+          'seeded ${added.length == 1 ? '${first.kind} "${first.name}" (${_humanSize(first.sizeBytes)})' : '${added.length} ${first.kind}s "${first.name}"..."${added.last.name}"'} '
           'into the ${device.id} $where${first.devicePath == null ? '' : ' at ${first.devicePath}'}',
       nextSteps: [
-        if (device.isIos) 'open the app\'s picker (the system photo picker: Choose from library); the seeded item is the newest one'
-        else 'open the app\'s picker (Photo Picker or Files); the seeded item is the newest one',
-        if (kind == 'video' && generator == 'testcard') 'after the app exports it, `media op:files since:lastAction` then `media op:inspect path:<file>` decodes the card',
-        if (device.isIos) 'to remove it later, delete the glint-${first.name} item in the Photos app (the simulator offers no delete)'
-        else '`media op:seed clear:true` removes what glint seeded',
+        if (device.isIos)
+          'open the app\'s picker (the system photo picker: Choose from library); the seeded item is the newest one'
+        else
+          'open the app\'s picker (Photo Picker or Files); the seeded item is the newest one',
+        if (kind == 'video' && generator == 'testcard')
+          'after the app exports it, `media op:files since:lastAction` then `media op:inspect path:<file>` decodes the card',
+        if (device.isIos)
+          'to remove it later, delete the glint-${first.name} item in the Photos app (the simulator offers no delete)'
+        else
+          '`media op:seed clear:true` removes what glint seeded',
       ],
       data: {
         'device': device.id,
@@ -323,7 +383,8 @@ class MediaTool extends GlintTool {
     );
   }
 
-  ({TestCardSpec? spec, StructuredResponse? error}) _cardSpec(Map<String, Object?> args, {required String kind, required int count}) {
+  ({TestCardSpec? spec, StructuredResponse? error}) _cardSpec(Map<String, Object?> args,
+      {required String kind, required int count}) {
     final size = args['size'] as String? ?? '1080x1920';
     final m = RegExp(r'^(\d+)\s*[xX]\s*(\d+)$').firstMatch(size.trim());
     if (m == null) return (spec: null, error: _bad('size must look like 1080x1920, got "$size"'));
@@ -340,14 +401,26 @@ class MediaTool extends GlintTool {
     return problem == null ? (spec: spec, error: null) : (spec: null, error: _bad(problem));
   }
 
-  Future<StructuredResponse> _clear(MediaDevice device, Gallery gallery, SeedLedger ledger, String? name, PhaseReporter phases) async {
+  Future<StructuredResponse> _clear(
+      MediaDevice device, Gallery gallery, SeedLedger ledger, String? name, PhaseReporter phases) async {
     final all = ledger.load();
-    final chosen = name == null ? all : [for (final a in all) if (a.name == name || a.name.startsWith('$name-') || a.file.startsWith('glint-${_safe(name)}.')) a];
+    final chosen = name == null
+        ? all
+        : [
+            for (final a in all)
+              if (a.name == name || a.name.startsWith('$name-') || a.file.startsWith('glint-${_safe(name)}.')) a
+          ];
     if (chosen.isEmpty) {
       return StructuredResponse(
-        summary: all.isEmpty ? 'nothing to clear: glint has seeded nothing on ${device.id}' : 'nothing seeded as "$name" on ${device.id}',
+        summary: all.isEmpty
+            ? 'nothing to clear: glint has seeded nothing on ${device.id}'
+            : 'nothing seeded as "$name" on ${device.id}',
         nextSteps: [if (all.isNotEmpty) 'seeded here: ${all.map((a) => a.name).join(', ')}'],
-        data: {'device': device.id, 'removed': const <Object>[], 'remaining': [for (final a in all) a.name]},
+        data: {
+          'device': device.id,
+          'removed': const <Object>[],
+          'remaining': [for (final a in all) a.name]
+        },
       );
     }
     if (device.isIos) {
@@ -362,13 +435,27 @@ class MediaTool extends GlintTool {
         ],
       );
     }
-    final failed = await phases.during('removing ${chosen.length} seeded asset${chosen.length == 1 ? '' : 's'}', () => gallery.remove(chosen));
-    final removed = [for (final a in chosen) if (!failed.contains(a.file)) a];
-    ledger.save([for (final a in all) if (!removed.contains(a)) a]);
+    final failed = await phases.during(
+        'removing ${chosen.length} seeded asset${chosen.length == 1 ? '' : 's'}', () => gallery.remove(chosen));
+    final removed = [
+      for (final a in chosen)
+        if (!failed.contains(a.file)) a
+    ];
+    ledger.save([
+      for (final a in all)
+        if (!removed.contains(a)) a
+    ]);
     return StructuredResponse(
-      summary: 'removed ${removed.length} seeded asset${removed.length == 1 ? '' : 's'} from ${device.id}: ${removed.map((a) => a.name).join(', ')}',
-      warnings: [if (failed.isNotEmpty) 'could not remove ${failed.join(', ')}; they stay listed so a retry can finish'],
-      data: {'device': device.id, 'removed': [for (final a in removed) a.toJson()], 'failed': failed},
+      summary:
+          'removed ${removed.length} seeded asset${removed.length == 1 ? '' : 's'} from ${device.id}: ${removed.map((a) => a.name).join(', ')}',
+      warnings: [
+        if (failed.isNotEmpty) 'could not remove ${failed.join(', ')}; they stay listed so a retry can finish'
+      ],
+      data: {
+        'device': device.id,
+        'removed': [for (final a in removed) a.toJson()],
+        'failed': failed
+      },
     );
   }
 
@@ -399,7 +486,8 @@ class MediaTool extends GlintTool {
         errorKind: GlintErrorKind.targetNotFound,
         nextSteps: [
           if (surface == null) "open the app's photo picker first (e.g. tap its Choose from library), then pick",
-          if (surface != null) 'get_scene to see what the native surface shows; `media op:seed` adds photos to choose from',
+          if (surface != null)
+            'get_scene to see what the native surface shows; `media op:seed` adds photos to choose from',
         ],
       );
     }
@@ -408,20 +496,29 @@ class MediaTool extends GlintTool {
     if (name != null) {
       final device = MediaDevice(session.device.platform, session.device.id);
       final seeded = SeedLedger(device.id).load();
-      final asset = [for (final a in seeded) if (a.name == name || a.file == 'glint-${_safe(name)}.png' || a.file.startsWith('glint-${_safe(name)}.')) a].lastOrNull;
+      final asset = [
+        for (final a in seeded)
+          if (a.name == name || a.file == 'glint-${_safe(name)}.png' || a.file.startsWith('glint-${_safe(name)}.')) a
+      ].lastOrNull;
       if (asset == null) {
-        return _bad('nothing seeded as "$name" on ${device.id}',
-            nextSteps: [if (seeded.isNotEmpty) 'seeded here: ${seeded.map((a) => a.name).join(', ')}', 'or pick by index:<n> (0 = newest)']);
+        return _bad('nothing seeded as "$name" on ${device.id}', nextSteps: [
+          if (seeded.isNotEmpty) 'seeded here: ${seeded.map((a) => a.name).join(', ')}',
+          'or pick by index:<n> (0 = newest)'
+        ]);
       }
       final window = device.isIos ? const Duration(minutes: 1) : const Duration(seconds: 3);
-      final later = seeded.where((a) => a.addedAt.isAfter(asset.addedAt) && a.addedAt.difference(asset.addedAt) <= window).length;
+      final later =
+          seeded.where((a) => a.addedAt.isAfter(asset.addedAt) && a.addedAt.difference(asset.addedAt) <= window).length;
       final found = cellForAsset(cells, asset.addedAt, laterInSameWindow: later);
       if (found == null) {
         return StructuredResponse.error(
           summary: 'no cell in the picker shows "$name" (seeded ${asset.addedAt.toIso8601String().substring(11, 19)})',
           errorKind: GlintErrorKind.targetNotFound,
           detail: 'the picker shows: ${cells.take(6).map((c) => c.label).join('; ')}',
-          nextSteps: const ['scroll the picker or switch to its Photos tab, then pick again', 'or pick by index:<n> (0 = newest)'],
+          nextSteps: const [
+            'scroll the picker or switch to its Photos tab, then pick again',
+            'or pick by index:<n> (0 = newest)'
+          ],
         );
       }
       index = found;
@@ -441,11 +538,15 @@ class MediaTool extends GlintTool {
       final confirm = (await reader.readSnapshot())
           .root
           .children
-          .where((n) => n.isNativeEnabled == true && n.axFrame != null && RegExp(r'^(Add|Done|Select|Choose|Open)$').hasMatch(n.textPreview ?? ''))
+          .where((n) =>
+              n.isNativeEnabled == true &&
+              n.axFrame != null &&
+              RegExp(r'^(Add|Done|Select|Choose|Open)$').hasMatch(n.textPreview ?? ''))
           .firstOrNull;
       if (confirm != null) {
         final f = confirm.axFrame!;
-        await session.backend.tap(physicalX: ((f.x + f.w / 2) * dpr).round(), physicalY: ((f.y + f.h / 2) * dpr).round());
+        await session.backend
+            .tap(physicalX: ((f.x + f.w / 2) * dpr).round(), physicalY: ((f.y + f.h / 2) * dpr).round());
         confirmed = confirm.textPreview;
         await Future<void>.delayed(const Duration(milliseconds: 1200));
         await app.refreshSceneMode();
@@ -461,7 +562,12 @@ class MediaTool extends GlintTool {
         if (closed) 'get_scene to see the picked media in the app',
         if (!closed) 'get_scene to see the picker, then tap its confirm button',
       ],
-      data: {'picked': cell.label, 'index': index, if (confirmed != null) 'confirmed': confirmed, 'pickerClosed': closed},
+      data: {
+        'picked': cell.label,
+        'index': index,
+        if (confirmed != null) 'confirmed': confirmed,
+        'pickerClosed': closed
+      },
     );
   }
 
@@ -476,17 +582,29 @@ class MediaTool extends GlintTool {
     if (device == null) return failure.single;
     final appId = _appId(session, device, args);
     if (appId == null) {
-      return _bad('no app to set $permission for: the attached app has no known ${device.isIos ? 'bundle id' : 'package'}',
+      return _bad(
+          'no app to set $permission for: the attached app has no known ${device.isIos ? 'bundle id' : 'package'}',
           nextSteps: const ['pass appId:"<bundle id or package>"']);
     }
     try {
       final done = await setPermission(device, appId, permission!, action!);
-      final verb = switch (action) { 'grant' => 'granted', 'deny' => 'denied', 'reset' => 'reset (the app will ask again)', _ => 'set to limited' };
+      final verb = switch (action) {
+        'grant' => 'granted',
+        'deny' => 'denied',
+        'reset' => 'reset (the app will ask again)',
+        _ => 'set to limited'
+      };
       return StructuredResponse(
         summary: '$permission $verb for $appId on ${device.id}',
         warnings: [if (done.caution != null) done.caution!],
         nextSteps: const ['get_scene, then drive the flow that uses it'],
-        data: {'permission': permission, 'action': action, 'appId': appId, 'device': device.id, 'applied': done.applied},
+        data: {
+          'permission': permission,
+          'action': action,
+          'appId': appId,
+          'device': device.id,
+          'applied': done.applied
+        },
       );
     } on PermissionUnsupported catch (e) {
       return StructuredResponse.error(
@@ -501,7 +619,11 @@ class MediaTool extends GlintTool {
             : e.notDeclared
                 ? '$appId does not declare the $permission permission, so the system cannot ${action == 'limited' ? 'limit' : action} it'
                 : 'the device refused to ${action == 'limited' ? 'limit' : action} $permission for $appId',
-        errorKind: e.unknownApp ? GlintErrorKind.targetNotFound : e.notDeclared ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
+        errorKind: e.unknownApp
+            ? GlintErrorKind.targetNotFound
+            : e.notDeclared
+                ? GlintErrorKind.invalidArgument
+                : GlintErrorKind.backendToolError,
         detail: e.detail,
         nextSteps: [
           if (e.unknownApp) 'pass the installed package as appId',
@@ -517,7 +639,8 @@ class MediaTool extends GlintTool {
     return attached is AndroidDevice ? attached.adbPath : (resolveAdbPath(null) ?? 'adb');
   }
 
-  Future<({EmulatorAudio? audio, StructuredResponse? error})> _emulatorAudio(GlintSession session, Map<String, Object?> args) async {
+  Future<({EmulatorAudio? audio, StructuredResponse? error})> _emulatorAudio(
+      GlintSession session, Map<String, Object?> args) async {
     final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
     if (id == null) return (audio: null, error: _bad('no device: attach first, or pass device:"emulator-5554"'));
     if (!id.startsWith('emulator-')) {
@@ -568,9 +691,11 @@ class MediaTool extends GlintTool {
     }
     final rec = await audio.stopCapture();
     if (rec == null) {
-      return _bad('nothing is being recorded on ${audio.serial}', nextSteps: const ['start with `media op:listen`, play, then stop']);
+      return _bad('nothing is being recorded on ${audio.serial}',
+          nextSteps: const ['start with `media op:listen`, play, then stop']);
     }
-    final wav = writeWav('${mediaDir('pulled')}/${audio.serial}-speaker-${DateTime.now().millisecondsSinceEpoch}.wav', rec.pcm);
+    final wav =
+        writeWav('${mediaDir('pulled')}/${audio.serial}-speaker-${DateTime.now().millisecondsSinceEpoch}.wav', rec.pcm);
     final stats = audioStats(rec.pcm);
     final quiet = stats.silences.fold(Duration.zero, (sum, s) => sum + (s.$2 - s.$1));
     final secs = rec.length.inMilliseconds / 1000;
@@ -613,7 +738,8 @@ class MediaTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'the microphone feed needs glint\'s device server, which is not running on ${dev.serial}',
         errorKind: GlintErrorKind.backendToolError,
-        detail: 'the server feeds the microphone from inside Android; another automation tool may hold the accessibility connection it starts with',
+        detail:
+            'the server feeds the microphone from inside Android; another automation tool may hold the accessibility connection it starts with',
         nextSteps: const ['stop other automation tools on the device, then attach again'],
       );
     }
@@ -633,15 +759,22 @@ class MediaTool extends GlintTool {
     final ({File pcm, String label}) audio;
     try {
       audio = await micAudio((args['source'] as String?) ?? 'tone',
-          hz: argNum(args, 'hz')?.toDouble(), text: args['text'] as String?, voice: args['voice'] as String?, phases: phases);
+          hz: argNum(args, 'hz')?.toDouble(),
+          text: args['text'] as String?,
+          voice: args['voice'] as String?,
+          phases: phases);
     } on GalleryError catch (e) {
-      return _bad(e.summary, nextSteps: [if (e.detail.isNotEmpty) e.detail, 'source: tone (hz), speech (text) or a host audio file']);
+      return _bad(e.summary,
+          nextSteps: [if (e.detail.isNotEmpty) e.detail, 'source: tone (hz), speech (text) or a host audio file']);
     }
     final seconds = (argNum(args, 'durationSec') ?? 60).clamp(1, 600);
     const remote = '/data/local/tmp/glint-mic.pcm';
     final push = await Process.run(dev.adbPath, ['-s', dev.serial, 'push', audio.pcm.path, remote]);
     if (push.exitCode != 0) {
-      return StructuredResponse.error(summary: 'could not push the audio to ${dev.serial}', errorKind: GlintErrorKind.backendToolError, detail: '${push.stderr}'.trim());
+      return StructuredResponse.error(
+          summary: 'could not push the audio to ${dev.serial}',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '${push.stderr}'.trim());
     }
     final r = await server.call({'cmd': 'micStart', 'path': remote, 'ms': (seconds * 1000).round()});
     if (r['ok'] != true) {
@@ -653,9 +786,12 @@ class MediaTool extends GlintTool {
       );
     }
     return StructuredResponse(
-      summary: 'microphone of ${dev.serial} fed for ${seconds.toStringAsFixed(0)} s: any app that records hears ${audio.label}, looped',
+      summary:
+          'microphone of ${dev.serial} fed for ${seconds.toStringAsFixed(0)} s: any app that records hears ${audio.label}, looped',
       warnings: const ['while the feed runs, apps hear only the feed, not the device\'s real microphone'],
-      nextSteps: const ['make the app record, then `media op:mic stop:true` to see which app recorded it and for how long'],
+      nextSteps: const [
+        'make the app record, then `media op:mic stop:true` to see which app recorded it and for how long'
+      ],
       data: {'device': dev.serial, 'source': audio.label, 'seconds': seconds},
     );
   }
@@ -675,9 +811,10 @@ class MediaTool extends GlintTool {
         nextSteps: const ['run this flow on an Android emulator', 'or ask the user to do it on the device'],
       );
     }
-    final device = MediaDevice(DevicePlatform.android, id, adbPath: session.isAttached && session.device is AndroidDevice
-        ? (session.device as AndroidDevice).adbPath
-        : resolveAdbPath(null) ?? 'adb');
+    final device = MediaDevice(DevicePlatform.android, id,
+        adbPath: session.isAttached && session.device is AndroidDevice
+            ? (session.device as AndroidDevice).adbPath
+            : resolveAdbPath(null) ?? 'adb');
     try {
       final said = await sendEvent(device, kind!,
           value: args['value']?.toString(), number: args['number'] as String?, text: args['text'] as String?);
@@ -706,7 +843,10 @@ class MediaTool extends GlintTool {
         detail: MediaDevice.platformOf(id) == DevicePlatform.ios
             ? 'the iOS simulator has no camera at all'
             : 'a physical phone films what is in front of it',
-        nextSteps: const ['run the camera flow on an Android emulator', 'or `media op:seed` a photo and pick it from the gallery instead'],
+        nextSteps: const [
+          'run the camera flow on an Android emulator',
+          'or `media op:seed` a photo and pick it from the gallery instead'
+        ],
       );
     }
     final emulator = await EmulatorInstance.locate(id, adbPath: _adbPath(session));
@@ -720,9 +860,8 @@ class MediaTool extends GlintTool {
         nextSteps: const ['check the emulator is running (adb devices), then retry'],
       );
     }
-    final restart = emulator.grpc == null
-        ? emulator.controlSteps
-        : const ['restart the emulator once (close it, start it again)'];
+    final restart =
+        emulator.grpc == null ? emulator.controlSteps : const ['restart the emulator once (close it, start it again)'];
     final cam = EmulatorCamera(avdDir: avdDir, avdName: avdName);
     final setup = argBool(args, 'setup');
     if (setup == true) {
@@ -734,7 +873,8 @@ class MediaTool extends GlintTool {
             : 'glint can now feed the $avdName cameras once the emulator restarts and picks this up',
         nextSteps: [
           if (!already) ...restart,
-          if (!already) 'after the restart, `media op:camera source:"testcard"` (or an image or video path) sets what the cameras see',
+          if (!already)
+            'after the restart, `media op:camera source:"testcard"` (or an image or video path) sets what the cameras see',
           '`media op:camera setup:false` puts the original cameras back',
         ],
         data: {'device': id, 'avd': avdName, 'live': already},
@@ -776,11 +916,15 @@ class MediaTool extends GlintTool {
     final File file;
     final String label;
     if (source == 'testcard') {
-      file = await generateTestCardVideo(const TestCardSpec(width: 720, height: 1280, durationSec: 10, fps: 30), 'glint-camera-testcard', phases: phases);
+      file = await generateTestCardVideo(
+          const TestCardSpec(width: 720, height: 1280, durationSec: 10, fps: 30), 'glint-camera-testcard',
+          phases: phases);
       label = 'the glint test card';
     } else {
       file = File(source);
-      if (!file.existsSync()) return _bad('camera source must be testcard or an image or video path; "$source" does not exist');
+      if (!file.existsSync()) {
+        return _bad('camera source must be testcard or an image or video path; "$source" does not exist');
+      }
       label = file.uri.pathSegments.last;
     }
     final control = EmulatorControl(grpc);
@@ -809,7 +953,8 @@ class MediaTool extends GlintTool {
   DateTime? _sinceTime(GlintSession session, String? since, List<StructuredResponse> failure) {
     if (since == null) return null;
     if (since == 'lastAction') {
-      final last = session.actionLog.query(limit: 200).toList().reversed.where((e) => _actionTools.contains(e.tool)).firstOrNull;
+      final last =
+          session.actionLog.query(limit: 200).toList().reversed.where((e) => _actionTools.contains(e.tool)).firstOrNull;
       if (last == null) {
         failure.add(_bad('since:"lastAction" found no gesture or typing in this session',
             nextSteps: const ['run the action first, or pass an ISO time such as 2026-10-10T14:30:00']));
@@ -845,7 +990,9 @@ class MediaTool extends GlintTool {
     final files = AppFiles(device, appId);
     if (argBool(args, 'pull') ?? false) {
       final path = args['path'] as String?;
-      if (path == null || path.isEmpty) return _bad('pull needs path', nextSteps: const ['list files first with `media op:files`, then pass one path']);
+      if (path == null || path.isEmpty) {
+        return _bad('pull needs path', nextSteps: const ['list files first with `media op:files`, then pass one path']);
+      }
       final host = await files.pull(path, phases: phases);
       return StructuredResponse(
         summary: 'pulled ${path.split('/').last} (${_humanSize(host.lengthSync())}) to ${host.path}',
@@ -856,15 +1003,18 @@ class MediaTool extends GlintTool {
     final since = _sinceTime(session, args['since'] as String?, failure);
     if (failure.isNotEmpty) return failure.single;
     final cap = (argInt(args, 'limit') ?? 50).clamp(1, 200);
-    final listing = await phases.during('listing $appId files', () => files.list(since: since, glob: args['glob'] as String?));
+    final listing =
+        await phases.during('listing $appId files', () => files.list(since: since, glob: args['glob'] as String?));
     final shown = listing.files.take(cap).toList();
     final hidden = listing.total - shown.length;
     final root = listing.roots.first;
     String relative(String p) => p.startsWith('$root/') ? p.substring(root.length + 1) : p;
     final lines = [
-      for (final f in shown) '${_humanSize(f.sizeBytes).padLeft(8)}  ${f.modified.toLocal().toIso8601String().substring(11, 19)}  ${relative(f.path)}',
+      for (final f in shown)
+        '${_humanSize(f.sizeBytes).padLeft(8)}  ${f.modified.toLocal().toIso8601String().substring(11, 19)}  ${relative(f.path)}',
     ];
-    final filter = [if (since != null) 'since ${args['since']}', if (args['glob'] != null) 'matching ${args['glob']}'].join(' ');
+    final filter =
+        [if (since != null) 'since ${args['since']}', if (args['glob'] != null) 'matching ${args['glob']}'].join(' ');
     return StructuredResponse(
       summary: [
         '${listing.total} file${listing.total == 1 ? '' : 's'} in $appId${filter.isEmpty ? '' : ' $filter'}, newest first'
@@ -874,8 +1024,10 @@ class MediaTool extends GlintTool {
       ].join('\n'),
       warnings: listing.notes,
       nextSteps: [
-        if (shown.isNotEmpty) '`media op:inspect path:"${relative(shown.first.path)}"` reads the newest (device files are pulled for you)',
-        if (shown.isEmpty && since != null) 'nothing new: the app may still be writing, or wrote elsewhere (drop since to list everything)',
+        if (shown.isNotEmpty)
+          '`media op:inspect path:"${relative(shown.first.path)}"` reads the newest (device files are pulled for you)',
+        if (shown.isEmpty && since != null)
+          'nothing new: the app may still be writing, or wrote elsewhere (drop since to list everything)',
       ],
       data: {
         'appId': appId,
@@ -899,8 +1051,9 @@ class MediaTool extends GlintTool {
       final target = await _device(session, args, failure);
       final appId = target == null ? null : _appId(session, target, args);
       if (target == null || appId == null) {
-        return _bad('no file at $requested on the host, and no app to pull it from',
-            nextSteps: const ['pass a host path, or attach to the app (or pass device: and appId:) so a device path can be pulled']);
+        return _bad('no file at $requested on the host, and no app to pull it from', nextSteps: const [
+          'pass a host path, or attach to the app (or pass device: and appId:) so a device path can be pulled'
+        ]);
       }
       final files = AppFiles(target, appId);
       final inPlace = await files.iosFile(requested);
@@ -909,15 +1062,20 @@ class MediaTool extends GlintTool {
     }
     final probe = await probeMedia(path);
     final showProbe = argBool(args, 'probe') ?? true;
-    final loudness = showProbe && probe.hasAudio ? await phases.during('measuring loudness', () => measureLoudness(path)) : null;
+    final loudness =
+        showProbe && probe.hasAudio ? await phases.during('measuring loudness', () => measureLoudness(path)) : null;
     var card = await phases.during('looking for a glint test card', () => decodeTestCard(path, probe, phases: phases));
     String? barsNote;
     if (card == null) {
       final crop = await letterboxCrop(path, probe);
       final inner = crop == null ? null : await cropCopy(path, crop, photo: probe.kind == 'photo');
       if (inner != null) {
-        card = await phases.during('looking for a test card inside black bars', () async => decodeTestCard(inner, await probeMedia(inner), phases: phases));
-        if (card != null) barsNote = 'the card sits inside black bars (picture ${crop!.split(':').take(2).join('x')} at ${crop.split(':').skip(2).join(',')})';
+        card = await phases.during('looking for a test card inside black bars',
+            () async => decodeTestCard(inner, await probeMedia(inner), phases: phases));
+        if (card != null) {
+          barsNote =
+              'the card sits inside black bars (picture ${crop!.split(':').take(2).join('x')} at ${crop.split(':').skip(2).join(',')})';
+        }
         File(inner).deleteSync();
       }
     }
@@ -937,13 +1095,19 @@ class MediaTool extends GlintTool {
         return _bad('frames entries are seconds or start | middle | end, got "$raw"');
       }
       final out = '$framesDir/$stem-${at.label}.png';
-      final ok = await phases.during('extracting frame ${at.label}', () => extractFrame(path, at, out, still: probe.kind == 'photo'));
+      final ok = await phases.during(
+          'extracting frame ${at.label}', () => extractFrame(path, at, out, still: probe.kind == 'photo'));
       final size = ok ? pngSize(out) : null;
       if (size == null) {
         frameNotes.add('${at.label}: no frame there');
         continue;
       }
-      final sent = await prepareModelImage(out, width: size.$1, height: size.$2, maxSize: maxSize, format: session.config.screenshotFormat, quality: session.config.screenshotQuality);
+      final sent = await prepareModelImage(out,
+          width: size.$1,
+          height: size.$2,
+          maxSize: maxSize,
+          format: session.config.screenshotFormat,
+          quality: session.config.screenshotQuality);
       images.add(sent.path);
       frameNotes.add('${at.label}: ${sent.width}x${sent.height}');
     }
@@ -952,14 +1116,17 @@ class MediaTool extends GlintTool {
       if (card != null) card.summary,
       if (barsNote != null) barsNote,
       if (showProbe) ..._probeLines(probe, loudness),
-      if (frameNotes.isNotEmpty) 'frames: ${frameNotes.join(', ')}${images.isEmpty ? '' : ' (images attached in this order)'}',
+      if (frameNotes.isNotEmpty)
+        'frames: ${frameNotes.join(', ')}${images.isEmpty ? '' : ' (images attached in this order)'}',
       if (pulled) 'pulled from the device to $path',
     ];
     return StructuredResponse(
       summary: lines.join('\n'),
       nextSteps: [
-        if (card == null && probe.hasVideo && wanted.isEmpty) 'frames:["start","middle","end"] returns pictures to look at',
-        if (card != null && !card.photo && !card.stats.complete) 'frames were lost or repeated: the export re-timed or trimmed the video',
+        if (card == null && probe.hasVideo && wanted.isEmpty)
+          'frames:["start","middle","end"] returns pictures to look at',
+        if (card != null && !card.photo && !card.stats.complete)
+          'frames were lost or repeated: the export re-timed or trimmed the video',
       ],
       imagePaths: images,
       data: {

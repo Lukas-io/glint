@@ -10,8 +10,7 @@ class _FakeRuntime implements FlutterRuntime {
   int calls = 0;
 
   @override
-  Future<String?> evaluateString(String expression,
-          {bool rethrowErrors = false}) async {
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async {
     final i = calls < phases.length ? calls : phases.length - 1;
     calls++;
     return 'SchedulerPhase.${phases[i]}';
@@ -23,8 +22,7 @@ class _FakeRuntime implements FlutterRuntime {
 
 /// Scripted scenes: each `readSummary` yields the next root, the last repeats.
 class _FakeReader extends SceneReader {
-  _FakeReader(FlutterRuntime rt, this.roots)
-      : super(InspectorClient(rt), rt);
+  _FakeReader(FlutterRuntime rt, this.roots) : super(InspectorClient(rt), rt);
   final List<SceneNode> roots;
   int reads = 0;
 
@@ -36,8 +34,7 @@ class _FakeReader extends SceneReader {
   }
 }
 
-SceneNode _node(String label, {String? text, List<SceneNode> kids = const []}) =>
-    SceneNode(
+SceneNode _node(String label, {String? text, List<SceneNode> kids = const []}) => SceneNode(
       depth: 1,
       indexInParent: 0,
       description: label,
@@ -71,7 +68,9 @@ void main() {
     test('a RefreshIndicator wrapper is not a loading state', () async {
       final d = _detector(
         ['idle'],
-        [_node('Scaffold', kids: [_node('RefreshIndicator')])],
+        [
+          _node('Scaffold', kids: [_node('RefreshIndicator')])
+        ],
       );
       final r = await d.awaitSettle(ceilingMs: 500, quietFramesNeeded: 2);
       expect(r, isA<SettledOk>());
@@ -80,21 +79,23 @@ void main() {
     test('a spinner keeps it loading until the ceiling', () async {
       final d = _detector(
         ['idle'],
-        [_node('Scaffold', kids: [_node('CircularProgressIndicator')])],
+        [
+          _node('Scaffold', kids: [_node('CircularProgressIndicator')])
+        ],
       );
       final r = await d.awaitSettle(ceilingMs: 60, quietFramesNeeded: 1);
       expect(r, isA<SettledButLoading>());
       expect((r as SettledButLoading).loadingAffordances, isNotEmpty);
     });
 
-    test('frames never quiet but content stable settles as animating',
-        () async {
+    test('frames never quiet but content stable settles as animating', () async {
       final d = _detector(
         ['persistentCallbacks'],
-        [_node('Scaffold', kids: [_node('Text', text: 'hello')])],
+        [
+          _node('Scaffold', kids: [_node('Text', text: 'hello')])
+        ],
       );
-      final r = await d.awaitSettle(
-          ceilingMs: 400, quietFramesNeeded: 3, quietGraceMs: 20);
+      final r = await d.awaitSettle(ceilingMs: 400, quietFramesNeeded: 3, quietGraceMs: 20);
       expect(r, isA<SettledAnimating>());
       expect(r.settled, isTrue);
       expect(r.elapsedMs, lessThan(400));
@@ -109,30 +110,24 @@ void main() {
           ])
         ],
       );
-      final r = await d.awaitSettle(
-          ceilingMs: 300, quietFramesNeeded: 3, quietGraceMs: 20);
+      final r = await d.awaitSettle(ceilingMs: 300, quietFramesNeeded: 3, quietGraceMs: 20);
       expect(r, isA<SettledButLoading>());
       expect(r.settled, isFalse);
     });
 
     test('frames never quiet and content changing times out', () async {
       var n = 0;
-      final roots = List.generate(
-          50, (_) => _node('Scaffold', kids: [_node('Text', text: '${n++}')]));
+      final roots = List.generate(50, (_) => _node('Scaffold', kids: [_node('Text', text: '${n++}')]));
       final d = _detector(['persistentCallbacks'], roots);
-      final r = await d.awaitSettle(
-          ceilingMs: 80, quietFramesNeeded: 3, quietGraceMs: 10);
+      final r = await d.awaitSettle(ceilingMs: 80, quietFramesNeeded: 3, quietGraceMs: 10);
       expect(r, isA<SettleTimedOut>());
     });
   });
 
   test('contentSignature ignores offstage nodes and tracks text', () {
-    final a = Scene.forTesting(
-        root: _node('Scaffold', kids: [_node('Text', text: 'a')]));
-    final b = Scene.forTesting(
-        root: _node('Scaffold', kids: [_node('Text', text: 'b')]));
-    final c = Scene.forTesting(
-        root: _node('Scaffold', kids: [_node('Text', text: 'a')]));
+    final a = Scene.forTesting(root: _node('Scaffold', kids: [_node('Text', text: 'a')]));
+    final b = Scene.forTesting(root: _node('Scaffold', kids: [_node('Text', text: 'b')]));
+    final c = Scene.forTesting(root: _node('Scaffold', kids: [_node('Text', text: 'a')]));
     expect(a.contentSignature(), isNot(b.contentSignature()));
     expect(a.contentSignature(), c.contentSignature());
   });
@@ -140,11 +135,9 @@ void main() {
 
 class _NoGeometryRuntime implements FlutterRuntime {
   @override
-  Future<void> setInspectorSelection(
-          {required String inspectorId, required String groupName}) async {}
+  Future<void> setInspectorSelection({required String inspectorId, required String groupName}) async {}
   @override
-  Future<String?> evaluateString(String expression,
-          {bool rethrowErrors = false}) async =>
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async =>
       '{"gx":1,"gy":1,"bx":0,"by":0,"bw":1,"bh":1,"dpr":1,"vw":1,"vh":1,'
       '"op":1.0,"vis":true,"hit":true}';
   @override
@@ -152,16 +145,13 @@ class _NoGeometryRuntime implements FlutterRuntime {
 }
 
 void readinessGateMain() {
-  test('ReadinessGate fails fast on a static screen without the target',
-      () async {
+  test('ReadinessGate fails fast on a static screen without the target', () async {
     final rt = _NoGeometryRuntime();
     final reader = _FakeReader(rt, [
       _node('Scaffold', kids: [_node('Text', text: 'hello')])
     ]);
-    final gate = ReadinessGate(
-        reader: reader, resolver: CoordinateResolver(rt), pollIntervalMs: 5);
-    final r = await gate.awaitReady(
-        glintId: 'text#stale', ceilingMs: 2000, staleAfterMs: 40);
+    final gate = ReadinessGate(reader: reader, resolver: CoordinateResolver(rt), pollIntervalMs: 5);
+    final r = await gate.awaitReady(glintId: 'text#stale', ceilingMs: 2000, staleAfterMs: 40);
     expect(r, isA<NotFoundResult>());
     final nf = r as NotFoundResult;
     expect(nf.staleScreen, isTrue);

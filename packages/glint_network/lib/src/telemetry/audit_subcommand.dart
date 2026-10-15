@@ -161,8 +161,7 @@ Future<void> _runShow(List<String> args) async {
     io.stdout.writeln('# entry $i  ts=${entry.ts.toIso8601String()}');
     io.stdout.writeln('# this_hash=${entry.thisHash.substring(0, 12)}…');
     try {
-      final pretty = const JsonEncoder.withIndent('  ')
-          .convert(jsonDecode(payloadJson));
+      final pretty = const JsonEncoder.withIndent('  ').convert(jsonDecode(payloadJson));
       io.stdout.writeln(pretty);
     } catch (_) {
       io.stdout.writeln(payloadJson);

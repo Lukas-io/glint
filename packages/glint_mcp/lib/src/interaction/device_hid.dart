@@ -47,13 +47,22 @@ enum DeviceHidFailure {
 
   /// What the agent can do about it.
   List<String> get nextSteps => switch (this) {
-        missing => const ['build it with `cargo build --release` in packages/glint_mcp/$deviceHidBuildDir, or set $deviceHidEnv'],
+        missing => const [
+            'build it with `cargo build --release` in packages/glint_mcp/$deviceHidBuildDir, or set $deviceHidEnv'
+          ],
         deviceNotFound || usbmuxd => const ['connect the iPhone by cable and unlock it, then retry'],
-        wifiOnly => const ['plug the iPhone in by cable and unlock it, then retry', 'over Wi-Fi alone, `device op:screenshot` and `device op:status` still work'],
+        wifiOnly => const [
+            'plug the iPhone in by cable and unlock it, then retry',
+            'over Wi-Fi alone, `device op:screenshot` and `device op:status` still work'
+          ],
         tunnel => const ['unlock the iPhone and confirm it trusts this Mac and has Developer Mode on, then retry'],
-        developerImage => const ['run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry'],
+        developerImage => const [
+            'run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry'
+          ],
         deviceBusy => const ['close Device Hub (Xcode) or any other screen viewer of this phone, then retry'],
-        unsupportedText => const ['only printable ASCII types through the hardware keyboard; for other text focus a Flutter field and use input:auto'],
+        unsupportedText => const [
+            'only printable ASCII types through the hardware keyboard; for other text focus a Flutter field and use input:auto'
+          ],
         stream || input || badRequest => const ['retry once; if it repeats, attach again'],
       };
 }
@@ -112,13 +121,15 @@ class DeviceHid {
       process.kill();
       final failure = DeviceHidFailure.parse(first['kind']);
       if (failure == DeviceHidFailure.deviceNotFound && await phoneTransport(udid) == 'localNetwork') {
-        throw DeviceHidError(DeviceHidFailure.wifiOnly, 'the iPhone is connected over Wi-Fi only, and touches, keys and buttons need the cable');
+        throw DeviceHidError(DeviceHidFailure.wifiOnly,
+            'the iPhone is connected over Wi-Fi only, and touches, keys and buttons need the cable');
       }
       throw DeviceHidError(failure, '${first['error']}');
     }
     if (first['ready'] != expectedDeviceHidProtocol) {
       process.kill();
-      throw DeviceHidError(DeviceHidFailure.missing, 'the helper speaks protocol ${first['ready']}, glint expects $expectedDeviceHidProtocol; rebuild or re-download it');
+      throw DeviceHidError(DeviceHidFailure.missing,
+          'the helper speaks protocol ${first['ready']}, glint expects $expectedDeviceHidProtocol; rebuild or re-download it');
     }
     _process = process;
     _lines = lines;
@@ -154,11 +165,15 @@ class DeviceHid {
     await start();
     final process = _process;
     final lines = _lines;
-    if (process == null || lines == null) throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper is not running${_why()}');
+    if (process == null || lines == null) {
+      throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper is not running${_why()}');
+    }
     try {
       process.stdin.writeln(jsonEncode(request));
       await process.stdin.flush();
-      if (!await lines.moveNext().timeout(timeout)) throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper exited${_why()}');
+      if (!await lines.moveNext().timeout(timeout)) {
+        throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper exited${_why()}');
+      }
     } on DeviceHidError {
       await stop();
       rethrow;

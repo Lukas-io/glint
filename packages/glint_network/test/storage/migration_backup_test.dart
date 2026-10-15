@@ -36,8 +36,7 @@ void main() {
     addTearDown(copy.close);
     expect(copy.select("SELECT value FROM _meta WHERE key='schema_version'").first['value'], '13');
     expect(copy.select('SELECT app_name FROM sessions').single['app_name'], 'kept-app');
-    expect(CapturesDatabase.instance.raw
-        .select("SELECT value FROM _meta WHERE key='schema_version'").first['value'],
+    expect(CapturesDatabase.instance.raw.select("SELECT value FROM _meta WHERE key='schema_version'").first['value'],
         '$currentVersion');
   });
 
@@ -57,15 +56,14 @@ void main() {
     expect(File(backup(13)).existsSync(), isTrue);
     CapturesDatabase.instance.close();
 
-    File(backup(13)).setLastModifiedSync(
-        DateTime.now().subtract(CapturesDatabase.backupRetention + const Duration(days: 1)));
+    File(backup(13))
+        .setLastModifiedSync(DateTime.now().subtract(CapturesDatabase.backupRetention + const Duration(days: 1)));
     CapturesDatabase.open(dataDir: dir.path);
     expect(File(backup(13)).existsSync(), isFalse);
   });
 
   test('a manual backup with another name is never touched', () {
-    final manual = File('${dir.path}/captures.db.pre-v13-2026-09-25.bak')
-      ..writeAsStringSync('mine');
+    final manual = File('${dir.path}/captures.db.pre-v13-2026-09-25.bak')..writeAsStringSync('mine');
     manual.setLastModifiedSync(DateTime.now().subtract(const Duration(days: 60)));
     seedV13();
     CapturesDatabase.open(dataDir: dir.path);

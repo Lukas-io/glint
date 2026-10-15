@@ -25,8 +25,7 @@ Future<void> runUsage(List<String> args) async {
   }
 
   final parser = ArgParser()
-    ..addFlag('show',
-        negatable: false, help: 'List recent raw events instead of the summary.')
+    ..addFlag('show', negatable: false, help: 'List recent raw events instead of the summary.')
     ..addOption('since', help: 'Relative window: 7d, 24h, 30m. Default: all.')
     ..addOption('limit', help: 'Max raw events with --show (default 50).')
     ..addFlag('json', negatable: false, help: 'Emit JSON instead of text.')
@@ -97,8 +96,7 @@ Future<void> runUsage(List<String> args) async {
       return;
     }
     for (final e in events) {
-      final ts = DateTime.fromMillisecondsSinceEpoch(e['ts_ms'] as int)
-          .toIso8601String();
+      final ts = DateTime.fromMillisecondsSinceEpoch(e['ts_ms'] as int).toIso8601String();
       io.stdout.writeln(
         '$ts  ${(e['tool'] as String).padRight(20)}  '
         '${(e['outcome'] as String).padRight(6)}  '
@@ -130,8 +128,7 @@ Future<void> runUsage(List<String> args) async {
     final outcome = row['outcome'] as String;
     (perTool[tool] ??= {})[outcome] = row['count'] as int;
   }
-  final sorted = perTool.entries.toList()
-    ..sort((a, b) => _sum(b.value).compareTo(_sum(a.value)));
+  final sorted = perTool.entries.toList()..sort((a, b) => _sum(b.value).compareTo(_sum(a.value)));
 
   io.stdout.writeln(
     'Tool usage ($total event(s) total'
@@ -153,11 +150,8 @@ int _sum(Map<String, int> m) => m.values.fold(0, (a, b) => a + b);
 /// when one is configured. Idempotent; run it as often as you like.
 Future<void> _runShip(List<String> args) async {
   final parser = ArgParser()
-    ..addFlag('dry-run',
-        negatable: false,
-        help: 'Build + print the rollup without writing or sending it.')
-    ..addFlag('json',
-        negatable: false, help: 'Emit the rollup payload + result as JSON.')
+    ..addFlag('dry-run', negatable: false, help: 'Build + print the rollup without writing or sending it.')
+    ..addFlag('json', negatable: false, help: 'Emit the rollup payload + result as JSON.')
     ..addFlag('help', abbr: 'h', negatable: false);
 
   final ArgResults parsed;
@@ -197,16 +191,14 @@ Future<void> _runShip(List<String> args) async {
       'toEventId': result.toEventId,
       'posted': result.posted,
       'message': result.message,
-      if (result.payloadJson != null)
-        'payload': jsonDecode(result.payloadJson!),
+      if (result.payloadJson != null) 'payload': jsonDecode(result.payloadJson!),
     }));
     return;
   }
 
   io.stdout.writeln('glint_network usage ship: ${result.message}');
   if (result.payloadJson != null && dryRun) {
-    io.stdout.writeln(const JsonEncoder.withIndent('  ')
-        .convert(jsonDecode(result.payloadJson!)));
+    io.stdout.writeln(const JsonEncoder.withIndent('  ').convert(jsonDecode(result.payloadJson!)));
   } else if (result.shipped) {
     io.stdout.writeln(
       '  events ${result.fromEventId + 1}..${result.toEventId} '

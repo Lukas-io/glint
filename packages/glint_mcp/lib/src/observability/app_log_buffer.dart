@@ -32,10 +32,7 @@ class AppLogEntry {
 
   bool get looksLikeError {
     final c = content.toLowerCase();
-    return c.contains('exception') ||
-        c.contains('error') ||
-        c.contains('flutter error') ||
-        c.contains('stack trace');
+    return c.contains('exception') || c.contains('error') || c.contains('flutter error') || c.contains('stack trace');
   }
 
   Map<String, Object?> toJson() => {
@@ -112,9 +109,7 @@ class AppLogBuffer {
     final receivedAt = DateTime.now();
     // Values are fetched as the record arrives; only the append waits its turn, and a failed record never blocks later ones.
     final values = _fetchValues(rec, event.isolate?.id);
-    _logQueue = _logQueue
-        .then((_) async => _appendLog(rec, await values, receivedAt))
-        .catchError((Object _) {});
+    _logQueue = _logQueue.then((_) async => _appendLog(rec, await values, receivedAt)).catchError((Object _) {});
   }
 
   Future<List<String?>> _fetchValues(LogRecord rec, String? isolateId) {

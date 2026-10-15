@@ -31,8 +31,7 @@ class Session {
         'firstSeq': firstSeq,
         if (lastSeq != null) 'lastSeq': lastSeq,
         'isActive': isActive,
-        if (notes.isNotEmpty)
-          'notes': notes.map((n) => n.toJson()).toList(),
+        if (notes.isNotEmpty) 'notes': notes.map((n) => n.toJson()).toList(),
       };
 }
 
@@ -50,8 +49,7 @@ class SessionNote {
 /// Tracks one active session at a time plus the history of closed ones.
 /// Opening a new session auto-closes the previous one.
 class SessionManager {
-  SessionManager({DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+  SessionManager({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
 
   final DateTime Function() _clock;
   final List<Session> _sessions = [];

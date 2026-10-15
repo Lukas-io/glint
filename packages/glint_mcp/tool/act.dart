@@ -23,8 +23,7 @@ Future<void> main(List<String> argv) async {
   final parser = ArgParser()
     ..addOption('vm-uri', mandatory: true)
     ..addOption('platform', allowed: ['ios', 'android'], mandatory: true)
-    ..addOption('device', mandatory: true,
-        help: 'UDID (iOS) or adb serial (Android)')
+    ..addOption('device', mandatory: true, help: 'UDID (iOS) or adb serial (Android)')
     ..addOption('ios-bridge',
         defaultsTo: 'native/ios_sim_bridge/.build/debug/glint-iossim',
         help: 'Path to compiled glint-iossim binary (iOS only)')

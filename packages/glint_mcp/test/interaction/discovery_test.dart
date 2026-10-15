@@ -4,8 +4,7 @@ import 'package:test/test.dart';
 void main() {
   group('DeviceDiscovery.appBundlePathsForDevice', () {
     const udid = 'E223E4B6-14EB-4331-A4E9-C1031EE08261';
-    String appLine(String bundleDir, String app) =>
-        '/Users/x/Library/Developer/CoreSimulator/Devices/$udid/data/'
+    String appLine(String bundleDir, String app) => '/Users/x/Library/Developer/CoreSimulator/Devices/$udid/data/'
         'Containers/Bundle/Application/$bundleDir/$app.app/$app';
 
     test('single app on the sim → one path', () {
@@ -58,10 +57,7 @@ void main() {
     const udid = '41C10380-3598-406B-B7D4-0943A4A71115';
     const booted = [
       BootedDevice(platform: DevicePlatform.ios, id: udid, name: 'iPhone 17'),
-      BootedDevice(
-          platform: DevicePlatform.ios,
-          id: 'E223E4B6-14EB-4331-A4E9-C1031EE08261',
-          name: 'iPhone Air'),
+      BootedDevice(platform: DevicePlatform.ios, id: 'E223E4B6-14EB-4331-A4E9-C1031EE08261', name: 'iPhone Air'),
     ];
     Future<(String?, String?)?> noBundle(String _) async => null;
 
@@ -114,8 +110,7 @@ void main() {
   });
 
   group('collapseSameApp', () {
-    RunningApp app(int port, {String? device = 'sim', String? bundle = 'com.x'}) =>
-        RunningApp(
+    RunningApp app(int port, {String? device = 'sim', String? bundle = 'com.x'}) => RunningApp(
           vmUri: Uri.parse('http://127.0.0.1:$port/t=/'),
           deviceId: device,
           bundleId: bundle,
@@ -127,8 +122,8 @@ void main() {
     });
 
     test('entries without device or bundle are never merged', () {
-      final out = collapseSameApp(
-          [app(1, bundle: null), app(2, bundle: null), app(3, device: null), app(4, device: null)]);
+      final out =
+          collapseSameApp([app(1, bundle: null), app(2, bundle: null), app(3, device: null), app(4, device: null)]);
       expect(out, hasLength(4));
     });
   });

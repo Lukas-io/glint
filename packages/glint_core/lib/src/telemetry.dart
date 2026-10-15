@@ -2,8 +2,7 @@ import 'dart:io' as io;
 import 'dart:math';
 
 /// Collector endpoint baked into the binary so users can audit where payloads go.
-const String kCollectorEndpoint =
-    'https://flutter-network-telemetry.wisdomiyamu.workers.dev/v1/telemetry';
+const String kCollectorEndpoint = 'https://flutter-network-telemetry.wisdomiyamu.workers.dev/v1/telemetry';
 
 /// Budget for one POST, short enough that shutdown never waits on an unreachable collector.
 const Duration kTelemetryTimeout = Duration(seconds: 3);
@@ -49,8 +48,7 @@ bool truthyEnv(String? v) {
 }
 
 /// POSTs [jsonStr] to [endpoint] and returns the HTTP status; throws when the collector can't be reached.
-Future<int> postToCollector(String jsonStr,
-    {required String userAgent, String endpoint = kCollectorEndpoint}) async {
+Future<int> postToCollector(String jsonStr, {required String userAgent, String endpoint = kCollectorEndpoint}) async {
   final client = io.HttpClient()
     ..connectionTimeout = kTelemetryTimeout
     ..userAgent = userAgent;
@@ -76,8 +74,7 @@ class TelemetrySwitches {
   bool disabled(Map<String, String> env) => truthyEnv(env['${prefix}NO_TELEMETRY']);
 
   /// Local usage recording is off under `<prefix>NO_TELEMETRY` or `<prefix>NO_USAGE`.
-  bool usageDisabled(Map<String, String> env) =>
-      disabled(env) || truthyEnv(env['${prefix}NO_USAGE']);
+  bool usageDisabled(Map<String, String> env) => disabled(env) || truthyEnv(env['${prefix}NO_USAGE']);
 
   /// Why nothing is shared, or null when the user opted in with `<prefix>TELEMETRY=on`; [usage] also honours `<prefix>NO_USAGE`, which crash reports ignore.
   String? sharingOffReason(Map<String, String> env, {bool usage = true}) {

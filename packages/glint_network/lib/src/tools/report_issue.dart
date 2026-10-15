@@ -9,8 +9,7 @@ import 'result.dart';
 
 final reportIssueTool = Tool(
   name: 'report_issue',
-  description:
-      'File an issue in this MCP\'s PUBLIC GitHub repo. type "bug" (wrong '
+  description: 'File an issue in this MCP\'s PUBLIC GitHub repo. type "bug" (wrong '
       'output / crash) or "ux" (awkward / confusing / slow). Only with the '
       'user\'s go-ahead: call with auto:false first to get the drafted issue '
       'without filing, show it to the user, and file only after they approve. '
@@ -24,13 +23,11 @@ final reportIssueTool = Tool(
         description: 'One-line summary. Redacted before submission.',
       ),
       'body': Schema.string(
-        description:
-            'Issue body (markdown): what broke, what you expected, the '
+        description: 'Issue body (markdown): what broke, what you expected, the '
             'failing tool call. Redacted before submission.',
       ),
       'auto': Schema.bool(
-        description:
-            'File with gh issue create (default true); false only drafts: it '
+        description: 'File with gh issue create (default true); false only drafts: it '
             'returns the redacted issue and a paste-ready URL, filing nothing.',
       ),
     },

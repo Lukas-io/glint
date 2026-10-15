@@ -13,8 +13,7 @@ abstract class WidgetClassifier {
 
 class ClassifierRegistry {
   ClassifierRegistry(List<WidgetClassifier> classifiers)
-      : _classifiers = [...classifiers]
-          ..sort((a, b) => a.priority.compareTo(b.priority));
+      : _classifiers = [...classifiers]..sort((a, b) => a.priority.compareTo(b.priority));
 
   factory ClassifierRegistry.defaults() => ClassifierRegistry(const [
         PageClassifier(),
@@ -39,8 +38,7 @@ class ClassifierRegistry {
     for (final c in _classifiers) {
       if (c.matches(node)) return c;
     }
-    throw StateError(
-        'no classifier matched ${node.label} — UnknownClassifier should be the floor');
+    throw StateError('no classifier matched ${node.label} — UnknownClassifier should be the floor');
   }
 }
 
@@ -101,8 +99,7 @@ class AppBarClassifier extends WidgetClassifier {
   int get priority => 20;
 
   @override
-  bool matches(SceneNode node) =>
-      _labelOneOf(node, const {'AppBar', 'SliverAppBar', 'CupertinoNavigationBar'});
+  bool matches(SceneNode node) => _labelOneOf(node, const {'AppBar', 'SliverAppBar', 'CupertinoNavigationBar'});
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
@@ -208,7 +205,12 @@ class SegmentedClassifier extends WidgetClassifier {
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
     List<SemanticNode> segments(List<SemanticNode> ns) => [
           for (final n in ns)
-            if (n is SemanticText) SemanticButton(glintId: n.glintId, label: n.content) else if (n is SemanticButton) n else ...segments(n.children),
+            if (n is SemanticText)
+              SemanticButton(glintId: n.glintId, label: n.content)
+            else if (n is SemanticButton)
+              n
+            else
+              ...segments(n.children),
         ];
     return SemanticContainer(glintId: node.glintId, hint: 'segments', children: segments(children));
   }
@@ -289,9 +291,7 @@ class ButtonClassifier extends WidgetClassifier {
     // Leaf button: absorb caption text into the label; keep Icon / Image as
     // children so the IconEnricher can populate them post-classify.
     final label = _captionIn(children) ?? _implicitLabels[node.baseLabel];
-    final kept = children
-        .where((c) => c is SemanticIcon || c is SemanticImage)
-        .toList();
+    final kept = children.where((c) => c is SemanticIcon || c is SemanticImage).toList();
     return SemanticButton(
       glintId: node.glintId,
       label: label,
@@ -367,8 +367,7 @@ class TextClassifier extends WidgetClassifier {
   int get priority => 60;
 
   @override
-  bool matches(SceneNode node) =>
-      node.textPreview != null && node.textPreview!.isNotEmpty;
+  bool matches(SceneNode node) => node.textPreview != null && node.textPreview!.isNotEmpty;
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {
@@ -383,8 +382,7 @@ class IconClassifier extends WidgetClassifier {
   int get priority => 70;
 
   @override
-  bool matches(SceneNode node) =>
-      _labelOneOf(node, const {'Icon', 'ImageIcon'});
+  bool matches(SceneNode node) => _labelOneOf(node, const {'Icon', 'ImageIcon'});
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {

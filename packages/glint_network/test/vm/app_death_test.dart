@@ -13,8 +13,7 @@ import 'package:test/test.dart';
 /// killed app left a zombie attach that network_status reported as healthy
 /// and reads answered with "drive the app to generate traffic".
 void main() {
-  test('onUnexpectedDisconnect fires when the app process is killed',
-      () async {
+  test('onUnexpectedDisconnect fires when the app process is killed', () async {
     final script = File(
       '${Directory.systemTemp.createTempSync('app_death_').path}/app.dart',
     )..writeAsStringSync(
@@ -31,8 +30,7 @@ void main() {
         .transform(const LineSplitter())
         .firstWhere((l) => l.contains('Dart VM service'))
         .timeout(const Duration(seconds: 30));
-    final httpUri =
-        RegExp(r'https?://\S+').firstMatch(uriLine)!.group(0)!;
+    final httpUri = RegExp(r'https?://\S+').firstMatch(uriLine)!.group(0)!;
 
     final vm = VmClient();
     final died = Completer<void>();
@@ -47,12 +45,10 @@ void main() {
         'bug (F18) is back',
       ),
     );
-    expect(vm.connectedUri, isNull,
-        reason: 'client state must be torn down after an app death');
+    expect(vm.connectedUri, isNull, reason: 'client state must be torn down after an app death');
   });
 
-  test('deliberate disconnect does NOT fire onUnexpectedDisconnect',
-      () async {
+  test('deliberate disconnect does NOT fire onUnexpectedDisconnect', () async {
     final script = File(
       '${Directory.systemTemp.createTempSync('app_death2_').path}/app.dart',
     )..writeAsStringSync(
@@ -68,8 +64,7 @@ void main() {
         .transform(const LineSplitter())
         .firstWhere((l) => l.contains('Dart VM service'))
         .timeout(const Duration(seconds: 30));
-    final httpUri =
-        RegExp(r'https?://\S+').firstMatch(uriLine)!.group(0)!;
+    final httpUri = RegExp(r'https?://\S+').firstMatch(uriLine)!.group(0)!;
 
     final vm = VmClient();
     var fired = false;
@@ -78,8 +73,7 @@ void main() {
     await vm.disconnect();
     // Give any stray onDone callback time to run before asserting.
     await Future<void>.delayed(const Duration(seconds: 2));
-    expect(fired, isFalse,
-        reason: 'our own disconnect must never count as an app death');
+    expect(fired, isFalse, reason: 'our own disconnect must never count as an app death');
     proc.kill(ProcessSignal.sigkill);
   });
 }

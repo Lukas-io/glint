@@ -41,12 +41,10 @@ Future<ArmingOutcome> maybeAwaitReady({
   String? toolLabel,
 }) async {
   if (!awaitReady) return const ArmingSkipped();
-  final result = await session.readinessGate
-      .awaitReady(glintId: glintId, ceilingMs: ceilingMs);
+  final result = await session.readinessGate.awaitReady(glintId: glintId, ceilingMs: ceilingMs);
   switch (result) {
     case ReadyResult():
-      return ArmingReady(
-          attempts: result.attempts, elapsedMs: result.elapsedMs);
+      return ArmingReady(attempts: result.attempts, elapsedMs: result.elapsedMs);
     case NotFoundResult():
       final hint = didYouMean(result.suggestions);
       return ArmingFailed(StructuredResponse.error(
@@ -61,8 +59,7 @@ Future<ArmingOutcome> maybeAwaitReady({
         nextSteps: [
           if (hint != null) hint,
           'verify the glintId via `get_scene`',
-          if (!result.staleScreen)
-            'raise `readyTimeoutMs` if the target arrives slowly',
+          if (!result.staleScreen) 'raise `readyTimeoutMs` if the target arrives slowly',
         ],
       ));
     case NeverReadyResult():
@@ -81,8 +78,7 @@ Future<ArmingOutcome> maybeAwaitReady({
 
 /// Wraps an action's [StructuredResponse] with armed metadata. Use after
 /// the action fires when [arming] reports ready.
-StructuredResponse withArmedMetadata(
-        StructuredResponse response, ArmingReady arming) =>
+StructuredResponse withArmedMetadata(StructuredResponse response, ArmingReady arming) =>
     response.mergeData({'armed': arming.toJson()}).copyWith(
       summary: 'armed (${arming.attempts} polls / ${arming.elapsedMs}ms) — '
           '${response.summary}',

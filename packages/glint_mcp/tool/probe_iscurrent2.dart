@@ -9,14 +9,17 @@ void main(List<String> args) async {
   for (final ref in vm.isolates ?? <IsolateRef>[]) {
     if (ref.id == null) continue;
     final iso = await ws.getIsolate(ref.id!);
-    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) { flutter = iso; break; }
+    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) {
+      flutter = iso;
+      break;
+    }
   }
   final isoId = flutter!.id!;
   final rootLibId = flutter.rootLib?.id!;
 
   final r = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree',
-    isolateId: isoId,
-    args: {'groupName': 'g', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
+      isolateId: isoId,
+      args: {'groupName': 'g', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
   final tree = (r.json?['result'] as Map?)?.cast<String, Object?>() ?? {};
 
   // Find all Scaffolds AND their first child (one level down)
@@ -26,20 +29,24 @@ void main(List<String> args) async {
 
   for (final (id, childDesc, scaffoldDesc) in items.take(8)) {
     await ws.callServiceExtension('ext.flutter.inspector.setSelectionById',
-      isolateId: isoId, args: {'arg': id, 'objectGroup': 'g'});
+        isolateId: isoId, args: {'arg': id, 'objectGroup': 'g'});
     try {
       final res = await ws.evaluate(isoId, rootLibId!,
-        '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isCurrent ?? false).toString()');
+          '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isCurrent ?? false).toString()');
       final isCurrent = res is InstanceRef ? res.valueAsString : '?';
       // Also get route name
-      final nameRes = await ws.evaluate(isoId, rootLibId!,
-        '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "-")');
+      final nameRes = await ws.evaluate(isoId, rootLibId,
+          '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "-")');
       final name = nameRes is InstanceRef ? nameRes.valueAsString : '?';
       print('  [$id] child-of-$scaffoldDesc ($childDesc) → isCurrent=$isCurrent, name=$name');
-    } catch (e) { print('  [$id] child-of-$scaffoldDesc → threw: $e'); }
+    } catch (e) {
+      print('  [$id] child-of-$scaffoldDesc → threw: $e');
+    }
   }
 
-  try { await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'g'}); } on Object {}
+  try {
+    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'g'});
+  } on Object catch (_) {}
   await ws.dispose();
 }
 
@@ -56,9 +63,17 @@ void _collectScaffoldChildren(Map<String, Object?> node, String? parentScaffold,
       if (childId.isNotEmpty) out.add((childId, childType, '$type[$id]'));
     }
     // Still recurse into children
-    if (kids is List) { for (final c in kids) { if (c is Map) _collectScaffoldChildren(c.cast<String, Object?>(), type, out); } }
+    if (kids is List) {
+      for (final c in kids) {
+        if (c is Map) _collectScaffoldChildren(c.cast<String, Object?>(), type, out);
+      }
+    }
   } else {
-    if (kids is List) { for (final c in kids) { if (c is Map) _collectScaffoldChildren(c.cast<String, Object?>(), parentScaffold, out); } }
+    if (kids is List) {
+      for (final c in kids) {
+        if (c is Map) _collectScaffoldChildren(c.cast<String, Object?>(), parentScaffold, out);
+      }
+    }
   }
 }
 

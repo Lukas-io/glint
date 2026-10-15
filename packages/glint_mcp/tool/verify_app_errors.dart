@@ -15,8 +15,7 @@ void main(List<String> argv) async {
         ..addOption('device', defaultsTo: '791A0611-C553-445E-87E6-4BA41F6A9143'))
       .parse(argv);
 
-  final proc = await Process.start(Platform.resolvedExecutable,
-      ['run', 'bin/glint.dart'],
+  final proc = await Process.start(Platform.resolvedExecutable, ['run', 'bin/glint.dart'],
       workingDirectory: Directory.current.path);
   unawaited(proc.stderr.transform(utf8.decoder).forEach(stderr.write));
 
@@ -27,8 +26,7 @@ void main(List<String> argv) async {
       .map((l) => jsonDecode(l) as Map<String, Object?>)
       .asBroadcastStream();
   var nextId = 1;
-  Future<Map<String, Object?>> call(String tool,
-      [Map<String, Object?> args = const {}]) async {
+  Future<Map<String, Object?>> call(String tool, [Map<String, Object?> args = const {}]) async {
     final id = nextId++;
     proc.stdin.writeln(jsonEncode({
       'jsonrpc': '2.0',
@@ -40,8 +38,7 @@ void main(List<String> argv) async {
     return incoming.firstWhere((x) => x['id'] == id);
   }
 
-  Map<String, Object?> sc(Map<String, Object?> r) =>
-      (r['result'] as Map)['structuredContent'] as Map<String, Object?>;
+  Map<String, Object?> sc(Map<String, Object?> r) => (r['result'] as Map)['structuredContent'] as Map<String, Object?>;
   String txt(Map<String, Object?> r) {
     final c = (r['result'] as Map)['content'] as List?;
     return c?.firstOrNull is Map ? (c!.first as Map)['text'] as String : '';
@@ -63,8 +60,7 @@ void main(List<String> argv) async {
     }));
     await proc.stdin.flush();
     await incoming.firstWhere((x) => x['id'] == initId);
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
     await proc.stdin.flush();
 
     stdout.writeln('== attach (subscribes to Stderr + Logging) ==');
@@ -122,9 +118,7 @@ void main(List<String> argv) async {
     await proc.exitCode;
   }
 
-  stdout.writeln(failed == 0
-      ? '\nAPP ERROR VERIFY: GREEN'
-      : '\nAPP ERROR VERIFY: RED ($failed)');
+  stdout.writeln(failed == 0 ? '\nAPP ERROR VERIFY: GREEN' : '\nAPP ERROR VERIFY: RED ($failed)');
   exit(failed == 0 ? 0 : 1);
 }
 
@@ -139,7 +133,6 @@ Future<void> _vmEval(String vmUri, String expression) async {
     expression,
   ]);
   if (probe.exitCode != 0) {
-    throw StateError(
-        'probe_vm_eval failed (${probe.exitCode}): ${probe.stderr}');
+    throw StateError('probe_vm_eval failed (${probe.exitCode}): ${probe.stderr}');
   }
 }

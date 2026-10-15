@@ -8,8 +8,7 @@ import 'result.dart';
 
 final dbVacuumTool = Tool(
   name: 'db_vacuum',
-  description:
-      'Checkpoints the WAL, vacuums the captures DB, and runs PRAGMA '
+  description: 'Checkpoints the WAL, vacuums the captures DB, and runs PRAGMA '
       'optimize. Run after bulk deletions (session_delete, bodies_purge, '
       'alerts_clear) to actually shrink the file on disk.',
   inputSchema: Schema.object(properties: {}),

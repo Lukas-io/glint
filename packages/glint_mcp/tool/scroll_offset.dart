@@ -15,8 +15,7 @@ Future<void> main(List<String> args) async {
       break;
     }
   }
-  final result = await svc.evaluate(
-      flutter!.id!, flutter.rootLib!.id!, 'glintReadScrollOffset()');
+  final result = await svc.evaluate(flutter!.id!, flutter.rootLib!.id!, 'glintReadScrollOffset()');
   print((result as InstanceRef).valueAsString);
   await svc.dispose();
 }

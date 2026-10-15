@@ -7,8 +7,8 @@ import 'session.dart';
 typedef NativeHit = ({double x, double y, String label});
 
 /// Resolves [glintId] / [text] against the native surface over the app; null when the app's own screen is in front, so the Flutter path runs.
-Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(
-    GlintSession session, {String? glintId, String? text}) async {
+Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(GlintSession session,
+    {String? glintId, String? text}) async {
   final reader = session.nativeReader;
   if (session.isDeviceMode || reader == null || (glintId == null && text == null)) return null;
   if (reader is AndroidNativeReader) await session.active?.refreshSceneMode();

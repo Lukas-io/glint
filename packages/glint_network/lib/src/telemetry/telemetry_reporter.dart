@@ -51,14 +51,10 @@ class TelemetryReporter {
       } catch (_) {/* audit log is best-effort */}
 
       if (kCollectorEndpoint.isNotEmpty) {
-        await postTelemetry(jsonStr)
-            .timeout(kTelemetryTimeout)
-            .catchError((_) => -1);
+        await postTelemetry(jsonStr).timeout(kTelemetryTimeout).catchError((_) => -1);
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
-
 }
 
 /// Builds the wire payload. Visible for testing — `TelemetryReporter`
@@ -90,8 +86,7 @@ Map<String, Object?> buildTelemetryPayload({
   required String dataDir,
 }) {
   final errorClass = error.runtimeType.toString();
-  final errorMessage =
-      _truncate(redactForSharing(error.toString()), kErrorMessageMaxChars);
+  final errorMessage = _truncate(redactForSharing(error.toString()), kErrorMessageMaxChars);
   final stackHead = redactStackHead(stack, maxFrames: kStackHeadFrames);
   final signature = _signature(errorClass, stackHead);
   final commitShort = shortCommit();

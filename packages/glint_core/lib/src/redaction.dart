@@ -50,10 +50,8 @@ String? _homeDir() {
 
 final RegExp _posixHomeRegex = RegExp(r'(?:/Users/[^/\s]+|/home/[^/\s]+|/root)/');
 final RegExp _windowsHomeRegex = RegExp(r'[A-Za-z]:\\Users\\[^\\\s]+\\');
-final RegExp _posixProjectRegex =
-    RegExp(r'<home>/(?:[^/\s()]+/)*?(lib|test|bin|integration_test|tool)/');
-final RegExp _windowsProjectRegex =
-    RegExp(r'<home>\\(?:[^\\\s()]+\\)*?(lib|test|bin|integration_test|tool)\\');
+final RegExp _posixProjectRegex = RegExp(r'<home>/(?:[^/\s()]+/)*?(lib|test|bin|integration_test|tool)/');
+final RegExp _windowsProjectRegex = RegExp(r'<home>\\(?:[^\\\s()]+\\)*?(lib|test|bin|integration_test|tool)\\');
 final RegExp _jwtRegex = RegExp(r'eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}');
 final RegExp _bearerRegex = RegExp(r'\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}');
 final RegExp _assignmentRegex = RegExp(

@@ -35,7 +35,8 @@ Future<List<int>> phoneAppPids(String udid, String bundleId) async {
 Future<String?> phoneTerminate(String udid, String bundleId) async {
   final pids = await phoneAppPids(udid, bundleId);
   for (final pid in pids) {
-    final r = await Process.run('xcrun', ['devicectl', 'device', 'process', 'terminate', '--device', udid, '--pid', '$pid', '--kill', '-q']);
+    final r = await Process.run(
+        'xcrun', ['devicectl', 'device', 'process', 'terminate', '--device', udid, '--pid', '$pid', '--kill', '-q']);
     if (r.exitCode != 0) return '${r.stderr}'.trim().split('\n').last;
   }
   return null;

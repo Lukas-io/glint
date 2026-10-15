@@ -25,20 +25,16 @@ class ScrollTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'direction': Schema.string(
-              description:
-                  'One of: ${ScrollDirection.values.map((d) => d.name).join(', ')}',
+              description: 'One of: ${ScrollDirection.values.map((d) => d.name).join(', ')}',
             ),
             'amountFraction': Schema.num(
-              description:
-                  'Fraction of viewport to travel (0.0–1.0). Default 0.6.',
+              description: 'Fraction of viewport to travel (0.0–1.0). Default 0.6.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
           required: ['direction'],
@@ -46,13 +42,10 @@ class ScrollTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final dirName = args['direction']! as String;
-    final amount = (argNum(args, 'amountFraction') ??
-            session.config.scrollAmountFraction)
-        .toDouble();
+    final amount = (argNum(args, 'amountFraction') ?? session.config.scrollAmountFraction).toDouble();
     final returnScene = argBool(args, 'returnScene') ?? true;
     final fetchScene = argBool(args, 'fetchScene') ?? false;
 
@@ -61,9 +54,7 @@ class ScrollTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'unknown scroll direction: $dirName',
         errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: [
-          'use one of: ${ScrollDirection.values.map((d) => d.name).join(', ')}'
-        ],
+        nextSteps: ['use one of: ${ScrollDirection.values.map((d) => d.name).join(', ')}'],
       );
     }
 
@@ -79,20 +70,15 @@ class ScrollTool extends GlintTool {
           ],
         );
       }
-      final line = _swipeLine(dir, amount,
-          (x: 0.0, y: 0.0, w: size.w.toDouble(), h: size.h.toDouble()));
-      return coordinateSwipe(
-          session, line.fromX, line.fromY, line.toX, line.toY, 300,
+      final line = _swipeLine(dir, amount, (x: 0.0, y: 0.0, w: size.w.toDouble(), h: size.h.toDouble()));
+      return coordinateSwipe(session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled', holdMs: scrollHoldMs);
     }
 
-    final horizontal =
-        dir == ScrollDirection.left || dir == ScrollDirection.right;
+    final horizontal = dir == ScrollDirection.left || dir == ScrollDirection.right;
     final action = await openActionScene(session, snapshot: returnScene);
     try {
-      final anchor = action.semantic == null
-          ? null
-          : await session.scrollAnchorIn(action.scene, action.semantic!);
+      final anchor = action.semantic == null ? null : await session.scrollAnchorIn(action.scene, action.semantic!);
       final ({double logicalW, double logicalH, double dpr}) vp;
       try {
         vp = await session.viewportIn(action.scene);
@@ -108,17 +94,13 @@ class ScrollTool extends GlintTool {
         );
       }
       final keyboard = (await session.uiState()).keyboardBottomPx / vp.dpr;
-      final region = swipeRegion(
-          (x: 0.0, y: 0.0, w: vp.logicalW, h: vp.logicalH - keyboard), anchor?.clip);
+      final region = swipeRegion((x: 0.0, y: 0.0, w: vp.logicalW, h: vp.logicalH - keyboard), anchor?.clip);
       final line = _swipeLine(dir, amount, region);
-      var response = await coordinateSwipe(
-          session, line.fromX, line.fromY, line.toX, line.toY, 300,
+      var response = await coordinateSwipe(session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled', holdMs: scrollHoldMs);
       if (returnScene && !response.isError) {
         final post = await readPostActionState(session, action.pre,
-            includeSceneText: fetchScene,
-            scrollAnchor: anchor,
-            horizontalScroll: horizontal);
+            includeSceneText: fetchScene, scrollAnchor: anchor, horizontalScroll: horizontal);
         if (post != null) {
           final movedPx = post.scrolledPx;
           final merged = mergeScrollSignal(post.changeCategory, movedPx);
@@ -130,9 +112,11 @@ class ScrollTool extends GlintTool {
           });
           if (!merged.changed) {
             final reason = await _whyStill(session, action.scene, anchor, dir);
-            response = response.copyWith(
+            response = response
+                .copyWith(
               summary: '${response.summary}; nothing moved: ${_reasonText[reason]}',
-            ).mergeData({'reason': reason});
+            )
+                .mergeData({'reason': reason});
           }
         }
       }
@@ -149,8 +133,7 @@ class ScrollTool extends GlintTool {
   /// fully-realized scrollable's tree is identical at every offset, so the
   /// hash reports 'nothing' even when content moved — promote that to
   /// 'scrolled' when the anchor physically shifted.
-  static ({bool changed, String category}) mergeScrollSignal(
-      String treeCategory, double? movedPx) {
+  static ({bool changed, String category}) mergeScrollSignal(String treeCategory, double? movedPx) {
     final moved = movedPx != null && movedPx > _movedThresholdPx;
     if (treeCategory == 'nothing' && moved) {
       return (changed: true, category: 'scrolled');
@@ -164,15 +147,12 @@ class ScrollTool extends GlintTool {
 
   /// Swipe travel centered on [r], clamped inside the edge margin.
   /// Content moves toward [dir], so the finger travels the opposite way.
-  ({double fromX, double fromY, double toX, double toY}) _swipeLine(
-      ScrollDirection dir, double amount, Rect4 r) {
-    final horizontal =
-        dir == ScrollDirection.left || dir == ScrollDirection.right;
+  ({double fromX, double fromY, double toX, double toY}) _swipeLine(ScrollDirection dir, double amount, Rect4 r) {
+    final horizontal = dir == ScrollDirection.left || dir == ScrollDirection.right;
     final span = horizontal ? r.w : r.h;
     final margin = span * _edgeMarginFraction;
     final travel = (span * amount).clamp(0.0, span - 2 * margin);
-    final sign =
-        (dir == ScrollDirection.right || dir == ScrollDirection.down) ? -1 : 1;
+    final sign = (dir == ScrollDirection.right || dir == ScrollDirection.down) ? -1 : 1;
     final cx = r.x + r.w / 2, cy = r.y + r.h / 2;
     final half = sign * travel / 2;
     return horizontal
@@ -188,8 +168,7 @@ class ScrollTool extends GlintTool {
   };
 
   /// Why a scroll moved nothing, from the scrollable's own position.
-  Future<String> _whyStill(GlintSession session, Scene scene,
-      ScrollAnchor? anchor, ScrollDirection dir) async {
+  Future<String> _whyStill(GlintSession session, Scene scene, ScrollAnchor? anchor, ScrollDirection dir) async {
     final node = anchor == null ? null : scene.findByGlintId(anchor.glintId);
     if (node == null) return 'notScrollable';
     final raw = await session.runtime.evaluateWithSelection(
@@ -208,8 +187,7 @@ class ScrollTool extends GlintTool {
     return 'blocked';
   }
 
-  static const _positionExpr =
-      "((ScrollPosition? p) => p == null ? 'none' : p.pixels.toString() + ',' + "
+  static const _positionExpr = "((ScrollPosition? p) => p == null ? 'none' : p.pixels.toString() + ',' + "
       "p.minScrollExtent.toString() + ',' + p.maxScrollExtent.toString())"
       '(Scrollable.maybeOf(WidgetInspectorService.instance.selection.currentElement!)?.position)';
 }

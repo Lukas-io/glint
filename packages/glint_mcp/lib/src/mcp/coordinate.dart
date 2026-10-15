@@ -30,20 +30,15 @@ Future<StructuredResponse> withCoordinateChange(
   final pre = await snapshotPreAction(session);
   final response = await action();
   if (response.isError) return response;
-  final post =
-      await readPostActionState(session, pre, includeSceneText: fetchScene);
-  return post == null
-      ? response
-      : response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
+  final post = await readPostActionState(session, pre, includeSceneText: fetchScene);
+  return post == null ? response : response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
 }
 
 /// Taps logical point [x], [y]; [label] names a native item the point was resolved from.
-Future<StructuredResponse> coordinateTap(
-    GlintSession session, double x, double y, {String? label}) async {
+Future<StructuredResponse> coordinateTap(GlintSession session, double x, double y, {String? label}) async {
   final dpr = session.device.devicePixelRatio;
   try {
-    await session.backend
-        .tap(physicalX: (x * dpr).round(), physicalY: (y * dpr).round());
+    await session.backend.tap(physicalX: (x * dpr).round(), physicalY: (y * dpr).round());
   } on Object catch (e) {
     return _failed('coordinate tap', '($x, $y)', e);
   }
@@ -54,8 +49,8 @@ Future<StructuredResponse> coordinateTap(
   );
 }
 
-Future<StructuredResponse> coordinateLongPress(
-    GlintSession session, double x, double y, int durationMs, {String? label}) async {
+Future<StructuredResponse> coordinateLongPress(GlintSession session, double x, double y, int durationMs,
+    {String? label}) async {
   final dpr = session.device.devicePixelRatio;
   try {
     await session.backend.longPress(
@@ -68,22 +63,26 @@ Future<StructuredResponse> coordinateLongPress(
   }
   final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: '${label == null ? 'long-pressed' : 'long-pressed "$label" at'} (${_n(x)}, ${_n(y)}) for ${durationMs}ms${_via(input)}',
+    summary:
+        '${label == null ? 'long-pressed' : 'long-pressed "$label" at'} (${_n(x)}, ${_n(y)}) for ${durationMs}ms${_via(input)}',
     data: _ok(session, {'x': x, 'y': y, if (label != null) 'native': label}, input),
   );
 }
 
 /// Pinches around logical [x], [y] to [scale]; [label] names what the center was resolved from.
-Future<StructuredResponse> coordinatePinch(GlintSession session, double x, double y, double scale, int durationMs, {String? label}) async {
+Future<StructuredResponse> coordinatePinch(GlintSession session, double x, double y, double scale, int durationMs,
+    {String? label}) async {
   final dpr = session.device.devicePixelRatio;
   try {
-    await session.backend.pinch(physicalX: (x * dpr).round(), physicalY: (y * dpr).round(), scale: scale, durationMs: durationMs);
+    await session.backend
+        .pinch(physicalX: (x * dpr).round(), physicalY: (y * dpr).round(), scale: scale, durationMs: durationMs);
   } on Object catch (e) {
     return _failed('pinch', '(${_n(x)}, ${_n(y)})', e);
   }
   final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: '${scale > 1 ? 'spread' : 'pinched'} ${label == null ? '' : '$label '}at (${_n(x)}, ${_n(y)}) to ${scale}x${_via(input)}',
+    summary:
+        '${scale > 1 ? 'spread' : 'pinched'} ${label == null ? '' : '$label '}at (${_n(x)}, ${_n(y)}) to ${scale}x${_via(input)}',
     data: _ok(session, {'x': x, 'y': y, 'scale': scale}, input),
   );
 }

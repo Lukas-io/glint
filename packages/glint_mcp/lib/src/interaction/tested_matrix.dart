@@ -98,7 +98,8 @@ const List<TestedSetup> testedSetups = [
     hostMajor: 27,
     status: SetupStatus.verified,
     checkedOn: '2026-10-15',
-    evidence: 'on a paired iPhone 15 Pro, iOS 27.0, over USB: tap, type, backspace and swipe inside the app through the VM; Control Center opened, read by OCR and dismissed through Device Hub; a system prompt answered through Device Hub',
+    evidence:
+        'on a paired iPhone 15 Pro, iOS 27.0, over USB: tap, type, backspace and swipe inside the app through the VM; Control Center opened, read by OCR and dismissed through Device Hub; a system prompt answered through Device Hub',
   ),
   TestedSetup(
     platform: 'ios',
@@ -108,7 +109,8 @@ const List<TestedSetup> testedSetups = [
     hostMajor: 27,
     status: SetupStatus.verified,
     checkedOn: '2026-10-07',
-    evidence: 'tap, Unicode type, keys, scroll, long press and home live through glint\'s XCUITest runner on iPhone 17, iOS 26.5 (#110)',
+    evidence:
+        'tap, Unicode type, keys, scroll, long press and home live through glint\'s XCUITest runner on iPhone 17, iOS 26.5 (#110)',
   ),
   TestedSetup(
     platform: 'ios',
@@ -152,7 +154,8 @@ const List<TestedSetup> testedSetups = [
     runtimeMajor: 35,
     status: SetupStatus.verified,
     checkedOn: '2026-10-07',
-    evidence: 'tap, Unicode type, keys, scroll, long press, back and the system photo picker read live on a Pixel 8 emulator (#109)',
+    evidence:
+        'tap, Unicode type, keys, scroll, long press, back and the system photo picker read live on a Pixel 8 emulator (#109)',
   ),
   TestedSetup(
     platform: 'android',
@@ -186,22 +189,16 @@ typedef DeviceSetup = ({
 });
 
 /// How [setup] compares with [testedSetups]: its status, the matching entry, and the closest proven one when it has none.
-({SetupStatus status, TestedSetup? match, TestedSetup? closest}) judgeSetup(
-    DeviceSetup setup,
+({SetupStatus status, TestedSetup? match, TestedSetup? closest}) judgeSetup(DeviceSetup setup,
     {List<TestedSetup> known = testedSetups}) {
-  final same = known.where((t) =>
-      t.platform == setup.platform &&
-      t.backend == setup.backend &&
-      t.runtimeMajor == setup.runtimeMajor);
-  final exact = same.where((t) =>
-      setup.platform != 'ios' ||
-      (t.xcodeMajor == setup.xcodeMajor && t.hostMajor == setup.hostMajor));
+  final same = known
+      .where((t) => t.platform == setup.platform && t.backend == setup.backend && t.runtimeMajor == setup.runtimeMajor);
+  final exact = same
+      .where((t) => setup.platform != 'ios' || (t.xcodeMajor == setup.xcodeMajor && t.hostMajor == setup.hostMajor));
   if (exact.isNotEmpty) {
     return (status: exact.first.status, match: exact.first, closest: null);
   }
-  final pool = same.isNotEmpty
-      ? same
-      : known.where((t) => t.platform == setup.platform && t.backend == setup.backend);
+  final pool = same.isNotEmpty ? same : known.where((t) => t.platform == setup.platform && t.backend == setup.backend);
   TestedSetup? closest;
   for (final t in pool) {
     if (closest == null || (t.status.index < closest.status.index)) closest = t;
@@ -210,8 +207,7 @@ typedef DeviceSetup = ({
 }
 
 /// One line for the attach reply, plus warnings for anything short of verified.
-({String line, List<String> warnings, Map<String, Object?> json}) describeSetup(
-    DeviceSetup setup) {
+({String line, List<String> warnings, Map<String, Object?> json}) describeSetup(DeviceSetup setup) {
   final v = judgeSetup(setup);
   final here = setup.platform == 'ios'
       ? '${setup.runtime ?? "iOS ?"}, Xcode ${setup.xcodeMajor ?? "?"}, macOS ${setup.hostMajor ?? "?"}, ${setup.backend}'
@@ -291,8 +287,11 @@ Future<({String? transport, String? fallback, String? error})> readIosTransport(
     String bridgePath, String udid, String mode,
     {ProcessRunner run = Process.run}) async {
   try {
-    final r = await run(bridgePath, [if (mode != 'auto') ...['--hid', mode], 'hid', udid])
-        .timeout(const Duration(seconds: 30));
+    final r = await run(bridgePath, [
+      if (mode != 'auto') ...['--hid', mode],
+      'hid',
+      udid
+    ]).timeout(const Duration(seconds: 30));
     final m = RegExp(r'^hid (\w+) coresimulator \S+(?: \(dtuhid unavailable: (.*)\))?$', multiLine: true)
         .firstMatch('${r.stdout}');
     if (r.exitCode == 0 && m != null) {

@@ -73,13 +73,10 @@ Future<String?> instanceText(VmService service, String? isolateId, InstanceRef? 
     try {
       if (ref.kind == InstanceKind.kString) {
         if (!cut) return preview;
-        final full = await service
-            .getObject(isolateId, id, offset: 0, count: ref.length)
-            .timeout(instanceTextTimeout);
+        final full = await service.getObject(isolateId, id, offset: 0, count: ref.length).timeout(instanceTextTimeout);
         if (full is Instance && full.valueAsString != null) return full.valueAsString;
       } else if (preview == null || cut) {
-        final text =
-            await service.invoke(isolateId, id, 'toString', const []).timeout(instanceTextTimeout);
+        final text = await service.invoke(isolateId, id, 'toString', const []).timeout(instanceTextTimeout);
         if (text is InstanceRef && text.kind == InstanceKind.kString) {
           return await instanceText(service, isolateId, text);
         }

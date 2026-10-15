@@ -18,10 +18,17 @@ typedef ScreenRegion = ({double top, double bottom, double left, double right});
 const _cropPadding = 8.0;
 
 /// One app's capture, cropped when asked: the PNG, its size, and the logical rect it covers (null for the whole screen).
-typedef _Shot = ({String path, int width, int height, ({double x, double y, double w, double h})? logical, AppSession app});
+typedef _Shot = ({
+  String path,
+  int width,
+  int height,
+  ({double x, double y, double w, double h})? logical,
+  AppSession app
+});
 
 /// `device op:screenshot` on attached apps: optional wait, crop to a widget or region, and several apps side by side.
-Future<StructuredResponse> attachedScreenshot(GlintSession session, Map<String, Object?> args, CallToolRequest request) async {
+Future<StructuredResponse> attachedScreenshot(
+    GlintSession session, Map<String, Object?> args, CallToolRequest request) async {
   final glintId = args['glintId'] as String?;
   final regionResult = _readRegion(args['region']);
   if (regionResult.error != null) return regionResult.error!;
@@ -48,8 +55,8 @@ Future<StructuredResponse> attachedScreenshot(GlintSession session, Map<String, 
   if (waitFor != null) {
     final waited = await session.withApp(
       targets.first,
-      () async => await const WaitForTool().handle(
-          session, CallToolRequest(name: 'wait_for', arguments: {'text': waitFor}, meta: request.meta)),
+      () async => await const WaitForTool()
+          .handle(session, CallToolRequest(name: 'wait_for', arguments: {'text': waitFor}, meta: request.meta)),
     );
     if (waited.isError) return waited;
   }
@@ -124,7 +131,9 @@ Future<({_Shot? shot, StructuredResponse? error})> _capture(GlintSession session
       error: StructuredResponse.error(
         summary: 'could not crop the screenshot',
         errorKind: GlintErrorKind.backendToolError,
-        detail: Platform.isMacOS ? 'sips failed on ${capture.path}' : 'ImageMagick `convert` is needed to crop on this host',
+        detail: Platform.isMacOS
+            ? 'sips failed on ${capture.path}'
+            : 'ImageMagick `convert` is needed to crop on this host',
         nextSteps: [if (!Platform.isMacOS) 'install ImageMagick, or take the whole screen without glintId/region'],
       ),
     );
@@ -171,7 +180,8 @@ Future<({({double x, double y, double w, double h})? rect, double? viewWidth, St
   }
 }
 
-Future<StructuredResponse> _single(GlintSession session, _Shot shot, {required bool inline, required int maxSize}) async {
+Future<StructuredResponse> _single(GlintSession session, _Shot shot,
+    {required bool inline, required int maxSize}) async {
   final l = shot.logical;
   ModelImage? sent;
   String? coordinates;
@@ -186,12 +196,14 @@ Future<StructuredResponse> _single(GlintSession session, _Shot shot, {required b
         maxSize: maxSize,
         format: session.config.screenshotFormat,
         quality: session.config.screenshotQuality);
-    coordinates = 'image is ${sent.width}x${sent.height} covering logical ${_n(l!.x)},${_n(l.y)} ${_n(l.w)}x${_n(l.h)}; '
+    coordinates =
+        'image is ${sent.width}x${sent.height} covering logical ${_n(l!.x)},${_n(l.y)} ${_n(l.w)}x${_n(l.h)}; '
         'tap x = ${_n(l.x)} + image x × ${(l.w / sent.width).toStringAsFixed(3)}, '
         'y = ${_n(l.y)} + image y × ${(l.h / sent.height).toStringAsFixed(3)}';
   }
   return StructuredResponse(
-    summary: '${l == null ? 'screenshot' : 'cropped screenshot'} of ${shot.app.label} saved: ${shot.path} (${shot.width}x${shot.height} px)',
+    summary:
+        '${l == null ? 'screenshot' : 'cropped screenshot'} of ${shot.app.label} saved: ${shot.path} (${shot.width}x${shot.height} px)',
     nextSteps: [if (sent == null) 'read the image at ${shot.path} to see the screen'],
     data: {
       'ok': true,
@@ -216,21 +228,31 @@ Future<StructuredResponse> _composite(List<_Shot> shots, {required int maxSize})
   if (composed == null) {
     return StructuredResponse(
       summary: 'captured ${shots.length} apps but could not join them; $legend',
-      warnings: [Platform.isMacOS ? 'sips could not join the images' : 'ImageMagick `convert` is needed to join images on this host'],
-      data: {'ok': true, 'paths': [for (final s in shots) s.path]},
+      warnings: [
+        Platform.isMacOS
+            ? 'sips could not join the images'
+            : 'ImageMagick `convert` is needed to join images on this host'
+      ],
+      data: {
+        'ok': true,
+        'paths': [for (final s in shots) s.path]
+      },
       nextSteps: const ['read each image path instead'],
     );
   }
   final size = pngSize(composed);
   final sent = size == null
       ? null
-      : await prepareModelImage(composed, width: size.$1, height: size.$2, maxSize: maxSize * 2, format: 'jpeg', quality: 75);
+      : await prepareModelImage(composed,
+          width: size.$1, height: size.$2, maxSize: maxSize * 2, format: 'jpeg', quality: 75);
   return StructuredResponse(
     summary: '${shots.length} apps side by side, $legend',
     data: {
       'ok': true,
       'path': composed,
-      'apps': [for (final s in shots) {'app': s.app.label, 'device': s.app.deviceName ?? s.app.id, 'path': s.path}],
+      'apps': [
+        for (final s in shots) {'app': s.app.label, 'device': s.app.deviceName ?? s.app.id, 'path': s.path}
+      ],
       if (size != null) 'width': size.$1,
       if (size != null) 'height': size.$2,
     },

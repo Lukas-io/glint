@@ -77,8 +77,7 @@ Future<void> _runMain(List<String> args) async {
   // connect". `bool.fromEnvironment('dart.vm.product')` is the canonical
   // AOT-vs-JIT check — true only when compiled with `dart compile exe`.
   final envForNudge = networkEnv;
-  if (!isAotBuild &&
-      envForNudge['GLINT_NETWORK_NO_JIT_NUDGE']?.toLowerCase() != 'true') {
+  if (!isAotBuild && envForNudge['GLINT_NETWORK_NO_JIT_NUDGE']?.toLowerCase() != 'true') {
     io.stderr.writeln(
       'glint_network: running in JIT mode — slow cold-start may '
       'cause MCP host handshake timeouts ("Failed to connect" on first '
@@ -91,8 +90,7 @@ Future<void> _runMain(List<String> args) async {
   final parser = ArgParser()
     ..addOption(
       'dtd-uri',
-      help:
-          'Default DTD WebSocket URI for network_attach. Falls back to the '
+      help: 'Default DTD WebSocket URI for network_attach. Falls back to the '
           'GLINT_NETWORK_DTD_URI environment variable. When neither '
           'is set the server auto-discovers from the standard package:dtd '
           'discovery dir (~/Library/Application Support/dart/dtd on macOS) '
@@ -101,8 +99,7 @@ Future<void> _runMain(List<String> args) async {
     ..addFlag(
       'no-auto-discover-dtd',
       negatable: false,
-      help:
-          'Disable auto-discovery of DTD from the standard package:dtd '
+      help: 'Disable auto-discovery of DTD from the standard package:dtd '
           'discovery directory at startup. Use when you want a fully '
           'explicit .mcp.json (paranoid configs, CI, multi-DTD machines '
           'where guessing would be dangerous). Env-var fallback: '
@@ -110,8 +107,7 @@ Future<void> _runMain(List<String> args) async {
     )
     ..addOption(
       'data-dir',
-      help:
-          'Directory for captures.db. macOS default: '
+      help: 'Directory for captures.db. macOS default: '
           '~/Library/Application Support/flutter_network_mcp. '
           r'Linux default: $XDG_DATA_HOME/flutter_network_mcp or '
           '~/.local/share/flutter_network_mcp. Env-var fallback: '
@@ -120,16 +116,14 @@ Future<void> _runMain(List<String> args) async {
     ..addFlag(
       'no-persist',
       negatable: false,
-      help:
-          'Ephemeral mode: keep captures in memory only, never write to disk. '
+      help: 'Ephemeral mode: keep captures in memory only, never write to disk. '
           'Captures are readable live but vanish when the server exits. For '
           'noisy or sensitive flows. Env-var fallback: '
           'GLINT_NETWORK_NO_PERSIST=true.',
     )
     ..addOption(
       'capabilities',
-      help:
-          'Comma-separated allowlist of categories to enable. Options: '
+      help: 'Comma-separated allowlist of categories to enable. Options: '
           'http, sockets, websockets, logs, alerts, search, sessions, sql, '
           'admin. '
           'Lifecycle (status/attach/detach) is always on. Falls back to '
@@ -137,14 +131,12 @@ Future<void> _runMain(List<String> args) async {
     )
     ..addOption(
       'disable',
-      help:
-          'Comma-separated denylist of categories to disable. Same option '
+      help: 'Comma-separated denylist of categories to disable. Same option '
           'set as --capabilities. Falls back to GLINT_NETWORK_DISABLE.',
     )
     ..addOption(
       'auto-attach',
-      help:
-          'Watch DTD for new apps and auto-attach them. Value is a '
+      help: 'Watch DTD for new apps and auto-attach them. Value is a '
           'comma-separated allowlist of case-insensitive substring '
           'patterns matched against the app name from DTD; only matching '
           'apps are auto-attached. Example: '
@@ -162,8 +154,7 @@ Future<void> _runMain(List<String> args) async {
     )
     ..addOption(
       'auto-attach-deny',
-      help:
-          'Optional denylist for auto-attach. Comma-separated case-'
+      help: 'Optional denylist for auto-attach. Comma-separated case-'
           'insensitive substring patterns matched against the app name '
           'from DTD; matching apps are skipped even if they also match '
           '--auto-attach. Useful for excluding specific devices like '
@@ -191,8 +182,7 @@ Future<void> _runMain(List<String> args) async {
   }
 
   final env = networkEnv;
-  var dtdUri = (results['dtd-uri'] as String?) ??
-      env['GLINT_NETWORK_DTD_URI'];
+  var dtdUri = (results['dtd-uri'] as String?) ?? env['GLINT_NETWORK_DTD_URI'];
 
   // Auto-discover the DTD URI from the standard package:dtd discovery dir
   // when nothing was configured explicitly. Opt-out: --no-auto-discover-dtd
@@ -217,8 +207,7 @@ Future<void> _runMain(List<String> args) async {
   }
 
   final dataDir = results['data-dir'] as String?;
-  final capabilities =
-      (results['capabilities'] as String?) ?? env['GLINT_NETWORK_CAPABILITIES'];
+  final capabilities = (results['capabilities'] as String?) ?? env['GLINT_NETWORK_CAPABILITIES'];
   final disable = (results['disable'] as String?) ?? env['GLINT_NETWORK_DISABLE'];
 
   try {
@@ -231,8 +220,8 @@ Future<void> _runMain(List<String> args) async {
     return;
   }
 
-  final noPersist = (results['no-persist'] as bool? ?? false) ||
-      env['GLINT_NETWORK_NO_PERSIST']?.toLowerCase() == 'true';
+  final noPersist =
+      (results['no-persist'] as bool? ?? false) || env['GLINT_NETWORK_NO_PERSIST']?.toLowerCase() == 'true';
 
   try {
     CapturesDatabase.open(dataDir: dataDir, inMemory: noPersist);

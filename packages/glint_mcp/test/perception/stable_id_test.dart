@@ -102,15 +102,13 @@ void main() {
       // Two Texts → both need disambiguation. AppBar's Text gets
       // `text_in_app_bar`, Body's Text gets `text_in_body`. No hash needed.
       expect(ids['Text'], anyOf('text_in_app_bar', 'text_in_body'));
-      final allTextIds =
-          tree.walk().where((n) => n.label == 'Text').map((n) => n.glintId).toSet();
+      final allTextIds = tree.walk().where((n) => n.label == 'Text').map((n) => n.glintId).toSet();
       expect(allTextIds, {'text_in_app_bar', 'text_in_body'});
     });
   });
 
   group('hash fallback', () {
-    test('two Texts under the same uniquely-named ancestor get hash suffixes',
-        () {
+    test('two Texts under the same uniquely-named ancestor get hash suffixes', () {
       final tree = _rooted(_n('Root', children: [
         _n('Column', children: [
           _n('Text', locationId: 10),
@@ -118,11 +116,7 @@ void main() {
         ]),
       ]));
       StableIdGenerator().assignIds(tree);
-      final textIds = tree
-          .walk()
-          .where((n) => n.label == 'Text')
-          .map((n) => n.glintId!)
-          .toList();
+      final textIds = tree.walk().where((n) => n.label == 'Text').map((n) => n.glintId!).toList();
       expect(textIds, hasLength(2));
       expect(textIds.toSet(), hasLength(2)); // unique
       for (final id in textIds) {

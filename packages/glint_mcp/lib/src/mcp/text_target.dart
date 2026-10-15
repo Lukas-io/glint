@@ -38,8 +38,7 @@ Future<({String? glintId, StructuredResponse? error})> readTarget(
 typedef TextMatch = ({String glintId, String label});
 
 /// The glintId behind visible [text], or the error to return: exact matches (case-insensitive) win over contains; the top overlay is searched before the screen. With [waitMs] the scene is re-read until the text appears or the time runs out.
-Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(
-    GlintSession session, String text,
+Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(GlintSession session, String text,
     {required String tool, int waitMs = 0}) async {
   final deadline = DateTime.now().add(Duration(milliseconds: waitMs));
   while (true) {
@@ -68,7 +67,8 @@ Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(
         error: StructuredResponse.error(
           summary: '$tool: no visible text matches "$text"',
           errorKind: waitMs > 0 ? GlintErrorKind.targetNeverReady : GlintErrorKind.unresolvedTarget,
-          detail: visible.isEmpty ? 'the screen shows no text' : 'text on screen: ${visible.map((t) => '"$t"').join(', ')}',
+          detail:
+              visible.isEmpty ? 'the screen shows no text' : 'text on screen: ${visible.map((t) => '"$t"').join(', ')}',
           nextSteps: const [
             'scroll_to_find text:<text> tap:true when it is further down a list',
             'get_scene to read the screen',
@@ -144,5 +144,8 @@ String _norm(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase()
 
 List<TextMatch> _distinct(List<TextMatch> matches) {
   final seen = <String>{};
-  return [for (final m in matches) if (seen.add(m.glintId)) m];
+  return [
+    for (final m in matches)
+      if (seen.add(m.glintId)) m
+  ];
 }

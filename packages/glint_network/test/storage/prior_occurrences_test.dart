@@ -98,8 +98,7 @@ void main() {
         signature: signature,
         excludeSessionId: currentSid,
       );
-      expect(result, isEmpty,
-          reason: 'current session must not appear in its own prior list');
+      expect(result, isEmpty, reason: 'current session must not appear in its own prior list');
     });
 
     test('newest-first ordering, capped at limit', () {
@@ -145,8 +144,7 @@ void main() {
       );
       expect(result, hasLength(3));
       // Newest first → app4, app3, app2.
-      expect(result.map((r) => r['app_name']).toList(),
-          ['app4', 'app3', 'app2']);
+      expect(result.map((r) => r['app_name']).toList(), ['app4', 'app3', 'app2']);
     });
 
     test('different signatures stay separate', () {
@@ -212,8 +210,7 @@ void main() {
         signature: signature,
         excludeSessionId: currentSid,
       );
-      expect(result, hasLength(1),
-          reason: 'GROUP BY session collapses N alerts/session to one row');
+      expect(result, hasLength(1), reason: 'GROUP BY session collapses N alerts/session to one row');
       expect(result.first['note'], 'fixed by adding Expanded');
     });
   });

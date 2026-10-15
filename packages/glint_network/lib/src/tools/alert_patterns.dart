@@ -9,8 +9,7 @@ import 'result.dart';
 
 final alertPatternsTool = Tool(
   name: 'alert_patterns',
-  description:
-      'Manage custom alert regex patterns matched against every captured log '
+  description: 'Manage custom alert regex patterns matched against every captured log '
       'message (alongside the built-in flutter_error / log_keyword rules), '
       'for project-specific signals. Persisted in the DB.',
   inputSchema: Schema.object(
@@ -125,9 +124,7 @@ FutureOr<CallToolResult> alertPatterns(CallToolRequest request) async {
         _refreshDetector(dao);
         return jsonResult({
           'action': 'remove',
-          'summary': removed
-              ? 'Removed alert pattern #$id.'
-              : 'No alert pattern with id $id (already removed?).',
+          'summary': removed ? 'Removed alert pattern #$id.' : 'No alert pattern with id $id (already removed?).',
           'id': id,
           'removed': removed,
           'nextSteps': const [

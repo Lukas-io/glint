@@ -20,8 +20,7 @@ bool isWebSocketUpgrade(HttpProfileRequestRef r) {
 /// succeeded at the protocol level (the upgrade case). Callers should treat
 /// this as "not an http_error".
 bool isBenignUpgradeError(HttpProfileRequestRef r) {
-  final erred =
-      (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
+  final erred = (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
   return erred && isWebSocketUpgrade(r);
 }
 

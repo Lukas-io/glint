@@ -8,7 +8,7 @@ const _key = '0123456789abcdef0123456789abcdef';
 const _iv = '000102030405060708090a0b0c0d0e0f';
 const _plain = '{"status":"ok","account":"Adaeze Okafor","balance":1520.75}';
 
-/// openssl enc -aes-256-ctr -K <hex of _key> -iv _iv -nosalt, hex-encoded.
+/// `openssl enc -aes-256-ctr -K <hex of _key> -iv _iv -nosalt`, hex-encoded.
 const _cipher =
     '287faf81f7bb43172306a522eeab97032733b02277497f77066482b40ffc872b8c543a7b29bd8d50c0dac76bc3223817d3d6aa7c77523faf7b9741';
 
@@ -24,8 +24,7 @@ void main() {
   group('#105 AES-256-CTR bodies', () {
     test('infused IV at a hex offset, as the reporter\'s app writes it', () {
       final infused = '${_cipher.substring(0, 10)}$_iv${_cipher.substring(10)}';
-      final out = _config({'ivMode': 'infused', 'ivOffset': 10, 'ivLength': 32})
-          .decrypt(_bytes(infused));
+      final out = _config({'ivMode': 'infused', 'ivOffset': 10, 'ivLength': 32}).decrypt(_bytes(infused));
       expect(out.decrypted, isTrue);
       expect(utf8.decode(out.bytes), _plain);
     });
@@ -36,10 +35,9 @@ void main() {
     });
 
     test('base64 payloads split in decoded bytes', () {
-      final hex = '$_iv$_cipher';
+      const hex = '$_iv$_cipher';
       final bytes = [for (var i = 0; i < hex.length; i += 2) int.parse(hex.substring(i, i + 2), radix: 16)];
-      final out = _config({'encoding': 'base64', 'ivMode': 'prefix'})
-          .decrypt(_bytes(base64.encode(bytes)));
+      final out = _config({'encoding': 'base64', 'ivMode': 'prefix'}).decrypt(_bytes(base64.encode(bytes)));
       expect(utf8.decode(out.bytes), _plain);
     });
 

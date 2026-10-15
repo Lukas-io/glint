@@ -63,41 +63,44 @@ class InstalledAppLauncher {
         ? (await _run('xcrun', ['simctl', 'get_app_container', deviceId, appId])).exitCode == 0
         : (await _adb(deviceId, ['shell', 'pm', 'path', appId])).stdout.toString().contains('package:');
     if (!installed) {
-      throw InstalledLaunchError(InstalledLaunchFailure.notInstalled,
-          '$appId is not installed on $deviceId');
+      throw InstalledLaunchError(InstalledLaunchFailure.notInstalled, '$appId is not installed on $deviceId');
     }
-    final running = platform == DevicePlatform.ios
-        ? await _iosPid(deviceId, appId)
-        : await _androidPid(deviceId, appId);
+    final running =
+        platform == DevicePlatform.ios ? await _iosPid(deviceId, appId) : await _androidPid(deviceId, appId);
     if (running != null) {
-      throw InstalledLaunchError(InstalledLaunchFailure.alreadyRunning,
-          '$appId is already running on $deviceId');
+      throw InstalledLaunchError(InstalledLaunchFailure.alreadyRunning, '$appId is already running on $deviceId');
     }
   }
 
-  Future<Uri> _openIos(String udid, String appId, Duration timeout,
-      Duration progressEvery, void Function(int, String?)? onProgress) async {
+  Future<Uri> _openIos(String udid, String appId, Duration timeout, Duration progressEvery,
+      void Function(int, String?)? onProgress) async {
     onProgress?.call(0, 'opening $appId');
     final stream = await _IosLogStream.start(udid);
     try {
       final launch = await _run('xcrun', ['simctl', 'launch', udid, appId]);
-      final pid = int.tryParse(
-          RegExp(r':\s*(\d+)\s*$').firstMatch(launch.stdout.toString().trim())?.group(1) ?? '');
+      final pid = int.tryParse(RegExp(r':\s*(\d+)\s*$').firstMatch(launch.stdout.toString().trim())?.group(1) ?? '');
       if (launch.exitCode != 0 || pid == null) {
-        throw InstalledLaunchError(InstalledLaunchFailure.toolFailed,
-            'simctl could not launch $appId on $udid',
+        throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, 'simctl could not launch $appId on $udid',
             detail: _firstNonEmpty(launch.stderr, launch.stdout));
       }
       var triedLogShow = false;
-      final uri = await _awaitUri(timeout, progressEvery, onProgress,
-          poll: const Duration(milliseconds: 250), probe: (elapsed) async {
+      final uri = await _awaitUri(timeout, progressEvery, onProgress, poll: const Duration(milliseconds: 250),
+          probe: (elapsed) async {
         final fromStream = _uriForPid(stream.text, pid);
         if (fromStream != null || triedLogShow || elapsed < const Duration(seconds: 8)) {
           return fromStream;
         }
         triedLogShow = true;
         final shown = await _run('xcrun', [
-          'simctl', 'spawn', udid, 'log', 'show', '--last', '2m', '--style', 'compact',
+          'simctl',
+          'spawn',
+          udid,
+          'log',
+          'show',
+          '--last',
+          '2m',
+          '--style',
+          'compact',
           '--predicate',
           'processID == $pid AND eventMessage CONTAINS "Dart VM service is listening"',
         ]);
@@ -109,15 +112,21 @@ class InstalledAppLauncher {
     }
   }
 
-  Future<Uri> _openAndroid(String serial, String appId, Duration timeout,
-      Duration progressEvery, void Function(int, String?)? onProgress) async {
+  Future<Uri> _openAndroid(String serial, String appId, Duration timeout, Duration progressEvery,
+      void Function(int, String?)? onProgress) async {
     onProgress?.call(0, 'opening $appId');
     final start = await _adb(serial, [
-      'shell', 'monkey', '-p', appId, '-c', 'android.intent.category.LAUNCHER', '1',
+      'shell',
+      'monkey',
+      '-p',
+      appId,
+      '-c',
+      'android.intent.category.LAUNCHER',
+      '1',
     ]);
     if (start.exitCode != 0 || start.stdout.toString().contains('No activities found')) {
-      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed,
-          'could not start $appId on $serial: it has no launcher activity',
+      throw InstalledLaunchError(
+          InstalledLaunchFailure.toolFailed, 'could not start $appId on $serial: it has no launcher activity',
           detail: _firstNonEmpty(start.stderr, start.stdout));
     }
     final stopwatch = Stopwatch()..start();
@@ -127,12 +136,10 @@ class InstalledAppLauncher {
       pid = await _androidPid(serial, appId);
     }
     if (pid == null) {
-      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed,
-          '$appId did not start a process on $serial');
+      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, '$appId did not start a process on $serial');
     }
     final remaining = timeout - stopwatch.elapsed;
-    return _awaitUri(remaining, progressEvery, onProgress,
-        poll: const Duration(seconds: 1), probe: (_) async {
+    return _awaitUri(remaining, progressEvery, onProgress, poll: const Duration(seconds: 1), probe: (_) async {
       final log = await _adb(serial, ['logcat', '-d', '--pid=$pid']);
       return _firstUri(log.stdout.toString());
     });
@@ -193,15 +200,13 @@ class InstalledAppLauncher {
     return Uri.tryParse(raw);
   }
 
-  Future<ProcessResult> _adb(String serial, List<String> args) =>
-      _run(adbPath, ['-s', serial, ...args]);
+  Future<ProcessResult> _adb(String serial, List<String> args) => _run(adbPath, ['-s', serial, ...args]);
 
   Future<ProcessResult> _run(String exe, List<String> args) async {
     try {
       return await Process.run(exe, args).timeout(const Duration(seconds: 20));
     } on Object catch (e) {
-      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed,
-          'could not run $exe', detail: '$e');
+      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, 'could not run $exe', detail: '$e');
     }
   }
 
@@ -225,12 +230,19 @@ class _IosLogStream {
     final Process process;
     try {
       process = await Process.start('xcrun', [
-        'simctl', 'spawn', udid, 'log', 'stream', '--style', 'compact',
-        '--predicate', 'eventMessage CONTAINS "Dart VM service is listening"',
+        'simctl',
+        'spawn',
+        udid,
+        'log',
+        'stream',
+        '--style',
+        'compact',
+        '--predicate',
+        'eventMessage CONTAINS "Dart VM service is listening"',
       ]);
     } on Object catch (e) {
-      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed,
-          'could not start the simulator log stream', detail: '$e');
+      throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, 'could not start the simulator log stream',
+          detail: '$e');
     }
     final stream = _IosLogStream._(process);
     final ready = Completer<void>();

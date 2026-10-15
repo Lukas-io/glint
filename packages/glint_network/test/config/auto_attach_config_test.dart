@@ -113,7 +113,10 @@ void main() {
       // The reader filters empties. Set raw config containing empties
       // via a manual write.
       configFile.writeAsStringSync(
-        jsonEncode({'allowed': ['', 'good', ''], 'denied': []}),
+        jsonEncode({
+          'allowed': ['', 'good', ''],
+          'denied': []
+        }),
       );
       final loaded = AutoAttachConfig.loadFromFile();
       expect(loaded.allowed, ['good']);
@@ -121,11 +124,9 @@ void main() {
   });
 
   test('an unknown action names every valid action, set included', () async {
-    final r = await autoAttachConfig(CallToolRequest(
-        name: 'auto_attach_config', arguments: const {'action': 'nope'}));
+    final r = await autoAttachConfig(CallToolRequest(name: 'auto_attach_config', arguments: const {'action': 'nope'}));
     expect(r.isError, isTrue);
     expect(r.structuredContent!['errorKind'], 'bad_argument');
-    expect(r.structuredContent!['error'],
-        contains('list | add | remove | clear | set'));
+    expect(r.structuredContent!['error'], contains('list | add | remove | clear | set'));
   });
 }

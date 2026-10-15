@@ -36,12 +36,9 @@ void main() {
 
   group('attachFailureKind', () {
     test('connection and RPC failures are unresponsive_vm', () {
-      expect(attachFailureKind(const SocketException('Connection refused')),
-          ErrorKind.unresponsiveVm);
-      expect(attachFailureKind(VmRpcTimeoutException('getVM', Duration.zero)),
-          ErrorKind.unresponsiveVm);
-      expect(attachFailureKind(TimeoutException('slow')),
-          ErrorKind.unresponsiveVm);
+      expect(attachFailureKind(const SocketException('Connection refused')), ErrorKind.unresponsiveVm);
+      expect(attachFailureKind(VmRpcTimeoutException('getVM', Duration.zero)), ErrorKind.unresponsiveVm);
+      expect(attachFailureKind(TimeoutException('slow')), ErrorKind.unresponsiveVm);
       expect(
           attachFailureKind(StateError('VM service at x accepted the '
               'connection but did not respond to getVersion() within 5s.')),
@@ -49,15 +46,11 @@ void main() {
     });
 
     test('a VM with no profilable isolate is not_found', () {
-      expect(
-          attachFailureKind(StateError(
-              'No running isolate exposes dart:io HTTP profiling.')),
-          ErrorKind.notFound);
+      expect(attachFailureKind(StateError('No running isolate exposes dart:io HTTP profiling.')), ErrorKind.notFound);
     });
 
     test('a malformed URI is bad_argument; anything else internal', () {
-      expect(attachFailureKind(const FormatException('bad uri')),
-          ErrorKind.badArgument);
+      expect(attachFailureKind(const FormatException('bad uri')), ErrorKind.badArgument);
       expect(attachFailureKind(StateError('boom')), ErrorKind.internal);
     });
   });

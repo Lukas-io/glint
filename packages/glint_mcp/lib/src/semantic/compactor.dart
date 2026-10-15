@@ -7,8 +7,7 @@ class SceneCompactor {
   const SceneCompactor();
 
   /// With [imageCandidate], a dissolved node leaves a pending [SemanticImage] ahead of its children for [ImageEnricher] to confirm or drop.
-  Iterable<SemanticNode> expandChild(SemanticNode node,
-      {bool imageCandidate = false}) {
+  Iterable<SemanticNode> expandChild(SemanticNode node, {bool imageCandidate = false}) {
     if (!_isNoisyPassThrough(node)) return [node];
     if (!imageCandidate) return node.children;
     return [
@@ -22,8 +21,7 @@ class SceneCompactor {
   }
 
   /// Widgets whose `decoration` can paint an image, which dissolving would hide.
-  bool paintsDecorationImage(SceneNode node) =>
-      _decorationLabels.contains(node.baseLabel);
+  bool paintsDecorationImage(SceneNode node) => _decorationLabels.contains(node.baseLabel);
 
   static const _decorationLabels = {
     'Container',
@@ -46,7 +44,10 @@ class SceneCompactor {
       return true;
     }
     // A button that only wraps another button (TextButton > InkWell > GestureDetector in a dialog) is one tap target.
-    if (node is SemanticButton && node.label == null && node.children.length == 1 && node.children.single is SemanticButton) {
+    if (node is SemanticButton &&
+        node.label == null &&
+        node.children.length == 1 &&
+        node.children.single is SemanticButton) {
       return true;
     }
     return false;

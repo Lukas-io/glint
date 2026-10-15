@@ -17,8 +17,7 @@ class DragTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'drag',
-        description:
-            'Drag from one glintId to another, OR pass x1,y1,x2,y2 for raw '
+        description: 'Drag from one glintId to another, OR pass x1,y1,x2,y2 for raw '
             'coordinates (device mode: screenshot pixels; flutter mode: logical '
             'points). Same as swipe but with a longer hold (800ms default) so '
             'the framework recognises it as a drag gesture rather than a fling. '
@@ -41,27 +40,23 @@ class DragTool extends GlintTool {
               description: 'Hold time in ms. Default 800.',
             ),
             'awaitReady': Schema.bool(
-              description:
-                  'Wait until fromGlintId is on screen and hittable, then act. Default false.',
+              description: 'Wait until fromGlintId is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = argInt(args, 'durationMs') ?? 800;
     final t = readTargetedArgs(args, session.config);
@@ -70,8 +65,7 @@ class DragTool extends GlintTool {
     if (seg != null) {
       return withCoordinateChange(
         session,
-        () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs,
-            verb: 'dragged'),
+        () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs, verb: 'dragged'),
         returnScene: t.returnScene,
         fetchScene: t.fetchScene,
       );
@@ -104,8 +98,7 @@ class DragTool extends GlintTool {
     try {
       final result = await session.interactor.run(
         scene,
-        Swipe(SymbolicTarget(from), SymbolicTarget(to),
-            durationMs: durationMs),
+        Swipe(SymbolicTarget(from), SymbolicTarget(to), durationMs: durationMs),
       );
       var response = StructuredResponse.fromActionResult(result);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);

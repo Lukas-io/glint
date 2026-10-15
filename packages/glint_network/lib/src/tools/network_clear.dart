@@ -9,8 +9,7 @@ import 'result.dart';
 
 final networkClearTool = Tool(
   name: 'network_clear',
-  description:
-      'Wipes the LIVE in-VM HTTP profile and resets the session cursor. Does '
+  description: 'Wipes the LIVE in-VM HTTP profile and resets the session cursor. Does '
       'NOT touch the persistent DB (use bodies_purge / session_delete for '
       'that).',
   inputSchema: Schema.object(
@@ -42,9 +41,7 @@ CallToolResult? clearFailedResult({
         ? 'No isolates to clear the $what profile on in session $sessionId.'
         : 'Nothing cleared: the $what profile clear failed on all '
             '${failed.length} isolate(s) of session $sessionId.',
-    kind: failed.isEmpty || idMiss
-        ? ErrorKind.notFound
-        : ErrorKind.unresponsiveVm,
+    kind: failed.isEmpty || idMiss ? ErrorKind.notFound : ErrorKind.unresponsiveVm,
     extra: {
       'cleared': false,
       if (failed.isNotEmpty) 'failed': failed,
@@ -79,9 +76,8 @@ FutureOr<CallToolResult> networkClear(CallToolRequest request) async {
   }
   final attached = SessionRegistry.instance.attachedById(scope.sessionId)!;
   final isolateFilter = args['isolateId'] as String?;
-  final isolates = isolateFilter == null
-      ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id]
-      : [isolateFilter];
+  final isolates =
+      isolateFilter == null ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id] : [isolateFilter];
   if (isolates.isEmpty) {
     return errorResult(
       'No HTTP-profiling isolates known for this session.',
@@ -126,8 +122,7 @@ FutureOr<CallToolResult> networkClear(CallToolRequest request) async {
     if (failed.isNotEmpty) 'failed': failed,
     'warnings': [
       'The persistent DB is NOT cleared. Use session_delete or bodies_purge to remove historical rows.',
-      if (failed.isNotEmpty)
-        '${failed.length} isolate(s) failed to clear — see `failed` field.',
+      if (failed.isNotEmpty) '${failed.length} isolate(s) failed to clear — see `failed` field.',
     ],
     'nextSteps': const [
       'network_list — confirm the live profile is empty',

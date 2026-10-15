@@ -10,12 +10,10 @@ class _Service implements VmService {
   final calls = <String?>[];
 
   @override
-  Future<Response> callServiceExtension(String method,
-      {String? isolateId, Map<String, dynamic>? args}) async {
+  Future<Response> callServiceExtension(String method, {String? isolateId, Map<String, dynamic>? args}) async {
     calls.add(isolateId);
     if (isolateId != liveIsolate) {
-      throw SentinelException.parse(
-          method, {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'});
+      throw SentinelException.parse(method, {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'});
     }
     return Response.parse({
       'type': '_extensionType',
@@ -58,7 +56,6 @@ void main() {
 
   test('no new isolate after a restart reports the connection lost', () async {
     final rt = VmServiceRuntime(client: _Client(_Service(), found: false));
-    expect(rt.readWidgetTree(groupName: 'g'),
-        throwsA(isA<RuntimeConnectionLostError>()));
+    expect(rt.readWidgetTree(groupName: 'g'), throwsA(isA<RuntimeConnectionLostError>()));
   });
 }

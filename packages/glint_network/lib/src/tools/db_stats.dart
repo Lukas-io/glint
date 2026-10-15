@@ -16,8 +16,7 @@ const double _kBodiesHeavyRatio = 0.7;
 
 final dbStatsTool = Tool(
   name: 'db_stats',
-  description:
-      'Inspect the captures DB: file size, per-table row counts, body BLOB '
+  description: 'Inspect the captures DB: file size, per-table row counts, body BLOB '
       'bytes, pending alerts, journal mode, path. Run before db_vacuum to see '
       'if it will reclaim much.',
   inputSchema: Schema.object(properties: {}),
@@ -52,7 +51,8 @@ FutureOr<CallToolResult> dbStats(CallToolRequest request) async {
     // is turned OFF. When on, the watchdog handles growth; just report it.
     final capBytes = DbCapConfig.maxBytes;
     if (capBytes == null && sessionCount >= 50) {
-      warnings.add('Many sessions ($sessionCount) and the rolling cap is OFF — old ones may be ready for session_delete.');
+      warnings
+          .add('Many sessions ($sessionCount) and the rolling cap is OFF — old ones may be ready for session_delete.');
     }
 
     final nextSteps = <String>[];

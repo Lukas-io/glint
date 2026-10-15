@@ -49,8 +49,14 @@ class AndroidServer {
     }
     await Process.run(adbPath, ['-s', serial, 'shell', 'pkill', '-f', _socketName]);
     final process = await Process.start(adbPath, [
-      '-s', serial, 'shell',
-      'CLASSPATH=$_deviceDex', 'app_process', '/', 'dev.glint.server.Server', _socketName,
+      '-s',
+      serial,
+      'shell',
+      'CLASSPATH=$_deviceDex',
+      'app_process',
+      '/',
+      'dev.glint.server.Server',
+      _socketName,
     ]);
     _process = process;
     final stderr = StringBuffer();
@@ -85,8 +91,7 @@ class AndroidServer {
   }
 
   /// Sends [request] and returns the server's reply; calls run one at a time.
-  Future<Map<String, Object?>> call(Map<String, Object?> request,
-      {Duration timeout = const Duration(seconds: 20)}) {
+  Future<Map<String, Object?>> call(Map<String, Object?> request, {Duration timeout = const Duration(seconds: 20)}) {
     final result = _queue.then((_) => _send(request, timeout));
     _queue = result.then((_) {}, onError: (_) {});
     return result;
@@ -188,26 +193,45 @@ Future<String> buildAndroidServerDex(String dest, {String? adbPath, Map<String, 
   if (sdk == null) throw AndroidServerError('found no Android SDK with platforms to build the server against');
   String? newest(String dir, String file) {
     final hits = Directory(dir).existsSync()
-        ? [for (final d in Directory(dir).listSync().whereType<Directory>()) if (File('${d.path}/$file').existsSync()) '${d.path}/$file']
+        ? [
+            for (final d in Directory(dir).listSync().whereType<Directory>())
+              if (File('${d.path}/$file').existsSync()) '${d.path}/$file'
+          ]
         : <String>[];
-    int version(String p) => int.tryParse(RegExp(r'(\d+)').firstMatch(p.split('/').reversed.elementAt(1))?.group(1) ?? '') ?? 0;
+    int version(String p) =>
+        int.tryParse(RegExp(r'(\d+)').firstMatch(p.split('/').reversed.elementAt(1))?.group(1) ?? '') ?? 0;
     hits.sort((a, b) => version(a).compareTo(version(b)));
     return hits.lastOrNull;
   }
 
   final jar = newest('$sdk/platforms', 'android.jar');
   final d8 = newest('$sdk/build-tools', 'd8');
-  if (jar == null || d8 == null) throw AndroidServerError('the Android SDK at $sdk lacks ${jar == null ? 'a platform android.jar' : 'build-tools d8'}');
-  final javac = e['JAVA_HOME'] != null && File('${e['JAVA_HOME']}/bin/javac').existsSync() ? '${e['JAVA_HOME']}/bin/javac' : 'javac';
+  if (jar == null || d8 == null) {
+    throw AndroidServerError(
+        'the Android SDK at $sdk lacks ${jar == null ? 'a platform android.jar' : 'build-tools d8'}');
+  }
+  final javac = e['JAVA_HOME'] != null && File('${e['JAVA_HOME']}/bin/javac').existsSync()
+      ? '${e['JAVA_HOME']}/bin/javac'
+      : 'javac';
   final work = await Directory.systemTemp.createTemp('glint-android-server');
   try {
-    final sources = [for (final f in src.listSync(recursive: true)) if (f.path.endsWith('.java')) f.path];
+    final sources = [
+      for (final f in src.listSync(recursive: true))
+        if (f.path.endsWith('.java')) f.path
+    ];
     final classes = Directory('${work.path}/classes')..createSync();
     final compiled = await Process.run(javac, ['--release', '11', '-cp', jar, '-d', classes.path, ...sources]);
-    if (compiled.exitCode != 0) throw AndroidServerError('javac failed: ${'${compiled.stderr}'.trim().split('\n').take(3).join(' ')}');
-    final classFiles = [for (final f in classes.listSync(recursive: true)) if (f.path.endsWith('.class')) f.path];
+    if (compiled.exitCode != 0) {
+      throw AndroidServerError('javac failed: ${'${compiled.stderr}'.trim().split('\n').take(3).join(' ')}');
+    }
+    final classFiles = [
+      for (final f in classes.listSync(recursive: true))
+        if (f.path.endsWith('.class')) f.path
+    ];
     final dexed = await Process.run(d8, ['--min-api', '26', '--lib', jar, '--output', work.path, ...classFiles]);
-    if (dexed.exitCode != 0) throw AndroidServerError('d8 failed: ${'${dexed.stderr}'.trim().split('\n').take(3).join(' ')}');
+    if (dexed.exitCode != 0) {
+      throw AndroidServerError('d8 failed: ${'${dexed.stderr}'.trim().split('\n').take(3).join(' ')}');
+    }
     File(dest).parent.createSync(recursive: true);
     File('${work.path}/classes.dex').copySync(dest);
     return dest;

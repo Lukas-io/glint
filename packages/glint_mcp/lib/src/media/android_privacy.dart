@@ -17,7 +17,8 @@ Map<String, List<String>> androidPrivacyServices(int sdk) => {
       'photos': sdk >= 33
           ? ['android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_MEDIA_VIDEO']
           : ['android.permission.READ_EXTERNAL_STORAGE'],
-      'media-library': sdk >= 33 ? ['android.permission.READ_MEDIA_AUDIO'] : ['android.permission.READ_EXTERNAL_STORAGE'],
+      'media-library':
+          sdk >= 33 ? ['android.permission.READ_MEDIA_AUDIO'] : ['android.permission.READ_EXTERNAL_STORAGE'],
       'calendar': ['android.permission.READ_CALENDAR', 'android.permission.WRITE_CALENDAR'],
       'motion': ['android.permission.ACTIVITY_RECOGNITION'],
       'phone': ['android.permission.READ_PHONE_STATE', 'android.permission.CALL_PHONE'],
@@ -40,15 +41,21 @@ Future<AndroidPrivacyOutcome> setAndroidPrivacy(MediaDevice device, String appId
       ? {for (final list in services.values) ...list}.where(requested.contains).toList()
       : services[service];
   if (perms == null) {
-    throw PermissionUnsupported('Android has no "$service" permission',
-        ['services: ${[...services.keys, 'screen-capture', 'all'].join(', ')}']);
+    throw PermissionUnsupported('Android has no "$service" permission', [
+      'services: ${[...services.keys, 'screen-capture', 'all'].join(', ')}'
+    ]);
   }
   if (perms.isEmpty) {
     throw PermissionUnsupported(
-        service == 'notifications' ? 'notifications need no permission before Android 13 (API 33); this device is API $sdk' : '$appId declares none of the permissions this needs',
+        service == 'notifications'
+            ? 'notifications need no permission before Android 13 (API 33); this device is API $sdk'
+            : '$appId declares none of the permissions this needs',
         const ['nothing to change']);
   }
-  final declared = [for (final p in perms) if (requested.contains(p)) p];
+  final declared = [
+    for (final p in perms)
+      if (requested.contains(p)) p
+  ];
   if (declared.isEmpty) throw PermissionRefused('$appId requests none of ${perms.join(', ')}', notDeclared: true);
 
   final applied = <String>[];
@@ -72,14 +79,25 @@ Future<AndroidPrivacyOutcome> setAndroidPrivacy(MediaDevice device, String appId
     }
   }
   final now = grantedState((await device.adb(['shell', 'dumpsys', 'package', appId])).text);
-  final wrong = [for (final p in declared) if (now[p] != (action == 'grant')) p];
-  if (wrong.isNotEmpty) throw PermissionRefused('after the change ${wrong.join(', ')} still read granted=${action != 'grant'}');
-  final skipped = [for (final p in perms) if (!requested.contains(p)) p.split('.').last];
+  final wrong = [
+    for (final p in declared)
+      if (now[p] != (action == 'grant')) p
+  ];
+  if (wrong.isNotEmpty) {
+    throw PermissionRefused('after the change ${wrong.join(', ')} still read granted=${action != 'grant'}');
+  }
+  final skipped = [
+    for (final p in perms)
+      if (!requested.contains(p)) p.split('.').last
+  ];
   return (
     applied: applied,
-    state: '${action == 'grant' ? 'granted' : action == 'revoke' ? 'denied' : 'not asked'}: ${declared.map((p) => p.split('.').last).join(', ')}'
-        '${skipped.isEmpty ? '' : ' (not declared, left alone: ${skipped.join(', ')})'}',
-    caution: action == 'grant' ? null : 'Android stops an app when a permission is taken away; relaunch it before the next action',
+    state:
+        '${action == 'grant' ? 'granted' : action == 'revoke' ? 'denied' : 'not asked'}: ${declared.map((p) => p.split('.').last).join(', ')}'
+            '${skipped.isEmpty ? '' : ' (not declared, left alone: ${skipped.join(', ')})'}',
+    caution: action == 'grant'
+        ? null
+        : 'Android stops an app when a permission is taken away; relaunch it before the next action',
   );
 }
 
@@ -88,7 +106,8 @@ Future<AndroidPrivacyOutcome> _screenCapture(MediaDevice device, String appId, S
   final r = await device.adb(['shell', 'appops', 'set', appId, 'PROJECT_MEDIA', mode]);
   if (!r.ok || r.text.contains('Error')) throw PermissionRefused('${r.text}\n${r.errTail()}'.trim());
   final now = (await device.adb(['shell', 'appops', 'get', appId, 'PROJECT_MEDIA'])).text.trim();
-  final read = RegExp(r'PROJECT_MEDIA: (\w+)').firstMatch(now)?.group(1) ?? (now.contains('No operations') ? 'default' : now);
+  final read =
+      RegExp(r'PROJECT_MEDIA: (\w+)').firstMatch(now)?.group(1) ?? (now.contains('No operations') ? 'default' : now);
   if (read != mode) throw PermissionRefused('PROJECT_MEDIA reads $read after setting $mode');
   return (
     applied: ['appops set $appId PROJECT_MEDIA $mode'],

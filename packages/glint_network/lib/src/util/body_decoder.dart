@@ -62,8 +62,7 @@ DecodedBody? decodeBody(
   final total = bytes.length;
   final cap = (maxBytes == null || maxBytes < 0) ? total : maxBytes;
 
-  final wantUtf8 = decode == 'utf8' ||
-      (decode == 'auto' && _isTextContentType(contentType));
+  final wantUtf8 = decode == 'utf8' || (decode == 'auto' && _isTextContentType(contentType));
 
   if (wantUtf8 && semantic && total <= kSemanticInputCap && cap < total) {
     final full = utf8.decode(bytes, allowMalformed: true);

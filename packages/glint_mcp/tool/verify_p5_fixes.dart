@@ -32,15 +32,9 @@ void main(List<String> argv) async {
       .asBroadcastStream();
   var nextId = 1;
 
-  Future<Map<String, Object?>> req(
-      String method, Map<String, Object?> params) async {
+  Future<Map<String, Object?>> req(String method, Map<String, Object?> params) async {
     final id = nextId++;
-    proc.stdin.writeln(jsonEncode({
-      'jsonrpc': '2.0',
-      'id': id,
-      'method': method,
-      'params': params
-    }));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params}));
     await proc.stdin.flush();
     return incoming.firstWhere((m) => m['id'] == id);
   }
@@ -60,8 +54,7 @@ void main(List<String> argv) async {
       'capabilities': const {},
       'clientInfo': {'name': 'verify_p5_fixes', 'version': '0'},
     });
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
     await proc.stdin.flush();
 
     note('attach');
@@ -93,11 +86,9 @@ void main(List<String> argv) async {
       stderr.writeln('content-predicate scroll_to_find failed');
       failed++;
     }
-    final findStructured =
-        (find['result'] as Map)['structuredContent'] as Map<String, Object?>;
+    final findStructured = (find['result'] as Map)['structuredContent'] as Map<String, Object?>;
     if (findStructured['matchedText'] != 'scroll row 27') {
-      stderr.writeln(
-          'expected matchedText="scroll row 27"; got ${findStructured['matchedText']}');
+      stderr.writeln('expected matchedText="scroll row 27"; got ${findStructured['matchedText']}');
       failed++;
     }
 
@@ -109,12 +100,9 @@ void main(List<String> argv) async {
       'arguments': {'glintId': foundId},
     });
     stdout.writeln(txtOf(res));
-    final resStructured =
-        (res['result'] as Map)['structuredContent'] as Map<String, Object?>;
-    if (resStructured['physicalCenter'] == null ||
-        resStructured['hittable'] != true) {
-      stderr.writeln(
-          'resolve did not return geometry: ${resStructured.keys.toList()}');
+    final resStructured = (res['result'] as Map)['structuredContent'] as Map<String, Object?>;
+    if (resStructured['physicalCenter'] == null || resStructured['hittable'] != true) {
+      stderr.writeln('resolve did not return geometry: ${resStructured.keys.toList()}');
       failed++;
     }
 
@@ -140,13 +128,11 @@ void main(List<String> argv) async {
       if (line.contains('input')) stdout.writeln('  $line');
     }
     if (!sceneText.contains('ping from p5')) {
-      stderr.writeln(
-          'expected "ping from p5" to appear in get_scene after enrichment');
+      stderr.writeln('expected "ping from p5" to appear in get_scene after enrichment');
       failed++;
     }
     if (!sceneText.contains('glint type target')) {
-      stderr.writeln(
-          'expected fixture\'s labelText "glint type target" to appear as the input hint');
+      stderr.writeln('expected fixture\'s labelText "glint type target" to appear as the input hint');
       failed++;
     }
   } finally {
@@ -154,8 +140,6 @@ void main(List<String> argv) async {
     await proc.exitCode;
   }
 
-  stdout.writeln(failed == 0
-      ? '\nP5 FIXES: GREEN'
-      : '\nP5 FIXES: RED ($failed failures)');
+  stdout.writeln(failed == 0 ? '\nP5 FIXES: GREEN' : '\nP5 FIXES: RED ($failed failures)');
   exit(failed == 0 ? 0 : 1);
 }

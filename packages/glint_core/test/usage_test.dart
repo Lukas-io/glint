@@ -66,8 +66,7 @@ void main() {
   test('a store reset below the watermark ships from the start instead of dropping events', () async {
     source.add('a');
     await shipper(optedIn).ship();
-    File('${dir.path}/${UsageShipper.stateFileName}')
-        .writeAsStringSync('{"lastShippedEventId": 99, "shipCount": 1}');
+    File('${dir.path}/${UsageShipper.stateFileName}').writeAsStringSync('{"lastShippedEventId": 99, "shipCount": 1}');
     expect(shipper(optedIn).unshippedCount(), 1);
   });
 
@@ -85,8 +84,7 @@ void main() {
   test('DO_NOT_TRACK and NO_USAGE stop a ship', () async {
     source.add('a');
     expect((await shipper({...optedIn, 'DO_NOT_TRACK': '1'}).ship()).shipped, isFalse);
-    expect((await shipper({...optedIn, 'TEST_NO_USAGE': 'true'}).ship()).message,
-        contains('usage recording is off'));
+    expect((await shipper({...optedIn, 'TEST_NO_USAGE': 'true'}).ship()).message, contains('usage recording is off'));
   });
 
   test('tokens come from stored estimates, else from result bytes', () {

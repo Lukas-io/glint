@@ -12,8 +12,7 @@ import 'ws_list.dart';
 
 final wsGetTool = Tool(
   name: 'ws_get',
-  description:
-      'One WebSocket connection (id from ws_list) and its event timeline in '
+  description: 'One WebSocket connection (id from ws_list) and its event timeline in '
       'order: each message\'s time since the connection started, direction '
       '(out = app to server, in = server to app), type (text, binary, ping, '
       'pong, close, error) and size. Contents are not captured.',
@@ -21,18 +20,15 @@ final wsGetTool = Tool(
     properties: {
       'id': Schema.int(description: 'Connection id from ws_list.'),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
-        description:
-            'Pick the session by app-name substring instead of sessionId.',
+        description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'direction': Schema.string(description: '"out" or "in". Omit for both.'),
       'kind': Schema.string(
-        description:
-            'Only this event type: text, binary, ping, pong, close or error.',
+        description: 'Only this event type: text, binary, ping, pong, close or error.',
       ),
       'afterId': Schema.int(
         description: 'Page on: pass the previous reply\'s nextAfterId.',
@@ -51,39 +47,28 @@ FutureOr<CallToolResult> wsGet(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final id = args['id'] as int?;
   if (id == null) {
-    return errorResult('Missing required arg `id` (int).',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['ws_list - list connections and pick an id'],
-        });
+    return errorResult('Missing required arg `id` (int).', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['ws_list - list connections and pick an id'],
+    });
   }
   final direction = args['direction'] as String?;
   if (direction != null && direction != 'out' && direction != 'in') {
-    return errorResult('`direction` must be "out" or "in".',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'Retry with direction:"out", direction:"in", or omit it'
-          ],
-        });
+    return errorResult('`direction` must be "out" or "in".', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with direction:"out", direction:"in", or omit it'],
+    });
   }
   final kind = args['kind'] as String?;
   if (kind != null && !_kinds.contains(kind)) {
-    return errorResult('`kind` must be one of ${_kinds.join(', ')}.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with a valid kind, or omit it'],
-        });
+    return errorResult('`kind` must be one of ${_kinds.join(', ')}.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with a valid kind, or omit it'],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
   scope!;
 
   if (scope.isLive) {
-    await SessionRegistry.instance
-        .attachedById(scope.sessionId)
-        ?.captureWriter
-        .refreshWebSockets();
+    await SessionRegistry.instance.attachedById(scope.sessionId)?.captureWriter.refreshWebSockets();
   }
 
   final dao = CapturesDao();
@@ -113,9 +98,7 @@ FutureOr<CallToolResult> wsGet(CallToolRequest request) async {
   );
   final more = rows.length > limit;
   final page = more ? rows.sublist(0, limit) : rows;
-  final originUs = conn['connect_started_us'] as int? ??
-      conn['opened_us'] as int? ??
-      conn['first_us'] as int?;
+  final originUs = conn['connect_started_us'] as int? ?? conn['opened_us'] as int? ?? conn['first_us'] as int?;
   final connection = wsConnectionJson(conn);
   final filter = [
     if (direction != null) 'direction $direction',
@@ -132,15 +115,13 @@ FutureOr<CallToolResult> wsGet(CallToolRequest request) async {
             '(${connection['url'] ?? 'url unknown'}, ${connection['state']})'
             '${filter.isEmpty ? '' : ', $filter'}, oldest first.',
     'connection': connection,
-    'eventFormat':
-        '+seconds since start, direction, type, size or close detail',
+    'eventFormat': '+seconds since start, direction, type, size or close detail',
     'events': [for (final r in page) _event(r, originUs)],
     if (more) 'nextAfterId': page.last['id'],
     'nextSteps': [
       if (more) 'ws_get id:$id afterId:${page.last['id']} - next page',
       'ws_list - the other connections',
-      if (connection['url'] == null)
-        'network_list - the upgrade request (status 101) names the url',
+      if (connection['url'] == null) 'network_list - the upgrade request (status 101) names the url',
     ],
   }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
 }
@@ -148,9 +129,7 @@ FutureOr<CallToolResult> wsGet(CallToolRequest request) async {
 /// One event as `+1.204s out text 239B`.
 String _event(Map<String, Object?> r, int? originUs) {
   final ts = r['ts_us'] as int;
-  final offset = originUs == null
-      ? ''
-      : '+${((ts - originUs) ~/ 1000 / 1000).toStringAsFixed(3)}s ';
+  final offset = originUs == null ? '' : '+${((ts - originUs) ~/ 1000 / 1000).toStringAsFixed(3)}s ';
   final bytes = r['bytes'] as int?;
   final detail = r['detail'] as String?;
   return [

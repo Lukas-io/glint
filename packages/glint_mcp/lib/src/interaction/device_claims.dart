@@ -18,7 +18,8 @@ class DeviceClaim {
 
   bool get idle => DateTime.now().difference(last) > idleAfter;
 
-  String get describe => 'glint pid $pid${app == null ? '' : ' ($app)'} since ${since.toIso8601String().substring(11, 19)}'
+  String get describe =>
+      'glint pid $pid${app == null ? '' : ' ($app)'} since ${since.toIso8601String().substring(11, 19)}'
       '${idle ? ', no input for ${DateTime.now().difference(last).inMinutes} min' : ''}';
 }
 

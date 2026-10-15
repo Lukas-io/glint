@@ -20,12 +20,12 @@ void main() {
     });
 
     test('extra fields (schema, nextSteps) are merged alongside errorKind', () {
-      final r = errorResult('bad sql',
-          kind: ErrorKind.badQuery,
-          extra: {
-            'schema': {'sessions': ['id', 'app_name']},
-            'nextSteps': ['fix it'],
-          });
+      final r = errorResult('bad sql', kind: ErrorKind.badQuery, extra: {
+        'schema': {
+          'sessions': ['id', 'app_name']
+        },
+        'nextSteps': ['fix it'],
+      });
       final sc = r.structuredContent!;
       expect(sc['errorKind'], 'bad_query');
       expect((sc['schema'] as Map)['sessions'], ['id', 'app_name']);
@@ -62,8 +62,7 @@ void main() {
     });
 
     test('works when the payload has no prior warnings', () {
-      final r = degradedResult({'source': 'live-db-fallback', 'count': 0},
-          reason: 'fell back');
+      final r = degradedResult({'source': 'live-db-fallback', 'count': 0}, reason: 'fell back');
       expect(r.structuredContent!['warnings'], ['fell back']);
     });
   });
@@ -73,8 +72,7 @@ void main() {
   group('looksLikeVmIdMiss (D3 taxonomy)', () {
     test('VM id-lookup miss is recognized', () {
       expect(
-          looksLikeVmIdMiss(
-              'getHttpProfileRequest: (-32602) Invalid params\n'
+          looksLikeVmIdMiss('getHttpProfileRequest: (-32602) Invalid params\n'
               "Unable to find request with id: 'bogus'"),
           isTrue);
       expect(looksLikeVmIdMiss('Unable to find request with id: 42'), isTrue);
@@ -82,8 +80,7 @@ void main() {
 
     test('transport failures are NOT id misses', () {
       expect(looksLikeVmIdMiss('Service connection disposed'), isFalse);
-      expect(looksLikeVmIdMiss('VmRpcTimeoutException(getHttpProfileRequest)'),
-          isFalse);
+      expect(looksLikeVmIdMiss('VmRpcTimeoutException(getHttpProfileRequest)'), isFalse);
       expect(looksLikeVmIdMiss(null), isFalse);
     });
   });

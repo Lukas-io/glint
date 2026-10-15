@@ -80,8 +80,7 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
 
 /// The session a bare read targets when several are live: the one attached
 /// from [projectPath], else the most recently touched. Pure and testable.
-({AttachedSession session, String by})? pickDefaultSession(
-    SessionRegistry reg, String projectPath) {
+({AttachedSession session, String by})? pickDefaultSession(SessionRegistry reg, String projectPath) {
   final byProject = reg.liveForProject(projectPath);
   // The project only counts as the reason when it actually narrowed the
   // choice; every session this server attached shares its cwd.
@@ -170,8 +169,7 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
           kind: ErrorKind.badArgument,
           extra: {
             'matches': [
-              for (final m in matches)
-                {'sessionId': m.id, 'appName': m.appName},
+              for (final m in matches) {'sessionId': m.id, 'appName': m.appName},
             ],
             'nextSteps': [
               'Pass sessionId:<N> for one specific match',
@@ -236,8 +234,7 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
           pickedBy: picked.by,
           others: [
             for (final a in reg.attached.values)
-              if (a.id != picked.session.id)
-                {'sessionId': a.id, if (a.appName != null) 'appName': a.appName},
+              if (a.id != picked.session.id) {'sessionId': a.id, if (a.appName != null) 'appName': a.appName},
           ],
         ),
         null,
@@ -264,8 +261,7 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
         kind: ErrorKind.noSession,
         extra: {
           'nextSteps': [
-            if (died != null)
-              'session_open id:${died.sessionId} — read what the exited app captured',
+            if (died != null) 'session_open id:${died.sessionId} — read what the exited app captured',
             'network_status — see what apps are reachable',
             'network_attach — connect to a live app',
             'session_list — see historical sessions',
@@ -284,8 +280,7 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
       extra: {
         'attached': _attachedSummary(reg),
         'nextSteps': [
-          for (final a in reg.attached.values)
-            'sessionId:${a.id}  // ${a.appName ?? "(no name)"}',
+          for (final a in reg.attached.values) 'sessionId:${a.id}  // ${a.appName ?? "(no name)"}',
         ],
       },
     ),
@@ -293,6 +288,5 @@ String deadSessionNote(SessionRegistry reg, DeadSession d) {
 }
 
 List<Map<String, Object?>> _attachedSummary(SessionRegistry reg) => [
-      for (final a in reg.attached.values)
-        {'sessionId': a.id, 'appName': a.appName},
+      for (final a in reg.attached.values) {'sessionId': a.id, 'appName': a.appName},
     ];

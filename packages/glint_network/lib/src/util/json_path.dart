@@ -90,8 +90,7 @@ List<_Sel> _parseJsonPath(String path) {
       var inner = s.substring(i + 1, end).trim();
       if (inner == '*') {
         out.add(const _Sel.wildcard());
-      } else if ((inner.startsWith("'") && inner.endsWith("'")) ||
-          (inner.startsWith('"') && inner.endsWith('"'))) {
+      } else if ((inner.startsWith("'") && inner.endsWith("'")) || (inner.startsWith('"') && inner.endsWith('"'))) {
         out.add(_Sel.key(inner.substring(1, inner.length - 1)));
       } else {
         final idx = int.tryParse(inner);

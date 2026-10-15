@@ -55,13 +55,10 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  int alertCount() => CapturesDatabase.instance.raw
-      .select('SELECT COUNT(*) c FROM alerts')
-      .first['c'] as int;
+  int alertCount() => CapturesDatabase.instance.raw.select('SELECT COUNT(*) c FROM alerts').first['c'] as int;
 
   test('expires alerts older than the window, keeps recent ones', () {
-    final sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    final sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     insertAlert(sid, nowMs - 20 * dayMs); // old — expire
     insertAlert(sid, nowMs - 15 * dayMs); // old — expire
     insertAlert(sid, nowMs - 2 * dayMs); //  recent — keep
@@ -74,24 +71,17 @@ void main() {
   });
 
   test('protects alerts of a currently-attached session, however old', () {
-    final live = dao.createSession(
-        appName: 'live', vmServiceUri: 'ws://live', isolateId: null,
-        projectPath: null);
+    final live = dao.createSession(appName: 'live', vmServiceUri: 'ws://live', isolateId: null, projectPath: null);
     SessionRegistry.instance.register(fakeSession(live, 'ws://live'));
     insertAlert(live, nowMs - 100 * dayMs); // ancient but LIVE — keep
 
-    final dead = dao.createSession(
-        appName: 'dead', vmServiceUri: 'ws://dead', isolateId: null,
-        projectPath: null);
+    final dead = dao.createSession(appName: 'dead', vmServiceUri: 'ws://dead', isolateId: null, projectPath: null);
     insertAlert(dead, nowMs - 100 * dayMs); // ancient + not attached — expire
 
     final deleted = AlertRetention(now: () => nowMs).sweep();
     expect(deleted, 1);
     expect(
-      CapturesDatabase.instance.raw
-          .select('SELECT session_id FROM alerts')
-          .map((r) => r['session_id'])
-          .toList(),
+      CapturesDatabase.instance.raw.select('SELECT session_id FROM alerts').map((r) => r['session_id']).toList(),
       [live],
       reason: 'the live session keeps its ancient alert',
     );
@@ -99,16 +89,14 @@ void main() {
 
   test('retentionDays = 0 disables retention (keeps forever)', () {
     AlertRules.instance.alertRetentionDays = 0;
-    final sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    final sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     insertAlert(sid, nowMs - 1000 * dayMs);
     expect(AlertRetention(now: () => nowMs).sweep(), 0);
     expect(alertCount(), 1);
   });
 
   test('DAO expireOldAlerts is a no-op when nothing is old enough', () {
-    final sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    final sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     insertAlert(sid, nowMs);
     expect(
       dao.expireOldAlerts(cutoffMs: nowMs - dayMs, protectedSessionIds: {}),

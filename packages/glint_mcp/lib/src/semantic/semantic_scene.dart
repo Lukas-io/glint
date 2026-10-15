@@ -59,11 +59,9 @@ class SemanticScene {
   Map<String, Object?> toJson() => {
         // Overlays first — mirrors the text renderer (topmost = most
         // interactive) and keeps dialog ids addressable in JSON mode.
-        if (overlayLayers.isNotEmpty)
-          'overlayLayers': overlayLayers.map((l) => l.toJson()).toList(),
+        if (overlayLayers.isNotEmpty) 'overlayLayers': overlayLayers.map((l) => l.toJson()).toList(),
         'root': root.toJson(),
-        if (routeStack.isNotEmpty)
-          'routeStack': routeStack.map((r) => r.toJson()).toList(),
+        if (routeStack.isNotEmpty) 'routeStack': routeStack.map((r) => r.toJson()).toList(),
       };
 }
 
@@ -72,6 +70,7 @@ class RouteFrame {
 
   final String name;
   final bool isModal;
+
   /// Navigator page count — how many routes are in the stack (GoRouter fills
   /// this via the pages API). 1 = at root, >1 = pushed screens above root.
   final int depth;

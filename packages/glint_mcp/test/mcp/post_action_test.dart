@@ -3,8 +3,7 @@ import 'package:glint_mcp/src/mcp/post_action.dart';
 import 'package:test/test.dart';
 
 SemanticScene _scene(SemanticNode root,
-    {List<RouteFrame> routes = const [],
-    List<SemanticOverlayLayer> overlays = const []}) {
+    {List<RouteFrame> routes = const [], List<SemanticOverlayLayer> overlays = const []}) {
   final s = SemanticScene(root: root, sourceScene: _FakeScene());
   s.routeStack = routes;
   s.overlayLayers = overlays;
@@ -41,8 +40,7 @@ void main() {
 
     test('toggle state flip reports contentChanged', () {
       SemanticNode build(String state) => SemanticPage(body: [
-            SemanticButton(glintId: 'checkbox', isToggle: true)
-              ..toggleState = state,
+            SemanticButton(glintId: 'checkbox', isToggle: true)..toggleState = state,
           ]);
       final cat = changeCategory(
         SceneSnapshot.from(_scene(build('on'))),

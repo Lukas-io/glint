@@ -84,14 +84,10 @@ class DocResources {
   /// The `doc/` beside this package's own `lib/`, so the guides match the running code; null in a compiled binary, which has no package config.
   static io.Directory? _docsNextToPackage() {
     try {
-      final lib = Isolate.resolvePackageUriSync(
-          Uri.parse('package:glint_network/'));
+      final lib = Isolate.resolvePackageUriSync(Uri.parse('package:glint_network/'));
       if (lib == null) return null;
-      final docs = io.Directory(
-          p.join(p.dirname(p.normalize(lib.toFilePath())), docDirName));
-      return io.File(p.join(docs.path, 'RESPONSE_CONTRACT.md')).existsSync()
-          ? docs
-          : null;
+      final docs = io.Directory(p.join(p.dirname(p.normalize(lib.toFilePath())), docDirName));
+      return io.File(p.join(docs.path, 'RESPONSE_CONTRACT.md')).existsSync() ? docs : null;
     } on Object {
       return null;
     }

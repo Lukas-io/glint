@@ -34,17 +34,30 @@ class DeviceAbilities {
   String? get line => gaps.isEmpty ? null : gaps.keys.map((a) => a.label).join(', ');
 
   Map<String, Object?> toJson() => {
-        for (final e in gaps.entries) e.key.name: {'reason': e.value.reason, if (e.value.instead != null) 'instead': e.value.instead},
+        for (final e in gaps.entries)
+          e.key.name: {'reason': e.value.reason, if (e.value.instead != null) 'instead': e.value.instead},
       };
 }
 
 /// A paired physical iPhone: what glint cannot reach on it yet.
 const iphoneAbilities = DeviceAbilities({
-  Ability.notifications: (reason: 'a physical iPhone gives glint no notification list', instead: 'test notifications on the iOS simulator'),
-  Ability.media: (reason: 'a phone has no simctl or adb to seed photos or set media permissions', instead: 'media op:pick still chooses in the open photo picker'),
-  Ability.locationPermission: (reason: 'devicectl has no privacy setting; only the person holding the phone can change it', instead: 'answer the prompt with tap text:"Allow"'),
+  Ability.notifications: (
+    reason: 'a physical iPhone gives glint no notification list',
+    instead: 'test notifications on the iOS simulator'
+  ),
+  Ability.media: (
+    reason: 'a phone has no simctl or adb to seed photos or set media permissions',
+    instead: 'media op:pick still chooses in the open photo picker'
+  ),
+  Ability.locationPermission: (
+    reason: 'devicectl has no privacy setting; only the person holding the phone can change it',
+    instead: 'answer the prompt with tap text:"Allow"'
+  ),
   Ability.deviceAppearance: (reason: 'dark mode and text size are set in the phone\'s Settings', instead: null),
-  Ability.devicePrivacy: (reason: 'devicectl has no privacy setting', instead: 'answer the app\'s prompt with tap text:"Allow"'),
+  Ability.devicePrivacy: (
+    reason: 'devicectl has no privacy setting',
+    instead: 'answer the app\'s prompt with tap text:"Allow"'
+  ),
   Ability.deviceBiometric: (reason: 'Face ID on a phone needs its owner', instead: null),
   Ability.shutdown: (reason: 'glint does not power off a phone', instead: 'kill_app to stop the app'),
 });

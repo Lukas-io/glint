@@ -52,8 +52,7 @@ not json
 
   group('describeFrames', () {
     test('names count, time and each frame', () {
-      final held = withHoldMs(
-          [(path: 'a', atMs: 0), (path: 'b', atMs: 500)], endMs: 1000);
+      final held = withHoldMs([(path: 'a', atMs: 0), (path: 'b', atMs: 500)], endMs: 1000);
       final s = describeFrames(held, 1000, distinctOnly: true);
       expect(s, contains('2 distinct frames over 1.0 s'));
       expect(s, contains('#1 0 ms (held 500 ms)'));
@@ -61,8 +60,7 @@ not json
     });
 
     test('empty is stated', () {
-      expect(describeFrames(const [], 800, distinctOnly: true),
-          contains('no frames'));
+      expect(describeFrames(const [], 800, distinctOnly: true), contains('no frames'));
     });
   });
 
@@ -76,17 +74,18 @@ not json
         bridgePath: bridge.path,
         run: (exe, args) async {
           seen = [exe, ...args];
-          return ProcessResult(0, 0,
+          return ProcessResult(
+              0,
+              0,
               '{"path":"/f/frame-00000ms.png","atMs":0}\n{"done":true,"durationMs":900,"sampled":9,"emitted":1,"capped":false}',
               '');
         },
       );
-      final r = await ex.extract(
-          video: '/v.mp4', outDir: '/out', everyMs: 50, maxFrames: 12, distinctOnly: true);
+      final r = await ex.extract(video: '/v.mp4', outDir: '/out', everyMs: 50, maxFrames: 12, distinctOnly: true);
       expect(r.tool, 'bridge');
       expect(r.frames.single.atMs, 0);
       expect(r.durationMs, 900);
-      expect(seen, ['${bridge.path}', 'frames', '/v.mp4', '/out', '50', '12', '1']);
+      expect(seen, [(bridge.path), 'frames', '/v.mp4', '/out', '50', '12', '1']);
     });
 
     test('no bridge and no ffmpeg leaves an error and the video', () async {
@@ -106,14 +105,11 @@ not json
     test('start, exists, stop, pull, remove', () {
       expect(AdbRecording.startArgs('emu-1'),
           ['-s', 'emu-1', 'shell', 'screenrecord', '--time-limit', '30', '/sdcard/glint-rec.mp4']);
-      expect(AdbRecording.existsArgs('emu-1'),
-          ['-s', 'emu-1', 'shell', 'ls', '/sdcard/glint-rec.mp4']);
-      expect(AdbRecording.stopArgs('emu-1'),
-          ['-s', 'emu-1', 'shell', 'pkill', '-l', 'INT', 'screenrecord']);
-      expect(AdbRecording.pullArgs('emu-1', '/tmp/v.mp4'),
-          ['-s', 'emu-1', 'pull', '/sdcard/glint-rec.mp4', '/tmp/v.mp4']);
-      expect(AdbRecording.removeArgs('emu-1'),
-          ['-s', 'emu-1', 'shell', 'rm', '-f', '/sdcard/glint-rec.mp4']);
+      expect(AdbRecording.existsArgs('emu-1'), ['-s', 'emu-1', 'shell', 'ls', '/sdcard/glint-rec.mp4']);
+      expect(AdbRecording.stopArgs('emu-1'), ['-s', 'emu-1', 'shell', 'pkill', '-l', 'INT', 'screenrecord']);
+      expect(
+          AdbRecording.pullArgs('emu-1', '/tmp/v.mp4'), ['-s', 'emu-1', 'pull', '/sdcard/glint-rec.mp4', '/tmp/v.mp4']);
+      expect(AdbRecording.removeArgs('emu-1'), ['-s', 'emu-1', 'shell', 'rm', '-f', '/sdcard/glint-rec.mp4']);
     });
   });
 }

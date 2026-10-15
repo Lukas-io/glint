@@ -15,7 +15,8 @@ class PinchTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'pinch',
-        description: 'Two fingers around a node (glintId or visible text) or x,y, spreading (scale > 1, zoom in) or closing '
+        description:
+            'Two fingers around a node (glintId or visible text) or x,y, spreading (scale > 1, zoom in) or closing '
             '(scale < 1, zoom out). Inside the Flutter app with two pointers, or real multi-touch on a physical iPhone. '
             'Returns changed + changeCategory and data.input like any gesture. '
             'errorKind: invalidArgument, unresolvedTarget, unsupportedBackendAction.',
@@ -25,7 +26,8 @@ class PinchTool extends GlintTool {
             'text': Schema.string(description: 'Visible text of the target instead of glintId.'),
             'x': Schema.num(description: 'Center x in logical points (device mode: screenshot pixels), with y.'),
             'y': Schema.num(description: 'Center y, with x.'),
-            'scale': Schema.num(description: 'How far apart the fingers end relative to where they start: 2 zooms in, 0.5 zooms out.'),
+            'scale': Schema.num(
+                description: 'How far apart the fingers end relative to where they start: 2 zooms in, 0.5 zooms out.'),
             'durationMs': Schema.int(description: 'Gesture length in ms. Default 400.'),
             'returnScene': Schema.bool(description: 'Settle, then report changed and changeCategory. Default true.'),
           },
@@ -49,7 +51,8 @@ class PinchTool extends GlintTool {
     var center = readPoint(args);
     String? label;
     if (center == null) {
-      final native = await resolveNativeTarget(session, glintId: args['glintId'] as String?, text: args['text'] as String?);
+      final native =
+          await resolveNativeTarget(session, glintId: args['glintId'] as String?, text: args['text'] as String?);
       if (native?.error case final error?) return error;
       if (native?.hit case final hit?) {
         center = (x: hit.x, y: hit.y);
@@ -68,6 +71,7 @@ class PinchTool extends GlintTool {
       }
     }
     final at = center;
-    return withCoordinateChange(session, () => coordinatePinch(session, at.x, at.y, scale, durationMs, label: label), returnScene: t.returnScene);
+    return withCoordinateChange(session, () => coordinatePinch(session, at.x, at.y, scale, durationMs, label: label),
+        returnScene: t.returnScene);
   }
 }

@@ -133,8 +133,7 @@ class AlertRules {
       httpErrorEnabled = (rules['http_error'] as bool?) ?? httpErrorEnabled;
       httpSlowEnabled = (rules['http_slow'] as bool?) ?? httpSlowEnabled;
       logKeywordEnabled = (rules['log_keyword'] as bool?) ?? logKeywordEnabled;
-      flutterErrorEnabled =
-          (rules['flutter_error'] as bool?) ?? flutterErrorEnabled;
+      flutterErrorEnabled = (rules['flutter_error'] as bool?) ?? flutterErrorEnabled;
       anomalyEnabled = (rules['http_anomaly'] as bool?) ?? anomalyEnabled;
     }
   }

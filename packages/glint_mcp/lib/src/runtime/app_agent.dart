@@ -1,6 +1,5 @@
 import 'dart:async';
 
-
 import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 

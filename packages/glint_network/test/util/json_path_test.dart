@@ -5,9 +5,21 @@ import 'package:test/test.dart';
 void main() {
   final doc = {
     'data': [
-      {'id': 0, 'symbol': 'aapl', 'meta': {'sector': 'tech'}},
-      {'id': 1, 'symbol': 'tsla', 'meta': {'sector': 'auto'}},
-      {'id': 2, 'symbol': 'msft', 'meta': {'sector': 'tech'}},
+      {
+        'id': 0,
+        'symbol': 'aapl',
+        'meta': {'sector': 'tech'}
+      },
+      {
+        'id': 1,
+        'symbol': 'tsla',
+        'meta': {'sector': 'auto'}
+      },
+      {
+        'id': 2,
+        'symbol': 'msft',
+        'meta': {'sector': 'tech'}
+      },
     ],
     'pagination': {'page': 1, 'total': 3},
   };
@@ -28,8 +40,7 @@ void main() {
     test('wildcard collects a field across the array (resolved paths)', () {
       final hits = extractJsonPath(doc, r'$.data[*].symbol');
       expect(hits.map((h) => h.value).toList(), ['aapl', 'tsla', 'msft']);
-      expect(hits.map((h) => h.path).toList(),
-          [r'$.data[0].symbol', r'$.data[1].symbol', r'$.data[2].symbol']);
+      expect(hits.map((h) => h.path).toList(), [r'$.data[0].symbol', r'$.data[1].symbol', r'$.data[2].symbol']);
     });
 
     test('wildcard over a map collects values', () {
@@ -60,12 +71,9 @@ void main() {
     });
 
     test('malformed path throws JsonPathParseException', () {
-      expect(() => extractJsonPath(doc, r'$.data[abc]'),
-          throwsA(isA<JsonPathParseException>()));
-      expect(() => extractJsonPath(doc, r'$.data[1'),
-          throwsA(isA<JsonPathParseException>()));
-      expect(() => extractJsonPath(doc, r'$'),
-          throwsA(isA<JsonPathParseException>()));
+      expect(() => extractJsonPath(doc, r'$.data[abc]'), throwsA(isA<JsonPathParseException>()));
+      expect(() => extractJsonPath(doc, r'$.data[1'), throwsA(isA<JsonPathParseException>()));
+      expect(() => extractJsonPath(doc, r'$'), throwsA(isA<JsonPathParseException>()));
     });
   });
 }

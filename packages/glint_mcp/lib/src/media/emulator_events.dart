@@ -20,7 +20,9 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
   Future<String> emu(List<String> args) async {
     final r = await device.adb(['emu', ...args]);
     final out = r.text.trim();
-    if (!r.ok || out.contains('KO')) throw EventFailed('the emulator console refused `${args.join(' ')}`', '$out ${r.errTail()}'.trim());
+    if (!r.ok || out.contains('KO')) {
+      throw EventFailed('the emulator console refused `${args.join(' ')}`', '$out ${r.errTail()}'.trim());
+    }
     return out;
   }
 
@@ -34,12 +36,20 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
         return 'auto-rotate is back on';
       }
       final r = _rotations[value];
-      if (r == null) throw EventFailed('rotate needs value: ${[..._rotations.keys, 'auto'].join(' | ')}', 'got ${value ?? 'nothing'}', invalid: true);
+      if (r == null) {
+        throw EventFailed(
+            'rotate needs value: ${[..._rotations.keys, 'auto'].join(' | ')}', 'got ${value ?? 'nothing'}',
+            invalid: true);
+      }
       await shell(['settings', 'put', 'system', 'accelerometer_rotation', '0']);
       await shell(['settings', 'put', 'system', 'user_rotation', '$r']);
       await Future<void>.delayed(const Duration(milliseconds: 800));
-      final now = RegExp(r'mCurrentRotation=ROTATION_(\d+)').firstMatch(await shell(['dumpsys', 'window', 'displays']))?.group(1);
-      if (now != '${r * 90}') throw EventFailed('the display did not turn to $value', 'it reads ROTATION_${now ?? '?'}');
+      final now = RegExp(r'mCurrentRotation=ROTATION_(\d+)')
+          .firstMatch(await shell(['dumpsys', 'window', 'displays']))
+          ?.group(1);
+      if (now != '${r * 90}') {
+        throw EventFailed('the display did not turn to $value', 'it reads ROTATION_${now ?? '?'}');
+      }
       return 'the display is now $value (${r * 90} degrees); auto-rotate is off until `value:"auto"`';
     case 'light':
     case 'proximity':
@@ -47,8 +57,10 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
           ? double.tryParse(value ?? '')
           : switch (value) { 'near' => 0.0, 'far' => 5.0, _ => double.tryParse(value ?? '') };
       if (reading == null) {
-        throw EventFailed(kind == 'light' ? 'light needs value: lux, e.g. 3 for a dark room' : 'proximity needs value: near | far',
-            'got ${value ?? 'nothing'}', invalid: true);
+        throw EventFailed(
+            kind == 'light' ? 'light needs value: lux, e.g. 3 for a dark room' : 'proximity needs value: near | far',
+            'got ${value ?? 'nothing'}',
+            invalid: true);
       }
       await emu(['sensor', 'set', kind, '$reading']);
       final got = await emu(['sensor', 'get', kind]);
@@ -63,9 +75,13 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
       await emu(['gsm', 'cancel', phone]);
       await Future<void>.delayed(const Duration(seconds: 1));
       final state = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
-      return state == '0' ? 'the call from $phone ended' : 'asked to end the call from $phone; the call state reads ${state ?? '?'}';
+      return state == '0'
+          ? 'the call from $phone ended'
+          : 'asked to end the call from $phone; the call state reads ${state ?? '?'}';
     case 'sms':
-      if (text == null || text.isEmpty) throw EventFailed('sms needs text: the message body', 'got nothing', invalid: true);
+      if (text == null || text.isEmpty) {
+        throw EventFailed('sms needs text: the message body', 'got nothing', invalid: true);
+      }
       await emu(['sms', 'send', phone, text]);
       for (var i = 0; i < 16; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 250));

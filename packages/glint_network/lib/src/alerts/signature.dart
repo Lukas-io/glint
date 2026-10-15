@@ -60,8 +60,7 @@ String normalizeAlertTitle(String input) {
 
 final RegExp _posixHomeRegex = RegExp(r'/users/[^/]+/');
 final RegExp _windowsHomeRegex = RegExp(r'c:\\users\\[^\\]+\\');
-final RegExp _studioProjectsRegex =
-    RegExp(r'studioprojects/[^/]+/');
+final RegExp _studioProjectsRegex = RegExp(r'studioprojects/[^/]+/');
 final RegExp _digitsRegex = RegExp(r'[0-9]+');
 final RegExp _hexRegex = RegExp(r'[a-f0-9]{8,}');
 final RegExp _wsRegex = RegExp(r'\s+');

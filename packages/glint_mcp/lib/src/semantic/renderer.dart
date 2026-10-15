@@ -27,8 +27,7 @@ class RenderResult {
   final int depthUsed;
 
   int get lineCount => text.isEmpty ? 0 : text.trimRight().split('\n').length;
-  int get foldedItems =>
-      runs.fold(0, (s, r) => s + (r.count - 1));
+  int get foldedItems => runs.fold(0, (s, r) => s + (r.count - 1));
 }
 
 /// Compact indented form for agent prompts. Markers: `*` tappable, `>` typeable,
@@ -48,8 +47,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
   String render(SemanticScene scene) => renderDetailed(scene).text;
 
   /// Full render with fold bookkeeping. [fold] off = every sibling in full.
-  RenderResult renderDetailed(SemanticScene scene,
-      {int? maxDepth, bool fold = true}) {
+  RenderResult renderDetailed(SemanticScene scene, {int? maxDepth, bool fold = true}) {
     final w = _Writer(this, maxDepth ?? defaultMaxDepth, fold);
 
     // Overlay layers render FIRST — topmost = most interactive.
@@ -61,9 +59,7 @@ class PlainTextSceneRenderer extends SceneRenderer {
         }
       }
       final blocked = scene.overlayLayers.any((l) => l.isBarriered);
-      w.buf.writeln(blocked
-          ? '--- screen (blocked by modal — not interactive) ---'
-          : '--- screen ---');
+      w.buf.writeln(blocked ? '--- screen (blocked by modal — not interactive) ---' : '--- screen ---');
     }
 
     w.write(scene.root, depth: 0);
@@ -114,8 +110,7 @@ class _Writer {
     if (isList) _listStack.removeLast();
   }
 
-  void _children(List<SemanticNode> children,
-      {required int depth, bool inList = false, String? parentId}) {
+  void _children(List<SemanticNode> children, {required int depth, bool inList = false, String? parentId}) {
     var i = 0;
     while (i < children.length) {
       final run = fold ? detectFoldRun(children, i, threshold: r.foldThreshold) : null;
@@ -219,17 +214,13 @@ class JsonSceneRenderer extends SceneRenderer {
   @override
   String render(SemanticScene scene) => encode(toMap(scene));
 
-  String encode(Map<String, Object?> map) => (pretty
-          ? const JsonEncoder.withIndent('  ')
-          : const JsonEncoder())
-      .convert(map);
+  String encode(Map<String, Object?> map) =>
+      (pretty ? const JsonEncoder.withIndent('  ') : const JsonEncoder()).convert(map);
 
   /// The scene as a map; [fold] off = plain `toJson`. [maxDepth] drops
   /// `children` below that many levels (a `childCount` stands in).
-  Map<String, Object?> toMap(SemanticScene scene,
-      {bool fold = true, int? maxDepth}) {
-    Map<String, Object?> node(SemanticNode n, int depth) =>
-        nodeMap(n, fold: fold, maxDepth: maxDepth, depth: depth);
+  Map<String, Object?> toMap(SemanticScene scene, {bool fold = true, int? maxDepth}) {
+    Map<String, Object?> node(SemanticNode n, int depth) => nodeMap(n, fold: fold, maxDepth: maxDepth, depth: depth);
     return {
       if (scene.overlayLayers.isNotEmpty)
         'overlayLayers': [
@@ -241,14 +232,12 @@ class JsonSceneRenderer extends SceneRenderer {
             }
         ],
       'root': node(scene.root, 0),
-      if (scene.routeStack.isNotEmpty)
-        'routeStack': scene.routeStack.map((r) => r.toJson()).toList(),
+      if (scene.routeStack.isNotEmpty) 'routeStack': scene.routeStack.map((r) => r.toJson()).toList(),
     };
   }
 
   /// One node as a map, folding runs among its children.
-  Map<String, Object?> nodeMap(SemanticNode n,
-      {bool fold = true, int? maxDepth, int depth = 0}) {
+  Map<String, Object?> nodeMap(SemanticNode n, {bool fold = true, int? maxDepth, int depth = 0}) {
     final own = n.toJson()..remove('children');
     if (n.children.isEmpty) return own;
     if (maxDepth != null && depth >= maxDepth) {

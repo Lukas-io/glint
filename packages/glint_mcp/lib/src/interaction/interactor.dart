@@ -173,15 +173,13 @@ class Interactor {
         return ActionResult.success(action: action, summary: action.label);
 
       case PressKey():
-        await backend.pressKey(action.key,
-            count: action.count, modifiers: action.modifiers);
+        await backend.pressKey(action.key, count: action.count, modifiers: action.modifiers);
         return ActionResult.success(action: action, summary: action.label);
 
       case ClearField():
         await backend.selectAll();
         await backend.pressKey(KeyName.backspace);
-        return ActionResult.success(
-            action: action, summary: 'select-all + backspace');
+        return ActionResult.success(action: action, summary: 'select-all + backspace');
 
       case PressHardwareButton():
         await backend.pressHardwareButton(action.button);
@@ -253,8 +251,7 @@ class Interactor {
     );
   }
 
-  ActionResult _coordinateResult(Action action, ResolvedCoord c,
-      {required String verb}) {
+  ActionResult _coordinateResult(Action action, ResolvedCoord c, {required String verb}) {
     return ActionResult.success(
       action: action,
       summary: '$verb ${action.targetSummary} at '
@@ -306,8 +303,7 @@ class NotHittableRefused implements Exception {
 /// The glintId an action aims at, when it targets one node symbolically.
 String? _glintIdOf(Action action) {
   final target = switch (action) {
-    Tap(:final target) || LongPress(:final target) || DoubleTap(:final target) =>
-      target,
+    Tap(:final target) || LongPress(:final target) || DoubleTap(:final target) => target,
     _ => null,
   };
   return target is SymbolicTarget ? target.glintId : null;

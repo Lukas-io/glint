@@ -26,21 +26,30 @@ void main() {
     dir = Directory.systemTemp.createTempSync('redaction_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     void insert(String vmId, int status) {
       CapturesDatabase.instance.raw.execute(
         'INSERT INTO http_requests(session_id, vm_id, method, url, host, path, '
         'status_code, start_us, request_headers_json, response_headers_json) '
         'VALUES (?,?,?,?,?,?,?,?,?,?)',
-        [sid, vmId, 'GET', 'https://api.x/a', 'api.x', '/a', status, 1000,
+        [
+          sid,
+          vmId,
+          'GET',
+          'https://api.x/a',
+          'api.x',
+          '/a',
+          status,
+          1000,
           jsonEncode({'authorization': secret, 'accept': 'application/json'}),
           jsonEncode({
             'content-type': 'application/json',
             'set-cookie': 'sid=SESSION-COOKIE-456',
-          })],
+          })
+        ],
       );
     }
+
     insert('r1', 200);
     insert('r2', 401);
   });
@@ -51,18 +60,15 @@ void main() {
   });
 
   test('network_get redacts auth headers by default', () async {
-    final res = await networkGet(CallToolRequest(
-        name: 'network_get', arguments: {'sessionId': sid, 'id': 'r1'}));
+    final res = await networkGet(CallToolRequest(name: 'network_get', arguments: {'sessionId': sid, 'id': 'r1'}));
     final text = jsonEncode(res.structuredContent);
     expect(text, isNot(contains('SUPER-SECRET')));
     expect(text, contains('<redacted>'));
   });
 
-  test('network_get redact:false reveals the token (deliberate opt-out)',
-      () async {
-    final res = await networkGet(CallToolRequest(
-        name: 'network_get',
-        arguments: {'sessionId': sid, 'id': 'r1', 'redact': false}));
+  test('network_get redact:false reveals the token (deliberate opt-out)', () async {
+    final res = await networkGet(
+        CallToolRequest(name: 'network_get', arguments: {'sessionId': sid, 'id': 'r1', 'redact': false}));
     expect(jsonEncode(res.structuredContent), contains('SUPER-SECRET'));
   });
 
@@ -70,19 +76,19 @@ void main() {
     // Make r2's token different so it lands in `changed`.
     CapturesDatabase.instance.raw.execute(
       "UPDATE http_requests SET request_headers_json=? WHERE vm_id='r2'",
-      [jsonEncode({'authorization': 'Bearer OTHER-SECRET-999'})],
+      [
+        jsonEncode({'authorization': 'Bearer OTHER-SECRET-999'})
+      ],
     );
-    final res = await networkDiff(CallToolRequest(
-        name: 'network_diff',
-        arguments: {'sessionId': sid, 'idA': 'r1', 'idB': 'r2'}));
+    final res = await networkDiff(
+        CallToolRequest(name: 'network_diff', arguments: {'sessionId': sid, 'idA': 'r1', 'idB': 'r2'}));
     final text = jsonEncode(res.structuredContent);
     expect(text, isNot(contains('SUPER-SECRET')));
     expect(text, isNot(contains('OTHER-SECRET')));
   });
 
   test('network_replay redacts by default now', () async {
-    final res = await networkReplay(CallToolRequest(
-        name: 'network_replay', arguments: {'sessionId': sid, 'id': 'r1'}));
+    final res = await networkReplay(CallToolRequest(name: 'network_replay', arguments: {'sessionId': sid, 'id': 'r1'}));
     final curl = res.structuredContent!['curl'].toString();
     expect(curl, isNot(contains('SUPER-SECRET')));
     expect(curl, contains('<redacted>'));
@@ -91,9 +97,7 @@ void main() {
   test('HAR export redacts auth headers when redact:true', () async {
     final out = '${dir.path}/out.har';
     final res = await sessionExport(CallToolRequest(
-        name: 'session_export',
-        arguments: {'id': sid, 'format': 'har', 'outPath': out,
-          'redact': true}));
+        name: 'session_export', arguments: {'id': sid, 'format': 'har', 'outPath': out, 'redact': true}));
     expect(res.isError, isFalse);
     final har = File(out).readAsStringSync();
     expect(har, isNot(contains('SUPER-SECRET')));
@@ -102,9 +106,8 @@ void main() {
 
   test('HAR export is redacted by default', () async {
     final out = '${dir.path}/default.har';
-    await sessionExport(CallToolRequest(
-        name: 'session_export',
-        arguments: {'id': sid, 'format': 'har', 'outPath': out}));
+    await sessionExport(
+        CallToolRequest(name: 'session_export', arguments: {'id': sid, 'format': 'har', 'outPath': out}));
     final har = File(out).readAsStringSync();
     expect(har, isNot(contains('SUPER-SECRET')));
     expect(har, isNot(contains('SESSION-COOKIE')));
@@ -113,22 +116,25 @@ void main() {
   test('HAR export redact:false keeps what the capture stored', () async {
     final out = '${dir.path}/raw.har';
     await sessionExport(CallToolRequest(
-        name: 'session_export',
-        arguments: {'id': sid, 'format': 'har', 'outPath': out, 'redact': false}));
+        name: 'session_export', arguments: {'id': sid, 'format': 'har', 'outPath': out, 'redact': false}));
     expect(File(out).readAsStringSync(), contains('SUPER-SECRET'));
   });
 
   test('a redacted export masks tokens and passwords inside bodies', () async {
     CapturesDatabase.instance.raw.execute(
-      "INSERT INTO http_bodies(session_id, vm_id, which, bytes, size) VALUES (?,?,?,?,?)",
-      [sid, 'r1', 'response',
-        utf8.encode('{"access_token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U","password":"hunter2","name":"Ada"}'),
-        120],
+      'INSERT INTO http_bodies(session_id, vm_id, which, bytes, size) VALUES (?,?,?,?,?)',
+      [
+        sid,
+        'r1',
+        'response',
+        utf8.encode(
+            '{"access_token":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U","password":"hunter2","name":"Ada"}'),
+        120
+      ],
     );
     final out = '${dir.path}/bodies.har';
-    await sessionExport(CallToolRequest(
-        name: 'session_export',
-        arguments: {'id': sid, 'format': 'har', 'outPath': out}));
+    await sessionExport(
+        CallToolRequest(name: 'session_export', arguments: {'id': sid, 'format': 'har', 'outPath': out}));
     final har = File(out).readAsStringSync();
     expect(har, isNot(contains('hunter2')));
     expect(har, isNot(contains('eyJhbGci')));
@@ -136,8 +142,8 @@ void main() {
   });
 
   test('network_query output never shows secret header values or tokens', () {
-    final rows = dao.rawSelect(
-        "SELECT request_headers_json AS h, response_headers_json FROM http_requests WHERE vm_id='r1'");
+    final rows =
+        dao.rawSelect("SELECT request_headers_json AS h, response_headers_json FROM http_requests WHERE vm_id='r1'");
     final text = jsonEncode(rows);
     expect(text, isNot(contains('SUPER-SECRET')));
     expect(text, isNot(contains('SESSION-COOKIE')));
@@ -155,7 +161,10 @@ void main() {
         events: const [],
         startTime: DateTime.fromMicrosecondsSinceEpoch(2000),
         request: HttpProfileRequestData.buildSuccessfulRequest(
-          headers: {'authorization': ['Bearer LIVE-TOKEN-777'], 'accept': ['*/*']},
+          headers: {
+            'authorization': ['Bearer LIVE-TOKEN-777'],
+            'accept': ['*/*']
+          },
           cookies: const [],
         ),
       ),
@@ -171,17 +180,13 @@ void main() {
   test('HAR export redact:true masks response cookies', () async {
     final out = '${dir.path}/cookies.har';
     await sessionExport(CallToolRequest(
-        name: 'session_export',
-        arguments: {'id': sid, 'format': 'har', 'outPath': out,
-          'redact': true}));
+        name: 'session_export', arguments: {'id': sid, 'format': 'har', 'outPath': out, 'redact': true}));
     expect(File(out).readAsStringSync(), isNot(contains('SESSION-COOKIE')));
   });
 
-  test('network_replay redact:false warning does not call it the default',
-      () async {
-    final res = await networkReplay(CallToolRequest(
-        name: 'network_replay',
-        arguments: {'sessionId': sid, 'id': 'r1', 'redact': false}));
+  test('network_replay redact:false warning does not call it the default', () async {
+    final res = await networkReplay(
+        CallToolRequest(name: 'network_replay', arguments: {'sessionId': sid, 'id': 'r1', 'redact': false}));
     final warnings = (res.structuredContent!['warnings'] as List).join(' ');
     expect(warnings, contains('NOT redacted'));
     expect(warnings, isNot(contains('the default')));
@@ -189,9 +194,7 @@ void main() {
 
   group('redacted_headers trims the name before the built-in check', () {
     Future<CallToolResult> call(String action, String name) async =>
-        redactedHeaders(CallToolRequest(
-            name: 'redacted_headers',
-            arguments: {'action': action, 'name': name}));
+        redactedHeaders(CallToolRequest(name: 'redacted_headers', arguments: {'action': action, 'name': name}));
 
     test('adding a padded built-in is a no-op, not a stored extra', () async {
       final r = await call('add', '  Authorization ');

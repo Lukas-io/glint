@@ -7,8 +7,7 @@ import 'package:path/path.dart' as p;
 /// Tamper-evident telemetry log at `<dataDir>/telemetry-audit.log`: one `<ts>|<prev_hash>|<payload_b64>|<this_hash>` line per payload, each hash covering the line before it, like `git log`.
 class AuditLog {
   static const String fileName = 'telemetry-audit.log';
-  static const String _zeroHash =
-      '0000000000000000000000000000000000000000000000000000000000000000';
+  static const String _zeroHash = '0000000000000000000000000000000000000000000000000000000000000000';
 
   /// Records [payloadJson], the exact bytes sent or about to be sent; an exclusive file lock keeps concurrent servers from forking the chain or losing lines. Throws on filesystem failure.
   static AuditEntry append(String dataDir, String payloadJson) {
@@ -118,8 +117,7 @@ class AuditLog {
     }
   }
 
-  static String _short(String hash) =>
-      hash.length <= 12 ? hash : '${hash.substring(0, 12)}…';
+  static String _short(String hash) => hash.length <= 12 ? hash : '${hash.substring(0, 12)}…';
 }
 
 class AuditEntry {

@@ -56,7 +56,6 @@ void main() {
         'app_process64 / com.genymobile.scrcpy.Server 2.4 log_level=info\n'
         '/system/bin/surfaceflinger\n'
         'app_process -Xzygote /system/bin --zygote\n';
-    expect(parseDeviceServers(ps),
-        ['com.mobilenext.mobilecli.DeviceServer', 'com.genymobile.scrcpy.Server']);
+    expect(parseDeviceServers(ps), ['com.mobilenext.mobilecli.DeviceServer', 'com.genymobile.scrcpy.Server']);
   });
 }

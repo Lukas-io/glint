@@ -12,8 +12,7 @@ import 'result.dart';
 
 final networkReportTool = Tool(
   name: 'network_report',
-  description:
-      'One-call session health triage: the worst error endpoints, the slowest '
+  description: 'One-call session health triage: the worst error endpoints, the slowest '
       'endpoints, pending alerts, and a recommended next action. Insight, not '
       'raw rows, the orientation call to run after network_status.',
   inputSchema: Schema.object(
@@ -52,28 +51,24 @@ FutureOr<CallToolResult> networkReport(CallToolRequest request) async {
       minCount: 1,
     );
   } catch (e) {
-    return errorResult('network_report query failed: $e',
-        kind: ErrorKind.internal,
-        extra: const {
-          'nextSteps': [
-            'network_status — confirm the session is reachable',
-            'network_summarize — try the raw digest',
-          ],
-        });
+    return errorResult('network_report query failed: $e', kind: ErrorKind.internal, extra: const {
+      'nextSteps': [
+        'network_status — confirm the session is reachable',
+        'network_summarize — try the raw digest',
+      ],
+    });
   }
 
-  final totalRequests = endpoints.fold<int>(
-      0, (s, e) => s + ((e['count'] as int?) ?? 0));
+  final totalRequests = endpoints.fold<int>(0, (s, e) => s + ((e['count'] as int?) ?? 0));
 
-  num impact(Map<String, Object?> e) =>
-      (e['errorRate'] as num) * (e['count'] as int);
+  num impact(Map<String, Object?> e) => (e['errorRate'] as num) * (e['count'] as int);
   final errorHotspots = [
     for (final e in endpoints)
       if ((e['errorRate'] as num) > 0) e,
   ]..sort((a, b) => impact(b).compareTo(impact(a)));
 
-  final slowest = [...endpoints]..sort((a, b) =>
-      ((b['p95LatencyMs'] as int?) ?? 0).compareTo((a['p95LatencyMs'] as int?) ?? 0));
+  final slowest = [...endpoints]
+    ..sort((a, b) => ((b['p95LatencyMs'] as int?) ?? 0).compareTo((a['p95LatencyMs'] as int?) ?? 0));
 
   Map<String, Object?> trim(Map<String, Object?> e) => {
         'endpoint': e['endpoint'],
@@ -83,11 +78,7 @@ FutureOr<CallToolResult> networkReport(CallToolRequest request) async {
       };
 
   final topErrors = errorHotspots.take(3).map(trim).toList();
-  final topSlow = slowest
-      .where((e) => (e['p95LatencyMs'] as int?) != null)
-      .take(3)
-      .map(trim)
-      .toList();
+  final topSlow = slowest.where((e) => (e['p95LatencyMs'] as int?) != null).take(3).map(trim).toList();
 
   var pendingAlerts = 0;
   if (caps.isEnabled(Category.alerts)) {
@@ -105,8 +96,7 @@ FutureOr<CallToolResult> networkReport(CallToolRequest request) async {
         : 'No HTTP captured in session $sid (its capture is complete).';
     nextSteps = [
       emptyCaptureHint(state, reRun: 'network_report'),
-      if (state.canGenerateTraffic)
-        'network_status — confirm the session is attached and capturing',
+      if (state.canGenerateTraffic) 'network_status — confirm the session is attached and capturing',
     ];
   } else if (topErrors.isNotEmpty) {
     final worst = topErrors.first;
@@ -119,12 +109,10 @@ FutureOr<CallToolResult> networkReport(CallToolRequest request) async {
       // D1: a host-wide search matches everything on the host; route to the
       // error rows directly instead.
       'network_list statusMin:400$hostArg: list the failing requests, then network_get one',
-      if (caps.isEnabled(Category.alerts) && pendingAlerts > 0)
-        'alerts_drain — $pendingAlerts pending alert(s)',
+      if (caps.isEnabled(Category.alerts) && pendingAlerts > 0) 'alerts_drain — $pendingAlerts pending alert(s)',
       'network_drift$hostArg: check if the response shape changed',
     ];
-  } else if (topSlow.isNotEmpty &&
-      ((topSlow.first['p95LatencyMs'] as int?) ?? 0) > 1000) {
+  } else if (topSlow.isNotEmpty && ((topSlow.first['p95LatencyMs'] as int?) ?? 0) > 1000) {
     final s = topSlow.first;
     headline = 'No errors; slowest endpoint ${s['endpoint']} at '
         '${s['p95LatencyMs']}ms p95.';

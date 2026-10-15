@@ -7,8 +7,7 @@ import 'package:test/test.dart';
 void main() {
   group('appSessionIdentity', () {
     test('parses package + device from the DTD app-name shape', () {
-      const name =
-          'Kind: Flutter - Device: iPhone 16 Pro - Package: roqquapp';
+      const name = 'Kind: Flutter - Device: iPhone 16 Pro - Package: roqquapp';
       expect(appSessionIdentity(name), 'roqquapp@iphone 16 pro');
     });
 

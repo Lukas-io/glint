@@ -13,13 +13,13 @@ void main() {
   void stampVersion(int v) {
     final db = sql.sqlite3.open('${dir.path}/captures.db');
     db.execute("UPDATE _meta SET value='$v' WHERE key='schema_version'");
-    db.dispose();
+    db.close();
   }
 
   String storedVersion() {
     final db = sql.sqlite3.open('${dir.path}/captures.db');
     final v = db.select("SELECT value FROM _meta WHERE key='schema_version'").first['value'] as String;
-    db.dispose();
+    db.close();
     return v;
   }
 
@@ -30,8 +30,7 @@ void main() {
 
     expect(
       () => CapturesDatabase.open(dataDir: dir.path),
-      throwsA(isA<NewerDatabaseError>()
-          .having((e) => e.toString(), 'message', contains('--data-dir'))),
+      throwsA(isA<NewerDatabaseError>().having((e) => e.toString(), 'message', contains('--data-dir'))),
     );
     expect(storedVersion(), '${currentVersion + 1}');
   });

@@ -62,8 +62,7 @@ class SessionFilters {
   Map<String, Object?> toBlock() => {
         if (levelMin != null) 'levelMin': levelMin,
         if (loggerContains != null) 'loggerContains': loggerContains,
-        if (messageContains != null && messageContains!.isNotEmpty)
-          'messageContains': messageContains,
+        if (messageContains != null && messageContains!.isNotEmpty) 'messageContains': messageContains,
         if (source != null) 'source': source,
         if (method != null && method!.isNotEmpty) 'method': method,
         if (hostContains != null) 'hostContains': hostContains,

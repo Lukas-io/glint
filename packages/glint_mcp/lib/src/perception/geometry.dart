@@ -56,8 +56,7 @@ class ResolvedCoord {
     // logicalBounds is node-local. Translate to global via the relationship
     // globalOrigin = logicalCenter - bounds.center. Exact for axis-aligned
     // non-transformed boxes.
-    final globalLeft =
-        logicalCenter.x - (logicalBounds.x + logicalBounds.w / 2);
+    final globalLeft = logicalCenter.x - (logicalBounds.x + logicalBounds.w / 2);
     final globalTop = logicalCenter.y - (logicalBounds.y + logicalBounds.h / 2);
     final globalRight = globalLeft + logicalBounds.w;
     final globalBottom = globalTop + logicalBounds.h;
@@ -66,10 +65,7 @@ class ResolvedCoord {
     if (globalTop >= logicalViewSize.h) return false;
     final c = clip;
     if (c == null) return true;
-    return globalRight > c.x &&
-        globalBottom > c.y &&
-        globalLeft < c.x + c.w &&
-        globalTop < c.y + c.h;
+    return globalRight > c.x && globalBottom > c.y && globalLeft < c.x + c.w && globalTop < c.y + c.h;
   }
 
   /// True when the centre sits inside the nearest scroll viewport (or there is none).
@@ -83,14 +79,9 @@ class ResolvedCoord {
   }
 
   /// True when the on-screen keyboard covers the centre.
-  bool get centerUnderKeyboard =>
-      keyboardInset > 0 && logicalCenter.y >= logicalViewSize.h - keyboardInset;
+  bool get centerUnderKeyboard => keyboardInset > 0 && logicalCenter.y >= logicalViewSize.h - keyboardInset;
 
-  bool get painted =>
-      hasNonZeroBounds &&
-      intersectsViewport &&
-      nearestAncestorOpacity > 0 &&
-      nearestAncestorVisible;
+  bool get painted => hasNonZeroBounds && intersectsViewport && nearestAncestorOpacity > 0 && nearestAncestorVisible;
 
   /// True when the resolved center lies inside the viewport — a gesture can
   /// land there. Center goes through localToGlobal, so this is transform-safe.
@@ -141,8 +132,7 @@ class ResolvedCoord {
         'hittable': hittable,
         'hitTest': hitTestReal ? 'real' : 'approximate',
         if (hitBy != null) 'hitBy': hitBy,
-        if (clip != null)
-          'clip': {'x': clip!.x, 'y': clip!.y, 'w': clip!.w, 'h': clip!.h},
+        if (clip != null) 'clip': {'x': clip!.x, 'y': clip!.y, 'w': clip!.w, 'h': clip!.h},
         if (keyboardInset > 0) 'keyboardInset': keyboardInset,
       };
 }
@@ -166,9 +156,7 @@ class CoordinateResolver {
   Future<({double dpr, double w, double h})> resolveViewportNodeFree() async {
     final String? json;
     try {
-      json = await _runtime.evaluateString(
-          GeometryExpr.buildImplicitViewProbe(),
-          rethrowErrors: true);
+      json = await _runtime.evaluateString(GeometryExpr.buildImplicitViewProbe(), rethrowErrors: true);
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(implicitView) failed: ${e.message}');
     }
@@ -185,8 +173,7 @@ class CoordinateResolver {
 
   /// Viewport dimensions without a hit-test. Safe on Dart 3.12 / iOS 26 where
   /// [HitTestResult] is inaccessible in the CFE eval scope; use over [resolve].
-  Future<({double dpr, double w, double h})> resolveViewport(
-      Scene scene, String glintId) async {
+  Future<({double dpr, double w, double h})> resolveViewport(Scene scene, String glintId) async {
     final node = scene.findByGlintId(glintId);
     if (node == null) {
       throw GeometryResolveError('unknown glintId: $glintId');
@@ -203,8 +190,7 @@ class CoordinateResolver {
     }
     final String? json;
     try {
-      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe(),
-          rethrowErrors: true);
+      json = await _runtime.evaluateString(GeometryExpr.buildViewProbe(), rethrowErrors: true);
     } on RuntimeEvalError catch (e) {
       throw GeometryResolveError('evaluate(viewProbe) failed: ${e.message}');
     }
@@ -239,8 +225,7 @@ class CoordinateResolver {
     String? json;
     for (var attempt = 0;; attempt++) {
       try {
-        json = await _runtime.evaluateString(GeometryExpr.build(),
-            rethrowErrors: true);
+        json = await _runtime.evaluateString(GeometryExpr.build(), rethrowErrors: true);
         break;
       } on RuntimeEvalError catch (e) {
         if (attempt > 0) {
@@ -254,8 +239,7 @@ class CoordinateResolver {
     }
     final decoded = _decode(json, 'geometry');
     if (decoded['gx'] == null || decoded['gy'] == null) {
-      throw GeometryResolveError(
-          '${node.glintId} is not laid out — offstage or an inactive tab '
+      throw GeometryResolveError('${node.glintId} is not laid out — offstage or an inactive tab '
           'page; bring it on screen first');
     }
     // A ModalBarrier blocks the base screen through its own hit-testing, not an
@@ -264,14 +248,10 @@ class CoordinateResolver {
     // scene already detected: a base-tree node under a barrier is not hittable.
     final evalHittable = decoded['hit'] as bool;
     final id = node.glintId;
-    final blockedByBarrier =
-        scene.hasBarrierOverlay && id != null && !scene.isInOverlay(id);
+    final blockedByBarrier = scene.hasBarrierOverlay && id != null && !scene.isInOverlay(id);
     final clip = await _clipRect();
     final gx = (decoded['gx'] as num).toDouble(), gy = (decoded['gy'] as num).toDouble();
-    final onScreen = gx >= 0 &&
-        gy >= 0 &&
-        gx < (decoded['vw'] as num) &&
-        gy < (decoded['vh'] as num);
+    final onScreen = gx >= 0 && gy >= 0 && gx < (decoded['vw'] as num) && gy < (decoded['vh'] as num);
     final probed = await _hitTest(scene, groupName, (decoded['vid'] as num?)?.toInt() ?? 0);
     final hit = probed == null || onScreen ? probed : (hit: false, hitBy: null);
     return ResolvedCoord(
@@ -314,18 +294,16 @@ class CoordinateResolver {
   }
 
   /// Flutter's own hit test at the selected node's centre; null when it cannot run, so callers fall back to the approximation.
-  Future<({bool hit, String? hitBy})?> _hitTest(
-      Scene scene, String groupName, int viewId) async {
+  Future<({bool hit, String? hitBy})?> _hitTest(Scene scene, String groupName, int viewId) async {
     try {
       final pair = await _runtime.evaluateIn(GeometryExpr.hitInputs);
       final pairId = pair.id;
       if (pairId == null) return null;
-      final path = await _runtime.evaluateIn(GeometryExpr.hitPath(viewId),
-          librarySuffix: GeometryExpr.gesturesLibrary, scope: {'x': pairId});
+      final path = await _runtime
+          .evaluateIn(GeometryExpr.hitPath(viewId), librarySuffix: GeometryExpr.gesturesLibrary, scope: {'x': pairId});
       final pathId = path.id;
       if (pathId == null) return null;
-      final verdict = await _runtime.evaluateIn(GeometryExpr.hitVerdict(groupName),
-          scope: {'h': pathId});
+      final verdict = await _runtime.evaluateIn(GeometryExpr.hitVerdict(groupName), scope: {'h': pathId});
       final text = verdict.valueAsStringIsTruncated == true
           ? await instanceText(_runtime.rawService, _runtime.flutterIsolateId, verdict)
           : verdict.valueAsString;
@@ -348,10 +326,7 @@ class CoordinateResolver {
     for (final id in ids) {
       final n = byId[id];
       if (n == null) continue;
-      final label = n
-          .walk()
-          .map((d) => d.textPreview)
-          .firstWhere((t) => t != null && t.isNotEmpty, orElse: () => null);
+      final label = n.walk().map((d) => d.textPreview).firstWhere((t) => t != null && t.isNotEmpty, orElse: () => null);
       return label == null ? n.glintId! : '${n.glintId} "$label"';
     }
     return parts.first.replaceFirst('miss:', '').trim().isEmpty
@@ -366,8 +341,7 @@ class CoordinateResolver {
 /// null so callers can name the condition.
 Map<String, Object?> _decode(String json, String what) {
   try {
-    final decoded =
-        jsonDecode(json.replaceAll(RegExp(r'-?(?:NaN|Infinity)'), 'null'));
+    final decoded = jsonDecode(json.replaceAll(RegExp(r'-?(?:NaN|Infinity)'), 'null'));
     if (decoded is Map<String, Object?>) return decoded;
   } on FormatException {
     // fall through
@@ -387,16 +361,13 @@ class GeometryResolveError implements Exception {
 // statement-block lambdas, so fields are string-concatenated into a JSON blob.
 class GeometryExpr {
   static const _ro = 'WidgetInspectorService.instance.selection.current!';
-  static const _el =
-      'WidgetInspectorService.instance.selection.currentElement!';
+  static const _el = 'WidgetInspectorService.instance.selection.currentElement!';
   static const _view = 'View.of($_el)';
-  static const _ancOpacity =
-      '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
-  static const _ancVisible =
-      '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
+  static const _ancOpacity = '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
+  static const _ancVisible = '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
+
   /// Fallback when the real hit test ([hitPath]) cannot run: nearest AbsorbPointer / IgnorePointer only.
-  static const _hittable =
-      '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
+  static const _hittable = '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
 
   static String build() {
@@ -435,8 +406,7 @@ class GeometryExpr {
   }
 
   /// The nearest scroll viewport's global rect as `x,y,w,h`, or empty when the node is not in one.
-  static const clip =
-      "((RenderAbstractViewport? v) => v == null ? '' : ((RenderBox b) => "
+  static const clip = "((RenderAbstractViewport? v) => v == null ? '' : ((RenderBox b) => "
       "b.localToGlobal(Offset.zero).dx.toString() + ',' + b.localToGlobal(Offset.zero).dy.toString() + ',' + "
       "b.size.width.toString() + ',' + b.size.height.toString())(v as RenderBox))"
       '(RenderAbstractViewport.maybeOf($_ro))';
@@ -445,8 +415,7 @@ class GeometryExpr {
   static const gesturesLibrary = 'flutter/src/gestures/binding.dart';
 
   /// The selected render object and its global centre, handed to [hitPath] through eval scope.
-  static const hitInputs =
-      '<Object>[$_ro, $_ro.localToGlobal($_ro.paintBounds.center)]';
+  static const hitInputs = '<Object>[$_ro, $_ro.localToGlobal($_ro.paintBounds.center)]';
 
   /// Runs Flutter's hit test at the centre; yields `[targetOnPath, deepestTarget]`.
   static String hitPath(int viewId) =>
@@ -462,8 +431,7 @@ class GeometryExpr {
       ".take(120).map((e) => WidgetInspectorService.instance.toId(e, '$groupName')).join(',') "
       ": 'miss:')";
 
-  static const _implicitView =
-      'WidgetsBinding.instance.platformDispatcher.implicitView!';
+  static const _implicitView = 'WidgetsBinding.instance.platformDispatcher.implicitView!';
 
   /// dpr/vw/vh from the implicit view — needs no inspector selection, so it
   /// works on any root widget and before the first addressable node renders.

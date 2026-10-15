@@ -41,11 +41,9 @@ class _FakeRuntime implements FlutterRuntime {
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
 }
 
-AndroidDevice _device(String serial) =>
-    AndroidDevice(serial: serial, adbPath: 'adb');
+AndroidDevice _device(String serial) => AndroidDevice(serial: serial, adbPath: 'adb');
 
 void main() {
-
   deviceGoneMain();
   group('GlintSession pool', () {
     late int created;
@@ -62,11 +60,9 @@ void main() {
     tearDown(() => session.detachAll());
 
     test('attaching two apps pools both; the latest is active', () async {
-      final a = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      final a = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
       a.displayName = 'Example Eats';
-      final b = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
+      final b = await session.attach(vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
       b.displayName = 'Acme Pay';
       expect(session.apps.length, 2);
       expect(session.active, same(b));
@@ -75,37 +71,29 @@ void main() {
     });
 
     test('re-attaching a pooled vmUri switches without reconnecting', () async {
-      final a = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
-      final again = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      final a = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      await session.attach(vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
+      final again = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
       expect(again, same(a));
       expect(session.active, same(a));
       expect(created, 2, reason: 'no new runtime for a live pooled app');
     });
 
     test('a new vmUri on the same device replaces the old entry', () async {
-      await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:9/restarted=/'),
-          device: _device('A'));
+      await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      await session.attach(vmUri: Uri.parse('http://127.0.0.1:9/restarted=/'), device: _device('A'));
       expect(session.apps.length, 1);
       expect(session.active!.vmUri.toString(), 'http://127.0.0.1:9/restarted=/');
       expect(created, 2);
     });
 
     test('matchApps resolves ids, names, packages and prefixes', () async {
-      final a = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      final a = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
       a
         ..displayName = 'Example Eats'
         ..package = 'eats_mobile'
         ..deviceName = 'iPhone Air';
-      final b = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
+      final b = await session.attach(vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
       b
         ..displayName = 'Acme Pay'
         ..package = 'acme_pay'
@@ -120,10 +108,8 @@ void main() {
     });
 
     test('withApp routes one call and restores the active app', () async {
-      final a = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      final b = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
+      final a = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      final b = await session.attach(vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
       expect(session.active, same(b));
       final seen = await session.withApp(a, () async => session.device.id);
       expect(seen, 'A');
@@ -131,10 +117,8 @@ void main() {
     });
 
     test('detaching the active app promotes the only remaining one', () async {
-      await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
-      await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
+      await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      await session.attach(vmUri: Uri.parse('http://127.0.0.1:2/b=/'), device: _device('B'));
       await session.detach();
       expect(session.apps.length, 1);
       expect(session.active?.id, 'A');
@@ -143,8 +127,7 @@ void main() {
     });
 
     test('the app arg routes a tool call and rejects unknown names', () async {
-      final a = await session.attach(
-          vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
+      final a = await session.attach(vmUri: Uri.parse('http://127.0.0.1:1/a=/'), device: _device('A'));
       a.displayName = 'Example Eats';
       final result = await const HardwareButtonTool().invoke(
         session,
@@ -173,8 +156,7 @@ void main() {
 void deviceGoneMain() {
   test('deviceGoneResponse names the device and how to get it back', () async {
     final session = GlintSession();
-    final app = AppSession.bindDevice(
-        device: AndroidDevice(serial: 'emulator-5554', adbPath: 'adb'))
+    final app = AppSession.bindDevice(device: AndroidDevice(serial: 'emulator-5554', adbPath: 'adb'))
       ..displayName = 'Acme Pay'
       ..deviceName = 'Pixel 8';
     final r = GlintTool.deviceGoneResponse(session, app);

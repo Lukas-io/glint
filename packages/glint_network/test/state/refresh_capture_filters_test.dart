@@ -59,13 +59,11 @@ void main() {
         reason: 'second writer must see it too — the stub-refresh bug '
             'left every non-sole session unfiltered');
     expect(
-      a.captureWriter.activeCaptureFilter
-          .shouldCapture(Uri.parse('https://analytics.example.com/hit')),
+      a.captureWriter.activeCaptureFilter.shouldCapture(Uri.parse('https://analytics.example.com/hit')),
       isFalse,
     );
     expect(
-      b.captureWriter.activeCaptureFilter
-          .shouldCapture(Uri.parse('https://api.example.com/orders')),
+      b.captureWriter.activeCaptureFilter.shouldCapture(Uri.parse('https://api.example.com/orders')),
       isTrue,
     );
   });

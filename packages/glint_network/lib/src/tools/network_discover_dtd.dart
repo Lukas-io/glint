@@ -8,8 +8,7 @@ import 'result.dart';
 
 final networkDiscoverDtdTool = Tool(
   name: 'network_discover_dtd',
-  description:
-      'List DTD instances on this machine (with full ws:// URI + token, '
+  description: 'List DTD instances on this machine (with full ws:// URI + token, '
       'workspaceRoot, pid, isLive) so you can attach without a pasted URI. '
       'Use when the server started without --dtd-uri or several DTDs run. '
       'Defaults to live, cwd-matching ones.',
@@ -41,9 +40,7 @@ FutureOr<CallToolResult> networkDiscoverDtd(CallToolRequest request) async {
 
   // Apply filters in two stages so warnings can speak to what was dropped.
   final liveOnly = includeStale ? all : all.where((c) => c.isLive).toList();
-  final cwdFiltered = cwdMatch
-      ? liveOnly.where((c) => c.matchesCwd).toList()
-      : liveOnly;
+  final cwdFiltered = cwdMatch ? liveOnly.where((c) => c.matchesCwd).toList() : liveOnly;
   final visible = cwdFiltered.take(limit).toList();
 
   final warnings = <String>[];

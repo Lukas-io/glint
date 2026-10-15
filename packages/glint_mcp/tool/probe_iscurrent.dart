@@ -1,4 +1,6 @@
 /// Probe G2: check ModalRoute.of(el)?.isCurrent for each Scaffold.
+library;
+
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -10,14 +12,17 @@ void main(List<String> args) async {
   for (final ref in vm.isolates ?? <IsolateRef>[]) {
     if (ref.id == null) continue;
     final iso = await ws.getIsolate(ref.id!);
-    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) { flutter = iso; break; }
+    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) {
+      flutter = iso;
+      break;
+    }
   }
   final isoId = flutter!.id!;
   final rootLibId = flutter.rootLib?.id!;
 
   final r = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree',
-    isolateId: isoId,
-    args: {'groupName': 'g-iscurrent', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
+      isolateId: isoId,
+      args: {'groupName': 'g-iscurrent', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
   final tree = (r.json?['result'] as Map?)?.cast<String, Object?>() ?? {};
 
   final scaffolds = <Map<String, Object?>>[];
@@ -29,17 +34,24 @@ void main(List<String> args) async {
     final desc = s['description'] ?? s['widgetRuntimeType'] ?? '?';
     if (id.isEmpty) continue;
     await ws.callServiceExtension('ext.flutter.inspector.setSelectionById',
-      isolateId: isoId, args: {'arg': id, 'objectGroup': 'g-iscurrent'});
+        isolateId: isoId, args: {'arg': id, 'objectGroup': 'g-iscurrent'});
     try {
-      final res = await ws.evaluate(isoId, rootLibId!,
-        '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!) ?? '
-        '  ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!.findAncestorStateOfType<NavigatorState>()!.context))'
-        '?.isCurrent.toString() ?? "null"');
+      final res = await ws.evaluate(
+          isoId,
+          rootLibId!,
+          '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!) ?? '
+          '  ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!.findAncestorStateOfType<NavigatorState>()!.context))'
+          '?.isCurrent.toString() ?? "null"');
       if (res is InstanceRef) print('  [$id] $desc → isCurrent: ${res.valueAsString}');
-    } catch (e) { print('  [$id] $desc → threw: $e'); }
+    } catch (e) {
+      print('  [$id] $desc → threw: $e');
+    }
   }
 
-  try { await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'g-iscurrent'}); } on Object {}
+  try {
+    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup',
+        isolateId: isoId, args: {'groupName': 'g-iscurrent'});
+  } on Object catch (_) {}
   await ws.dispose();
 }
 
@@ -47,7 +59,11 @@ void _findByType(Map<String, Object?> node, String type, List<Map<String, Object
   final t = node['widgetRuntimeType'] as String? ?? node['description'] as String? ?? '';
   if (t == type) results.add(node);
   final kids = node['children'];
-  if (kids is List) { for (final c in kids) { if (c is Map) _findByType(c.cast<String, Object?>(), type, results); } }
+  if (kids is List) {
+    for (final c in kids) {
+      if (c is Map) _findByType(c.cast<String, Object?>(), type, results);
+    }
+  }
 }
 
 String _toWs(String u) {

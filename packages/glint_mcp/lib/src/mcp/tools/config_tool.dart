@@ -36,8 +36,7 @@ class ConfigTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = args['op']! as String;
     final cfg = session.config;
@@ -45,11 +44,7 @@ class ConfigTool extends GlintTool {
     switch (op) {
       case 'get':
         return StructuredResponse(
-          summary: cfg
-              .toJson()
-              .entries
-              .map((e) => '${e.key} = ${e.value}')
-              .join('\n'),
+          summary: cfg.toJson().entries.map((e) => '${e.key} = ${e.value}').join('\n'),
           data: {'config': cfg.toJson()},
         );
       case 'set':

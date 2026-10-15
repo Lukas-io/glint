@@ -7,8 +7,10 @@ Future<Map<String, Object?>?> phoneStatus(String udid) async {
   try {
     final details = '${tmp.path}/details.json';
     final lock = '${tmp.path}/lock.json';
-    await Process.run('xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
-    await Process.run('xcrun', ['devicectl', 'device', 'info', 'lockState', '--device', udid, '--json-output', lock, '-q']);
+    await Process.run(
+        'xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
+    await Process.run(
+        'xcrun', ['devicectl', 'device', 'info', 'lockState', '--device', udid, '--json-output', lock, '-q']);
     final d = ((jsonDecode(File(details).readAsStringSync()) as Map)['result'] as Map?)?.cast<String, Object?>();
     if (d == null) return null;
     Map<String, Object?> part(String key) => (d[key] as Map?)?.cast<String, Object?>() ?? const {};
@@ -45,7 +47,8 @@ Future<String?> phoneTransport(String udid) async {
   final tmp = await Directory.systemTemp.createTemp('glint-phone-');
   try {
     final details = '${tmp.path}/details.json';
-    await Process.run('xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
+    await Process.run(
+        'xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
     final d = (jsonDecode(File(details).readAsStringSync()) as Map)['result'] as Map?;
     return (d?['connectionProperties'] as Map?)?['transportType'] as String?;
   } on Object {

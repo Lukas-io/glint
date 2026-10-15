@@ -10,8 +10,7 @@ import 'result.dart';
 
 final socketClearTool = Tool(
   name: 'socket_clear',
-  description:
-      'Wipes the LIVE in-VM socket profile. Does NOT touch the persistent DB '
+  description: 'Wipes the LIVE in-VM socket profile. Does NOT touch the persistent DB '
       '(socket_events rows stay queryable).',
   inputSchema: Schema.object(
     properties: {
@@ -61,9 +60,8 @@ FutureOr<CallToolResult> socketClear(CallToolRequest request) async {
     );
   }
   final isolateFilter = args['isolateId'] as String?;
-  final isolates = isolateFilter == null
-      ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id]
-      : [isolateFilter];
+  final isolates =
+      isolateFilter == null ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id] : [isolateFilter];
   final cleared = <String>[];
   final failed = <Map<String, Object?>>[];
   for (final isoId in isolates) {
@@ -92,8 +90,7 @@ FutureOr<CallToolResult> socketClear(CallToolRequest request) async {
     if (failed.isNotEmpty) 'failed': failed,
     'warnings': [
       'The persistent DB is NOT cleared. Use session_delete for DB-side removal.',
-      if (failed.isNotEmpty)
-        '${failed.length} isolate(s) failed to clear — see `failed` field.',
+      if (failed.isNotEmpty) '${failed.length} isolate(s) failed to clear — see `failed` field.',
     ],
     'nextSteps': const [
       'socket_list — confirm the live profile is empty',

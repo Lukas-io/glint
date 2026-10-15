@@ -23,8 +23,7 @@ class XcodeInfo {
   /// Why the version could not be read.
   final String? error;
 
-  int? get major =>
-      version == null ? null : int.tryParse(version!.split('.').first);
+  int? get major => version == null ? null : int.tryParse(version!.split('.').first);
 
   bool get tested => major != null && testedXcodeMajors.contains(major);
 }
@@ -42,13 +41,10 @@ Future<XcodeInfo> detectXcode({ProcessRunner run = Process.run}) async {
     return XcodeInfo(error: 'xcode-select -p failed: ${selected.stderr}'.trim());
   }
   if (!dir.contains('.app/')) {
-    return XcodeInfo(
-        developerDir: dir,
-        error: 'the selected developer dir is not an Xcode app ($dir)');
+    return XcodeInfo(developerDir: dir, error: 'the selected developer dir is not an Xcode app ($dir)');
   }
   final plist = '${dir.substring(0, dir.lastIndexOf('/'))}/Info.plist';
-  final read = await run(
-      'plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]);
+  final read = await run('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]);
   final version = ((read.stdout as String?) ?? '').trim();
   if (read.exitCode != 0 || version.isEmpty) {
     return XcodeInfo(developerDir: dir, error: 'could not read $plist');
@@ -57,8 +53,7 @@ Future<XcodeInfo> detectXcode({ProcessRunner run = Process.run}) async {
 }
 
 /// Asks the bridge for its protocol number; null with [error] when it cannot say.
-Future<({int? protocol, String? error})> bridgeHandshake(String path,
-    {ProcessRunner run = Process.run}) async {
+Future<({int? protocol, String? error})> bridgeHandshake(String path, {ProcessRunner run = Process.run}) async {
   try {
     final res = await run(path, ['version']).timeout(const Duration(seconds: 5));
     final m = RegExp(r'glint-iossim (\d+)').firstMatch('${res.stdout}');
@@ -166,9 +161,7 @@ Future<IosToolchain> checkIosToolchain(String? explicitBridge,
     final recent = _lastDownloadFailure;
     if (environment[noBridgeDownloadEnv] == 'true') {
       downloadError = '$noBridgeDownloadEnv is set';
-    } else if (fetch == null &&
-        recent != null &&
-        DateTime.now().difference(recent.at) < _retryAfter) {
+    } else if (fetch == null && recent != null && DateTime.now().difference(recent.at) < _retryAfter) {
       downloadError = recent.error;
     } else {
       try {
@@ -191,11 +184,10 @@ Future<IosToolchain> checkIosToolchain(String? explicitBridge,
     detectXcode(run: run),
     if (bridge.found) bridgeHandshake(bridge.path, run: run),
   ]);
-  var handshake = bridge.found
-      ? results[1] as ({int? protocol, String? error})
-      : null;
+  var handshake = bridge.found ? results[1] as ({int? protocol, String? error}) : null;
   String? skippedBuild;
-  final staleBecause = bridge.source == BridgeSource.build && handshake != null ? _staleBuild(bridge.path, handshake) : null;
+  final staleBecause =
+      bridge.source == BridgeSource.build && handshake != null ? _staleBuild(bridge.path, handshake) : null;
   if (staleBecause != null && environment[noBridgeDownloadEnv] != 'true') {
     final cached = cachedBridgePath(env: environment);
     try {
@@ -225,11 +217,16 @@ Future<IosToolchain> checkIosToolchain(String? explicitBridge,
 /// Why a local bridge build is stale, or null when it is current: it predates the handshake, speaks another protocol, or is older than the bridge sources beside it (an old checkout's build silently missing later fixes).
 String? _staleBuild(String path, ({int? protocol, String? error}) handshake) {
   if (handshake.protocol == null) return handshake.error ?? 'it gave no protocol';
-  if (handshake.protocol != expectedBridgeProtocol) return 'protocol ${handshake.protocol}, glint expects $expectedBridgeProtocol';
+  if (handshake.protocol != expectedBridgeProtocol) {
+    return 'protocol ${handshake.protocol}, glint expects $expectedBridgeProtocol';
+  }
   final build = File(path);
   final sources = Directory('${build.parent.parent.parent.path}/Sources');
   if (!build.existsSync() || !sources.existsSync()) return null;
   final built = build.lastModifiedSync();
-  final newer = sources.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.swift') && f.lastModifiedSync().isAfter(built));
+  final newer = sources
+      .listSync(recursive: true)
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.swift') && f.lastModifiedSync().isAfter(built));
   return newer.isEmpty ? null : 'it is older than its sources';
 }

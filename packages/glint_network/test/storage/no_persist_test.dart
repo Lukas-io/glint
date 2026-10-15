@@ -19,8 +19,7 @@ void main() {
   test('schema is fully usable in memory (create + insert + read back)', () {
     CapturesDatabase.open(inMemory: true);
     final dao = CapturesDao();
-    final sid = dao.createSession(
-        appName: 'eph', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    final sid = dao.createSession(appName: 'eph', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     CapturesDatabase.instance.raw.execute(
       'INSERT INTO http_requests(session_id, vm_id, method, url, host, path) '
       'VALUES (?,?,?,?,?,?)',
@@ -33,8 +32,7 @@ void main() {
   });
 
   test('a normal file-backed open is NOT ephemeral', () {
-    final dir =
-        Directory.systemTemp.createTempSync('no_persist_test_').path;
+    final dir = Directory.systemTemp.createTempSync('no_persist_test_').path;
     CapturesDatabase.open(dataDir: dir);
     expect(CapturesDatabase.instance.isEphemeral, isFalse);
     expect(CapturesDatabase.instance.path.endsWith('captures.db'), isTrue);

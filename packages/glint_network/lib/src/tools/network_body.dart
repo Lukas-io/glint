@@ -15,8 +15,7 @@ const int _kDefaultLen = 16384;
 
 final networkBodyTool = Tool(
   name: 'network_body',
-  description:
-      'Fetch more of a body that network_get truncated (its response had '
+  description: 'Fetch more of a body that network_get truncated (its response had '
       'truncated:true with a larger totalSize). Byte-range paged via '
       'offset+length; returns nextOffset to iterate. Auto-decodes text/binary.',
   inputSchema: Schema.object(
@@ -24,16 +23,14 @@ final networkBodyTool = Tool(
       'id': Schema.string(description: 'Request id from network_list / network_search.'),
       'which': Schema.string(description: '"request" or "response".'),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to '
+        description: 'Restrict to one isolate (id from network_status). Omit to '
             'auto-resolve.',
       ),
       'offset': Schema.int(
@@ -43,8 +40,7 @@ final networkBodyTool = Tool(
         description: 'Bytes to read (default 16384, cap 262144).',
       ),
       'decode': Schema.string(
-        description:
-            '"auto" (default — utf8 for text/json/xml content types, base64 '
+        description: '"auto" (default — utf8 for text/json/xml content types, base64 '
             'for binary), "utf8" (force, accepts malformed), or "base64".',
       ),
     },
@@ -58,14 +54,12 @@ FutureOr<CallToolResult> networkBody(CallToolRequest request) async {
   final id = args['id'] as String?;
   final whichArg = args['which'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — list captured requests and pick an id',
-            'network_search query:"..." — find a request by content',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — list captured requests and pick an id',
+        'network_search query:"..." — find a request by content',
+      ],
+    });
   }
   if (whichArg != 'request' && whichArg != 'response') {
     return errorResult(
@@ -86,23 +80,18 @@ FutureOr<CallToolResult> networkBody(CallToolRequest request) async {
 
   final offset = (args['offset'] as int?) ?? 0;
   final lengthArg = (args['length'] as int?) ?? _kDefaultLen;
-  final length = lengthArg <= 0
-      ? _kDefaultLen
-      : (lengthArg > _kMaxBodyChunk ? _kMaxBodyChunk : lengthArg);
+  final length = lengthArg <= 0 ? _kDefaultLen : (lengthArg > _kMaxBodyChunk ? _kMaxBodyChunk : lengthArg);
   final decode = (args['decode'] as String?) ?? 'auto';
   if (decode != 'auto' && decode != 'utf8' && decode != 'base64') {
-    return errorResult('`decode` must be one of: auto, utf8, base64.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with decode:"auto" (recommended)'],
-        });
+    return errorResult('`decode` must be one of: auto, utf8, base64.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with decode:"auto" (recommended)'],
+    });
   }
 
   final int sessionIdForResp = scope.sessionId;
 
   try {
-    final fetch = await fetchBodyBytes(scope, id, which,
-        isolateId: args['isolateId'] as String?);
+    final fetch = await fetchBodyBytes(scope, id, which, isolateId: args['isolateId'] as String?);
     if (fetch.error != null) return fetch.error!;
     final bytes = fetch.bytes;
     final mimeType = fetch.mimeType;
@@ -169,15 +158,13 @@ FutureOr<CallToolResult> networkBody(CallToolRequest request) async {
       'nextSteps': nextSteps,
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('body fetch failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'id': id,
-          'which': which,
-          'nextSteps': const [
-            'network_get id:<id> — confirm the request still exists',
-            'network_status — check zombie-DTD state if reading live',
-          ],
-        });
+    return errorResult('body fetch failed: $e', kind: ErrorKind.internal, extra: {
+      'id': id,
+      'which': which,
+      'nextSteps': const [
+        'network_get id:<id> — confirm the request still exists',
+        'network_status — check zombie-DTD state if reading live',
+      ],
+    });
   }
 }

@@ -19,8 +19,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('alert_severity_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
   });
 
   tearDown(() {
@@ -38,8 +37,7 @@ void main() {
         signature: 'sig-upper',
       );
       final stored = CapturesDatabase.instance.raw
-          .select('SELECT severity FROM alerts WHERE session_id=?', [sid])
-          .first['severity'];
+          .select('SELECT severity FROM alerts WHERE session_id=?', [sid]).first['severity'];
       expect(stored, 'error');
       expect(dao.pendingAlertCount(sessionId: sid, severityMin: 'warning'), 1);
     });
@@ -66,8 +64,7 @@ void main() {
       ('alerts_clear', alertsClear),
     ]) {
       test(name, () async {
-        final r = await call(CallToolRequest(
-            name: name, arguments: {'sessionId': sid, 'severityMin': 'loud'}));
+        final r = await call(CallToolRequest(name: name, arguments: {'sessionId': sid, 'severityMin': 'loud'}));
         expect(r.isError, isTrue);
         expect(r.structuredContent!['errorKind'], 'bad_argument');
         expect(r.structuredContent!['error'], contains('loud'));
@@ -80,8 +77,8 @@ void main() {
     setUp(() => slowBefore = AlertRules.instance.slowThresholdMs);
     tearDown(() => AlertRules.instance.slowThresholdMs = slowBefore);
 
-    Future<CallToolResult> set(Object? value) => Future.value(alertsConfig(
-        CallToolRequest(name: 'alerts_config', arguments: {'set': value})));
+    Future<CallToolResult> set(Object? value) =>
+        Future.value(alertsConfig(CallToolRequest(name: 'alerts_config', arguments: {'set': value})));
 
     test('a non-object set is bad_argument, not a crash', () async {
       final r = await set('slowThresholdMs=5000');

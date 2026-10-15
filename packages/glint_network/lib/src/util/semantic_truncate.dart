@@ -40,7 +40,7 @@ const int kSemanticInputCap = 262144;
 ///   trailing marker `{"_truncated": "<dropped> more, <shown> of <total>"}`
 ///   so the agent sees the shape but not the bulk.
 /// - String values longer than [stringLeafBytes] are clipped with a
-///   "...(<n> chars)" suffix.
+///   `...(<n> chars)` suffix.
 /// - Objects are preserved key-for-key (the SHAPE of the response is what
 ///   the agent needs); recursion descends into values.
 ///
@@ -106,8 +106,7 @@ Object? _walk(Object? node, _TruncState state) {
       state.truncated = true;
       final shown = node.sublist(0, state.arraySampleSize).map((e) => _walk(e, state)).toList();
       shown.add({
-        '_truncated':
-            '${node.length - state.arraySampleSize} more, ${state.arraySampleSize} of ${node.length} shown',
+        '_truncated': '${node.length - state.arraySampleSize} more, ${state.arraySampleSize} of ${node.length} shown',
       });
       return shown;
     }
@@ -156,9 +155,7 @@ SemanticTruncation truncateHtml(String input, {required int maxBytes}) {
   );
 }
 
-final RegExp _htmlScriptRegex =
-    RegExp(r'<script\b[^>]*>[\s\S]*?</script>', caseSensitive: false);
-final RegExp _htmlStyleRegex =
-    RegExp(r'<style\b[^>]*>[\s\S]*?</style>', caseSensitive: false);
+final RegExp _htmlScriptRegex = RegExp(r'<script\b[^>]*>[\s\S]*?</script>', caseSensitive: false);
+final RegExp _htmlStyleRegex = RegExp(r'<style\b[^>]*>[\s\S]*?</style>', caseSensitive: false);
 final RegExp _htmlCommentRegex = RegExp(r'<!--[\s\S]*?-->');
 final RegExp _htmlWhitespaceRegex = RegExp(r'\s+');

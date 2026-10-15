@@ -18,8 +18,7 @@ class VmRpcTimeoutException implements Exception {
   final Duration deadline;
 
   @override
-  String toString() =>
-      'VM service did not respond to $operation within '
+  String toString() => 'VM service did not respond to $operation within '
       '${deadline.inMilliseconds}ms — the app may be paused at a breakpoint, '
       'backgrounded, or the DDS is unresponsive.';
 }
@@ -78,20 +77,18 @@ class VmClient {
       return false;
     }
   }
+
   Uri? get connectedUri => _connectedUri;
 
   /// Back-compat: first known HTTP-profiling isolate id, or null if no
   /// discovery has run yet (or the connected VM has none). Prefer
   /// [httpProfilingIsolates] in new code.
-  String? get isolateId =>
-      _isolates.isEmpty ? null : _isolates.keys.first;
+  String? get isolateId => _isolates.isEmpty ? null : _isolates.keys.first;
 
   /// Snapshot of every currently-tracked HTTP-profiling isolate.
-  List<IsolateInfo> get httpProfilingIsolates =>
-      List.unmodifiable(_isolates.values);
+  List<IsolateInfo> get httpProfilingIsolates => List.unmodifiable(_isolates.values);
 
-  VmService get service =>
-      _service ?? (throw StateError('VM service is not connected.'));
+  VmService get service => _service ?? (throw StateError('VM service is not connected.'));
 
   /// Per-RPC deadline. Every `ext.dart.io.*` call is bounded by this so a
   /// live-but-unresponsive VM can never hang a tool indefinitely. Defaults to
@@ -100,8 +97,7 @@ class VmClient {
   static final Duration rpcDeadline = _deadlineFromEnv();
 
   static Duration _deadlineFromEnv() {
-    final raw =
-        int.tryParse(networkEnv['GLINT_NETWORK_RPC_TIMEOUT_MS'] ?? '');
+    final raw = int.tryParse(networkEnv['GLINT_NETWORK_RPC_TIMEOUT_MS'] ?? '');
     if (raw == null || raw < 1000) return const Duration(seconds: 10);
     return Duration(milliseconds: raw);
   }
@@ -268,8 +264,7 @@ class VmClient {
   /// Adds the `Dart` stream to the VM's recorded timeline streams (dart:io writes its WebSocket events there), keeping any streams DevTools already records. False when the VM refuses.
   Future<bool> recordDartTimelineStream() async {
     try {
-      final flags =
-          await _bounded('getVMTimelineFlags', service.getVMTimelineFlags());
+      final flags = await _bounded('getVMTimelineFlags', service.getVMTimelineFlags());
       final recorded = flags.recordedStreams ?? const <String>[];
       if (recorded.contains('Dart')) return true;
       await _bounded(
@@ -290,17 +285,15 @@ class VmClient {
   Future<bool?> checkWebSocketTimelineSupport(String isolateId) async {
     try {
       final isolate = await _bounded('getIsolate', service.getIsolate(isolateId));
-      final http = (isolate.libraries ?? const <LibraryRef>[])
-          .where((l) => l.uri == 'dart:_http')
-          .firstOrNull;
+      final http = (isolate.libraries ?? const <LibraryRef>[]).where((l) => l.uri == 'dart:_http').firstOrNull;
       if (http?.id == null) return null;
       final lib = await _bounded(
         'getObject',
         service.getObject(isolateId, http!.id!),
       );
       if (lib is! Library) return null;
-      return _webSocketTimelineSupported = (lib.classes ?? const <ClassRef>[])
-          .any((c) => c.name == '_WebSocketTimelineLogger');
+      return _webSocketTimelineSupported =
+          (lib.classes ?? const <ClassRef>[]).any((c) => c.name == '_WebSocketTimelineLogger');
     } on Object {
       return null;
     }
@@ -326,9 +319,7 @@ class VmClient {
     );
     return [
       for (final e in timeline.traceEvents ?? const <TimelineEvent>[])
-        if (e.json case final json?
-            when '${json['name']}'.startsWith('WebSocket.'))
-          json.cast<String, Object?>(),
+        if (e.json case final json? when '${json['name']}'.startsWith('WebSocket.')) json.cast<String, Object?>(),
     ];
   }
 
@@ -394,5 +385,4 @@ class VmClient {
     }
     return _isolates.keys.first;
   }
-
 }

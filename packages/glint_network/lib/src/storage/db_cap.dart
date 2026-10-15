@@ -113,8 +113,7 @@ class DbCapManager {
     // 3. Whole oldest sessions, if still over. Estimate how many to drop from
     // the average evictable-session size so we vacuum once, not per session.
     if (size > cap) {
-      final evictable =
-          _dao.sessionIdsOldestFirst(protectedSessionIds: protected);
+      final evictable = _dao.sessionIdsOldestFirst(protectedSessionIds: protected);
       if (evictable.isNotEmpty) {
         final avg = (size / evictable.length).ceil();
         var toDrop = ((size - target) / avg).ceil();
@@ -138,8 +137,7 @@ class DbCapManager {
       atMs: nowMs ?? DateTime.now().millisecondsSinceEpoch,
     );
 
-    final droppedAnything =
-        bodiesDropped > 0 || logsDropped > 0 || sessionsDropped > 0;
+    final droppedAnything = bodiesDropped > 0 || logsDropped > 0 || sessionsDropped > 0;
     if (!droppedAnything) {
       // Over cap, but everything left belongs to an attached session — we never
       // evict live data. Warn once on transition; don't clobber the last real

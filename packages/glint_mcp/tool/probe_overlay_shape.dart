@@ -1,5 +1,7 @@
 /// Probe A1.1: open a dialog via VM evaluate on a known inner context,
 /// then dump the summary tree to confirm where dialog content lands.
+library;
+
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -14,14 +16,21 @@ void main(List<String> args) async {
     if (ref.id == null) continue;
     final iso = await ws.getIsolate(ref.id!);
     if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) {
-      flutter = iso; break;
+      flutter = iso;
+      break;
     }
   }
-  if (flutter == null) { print('No Flutter isolate'); return; }
+  if (flutter == null) {
+    print('No Flutter isolate');
+    return;
+  }
   final isoId = flutter.id!;
   final rootLibId = flutter.rootLib?.id;
   print('rootLib = ${flutter.rootLib?.uri}');
-  if (rootLibId == null) { print('No rootLib'); return; }
+  if (rootLibId == null) {
+    print('No rootLib');
+    return;
+  }
 
   // Step 1: read tree, find a Scaffold widget (has Navigator ancestor).
   final treeResp1 = await ws.callServiceExtension(
@@ -32,7 +41,10 @@ void main(List<String> args) async {
   final tree1 = (treeResp1.json?['result'] as Map?)?.cast<String, Object?>();
   final scaffoldId = _findTypeId(tree1 ?? {}, 'Scaffold');
   print('\nFirst Scaffold inspectorId: $scaffoldId');
-  if (scaffoldId == null) { print('No Scaffold found'); return; }
+  if (scaffoldId == null) {
+    print('No Scaffold found');
+    return;
+  }
 
   await ws.callServiceExtension(
     'ext.flutter.inspector.setSelectionById',
@@ -44,19 +56,28 @@ void main(List<String> args) async {
   print('\n--- eval test (check context) ---');
   try {
     final raw = await ws.evaluate(isoId, rootLibId,
-      'ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "no-route"');
-    if (raw is InstanceRef) print('route = ${raw.valueAsString}');
-    else print('eval returned: ${raw.runtimeType}');
-  } catch (e) { print('eval threw: $e'); }
+        'ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "no-route"');
+    if (raw is InstanceRef) {
+      print('route = ${raw.valueAsString}');
+    } else {
+      print('eval returned: ${raw.runtimeType}');
+    }
+  } catch (e) {
+    print('eval threw: $e');
+  }
 
   // Step 3: push dialog.
   print('\n--- pushing dialog ---');
   try {
-    final raw = await ws.evaluate(isoId, rootLibId,
-      'Navigator.of(WidgetInspectorService.instance.selection.currentElement!)'
-      '.push(DialogRoute(context: WidgetInspectorService.instance.selection.currentElement!, builder: (_) => AlertDialog(title: Text("probe-open"), content: Text("tree check"))))');
+    final raw = await ws.evaluate(
+        isoId,
+        rootLibId,
+        'Navigator.of(WidgetInspectorService.instance.selection.currentElement!)'
+        '.push(DialogRoute(context: WidgetInspectorService.instance.selection.currentElement!, builder: (_) => AlertDialog(title: Text("probe-open"), content: Text("tree check"))))');
     print('push result: ${raw.runtimeType}');
-  } catch (e) { print('push threw: $e'); }
+  } catch (e) {
+    print('push threw: $e');
+  }
 
   await Future<void>.delayed(const Duration(milliseconds: 500));
 
@@ -68,16 +89,19 @@ void main(List<String> args) async {
     args: {'groupName': 'probe-dialog', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'},
   );
   final tree2 = (treeResp2.json?['result'] as Map?)?.cast<String, Object?>();
-  if (tree2 == null) { print('No tree result'); }
-  else { _dumpNode(tree2, 0, maxDepth: 12); }
+  if (tree2 == null) {
+    print('No tree result');
+  } else {
+    _dumpNode(tree2, 0, maxDepth: 12);
+  }
 
   // Clean up.
   try {
-    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup',
-        isolateId: isoId, args: {'groupName': 'probe-ctx'});
+    await ws
+        .callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'probe-ctx'});
     await ws.callServiceExtension('ext.flutter.inspector.disposeGroup',
         isolateId: isoId, args: {'groupName': 'probe-dialog'});
-  } on Object {}
+  } on Object catch (_) {}
 
   await ws.dispose();
 }
@@ -98,7 +122,10 @@ String? _findTypeId(Map<String, Object?> node, String type) {
 }
 
 void _dumpNode(Map<String, Object?> node, int depth, {int maxDepth = 12}) {
-  if (depth > maxDepth) { print('${'  ' * depth}…'); return; }
+  if (depth > maxDepth) {
+    print('${'  ' * depth}…');
+    return;
+  }
   final type = node['widgetRuntimeType'] as String? ?? node['description'] as String? ?? '?';
   final id = node['valueId'] as String? ?? '-';
   final local = node['createdByLocalProject'] == true ? '✓' : '·';

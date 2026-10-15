@@ -69,17 +69,17 @@ class IosSimBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> tapSequence(List<({int x, int y})> points,
-      {required int intervalMs}) {
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) {
     return _run(_BridgeCommand.taps, [
       udid,
       '$deviceLogicalWidth',
       '$deviceLogicalHeight',
       '$intervalMs',
-      for (final pt in points) ...() {
-        final p = _logical(pt.x, pt.y);
-        return ['${p.x}', '${p.y}'];
-      }(),
+      for (final pt in points)
+        ...() {
+          final p = _logical(pt.x, pt.y);
+          return ['${p.x}', '${p.y}'];
+        }(),
     ]);
   }
 
@@ -115,29 +115,27 @@ class IosSimBackend implements InteractionBackend {
       udid,
       '$deviceLogicalWidth',
       '$deviceLogicalHeight',
-      '${from.x}', '${from.y}',
-      '${to.x}', '${to.y}',
+      '${from.x}',
+      '${from.y}',
+      '${to.x}',
+      '${to.y}',
       '$durationMs',
       if (holdMs > 0) '$holdMs',
     ]);
   }
 
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) => _run(
-      _BridgeCommand.type, [udid, text, if (keyDelayMs != null) '$keyDelayMs']);
+  Future<void> typeText(String text, {int? keyDelayMs}) =>
+      _run(_BridgeCommand.type, [udid, text, if (keyDelayMs != null) '$keyDelayMs']);
 
   @override
-  Future<void> pressKey(KeyName key,
-          {int count = 1, Set<KeyModifier> modifiers = const {}}) =>
-      _run(_BridgeCommand.key,
-          [udid, '${key.hidUsage}', '$count', '${hidModifierMask(modifiers)}']);
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) =>
+      _run(_BridgeCommand.key, [udid, '${key.hidUsage}', '$count', '${hidModifierMask(modifiers)}']);
 
   @override
-  Future<void> selectAll() =>
-      _run(_BridgeCommand.key, [udid, '4', '1', '8']); // usage 0x04=a, mask 8=cmd
+  Future<void> selectAll() => _run(_BridgeCommand.key, [udid, '4', '1', '8']); // usage 0x04=a, mask 8=cmd
   @override
-  Future<ScreenRecording> startRecording(String path) =>
-      SimctlRecording.start(udid: udid, path: path);
+  Future<ScreenRecording> startRecording(String path) => SimctlRecording.start(udid: udid, path: path);
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
@@ -173,7 +171,7 @@ class IosSimBackend implements InteractionBackend {
         throw UnsupportedBackendAction(
           label,
           'pressHardwareButton(${button.name}): not wired on Xcode 26 yet — '
-              'see source-of-truth §13',
+          'see source-of-truth §13',
         );
     }
   }
@@ -185,8 +183,10 @@ class IosSimBackend implements InteractionBackend {
       udid,
       '$deviceLogicalWidth',
       '$deviceLogicalHeight',
-      '8', '$midY',
-      '${deviceLogicalWidth * 0.8}', '$midY',
+      '8',
+      '$midY',
+      '${deviceLogicalWidth * 0.8}',
+      '$midY',
       '350',
     ]);
   }
@@ -197,8 +197,10 @@ class IosSimBackend implements InteractionBackend {
       udid,
       '$deviceLogicalWidth',
       '$deviceLogicalHeight',
-      '$centerX', '${deviceLogicalHeight - 1}',
-      '$centerX', '${deviceLogicalHeight / 2}',
+      '$centerX',
+      '${deviceLogicalHeight - 1}',
+      '$centerX',
+      '${deviceLogicalHeight / 2}',
       '200',
     ]);
   }
@@ -208,8 +210,7 @@ class IosSimBackend implements InteractionBackend {
     await _run(_BridgeCommand.probeButton, [udid, '1']);
     await _awaitLockState(true);
     // Settle into display-off so unlock knows to wake it; the flag trails the display.
-    await _awaitSpringboardFlag('hasBlankedScreen', true,
-        within: const Duration(seconds: 6));
+    await _awaitSpringboardFlag('hasBlankedScreen', true, within: const Duration(seconds: 6));
   }
 
   /// Face ID match Darwin notification authenticates; after about a second the bottom-edge swipe moves past the authenticated lock screen. Each round re-reads lock and display state, waking a dark display first, since matching behind a dark display unlocks without lighting it.
@@ -248,8 +249,7 @@ class IosSimBackend implements InteractionBackend {
   Future<bool?> _displayBlanked() => _springboardFlag('hasBlankedScreen');
 
   /// Polls a SpringBoard flag until it reads [value] or [within] passes.
-  Future<void> _awaitSpringboardFlag(String name, bool value,
-      {Duration within = const Duration(seconds: 2)}) async {
+  Future<void> _awaitSpringboardFlag(String name, bool value, {Duration within = const Duration(seconds: 2)}) async {
     final deadline = DateTime.now().add(within);
     while (DateTime.now().isBefore(deadline)) {
       if (await _springboardFlag(name) == value) return;
@@ -286,7 +286,8 @@ class IosSimBackend implements InteractionBackend {
   Future<void> warm() async {}
 
   @override
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+  Future<void> pinch(
+          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
       throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
 
   @override
@@ -296,7 +297,12 @@ class IosSimBackend implements InteractionBackend {
   /// Reads `com.apple.springboard.<name>` inside the simulator: true when non-zero, null when unreadable.
   Future<bool?> _springboardFlag(String name) async {
     final result = await Process.run('xcrun', [
-      'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.$name',
+      'simctl',
+      'spawn',
+      udid,
+      'notifyutil',
+      '-g',
+      'com.apple.springboard.$name',
     ]);
     if (result.exitCode != 0) return null;
     final m = RegExp('$name\\s+(\\d+)').firstMatch((result.stdout as String?) ?? '');
@@ -325,7 +331,11 @@ class IosSimBackend implements InteractionBackend {
     if (blocker != null) {
       throw IosToolchainBlocked(label, blocker, toolchain!.nextSteps);
     }
-    final argv = [if (hidMode != 'auto') ...['--hid', hidMode], cmd.cliName, ...args];
+    final argv = [
+      if (hidMode != 'auto') ...['--hid', hidMode],
+      cmd.cliName,
+      ...args
+    ];
     final result = await run(binaryPath, argv);
     if (result.exitCode != 0) {
       throw BackendToolError(

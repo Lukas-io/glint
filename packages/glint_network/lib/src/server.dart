@@ -73,8 +73,7 @@ String _legacyInstructions() {
 /// MCP server exposing Flutter DevTools data via DTD + VM service, with
 /// persistent capture sessions in SQLite, full-text search, proactive alerts,
 /// CLI-driven capability gating, and runtime configurability.
-base class FlutterNetworkMcpServer extends MCPServer
-    with ToolsSupport, ResourcesSupport {
+base class FlutterNetworkMcpServer extends MCPServer with ToolsSupport, ResourcesSupport {
   FlutterNetworkMcpServer.fromStreamChannel(
     super.channel, {
     this.defaultDtdUri,
@@ -104,10 +103,7 @@ base class FlutterNetworkMcpServer extends MCPServer
     final caps = CapabilityConfig.instance;
 
     _register(networkStatusTool, (req) => networkStatus(req, defaultDtdUri));
-    _register(
-        networkWaitForAppTool,
-        (req) => networkWaitForApp(req, defaultDtdUri,
-            notifyProgress: notifyProgress));
+    _register(networkWaitForAppTool, (req) => networkWaitForApp(req, defaultDtdUri, notifyProgress: notifyProgress));
     _register(networkAttachTool, (req) => networkAttach(req, defaultDtdUri));
     _register(networkDetachTool, networkDetach);
     _register(networkDiscoverDtdTool, networkDiscoverDtd);

@@ -4,7 +4,6 @@
 //   dart run tool/probe_hittest.dart <vm-uri> [needle]
 
 import 'package:glint_mcp/glint.dart';
-import 'package:glint_mcp/perception.dart';
 
 Future<void> main(List<String> args) async {
   final vm = VmServiceRuntime();
@@ -42,8 +41,7 @@ Future<void> main(List<String> args) async {
   ];
   for (final e in exprs) {
     try {
-      await vm.setInspectorSelection(
-          inspectorId: target.inspectorId, groupName: scene.groupName);
+      await vm.setInspectorSelection(inspectorId: target.inspectorId, groupName: scene.groupName);
       final r = await vm.evaluate(e);
       print('OK  [$e] => ${r.valueAsString ?? r.kind}');
     } on Object catch (err) {

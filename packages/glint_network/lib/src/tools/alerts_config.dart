@@ -12,8 +12,7 @@ const _ruleKeys = AlertRules.ruleKeys;
 
 final alertsConfigTool = Tool(
   name: 'alerts_config',
-  description:
-      'Read or update alert rules. No args (or get:true) reads; '
+  description: 'Read or update alert rules. No args (or get:true) reads; '
       'set:{slowThresholdMs?, rules?:{rule_key:bool}} mutates; invalid '
       'values are skipped and listed in rejected. Applies immediately; '
       'per-process, resets on restart.',
@@ -27,8 +26,7 @@ final alertsConfigTool = Tool(
             description: 'http_slow trigger threshold in ms (>0).',
           ),
           'retentionDays': Schema.int(
-            description:
-                'Auto-expire alerts from non-attached sessions older than '
+            description: 'Auto-expire alerts from non-attached sessions older than '
                 'this many days (keeps the pending banner recent). 0 = keep '
                 'forever. Env default GLINT_NETWORK_ALERT_RETENTION_DAYS '
                 '(14). Applies to the next hourly sweep; per-process.',
@@ -60,9 +58,7 @@ FutureOr<CallToolResult> alertsConfig(CallToolRequest request) async {
       },
     );
   }
-  final patch = rawSet == null
-      ? null
-      : validateAlertsConfigPatch(Map<String, Object?>.from(rawSet as Map));
+  final patch = rawSet == null ? null : validateAlertsConfigPatch(Map<String, Object?>.from(rawSet as Map));
   if (patch != null && patch.applied.isEmpty && patch.rejected.isNotEmpty) {
     return errorResult(
       'alerts_config: nothing applied; every value in `set` was rejected.',
@@ -176,8 +172,7 @@ AlertsConfigPatch validateAlertsConfigPatch(Map<String, Object?> set) {
         for (final rule in value.entries) {
           final field = 'rules.${rule.key}';
           if (!_ruleKeys.contains(rule.key)) {
-            reject(field, rule.value,
-                'unknown rule; valid: ${_ruleKeys.join(", ")}');
+            reject(field, rule.value, 'unknown rule; valid: ${_ruleKeys.join(", ")}');
           } else if (rule.value is! bool) {
             reject(field, rule.value, 'must be true or false');
           } else {
@@ -186,8 +181,7 @@ AlertsConfigPatch validateAlertsConfigPatch(Map<String, Object?> set) {
           }
         }
       default:
-        reject(entry.key, value,
-            'unknown setting; valid: slowThresholdMs, retentionDays, rules');
+        reject(entry.key, value, 'unknown setting; valid: slowThresholdMs, retentionDays, rules');
     }
   }
   return (

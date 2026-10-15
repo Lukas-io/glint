@@ -40,8 +40,21 @@ Future<({File pcm, String label})> micAudio(String source,
     if (!input.existsSync()) throw GalleryError('no audio file at $source', '');
     label = input.uri.pathSegments.last;
   }
-  final r = await runHost(requireHostBinary('ffmpeg'),
-      ['-y', '-hide_banner', '-loglevel', 'error', '-i', input.path, '-f', 's16le', '-ac', '1', '-ar', '$micSampleRate', out.path]);
+  final r = await runHost(requireHostBinary('ffmpeg'), [
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-i',
+    input.path,
+    '-f',
+    's16le',
+    '-ac',
+    '1',
+    '-ar',
+    '$micSampleRate',
+    out.path
+  ]);
   if (r.exitCode != 0 || out.lengthSync() < 2) throw GalleryError('ffmpeg could not decode $label', r.errTail());
   return (pcm: out, label: label);
 }

@@ -100,13 +100,10 @@ class AnomalyDetector {
     required List<Map<String, Object?>> currentRows,
     required List<Map<String, Object?>> baselineRows,
   }) {
-    final currentBuckets =
-        summarizeRequests(currentRows, minCount: minRequests);
-    final baselineBuckets =
-        summarizeRequests(baselineRows, minCount: minRequests);
+    final currentBuckets = summarizeRequests(currentRows, minCount: minRequests);
+    final baselineBuckets = summarizeRequests(baselineRows, minCount: minRequests);
     final baselineByKey = <String, Map<String, Object?>>{
-      for (final b in baselineBuckets)
-        '${b['method']}|${b['host']}|${b['pathTemplate']}': b,
+      for (final b in baselineBuckets) '${b['method']}|${b['host']}|${b['pathTemplate']}': b,
     };
 
     final out = <DetectedAnomaly>[];
@@ -127,8 +124,7 @@ class AnomalyDetector {
           severity: 'warning',
           title: '${c['endpoint']} p95 ${currentP95}ms vs baseline '
               '${baselineP95}ms (${mult}x)',
-          detail:
-              'Current 30s p95 (${currentP95}ms over ${c['count']} requests) '
+          detail: 'Current 30s p95 (${currentP95}ms over ${c['count']} requests) '
               'is ${mult}x the 5min baseline (${baselineP95}ms over '
               '${baseline['count']} requests). Threshold: '
               '${latencyMultiplier}x.',
@@ -138,9 +134,7 @@ class AnomalyDetector {
 
       final currentErr = (c['errorRate'] as num).toDouble();
       final baselineErr = (baseline['errorRate'] as num).toDouble();
-      if (currentErr > errorRateAbsFloor &&
-          baselineErr > 0 &&
-          currentErr > errorRateMultiplier * baselineErr) {
+      if (currentErr > errorRateAbsFloor && baselineErr > 0 && currentErr > errorRateMultiplier * baselineErr) {
         final mult = (currentErr / baselineErr).toStringAsFixed(1);
         out.add(DetectedAnomaly(
           kind: 'http_anomaly_errors',
@@ -148,8 +142,7 @@ class AnomalyDetector {
           title: '${c['endpoint']} error rate '
               '${(currentErr * 100).toStringAsFixed(1)}% vs baseline '
               '${(baselineErr * 100).toStringAsFixed(1)}% (${mult}x)',
-          detail:
-              'Current 30s error rate ${(currentErr * 100).toStringAsFixed(1)}% '
+          detail: 'Current 30s error rate ${(currentErr * 100).toStringAsFixed(1)}% '
               'across ${c['count']} requests; 5min baseline '
               '${(baselineErr * 100).toStringAsFixed(1)}% across '
               '${baseline['count']} requests. Floor: '
@@ -164,9 +157,7 @@ class AnomalyDetector {
 
   Future<void> _checkSession(int sessionId, int nowUs) async {
     final currentStartUs = nowUs - currentWindow.inMicroseconds;
-    final baselineStartUs = nowUs -
-        currentWindow.inMicroseconds -
-        baselineWindow.inMicroseconds;
+    final baselineStartUs = nowUs - currentWindow.inMicroseconds - baselineWindow.inMicroseconds;
 
     final dao = CapturesDao();
     final rows = dao.queryHttpRequests(

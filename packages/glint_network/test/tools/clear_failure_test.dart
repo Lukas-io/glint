@@ -19,9 +19,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('clear_failure_test_');
     CapturesDatabase.open(dataDir: dir.path);
-    sid = CapturesDao().createSession(
-        appName: 'a', vmServiceUri: 'ws://gone', isolateId: null,
-        projectPath: null);
+    sid = CapturesDao().createSession(appName: 'a', vmServiceUri: 'ws://gone', isolateId: null, projectPath: null);
     SessionRegistry.instance.register(AttachedSession(
       id: sid,
       appName: 'a',
@@ -47,9 +45,7 @@ void main() {
     ('socket_clear', socketClear),
   ]) {
     test('$name fails when no isolate was cleared', () async {
-      final r = await call(CallToolRequest(
-          name: name,
-          arguments: {'sessionId': sid, 'isolateId': 'isolates/1'}));
+      final r = await call(CallToolRequest(name: name, arguments: {'sessionId': sid, 'isolateId': 'isolates/1'}));
       final sc = r.structuredContent!;
       expect(r.isError, isTrue);
       expect(sc['cleared'], isFalse);

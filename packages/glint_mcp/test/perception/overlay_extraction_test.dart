@@ -2,8 +2,7 @@ import 'package:glint_mcp/src/perception/scene_node.dart';
 import 'package:glint_mcp/src/perception/scene_reader.dart';
 import 'package:test/test.dart';
 
-SceneNode _n(String label,
-    {String? glintId, String? text, bool local = false, List<SceneNode> children = const []}) {
+SceneNode _n(String label, {String? glintId, String? text, bool local = false, List<SceneNode> children = const []}) {
   return SceneNode(
     textPreview: text,
     createdByLocalProject: local,
@@ -19,11 +18,9 @@ SceneNode _n(String label,
 }
 
 /// Wrap entries under Overlay > _Theater as the live tree does.
-SceneNode _overlayTree(List<SceneNode> entries) =>
-    _n('Overlay', children: [_n('_Theater', children: entries)]);
+SceneNode _overlayTree(List<SceneNode> entries) => _n('Overlay', children: [_n('_Theater', children: entries)]);
 
-SceneNode _entry(List<SceneNode> children) =>
-    _n('_OverlayEntryWidget', children: children);
+SceneNode _entry(List<SceneNode> children) => _n('_OverlayEntryWidget', children: children);
 
 void main() {
   group('overlay extraction', () {
@@ -90,7 +87,9 @@ void main() {
 
     test('a page route barrier below the top page is not a covering barrier', () {
       final tree = _overlayTree([
-        _entry([_n('IgnorePointer', children: [_n('ModalBarrier')])]),
+        _entry([
+          _n('IgnorePointer', children: [_n('ModalBarrier')])
+        ]),
         _entry([_n('Scaffold')]),
       ]);
       expect(SceneReader.debugOverlayContentIds(tree), isEmpty);
@@ -99,7 +98,9 @@ void main() {
 
     test('a dialog barrier above the top page covers it', () {
       final tree = _overlayTree([
-        _entry([_n('IgnorePointer', children: [_n('ModalBarrier')])]),
+        _entry([
+          _n('IgnorePointer', children: [_n('ModalBarrier')])
+        ]),
         _entry([_n('Scaffold')]),
         _entry([_n('ModalBarrier')]),
         _entry([_n('AlertDialog', glintId: 'alert', local: true)]),

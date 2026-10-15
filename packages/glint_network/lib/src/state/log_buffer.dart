@@ -47,8 +47,7 @@ class LogBuffer {
   /// `GLINT_NETWORK_LOG_BUFFER_SIZE`), clamped 50 to [maxCapacity]. Default [defaultCapacity].
   static int _envCapacity() {
     final env = networkEnv;
-    final raw = env['GLINT_NETWORK_LOG_BUFFER'] ??
-        env['GLINT_NETWORK_LOG_BUFFER_SIZE'];
+    final raw = env['GLINT_NETWORK_LOG_BUFFER'] ?? env['GLINT_NETWORK_LOG_BUFFER_SIZE'];
     final parsed = raw == null ? null : int.tryParse(raw);
     if (parsed == null) return defaultCapacity;
     if (parsed < 50) return 50;
@@ -109,11 +108,8 @@ class LogBuffer {
     int limit = 100,
   }) {
     final lc = loggerContains?.toLowerCase();
-    final mcTerms = messageContains
-            ?.where((t) => t.trim().isNotEmpty)
-            .map((t) => t.toLowerCase())
-            .toList() ??
-        const <String>[];
+    final mcTerms =
+        messageContains?.where((t) => t.trim().isNotEmpty).map((t) => t.toLowerCase()).toList() ?? const <String>[];
     final sc = sourceContains?.toLowerCase();
     final iso = isolateId;
     final result = <LogEntry>[];

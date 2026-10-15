@@ -22,8 +22,7 @@ class _FakeVm extends VmClient {
   int clockUs = 1000000;
 
   @override
-  List<IsolateInfo> get httpProfilingIsolates =>
-      [for (final id in requestsByIsolate.keys) IsolateInfo(id: id)];
+  List<IsolateInfo> get httpProfilingIsolates => [for (final id in requestsByIsolate.keys) IsolateInfo(id: id)];
 
   @override
   Future<HttpProfile> getHttpProfileForIsolate(
@@ -43,8 +42,7 @@ class _FakeVm extends VmClient {
   }
 }
 
-HttpProfileRequest _req(String id, int startUs, {String iso = 'i1'}) =>
-    HttpProfileRequest(
+HttpProfileRequest _req(String id, int startUs, {String iso = 'i1'}) => HttpProfileRequest(
       id: id,
       isolateId: iso,
       method: 'GET',
@@ -71,8 +69,7 @@ void main() {
   });
 
   _FakeVm attach(Map<String, List<HttpProfileRequest>> profile) {
-    final sid = dao.createSession(
-        appName: 'app', vmServiceUri: 'ws://live', isolateId: null, projectPath: null);
+    final sid = dao.createSession(appName: 'app', vmServiceUri: 'ws://live', isolateId: null, projectPath: null);
     final vm = _FakeVm(profile);
     SessionRegistry.instance.register(AttachedSession(
       id: sid,
@@ -161,8 +158,7 @@ void main() {
 
   group('history empty result', () {
     int endedSession() {
-      final id = dao.createSession(
-          appName: 'old', vmServiceUri: 'ws://old', isolateId: null, projectPath: null);
+      final id = dao.createSession(appName: 'old', vmServiceUri: 'ws://old', isolateId: null, projectPath: null);
       dao.endSession(id);
       return id;
     }

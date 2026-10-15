@@ -183,7 +183,8 @@ class LocationPlayer {
   Future<void> _apply(Fix fix, Future<void> Function() send) async {
     _sending = true;
     try {
-      await send().timeout(const Duration(seconds: 20), onTimeout: () => throw LocationFailed('the device did not take the fix', 'no answer in 20 s'));
+      await send().timeout(const Duration(seconds: 20),
+          onTimeout: () => throw LocationFailed('the device did not take the fix', 'no answer in 20 s'));
       lastFix = fix;
       sent++;
       _failures = 0;
