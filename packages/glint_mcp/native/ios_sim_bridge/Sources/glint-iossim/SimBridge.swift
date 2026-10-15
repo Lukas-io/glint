@@ -41,6 +41,8 @@ enum SimBridge {
         let frameworks = [
             "\(devDir)/Library/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",
             "\(devDir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit",
+            // Xcode 27 keeps SimulatorKit in Contents/SharedFrameworks.
+            "\(devDir)/../SharedFrameworks/SimulatorKit.framework/SimulatorKit",
             // Fallback: pre-Xcode-15 installs put CoreSimulator under /Library.
             "/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator",
         ]
@@ -776,8 +778,7 @@ extension SimBridge {
 
     static func simulatorKitHandle() -> UnsafeMutableRawPointer? {
         if let h = _simKitHandle { return h }
-        let devDir = (ProcessInfo.processInfo.environment["DEVELOPER_DIR"] ??
-                      "/Applications/Xcode.app/Contents/Developer") as String
+        let devDir = developerDir() as String
         for path in [
             "\(devDir)/Library/PrivateFrameworks/SimulatorKit.framework/SimulatorKit",
             // Xcode 27 moved SimulatorKit out of the developer dir into Contents/SharedFrameworks.
