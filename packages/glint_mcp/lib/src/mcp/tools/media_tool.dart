@@ -13,6 +13,7 @@ import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorI
 import '../../media/emulator_audio.dart';
 import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
+import '../../media/mic_audio.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
 import '../../media/picker.dart';
@@ -41,13 +42,14 @@ class MediaTool extends GlintTool {
             'pick (choose a photo or video in the open system picker: name, index or newest), '
             'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited), '
             'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
+            'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
             'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS), '
             'camera (Android emulator: what both cameras see now, an image, video or testcard; setup:true once). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | event | camera'),
-            'stop': Schema.bool(description: 'listen: end the recording and report it.'),
+            'op': Schema.string(description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
+            'stop': Schema.bool(description: 'listen: end the recording and report it. mic: stop feeding and report what was fed.'),
             'setup': Schema.bool(description: 'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
             'value': Schema.string(description: 'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
             'number': Schema.string(description: 'event call, endCall, sms: the caller. Default 5551234.'),
@@ -55,18 +57,18 @@ class MediaTool extends GlintTool {
             'action': Schema.string(description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(description: 'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
-            'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard.'),
+            'source': Schema.string(description: 'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file.'),
             'name': Schema.string(description: 'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
             'index': Schema.int(description: 'pick: position in the picker, 0 = newest. Default 0.'),
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
             'clear': Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
             'size': Schema.string(description: 'testcard: WxH, even. Default 1080x1920.'),
-            'durationSec': Schema.num(description: 'testcard video or tone: seconds. Default 6.'),
+            'durationSec': Schema.num(description: 'testcard video or tone: seconds. Default 6. mic: how long the feed runs, up to 600. Default 60.'),
             'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
             'rotation': Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
             'text': Schema.string(description: 'speech: what to say. event sms: the message.'),
             'voice': Schema.string(description: 'speech: a macOS voice name.'),
-            'hz': Schema.num(description: 'tone: frequency. Default 440.'),
+            'hz': Schema.num(description: 'tone: frequency. Default 440 (mic: 1000).'),
             'since': Schema.string(description: 'files: lastAction (since the last tap, type, swipe ...) or an ISO time.'),
             'glob': Schema.string(description: 'files: e.g. *.mp4 (matches the file name, or the path when it has a /).'),
             'limit': Schema.int(description: 'files: cap on the list. Default 50, max 200.'),
@@ -94,6 +96,7 @@ class MediaTool extends GlintTool {
         'pick' => await _pick(session, args),
         'permission' => await _permission(session, args),
         'listen' => await _listen(session, args),
+        'mic' => await _mic(session, args, phases),
         'event' => await _event(session, args),
         'camera' => await _camera(session, args, phases),
         _ => _bad('op must be seed, files, inspect, pick, permission, listen, event or camera, got ${op ?? 'nothing'}'),
@@ -584,6 +587,72 @@ class MediaTool extends GlintTool {
         'rmsDb': stats.rmsDb,
         'silences': [for (final (a, b) in stats.silences) '${at(a)}-${at(b)} s'],
       },
+    );
+  }
+
+  /// Feeds audio into the microphone of every app that records on an Android device, through glint's device server (a loop-back audio policy, shell's own permission); stop:true ends it.
+  Future<StructuredResponse> _mic(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
+    final app = session.active;
+    final dev = app?.device;
+    if (dev is! AndroidDevice) {
+      return StructuredResponse.error(
+        summary: 'mic works on Android devices only',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: dev != null && dev.platform == DevicePlatform.ios
+            ? 'the iOS simulator records the Mac\'s own microphone, and nothing can feed it without a macOS permission'
+            : 'attach to an Android device first',
+        nextSteps: const ['run the voice flow on an Android emulator or phone'],
+      );
+    }
+    final server = dev.server;
+    if (server == null || !server.running) {
+      return StructuredResponse.error(
+        summary: 'the microphone feed needs glint\'s device server, which is not running on ${dev.serial}',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: 'the server feeds the microphone from inside Android; another automation tool may hold the accessibility connection it starts with',
+        nextSteps: const ['stop other automation tools on the device, then attach again'],
+      );
+    }
+    if (argBool(args, 'stop') ?? false) {
+      final r = await server.call(const {'cmd': 'micStop'});
+      final seconds = ((r['recordedMs'] as num?) ?? 0) / 1000;
+      final who = [for (final p in (r['recordedBy'] as List? ?? const [])) '$p'];
+      return StructuredResponse(
+        summary: r['wasFeeding'] != true
+            ? 'the microphone of ${dev.serial} was not being fed'
+            : who.isEmpty
+                ? 'stopped the microphone feed: no app recorded meanwhile'
+                : 'stopped the microphone feed: ${who.join(', ')} recorded about ${seconds.toStringAsFixed(1)} s of it',
+        data: {'device': dev.serial, 'recordedSeconds': seconds, 'recordedBy': who},
+      );
+    }
+    final ({File pcm, String label}) audio;
+    try {
+      audio = await micAudio((args['source'] as String?) ?? 'tone',
+          hz: argNum(args, 'hz')?.toDouble(), text: args['text'] as String?, voice: args['voice'] as String?, phases: phases);
+    } on GalleryError catch (e) {
+      return _bad(e.summary, nextSteps: [if (e.detail.isNotEmpty) e.detail, 'source: tone (hz), speech (text) or a host audio file']);
+    }
+    final seconds = (argNum(args, 'durationSec') ?? 60).clamp(1, 600);
+    const remote = '/data/local/tmp/glint-mic.pcm';
+    final push = await Process.run(dev.adbPath, ['-s', dev.serial, 'push', audio.pcm.path, remote]);
+    if (push.exitCode != 0) {
+      return StructuredResponse.error(summary: 'could not push the audio to ${dev.serial}', errorKind: GlintErrorKind.backendToolError, detail: '${push.stderr}'.trim());
+    }
+    final r = await server.call({'cmd': 'micStart', 'path': remote, 'ms': (seconds * 1000).round()});
+    if (r['ok'] != true) {
+      return StructuredResponse.error(
+        summary: 'Android refused the microphone feed',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '${r['error']}: ${r['detail']}',
+        nextSteps: const ['check the device runs Android 10 or later'],
+      );
+    }
+    return StructuredResponse(
+      summary: 'microphone of ${dev.serial} fed for ${seconds.toStringAsFixed(0)} s: any app that records hears ${audio.label}, looped',
+      warnings: const ['while the feed runs, apps hear only the feed, not the device\'s real microphone'],
+      nextSteps: const ['make the app record, then `media op:mic stop:true` to see which app recorded it and for how long'],
+      data: {'device': dev.serial, 'source': audio.label, 'seconds': seconds},
     );
   }
 

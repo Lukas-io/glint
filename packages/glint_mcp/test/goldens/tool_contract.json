@@ -173,11 +173,11 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick | permission | listen | event | camera"
+        "description": "seed | files | inspect | pick | permission | listen | mic | event | camera"
       },
       "stop": {
         "type": "boolean",
-        "description": "listen: end the recording and report it."
+        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed."
       },
       "setup": {
         "type": "boolean",
@@ -209,7 +209,7 @@
       },
       "source": {
         "type": "string",
-        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard."
+        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file."
       },
       "name": {
         "type": "string",
@@ -233,7 +233,7 @@
       },
       "durationSec": {
         "type": "number",
-        "description": "testcard video or tone: seconds. Default 6."
+        "description": "testcard video or tone: seconds. Default 6. mic: how long the feed runs, up to 600. Default 60."
       },
       "fps": {
         "type": "integer",
@@ -253,7 +253,7 @@
       },
       "hz": {
         "type": "number",
-        "description": "tone: frequency. Default 440."
+        "description": "tone: frequency. Default 440 (mic: 1000)."
       },
       "since": {
         "type": "string",

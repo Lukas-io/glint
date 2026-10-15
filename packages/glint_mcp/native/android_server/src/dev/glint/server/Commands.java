@@ -42,9 +42,77 @@ final class Commands {
                 return focus();
             case "windows":
                 return windows(r.optInt("maxNodes", 3000));
+            case "micStart":
+                return micStart(r.getString("path"), r.optLong("ms", 0));
+            case "micStop":
+                return micStop();
             default:
                 return fail("unknownCommand", "no command " + r.optString("cmd"));
         }
+    }
+
+    private MicFeed mic;
+    private Thread micThread;
+    private volatile boolean micRunning;
+    private volatile long micFedMs;
+    private final java.util.Set<String> micRecordedBy = java.util.Collections.synchronizedSet(new java.util.TreeSet<>());
+
+    /** Loops the 48 kHz mono 16-bit PCM at [path] into every app that records the microphone, for [ms] (0 = until micStop). */
+    private JSONObject micStart(String path, long ms) throws Exception {
+        micStop();
+        byte[] pcm = MicFeed.readFile(path);
+        if (pcm.length < 2) return fail("emptyAudio", path + " holds no audio");
+        try {
+            mic = MicFeed.openOnLooper();
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            return fail("micRefused", String.valueOf(e.getCause()));
+        }
+        micFedMs = 0;
+        micRecordedBy.clear();
+        micRunning = true;
+        long end = ms > 0 ? System.currentTimeMillis() + ms : Long.MAX_VALUE;
+        MicFeed feed = mic;
+        micThread = new Thread(() -> {
+            int chunk = MicFeed.SAMPLE_RATE / 50 * 2;
+            byte[] part = new byte[chunk];
+            int at = 0;
+            long lastCheck = 0;
+            while (micRunning && System.currentTimeMillis() < end) {
+                for (int i = 0; i < chunk; i++) part[i] = pcm[(at + i) % pcm.length];
+                at = (at + chunk) % pcm.length;
+                if (feed.write(part, chunk) <= 0) break;
+                long now = System.currentTimeMillis();
+                if (now - lastCheck > 250) {
+                    lastCheck = now;
+                    java.util.Set<String> active = feed.recorders();
+                    if (!active.isEmpty()) {
+                        micRecordedBy.addAll(active);
+                        micFedMs += 250;
+                    }
+                }
+            }
+            micRunning = false;
+            feed.close();
+        }, "glint-mic");
+        micThread.setDaemon(true);
+        micThread.start();
+        return ok().put("feeding", true);
+    }
+
+    /** Ends the feed (if any) and reports roughly how long an app recorded it, and which. */
+    private JSONObject micStop() throws Exception {
+        boolean was = micThread != null;
+        micRunning = false;
+        if (micThread != null) {
+            micThread.join(2000);
+            micThread = null;
+        }
+        mic = null;
+        JSONArray who = new JSONArray();
+        synchronized (micRecordedBy) {
+            for (String p : micRecordedBy) who.put(p);
+        }
+        return ok().put("wasFeeding", was).put("recordedMs", micFedMs).put("recordedBy", who);
     }
 
     private JSONObject touch(double x, double y, long holdMs) throws Exception {

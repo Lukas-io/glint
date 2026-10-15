@@ -16,7 +16,7 @@ import org.json.JSONObject;
 /** glint's resident Android server: one UiAutomation connection, answering JSON lines on a local abstract socket. */
 public final class Server {
     /** Bumped whenever a command's arguments or reply change; glint checks it before using the server. */
-    static final int PROTOCOL = 1;
+    static final int PROTOCOL = 2;
 
     public static void main(String[] args) {
         Looper.prepareMainLooper();
