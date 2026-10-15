@@ -27,7 +27,7 @@ class BatchTool extends GlintTool {
               _maxSteps,
               description:
                   'Ordered steps, each {tool: "<name>", args: {…}} with the '
-                  'same args the tool takes on its own. Max $_maxSteps.',
+                  'same args the tool takes on its own, plus app:"<name>" to run that step on another attached app. Max $_maxSteps.',
             ),
             'stopOnNoChange': Schema.bool(
               description:
@@ -52,8 +52,7 @@ class BatchTool extends GlintTool {
     if (parsed.error != null) return parsed.error!;
     final steps = parsed.steps!;
 
-    final run =
-        await runBatchSteps(session, steps, stopOnNoChange: stopOnNoChange);
+    final run = await runBatchSteps(session, steps, stopOnNoChange: stopOnNoChange, meta: request.meta);
 
     final results = [for (final o in run.outcomes) o.toJson()];
     final lines = [for (final o in run.outcomes) o.line()];

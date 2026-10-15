@@ -121,6 +121,7 @@ class StepOutcome {
   Map<String, Object?> toJson({DateTime? origin}) => {
         'step': index,
         'tool': tool,
+        if (args['app'] != null) 'app': args['app'],
         'ok': !isError,
         'elapsedMs': elapsedMs,
         if (origin != null)
@@ -141,7 +142,8 @@ class StepOutcome {
     final fired = origin == null
         ? ''
         : ', fired at ${startedAt.difference(origin).inMilliseconds} ms';
-    return '$index. $tool ${stepTarget(args)} → '
+    final app = args['app'];
+    return '$index. ${app == null ? '' : '[$app] '}$tool ${stepTarget(args)} → '
         '${isError ? "FAIL ${response.data?['errorKind']}: " : ""}'
         '${shortSummary(response.summary)}'
         '${changeCategory != null ? " · $changeCategory" : ""}'
@@ -167,6 +169,7 @@ Future<BatchRun> runBatchSteps(
   List<BatchStep> steps, {
   required bool stopOnNoChange,
   void Function(int index, String tool)? onStepStart,
+  MetaWithProgressToken? meta,
 }) async {
   final outcomes = <StepOutcome>[];
   String? reason;
@@ -190,10 +193,20 @@ Future<BatchRun> runBatchSteps(
         'returnScene': true,
       'fetchScene': false,
     };
-    final request = CallToolRequest(name: step.tool, arguments: stepArgs);
+    final request = CallToolRequest(name: step.tool, arguments: stepArgs, meta: meta);
+    final appTarget = step.args['app'] as String?;
+    final matches = appTarget == null ? null : session.matchApps(appTarget);
     StructuredResponse r;
     try {
-      r = invalid ?? await tool.handle(session, request);
+      if (invalid != null) {
+        r = invalid;
+      } else if (matches == null) {
+        r = await tool.handle(session, request);
+      } else if (matches.length != 1) {
+        r = GlintTool.unknownAppResponse(session, appTarget!, matches);
+      } else {
+        r = await session.withApp(matches.single, () async => await tool.handle(session, request));
+      }
     } on SessionNotAttachedError {
       rethrow;
     } on Object catch (e) {
