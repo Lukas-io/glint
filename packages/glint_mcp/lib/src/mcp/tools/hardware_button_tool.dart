@@ -239,7 +239,30 @@ class HardwareButtonTool extends GlintTool {
       if (again.isError) return again;
       post = await readPostActionState(session, pre, includeSceneText: false);
     }
+    if (post != null && post.changed == false && session.device.platform == DevicePlatform.ios) {
+      final bar = _appBarBack(scene);
+      if (bar != null) {
+        final tapped = StructuredResponse.fromActionResult(
+            await session.interactor.run(scene, Tap(SymbolicTarget(bar))));
+        if (!tapped.isError) {
+          post = await readPostActionState(session, pre, includeSceneText: false);
+          response = response.copyWith(
+            summary: 'the back swipe did nothing, so tapped the app bar\'s $bar',
+            data: {...?response.data, 'via': bar},
+          );
+        }
+      }
+    }
     return post == null ? response : response.mergeData(post.toData());
+  }
+
+  /// The visible app bar back (or close) button, which an iPhone user taps when a page refuses the edge swipe (go_router's shell routes do).
+  static String? _appBarBack(Scene scene) {
+    const labels = {'BackButton', 'CupertinoNavigationBarBackButton', 'CloseButton'};
+    for (final n in scene.root.walk()) {
+      if (!n.isOffstage && n.glintId != null && labels.contains(n.baseLabel) && !scene.isInOverlay(n.glintId!)) return n.glintId;
+    }
+    return null;
   }
 
   static const _stillLocked =

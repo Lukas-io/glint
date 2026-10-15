@@ -258,10 +258,22 @@ class ButtonClassifier extends WidgetClassifier {
     'CupertinoButton',
     'BackButton',
     'CloseButton',
+    'DrawerButton',
+    'EndDrawerButton',
+    'CupertinoNavigationBarBackButton',
     'PopupMenuButton',
     'DropdownButton',
     'InkWell',
     'GestureDetector',
+  };
+
+  /// What the framework's own app bar buttons say (their tooltips), since they carry no text.
+  static const _implicitLabels = {
+    'BackButton': 'Back',
+    'CupertinoNavigationBarBackButton': 'Back',
+    'CloseButton': 'Close',
+    'DrawerButton': 'Open navigation menu',
+    'EndDrawerButton': 'Open menu',
   };
 
   @override
@@ -276,7 +288,7 @@ class ButtonClassifier extends WidgetClassifier {
     }
     // Leaf button: absorb caption text into the label; keep Icon / Image as
     // children so the IconEnricher can populate them post-classify.
-    final label = _captionIn(children);
+    final label = _captionIn(children) ?? _implicitLabels[node.baseLabel];
     final kept = children
         .where((c) => c is SemanticIcon || c is SemanticImage)
         .toList();

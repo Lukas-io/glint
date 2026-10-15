@@ -654,6 +654,9 @@ class ButtonFactsEnricher implements SemanticEnricher {
   final FlutterRuntime runtime;
   final int maxNodes;
 
+  /// App bar buttons whose null `onPressed` means "do the default" (pop, open the drawer), not disabled.
+  static const _defaultActionButtons = {'BackButton', 'CloseButton', 'DrawerButton', 'EndDrawerButton', 'CupertinoNavigationBarBackButton'};
+
   static const _facts = '(Element e) { final w = e.widget as dynamic; bool? on; String? tip; '
       'bool has(Object? Function() f) { try { return f() != null; } catch (_) { return false; } } '
       'bool known(Object? Function() f) { try { f(); return true; } catch (_) { return false; } } '
@@ -673,6 +676,7 @@ class ButtonFactsEnricher implements SemanticEnricher {
       final id = n.glintId;
       final source = id == null ? null : scene.sourceFor(id);
       if (source == null || source.inspectorId.isEmpty) continue;
+      if (_defaultActionButtons.contains(source.baseLabel)) continue;
       nodes.add((n, source.inspectorId));
       if (nodes.length >= maxNodes) break;
     }
