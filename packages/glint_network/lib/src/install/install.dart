@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
@@ -6,6 +7,7 @@ import '../util/data_dir.dart';
 import '../util/network_env.dart';
 import 'repo_layout.dart';
 import '../util/legacy_install.dart';
+import '../version.dart';
 
 /// `glint_network install` subcommand: AOT-builds this package's
 /// entrypoint via `dart build cli` (a relocatable bundle, since Dart 3.12's
@@ -34,9 +36,8 @@ Future<void> runInstall(List<String> args) async {
   if (source == null) {
     io.stderr.writeln(
       'glint_network install: could not locate the package source. '
-      'Platform.script="${io.Platform.script}". Run from inside the activated '
-      'glint_network install, or run `dart pub global activate -s git '
-      'https://github.com/Lukas-io/glint.git --git-path $packageGitPath` first.',
+      'Platform.script="${io.Platform.script}". Run `dart pub global activate '
+      '$packageName` first, then `glint_network install` again.',
     );
     io.exitCode = 70;
     return;
@@ -74,11 +75,21 @@ Future<void> runInstall(List<String> args) async {
     if (old.existsSync()) old.deleteSync(recursive: true);
   } catch (_) {/* best-effort clean rebuild */}
 
+  final String buildRoot;
+  try {
+    buildRoot = await _buildableRoot(source, p.dirname(output));
+  } on Object catch (e) {
+    io.stderr.writeln('glint_network install: could not prepare the source for building ($e).');
+    io.exitCode = 70;
+    return;
+  }
+
   final io.Process build;
   try {
     build = await io.Process.start(
       'dart',
-      ['build', 'cli', '-t', source, '-o', bundleDir],
+      ['build', 'cli', '-t', p.join(buildRoot, 'bin', p.basename(source)), '-o', bundleDir],
+      workingDirectory: buildRoot,
       mode: io.ProcessStartMode.inheritStdio,
     );
   } on io.ProcessException catch (e) {
@@ -145,11 +156,71 @@ String? _resolveSourcePath() {
     return script;
   }
 
+  final installed = _installedPackageSource();
+  if (installed != null) return installed;
   final cache = _pubCacheDir();
   if (cache == null) return null;
+  final hosted = io.File(p.join(cache, 'hosted', 'pub.dev', '$packageName-$packageVersion', 'bin', 'glint_network.dart'));
+  if (hosted.existsSync()) return hosted.path;
   final gitDir = io.Directory(p.join(cache, 'git'));
   if (!gitDir.existsSync()) return null;
   return newestPubCacheSource(gitDir);
+}
+
+/// `bin/glint_network.dart` of the package the running snapshot was activated from, found through its package config; null in a compiled binary.
+String? _installedPackageSource() {
+  try {
+    final lib = Isolate.resolvePackageUriSync(Uri.parse('package:$packageName/'));
+    if (lib == null) return null;
+    final source = io.File(p.join(p.dirname(p.normalize(lib.toFilePath())), 'bin', 'glint_network.dart'));
+    return source.existsSync() ? source.path : null;
+  } on Object {
+    return null;
+  }
+}
+
+/// A package root `dart build cli` can build [source] in: its own, inside a git checkout of the glint workspace, or a copy beside [outputDir] for a pub.dev install, whose pubspec names a workspace that is not there.
+Future<String> _buildableRoot(String source, String outputDir) async {
+  final root = p.dirname(p.dirname(source));
+  if (!io.File(p.join(root, 'pubspec.yaml')).readAsStringSync().contains(RegExp(r'^resolution:\s*workspace', multiLine: true)) ||
+      _hasWorkspaceRoot(root)) {
+    return root;
+  }
+  final staged = io.Directory(p.join(outputDir, '.glint_network_src'));
+  if (staged.existsSync()) staged.deleteSync(recursive: true);
+  _copyTree(io.Directory(root), staged);
+  final pubspec = io.File(p.join(staged.path, 'pubspec.yaml'));
+  pubspec.writeAsStringSync(pubspec.readAsStringSync().replaceAll(RegExp(r'^resolution:\s*workspace\s*$', multiLine: true), ''));
+  final get = await io.Process.start('dart', ['pub', 'get'], workingDirectory: staged.path, mode: io.ProcessStartMode.inheritStdio);
+  final code = await get.exitCode;
+  if (code != 0) throw StateError('dart pub get exited $code in ${staged.path}');
+  return staged.path;
+}
+
+/// Whether a directory above [root] holds the workspace pubspec that lists it.
+bool _hasWorkspaceRoot(String root) {
+  var dir = p.dirname(root);
+  for (var i = 0; i < 4; i++) {
+    final pubspec = io.File(p.join(dir, 'pubspec.yaml'));
+    if (pubspec.existsSync() && pubspec.readAsStringSync().contains(RegExp(r'^workspace:', multiLine: true))) return true;
+    final parent = p.dirname(dir);
+    if (parent == dir) break;
+    dir = parent;
+  }
+  return false;
+}
+
+void _copyTree(io.Directory from, io.Directory to) {
+  to.createSync(recursive: true);
+  for (final entity in from.listSync(followLinks: false)) {
+    final target = p.join(to.path, p.basename(entity.path));
+    if (entity is io.Directory) {
+      if (p.basename(entity.path) == '.dart_tool') continue;
+      _copyTree(entity, io.Directory(target));
+    } else if (entity is io.File) {
+      entity.copySync(target);
+    }
+  }
 }
 
 /// The newest entry point pub has checked out under [gitDir]: `glint-<commit>/packages/glint_network/bin/glint_network.dart`, or the old repository's `flutter_network_mcp-<commit>/bin/flutter_network_mcp.dart`.

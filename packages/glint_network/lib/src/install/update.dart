@@ -4,8 +4,8 @@ import 'install.dart';
 import 'repo_layout.dart';
 
 /// `glint_network update` subcommand: re-runs
-/// `dart pub global activate -s git ...` to fetch the latest source from
-/// `master`, then re-AOTs the binary if the user previously ran
+/// `dart pub global activate glint_network` to fetch the latest release from
+/// pub.dev, then re-AOTs the binary if the user previously ran
 /// `glint_network install` (detected via the `.compiled` marker
 /// written by [runInstall]).
 ///
@@ -15,17 +15,15 @@ import 'repo_layout.dart';
 /// version check (`UpdateCheck`) nudges the user toward this subcommand
 /// when an upgrade is available; running it is up to them.
 Future<void> runUpdate(List<String> args) async {
-  const repo = 'https://github.com/Lukas-io/glint.git';
-
   io.stderr.writeln(
-    'glint_network update: re-activating from $repo …',
+    'glint_network update: re-activating $packageName from pub.dev …',
   );
 
   final io.Process activate;
   try {
     activate = await io.Process.start(
       'dart',
-      activateArgs(repo),
+      activateArgs(),
       mode: io.ProcessStartMode.inheritStdio,
     );
   } on io.ProcessException catch (e) {
@@ -72,9 +70,8 @@ Future<void> runUpdate(List<String> args) async {
   );
 }
 
-/// `--overwrite` lets glint_network take over the `flutter_network_mcp` command still owned by the old package.
-List<String> activateArgs(String repo) =>
-    ['pub', 'global', 'activate', '-s', 'git', repo, '--git-path', packageGitPath, '--overwrite'];
+/// Activates the latest pub.dev release, which also moves a git install over; `--overwrite` lets glint_network take over the `flutter_network_mcp` command still owned by the old package.
+List<String> activateArgs() => ['pub', 'global', 'activate', packageName, '--overwrite'];
 
 /// Deactivates the old flutter_network_mcp package once glint_network owns both commands.
 Future<void> _retireLegacyPackage() async {

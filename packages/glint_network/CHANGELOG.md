@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- glint_network installs from pub.dev: `dart pub global activate glint_network`. `glint_network update` installs the newest pub.dev release (which also moves a git install over), and the daily update check asks pub.dev for the latest version.
+- `glint_network install` builds from a pub.dev install too. Its source is a workspace member without its workspace, so the build runs on a copy beside the binary.
+- The guides moved from `docs/` to `doc/`, pub's layout convention. Their resource URIs (`glint-network://docs/...`) are unchanged, and a compiled binary finds them in the pub.dev install.
+
 ### Fixed
 
 - After a hot restart, HTTP made in the next ~20 seconds was never captured, and the session kept polling the collected isolate. dart:io records a request only if logging is on when it is made, and logging was enabled on the new isolate only at the next periodic rescan. glint_network now listens for isolates registering `ext.dart.io.getHttpProfile` and enables logging the moment one appears; a poll that hits a collected isolate also triggers a rescan (#116).

@@ -66,7 +66,6 @@ void main() {
   });
 
   test('update takes over commands the old package still owns', () {
-    expect(activateArgs('https://github.com/Lukas-io/glint.git'),
-        containsAllInOrder(['--git-path', 'packages/glint_network', '--overwrite']));
+    expect(activateArgs(), ['pub', 'global', 'activate', 'glint_network', '--overwrite']);
   });
 }

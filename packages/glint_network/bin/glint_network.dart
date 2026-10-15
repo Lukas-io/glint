@@ -36,7 +36,7 @@ Future<void> main(List<String> args) async {
   // writes a tamper-evident audit log + (when configured) POSTs an
   // anonymized payload to the maintainer's collector, only for users who
   // set GLINT_NETWORK_TELEMETRY=on. See
-  // docs/telemetry.md.
+  // doc/telemetry.md.
   await runZonedGuarded(() => _runMain(args), (error, stack) {
     io.stderr.writeln(
       'glint_network: UNCAUGHT ERROR ($error). The MCP host will see '

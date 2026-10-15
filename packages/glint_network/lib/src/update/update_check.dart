@@ -6,8 +6,7 @@ import 'package:path/path.dart' as p;
 import '../util/network_env.dart';
 
 /// Background "is there a newer version?" probe that runs at most once per
-/// UTC day. Hits the raw `pubspec.yaml` on `master` (no GitHub API, no
-/// rate-limit headaches) and parses the `version:` line. When the upstream
+/// UTC day. Asks pub.dev for the latest published version. When the upstream
 /// version is newer, prints one stderr nudge:
 ///
 /// ```
@@ -20,8 +19,8 @@ import '../util/network_env.dart';
 /// it never blocks startup, never crashes the MCP, never delays the JSON-
 /// RPC handshake. Fire-and-forget from `main()` after the server starts.
 class UpdateCheck {
-  static const String _pubspecUrl =
-      'https://raw.githubusercontent.com/Lukas-io/glint/main/packages/glint_network/pubspec.yaml';
+  /// pub.dev's latest release, which is what `glint_network update` installs.
+  static const String _latestUrl = 'https://pub.dev/api/packages/glint_network';
 
   static const Duration _connectTimeout = Duration(seconds: 3);
   static const Duration _totalTimeout = Duration(seconds: 5);
@@ -133,13 +132,13 @@ class UpdateCheck {
       ..userAgent = 'glint_network-update-check';
     try {
       final request = await client
-          .getUrl(Uri.parse(_pubspecUrl))
+          .getUrl(Uri.parse(_latestUrl))
           .timeout(_connectTimeout);
       final response = await request.close().timeout(_totalTimeout);
       if (response.statusCode != 200) return null;
       final body =
           await response.transform(utf8.decoder).join().timeout(_totalTimeout);
-      return _parseVersionLine(body);
+      return _latestVersion(body);
     } catch (_) {
       return null;
     } finally {
@@ -147,19 +146,14 @@ class UpdateCheck {
     }
   }
 
-  /// Extracts `0.6.3` from a pubspec containing `version: 0.6.3`. Returns
-  /// null when no version line is present or the value isn't a recognized
-  /// semver triple.
-  static String? _parseVersionLine(String yaml) {
-    for (final line in const LineSplitter().convert(yaml)) {
-      final trimmed = line.trim();
-      if (!trimmed.startsWith('version:')) continue;
-      final value = trimmed.substring('version:'.length).trim();
-      final cleaned = value.replaceAll(RegExp('["\']'), '');
-      if (_parseTriple(cleaned) != null) return cleaned;
-      return null;
-    }
-    return null;
+  /// The `latest.version` of a pub.dev package listing, when it is a semver triple.
+  static String? _latestVersion(String body) {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return null;
+    final latest = decoded['latest'];
+    if (latest is! Map) return null;
+    final version = latest['version'];
+    return version is String && _parseTriple(version) != null ? version : null;
   }
 
   /// True when [upstream] is strictly newer than [current]. Both must be
