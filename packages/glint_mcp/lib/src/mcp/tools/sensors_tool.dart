@@ -51,7 +51,7 @@ class SensorsTool extends GlintTool {
     final _Motion? motion = switch (dev) {
       AndroidDevice() => _AndroidMotion(dev),
       IosSimulator() => await _IosMotion.open(session, dev, request),
-      _ => null,
+      IosDevice() => switch (phoneHid(session.backend)) { final hid? => _PhoneMotion(hid), null => null },
     };
     if (motion == null) {
       return StructuredResponse.refuse(dev, Ability.sensors) ??
@@ -292,6 +292,34 @@ class _AndroidMotion extends _Motion {
     final m = RegExp(r'=\s*([-\d.]+):([-\d.]+):([-\d.]+)').firstMatch(out);
     return m == null ? null : [for (var i = 1; i <= 3; i++) double.parse(m.group(i)!)];
   }
+}
+
+/// A physical iPhone: the interface orientation from SpringBoard, read through the Device Hub helper.
+class _PhoneMotion extends _Motion {
+  _PhoneMotion(this.hid);
+  final DeviceHid hid;
+
+  @override
+  Future<_MotionState> read(GlintSession session) async {
+    final r = await hid.call(const {'cmd': 'orientation'});
+    final raw = '${r['interfaceOrientation']}';
+    final name = raw.isEmpty ? null : raw[0].toLowerCase() + raw.substring(1);
+    return _MotionState(
+      interfaceOrientation: name == 'unknown' ? null : name,
+      source: 'SpringBoard through Device Hub',
+      notes: const ['a physical iPhone reports its interface orientation only, not its motion sensors'],
+    );
+  }
+
+  @override
+  StructuredResponse? refuses(Map<String, Object?> step) => StructuredResponse.error(
+        summary: 'glint cannot turn a physical iPhone yet',
+        errorKind: GlintErrorKind.notOnThisDevice,
+        nextSteps: const ['turn the phone yourself, or test rotation on the simulator'],
+      ).mergeData({'ability': 'sensors'});
+
+  @override
+  Future<StructuredResponse?> _apply(Map<String, Object?> step) async => refuses(step);
 }
 
 class _IosMotion extends _Motion {

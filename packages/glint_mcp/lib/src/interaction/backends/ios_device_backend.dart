@@ -2,8 +2,10 @@ import 'dart:io';
 
 import '../action.dart';
 import '../backend.dart';
+import 'flutter_input_backend.dart';
 import '../device_hid.dart';
 import '../image_size.dart';
+import '../screen_recording.dart';
 
 /// A paired physical iPhone driven like a hand would: real touches, keys and buttons through Xcode's Device Hub service, screenshots through `devicectl`.
 class IosDeviceBackend extends InteractionBackend {
@@ -31,6 +33,7 @@ class IosDeviceBackend extends InteractionBackend {
   @override
   BackendCapabilities get capabilities => const BackendCapabilities(
         keys: true,
+        record: true,
         hardwareButtons: {HardwareButton.home, HardwareButton.lock, HardwareButton.volumeUp, HardwareButton.volumeDown},
       );
 
@@ -119,6 +122,17 @@ class IosDeviceBackend extends InteractionBackend {
       };
 
   @override
+  Future<ScreenRecording> startRecording(String path) async {
+    final raw = '$path.h265';
+    try {
+      await hid.call({'cmd': 'recordStart', 'path': raw});
+    } on DeviceHidError catch (e) {
+      throw BackendFailure(e.failure.errorKind, 'recording the iPhone could not start: ${e.detail}', nextSteps: e.nextSteps);
+    }
+    return _DeviceHubRecording(hid, raw, path, run);
+  }
+
+  @override
   Future<void> close() => hid.stop();
 
   @override
@@ -153,3 +167,39 @@ class IosDeviceBackend extends InteractionBackend {
     return ScreenshotResult(path: path, width: size?.$1, height: size?.$2);
   }
 }
+
+/// A Device Hub recording: the display's HEVC written by the helper, wrapped as mp4 without re-encoding when it stops.
+class _DeviceHubRecording implements ScreenRecording {
+  _DeviceHubRecording(this.hid, this.raw, this.path, this.run);
+
+  final DeviceHid hid;
+  final String raw;
+  final String path;
+  final ProcessRunner run;
+
+  @override
+  final DateTime startedAt = DateTime.now();
+
+  @override
+  Future<String> stop() async {
+    final r = await hid.call({'cmd': 'recordStop'});
+    final frames = (r['frames'] as num?)?.toInt() ?? 0;
+    final seconds = (r['seconds'] as num?)?.toDouble() ?? 0;
+    final fps = seconds <= 0 || frames == 0 ? 30.0 : (frames / seconds).clamp(1, 120).toDouble();
+    final mux = await run('ffmpeg', ['-v', 'error', '-y', '-r', fps.toStringAsFixed(2), '-i', raw, '-c', 'copy', '-tag:v', 'hvc1', path]);
+    if (mux.exitCode != 0) return raw;
+    try {
+      File(raw).deleteSync();
+    } on Object {
+      // the raw stream only takes space
+    }
+    return path;
+  }
+}
+
+/// The Device Hub helper behind [backend], when it drives a physical iPhone.
+DeviceHid? phoneHid(InteractionBackend backend) => switch (backend) {
+      FlutterInputBackend(:final native) => phoneHid(native),
+      IosDeviceBackend(:final hid) => hid,
+      _ => null,
+    };

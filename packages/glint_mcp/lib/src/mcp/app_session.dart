@@ -64,7 +64,8 @@ class AppSession {
         final id = bundleId;
         return id == null ? const [] : iosCrashes(bundleId: id, since: since);
       case IosDevice():
-        return const [];
+        final id = bundleId;
+        return id == null ? const [] : phoneCrashes(udid: dev.udid, bundleId: id, since: since);
       case AndroidDevice():
         final reader = nativeReader;
         final pkg = (reader is AndroidNativeReader ? reader.appPackage : null) ?? package;

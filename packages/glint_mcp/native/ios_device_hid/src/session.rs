@@ -2,16 +2,20 @@ use crate::keys;
 use idevice::{
     IdeviceService, ReadWrite, RsdService,
     core_device::{
-        CallInfoBlob, DisplayServiceClient, ImageFormat, ScreenCaptureServiceClient, build_screen_audio_offer, build_screen_video_offer,
+        CallInfoBlob, DisplayServiceClient, HevcDepacketizer, ImageFormat, RtpPacket, ScreenCaptureServiceClient, build_screen_audio_offer, build_screen_video_offer,
         build_start_audio_parameters, build_start_video_parameters,
         hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient},
     },
     core_device_proxy::CoreDeviceProxy,
     rsd::RsdHandshake,
     tcp::handle::AdapterHandle,
+    provider::UsbmuxdProvider,
+    springboardservices::SpringBoardServicesClient,
     usbmuxd::{UsbmuxdAddr, UsbmuxdConnection},
 };
 use serde_json::{Value, json};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 
@@ -37,11 +41,41 @@ struct Live {
     indigo: IndigoHidClient<Box<dyn ReadWrite>>,
 }
 
+/// A recording in progress: the display's HEVC as Annex-B, timed from its first packet.
+struct Recorder {
+    out: std::io::BufWriter<std::fs::File>,
+    depack: HevcDepacketizer,
+    first: Option<Instant>,
+    last_ts: u32,
+    frames: u64,
+    bytes: u64,
+}
+
+impl Recorder {
+    fn push(&mut self, data: &[u8]) {
+        let Some(pkt) = RtpPacket::parse(data) else { return };
+        if self.first.is_none() {
+            self.first = Some(Instant::now());
+        }
+        if pkt.timestamp != self.last_ts {
+            self.frames += 1;
+            self.last_ts = pkt.timestamp;
+        }
+        self.depack.push(pkt.sequence_number, pkt.timestamp, pkt.payload);
+        let out = self.depack.take_output();
+        if !out.is_empty() && self.out.write_all(&out).is_ok() {
+            self.bytes += out.len() as u64;
+        }
+    }
+}
+
 pub struct Session {
+    provider: UsbmuxdProvider,
     adapter: AdapterHandle,
     handshake: RsdHandshake,
     live: Option<Live>,
     capture: Option<ScreenCaptureServiceClient<Box<dyn ReadWrite>>>,
+    recorder: Arc<Mutex<Option<Recorder>>>,
 }
 
 impl Session {
@@ -70,7 +104,7 @@ impl Session {
         let handshake = RsdHandshake::new(stream)
             .await
             .map_err(|e| err("tunnel", format!("service directory handshake failed: {e:?}")))?;
-        Ok(Self { adapter, handshake, live: None, capture: None })
+        Ok(Self { provider, adapter, handshake, live: None, capture: None, recorder: Arc::new(Mutex::new(None)) })
     }
 
     pub async fn stream_status(&mut self) -> Result<String, SessionError> {
@@ -105,6 +139,44 @@ impl Session {
         Ok(json!({"bytes": bytes.len(), "ms": started.elapsed().as_millis() as u64}))
     }
 
+    /// Whether a recording is running, so the idle timer leaves the stream alone.
+    pub fn recording(&self) -> bool {
+        self.recorder.lock().map(|r| r.is_some()).unwrap_or(false)
+    }
+
+    /// Starts writing the display's HEVC to `path`, on a fresh screen session so the file opens on a keyframe.
+    async fn record_start(&mut self, request: &Value) -> Result<Value, SessionError> {
+        let path = request["path"].as_str().ok_or_else(|| err("badRequest", "path is required"))?;
+        if self.recording() {
+            return Err(err("badRequest", "a recording is already running"));
+        }
+        let file = std::fs::File::create(path).map_err(|e| err("badRequest", format!("cannot write {path}: {e}")))?;
+        self.stop_stream().await;
+        *self.recorder.lock().expect("recorder") = Some(Recorder {
+            out: std::io::BufWriter::new(file),
+            depack: HevcDepacketizer::new(),
+            first: None,
+            last_ts: 0,
+            frames: 0,
+            bytes: 0,
+        });
+        if let Err(e) = self.ensure_live().await {
+            *self.recorder.lock().expect("recorder") = None;
+            return Err(e);
+        }
+        Ok(json!({"recording": path}))
+    }
+
+    /// Stops the recording and reports the frames, bytes and seconds of display time it holds.
+    fn record_stop(&mut self) -> Result<Value, SessionError> {
+        let Some(mut r) = self.recorder.lock().expect("recorder").take() else {
+            return Err(err("badRequest", "no recording is running"));
+        };
+        let _ = r.out.flush();
+        let span = r.first.map(|f| f.elapsed().as_secs_f64()).unwrap_or(0.0);
+        Ok(json!({"frames": r.frames, "bytes": r.bytes, "seconds": span}))
+    }
+
     pub fn streaming(&self) -> bool {
         self.live.is_some()
     }
@@ -113,6 +185,19 @@ impl Session {
         let cmd = request["cmd"].as_str().unwrap_or_default();
         if cmd == "screenshot" {
             return self.screenshot(request).await;
+        }
+        if cmd == "recordStart" {
+            return self.record_start(request).await;
+        }
+        if cmd == "recordStop" {
+            return self.record_stop();
+        }
+        if cmd == "orientation" {
+            let mut sb = SpringBoardServicesClient::connect(&self.provider)
+                .await
+                .map_err(|e| err("tunnel", format!("no SpringBoard service: {e:?}")))?;
+            let o = sb.get_interface_orientation().await.map_err(|e| err("stream", format!("{e:?}")))?;
+            return Ok(json!({"interfaceOrientation": format!("{o:?}")}));
         }
         let opened = self.ensure_live().await?;
         let live = self.live.as_mut().expect("ensure_live");
@@ -170,10 +255,19 @@ impl Session {
             .start_media_stream(build_start_video_parameters(&receiver, video.local_port(), &sender, 50001, video_offer, CLIENT_SUPPORTED_FEATURES, MAIN_DISPLAY, session_id))
             .await
             .map_err(|e| err("stream", format!("video start failed: {e:?}")))?;
-        let drains = [audio, video]
-            .into_iter()
-            .map(|socket| tokio::spawn(async move { while socket.recv().await.is_ok() {} }))
-            .collect();
+        let recorder = self.recorder.clone();
+        let drains = vec![
+            tokio::spawn(async move { while audio.recv().await.is_ok() {} }),
+            tokio::spawn(async move {
+                while let Ok(dg) = video.recv().await {
+                    if let Ok(mut slot) = recorder.lock() {
+                        if let Some(r) = slot.as_mut() {
+                            r.push(&dg.data);
+                        }
+                    }
+                }
+            }),
+        ];
         // backboardd needs a moment to re-match the HID surfaces against the new stream before reports land.
         tokio::time::sleep(Duration::from_millis(300)).await;
         let touch = UniversalHidServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
