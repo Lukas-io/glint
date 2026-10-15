@@ -1470,7 +1470,11 @@ class AttachTool extends GlintTool {
   String? _inputOf(DeviceTarget device) => switch (device) {
         IosSimulator(:final runner) => runner != null ? 'xctest' : 'bridge',
         AndroidDevice(:final server) => server != null ? 'server' : 'adb',
-        _ => null,
+        IosDevice(:final route) => switch (route) {
+            InputRoute.auto => 'auto',
+            InputRoute.native => 'dtuhid',
+            InputRoute.flutter => 'flutter',
+          },
       };
 
   /// Says which backend the rebuilt session really uses, since an Android server that fails to start falls back to adb.
@@ -1487,6 +1491,8 @@ class AttachTool extends GlintTool {
     final ios = args['iosBackend'] as String?;
     final now = _inputOf(device);
     if (device is IosSimulator && ios != null && !app.deviceMode && ios != now) return (from: now!, to: ios);
+    final iphone = args['iosInput'] as String?;
+    if (device is IosDevice && iphone != null && !app.deviceMode && iphone != now) return (from: now!, to: iphone);
     final input = args['androidInput'] as String?;
     if (device is AndroidDevice && input != null && input != 'auto' && input != now) return (from: now!, to: input);
     return null;
