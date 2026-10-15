@@ -6,6 +6,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Multi-device scenarios in one call (#165):
+  - A `batch` step may name its own `app:`, so one batch drives several attached devices. Before, a step's `app:` was dropped without a word and the step ran on the active app, so a tap meant for the second phone landed on the first. An `app:` that matches no attached app (or several) stops the batch with `unknownApp`. Each step line names its app (`3. [emulator-5556] wait_for …`).
+  - `wait_for`, a new tool: wait until an app shows a text (matched as `tap text:` matches, app bar titles included) or a `glintId`, or with `gone:true` until it disappears. With `app:` it watches another attached app, so in a batch one device waits for what another caused. `timeoutMs` defaults to 15 s (max 120 s). It reports progress every 15 s and, on a timeout, fails with `targetNeverReady` and the text the app shows instead. It also runs as a `batch` step, and batch passes its progress token to its steps.
+  - `tap text:` and the other text targets also match app bar titles.
 - Fewer wasted calls when targeting (#169):
   - `tap`, `long_press` and `resolve` take `text:` instead of `glintId`: the visible text of a button, tile or label, matched exactly first (ignoring case), then as a substring. An open dialog is searched before the screen, so a dialog button with a generic id (`gesture_detector_in_overflow_bar#xm3q`) is one call: `tap text:"Try again"`. The tap lands on the nearest tappable ancestor of the text. Several matches fail with each candidate's id and text; no match fails with the text on screen. With `awaitReady` the text is waited for.
   - `glintId` is accepted on every tool whose target has its own name: `type` (`focus`) and `scroll_to_find` (`targetGlintId`).

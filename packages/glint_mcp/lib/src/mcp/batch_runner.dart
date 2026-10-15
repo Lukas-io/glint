@@ -14,6 +14,7 @@ import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
+import 'tools/wait_for_tool.dart';
 
 /// A validated batch step: a step tool name plus that tool's own arguments.
 typedef BatchStep = ({String tool, Map<String, Object?> args});
@@ -30,6 +31,7 @@ const Map<String, GlintTool> kBatchStepTools = {
   'drag': DragTool(),
   'hardware_button': HardwareButtonTool(),
   'wait_for_settle': WaitForSettleTool(),
+  'wait_for': WaitForTool(),
 };
 
 /// Steps that resolve a glintId: default to awaitReady so a step can target what the previous step reveals.
@@ -189,6 +191,7 @@ Future<BatchRun> runBatchSteps(
         'awaitReady': true,
       if (step.tool != 'hardware_button' &&
           step.tool != 'wait_for_settle' &&
+          step.tool != 'wait_for' &&
           !step.args.containsKey('returnScene'))
         'returnScene': true,
       'fetchScene': false,

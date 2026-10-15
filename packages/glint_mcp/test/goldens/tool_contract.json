@@ -809,12 +809,33 @@
       }
     }
   },
+  "wait_for": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "Visible text to wait for, matched as tap text: does (exact, then contains)."
+      },
+      "glintId": {
+        "type": "string",
+        "description": "Id to wait for instead of text."
+      },
+      "gone": {
+        "type": "boolean",
+        "description": "Wait until it disappears instead. Default false."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "description": "How long to wait, 100-120000. Default 15000."
+      }
+    }
+  },
   "batch": {
     "type": "object",
     "properties": {
       "steps": {
         "type": "array",
-        "description": "Ordered steps, each {tool: \"<name>\", args: {…}} with the same args the tool takes on its own. Max 20.",
+        "description": "Ordered steps, each {tool: \"<name>\", args: {…}} with the same args the tool takes on its own, plus app:\"<name>\" to run that step on another attached app. Max 20.",
         "items": {
           "type": "object",
           "properties": {

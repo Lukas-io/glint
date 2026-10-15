@@ -136,6 +136,7 @@ String? _label(SemanticNode n) => switch (n) {
       SemanticButton(:final label) => label,
       SemanticText(:final content) => content,
       SemanticInput(:final hint) => hint,
+      SemanticAppBar(:final title) => title,
       _ => null,
     };
 
