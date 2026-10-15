@@ -97,6 +97,21 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
+- The iOS simulator now defaults to `input:auto`: gestures go inside the Flutter app, with real touches for system surfaces, the keyboard and native views.
+
+  Measured on the iPhone 17 simulator (median of 7):
+
+  | Action | `device` | `auto` |
+  |---|---|---|
+  | tap by text | 891 ms | 322 ms |
+  | tap x,y | 832 ms | 262 ms |
+  | swipe | 1,179 ms | 674 ms |
+  | long press | 1,380 ms | 876 ms |
+
+  Ember's route push, sheet, typing and back flows give the same change signals either way. `attach input:"device"` keeps the old behaviour. Android stays on `device` until there are numbers for it.
+- glint's iPhone helper is 43% smaller (3.07 → 1.75 MB) with no slower screenshots: built with `opt-level = "s"`, one codegen unit, and `panic = "abort"`. `opt-level = "z"` was smaller still but took screenshots about 60% slower, so it was not used.
+- One drag builder (`dragPath`) now serves the in-app path, the phone's real touches and its edge gestures, where three copies of the interpolation used to be.
+
 - One input vocabulary on every device. `attach input:` picks where gestures go:
   - `app`: inside the Flutter app;
   - `device`: real touches, which reach system prompts, keyboards and other apps;
