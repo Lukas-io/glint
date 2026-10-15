@@ -25,6 +25,10 @@ class SwipeTool extends GlintTool {
             'plus changed + changeCategory.',
         inputSchema: ObjectSchema(
           properties: {
+            'edge': Schema.string(
+              description: 'A system gesture from a screen edge instead of a swipe: left (back), bottom (home), '
+                  'bottomHold (app switcher), topLeft (Notification Center), topRight (Control Center). Physical iPhone.',
+            ),
             'fromGlintId': Schema.string(
               description: 'Start point — stable id from get_scene.',
             ),
@@ -61,6 +65,29 @@ class SwipeTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
+    final edgeName = args['edge'] as String?;
+    if (edgeName != null) {
+      final edge = ScreenEdge.values.where((e) => e.name == edgeName).firstOrNull;
+      if (edge == null) {
+        return StructuredResponse.error(
+          summary: 'unknown edge: $edgeName',
+          errorKind: GlintErrorKind.invalidArgument,
+          nextSteps: [for (final e in ScreenEdge.values) 'edge:"${e.name}"'],
+        );
+      }
+      return withCoordinateChange(session, () async {
+        try {
+          await session.backend.edgeSwipe(edge);
+        } on Object catch (e) {
+          return StructuredResponse.backendError('edge swipe ${edge.name} was not delivered', e);
+        }
+        final input = session.backend.takeInput();
+        return StructuredResponse(
+          summary: 'swiped from the ${edge.name} edge${input == null ? '' : ' · ${input.label}'}',
+          data: {'ok': true, 'edge': edge.name, if (input != null) 'input': input.toJson()},
+        );
+      });
+    }
     final t = readTargetedArgs(args, session.config);
 
     // Coordinate swipe — bypasses scene resolution; the only path in device mode.

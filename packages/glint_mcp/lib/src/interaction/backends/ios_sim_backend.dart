@@ -285,6 +285,14 @@ class IosSimBackend implements InteractionBackend {
   @override
   Future<void> warm() async {}
 
+  @override
+  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+      throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
+
+  @override
+  Future<void> edgeSwipe(ScreenEdge edge) async =>
+      throw UnsupportedBackendAction(label, 'edge swipe: not available on this backend');
+
   /// Reads `com.apple.springboard.<name>` inside the simulator: true when non-zero, null when unreadable.
   Future<bool?> _springboardFlag(String name) async {
     final result = await Process.run('xcrun', [

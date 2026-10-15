@@ -89,6 +89,9 @@ class PressHardwareButton extends Action {
 /// A non-printing key the keyboard can send; each backend maps it to its own code.
 enum KeyName { backspace, delete, enter, tab, escape, space, up, down, left, right }
 
+/// A screen edge a system gesture starts from.
+enum ScreenEdge { left, bottom, bottomHold, topLeft, topRight }
+
 /// A modifier held down around a key press.
 enum KeyModifier { cmd, shift, ctrl, alt }
 

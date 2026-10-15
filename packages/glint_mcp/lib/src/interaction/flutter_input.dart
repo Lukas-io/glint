@@ -49,6 +49,13 @@ class FlutterInput {
   Future<FlutterInputMiss?> key(String key, {int count = 1}) async =>
       editingKeys.contains(key) ? _call({'op': 'key', 'key': key, 'count': '$count'}) : FlutterInputMiss.unsupportedKey;
 
+  /// Two pointers around logical [cx], [cy] going from [from] to [to] apart over [ms]; null when delivered.
+  Future<FlutterInputMiss?> pinch(double cx, double cy, double from, double to, int ms) {
+    final base = _nextPointer;
+    _nextPointer += 2;
+    return _call({'op': 'pinch', 'cx': '$cx', 'cy': '$cy', 'from': '$from', 'to': '$to', 'ms': '$ms', 'pointer': '$base'}, extraMs: ms);
+  }
+
   /// Selects all text in the focused Flutter field; null when delivered.
   Future<FlutterInputMiss?> selectAll() => _call({'op': 'selectAll'});
 

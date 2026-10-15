@@ -73,6 +73,21 @@ Future<StructuredResponse> coordinateLongPress(
   );
 }
 
+/// Pinches around logical [x], [y] to [scale]; [label] names what the center was resolved from.
+Future<StructuredResponse> coordinatePinch(GlintSession session, double x, double y, double scale, int durationMs, {String? label}) async {
+  final dpr = session.device.devicePixelRatio;
+  try {
+    await session.backend.pinch(physicalX: (x * dpr).round(), physicalY: (y * dpr).round(), scale: scale, durationMs: durationMs);
+  } on Object catch (e) {
+    return _failed('pinch', '(${_n(x)}, ${_n(y)})', e);
+  }
+  final input = session.backend.takeInput();
+  return StructuredResponse(
+    summary: '${scale > 1 ? 'spread' : 'pinched'} ${label == null ? '' : '$label '}at (${_n(x)}, ${_n(y)}) to ${scale}x${_via(input)}',
+    data: _ok(session, {'x': x, 'y': y, 'scale': scale}, input),
+  );
+}
+
 Future<StructuredResponse> coordinateSwipe(
   GlintSession session,
   double x1,

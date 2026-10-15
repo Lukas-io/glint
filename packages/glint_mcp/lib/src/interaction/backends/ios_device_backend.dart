@@ -101,9 +101,34 @@ class IosDeviceBackend extends InteractionBackend {
         'intervalMs': intervalMs,
       }, extraMs: points.length * (intervalMs + 80));
 
+  /// ASCII goes key by key; other text goes through the pasteboard, which the hardware keyboard cannot type.
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) =>
-      _call({'cmd': 'type', 'text': text, if (keyDelayMs != null) 'keyDelayMs': keyDelayMs}, extraMs: text.length * ((keyDelayMs ?? 12) + 20));
+  Future<void> typeText(String text, {int? keyDelayMs}) => text.codeUnits.every((c) => c >= 0x20 && c < 0x7f || c == 0x0a || c == 0x09)
+      ? _call({'cmd': 'type', 'text': text, if (keyDelayMs != null) 'keyDelayMs': keyDelayMs}, extraMs: text.length * ((keyDelayMs ?? 12) + 20))
+      : _call({'cmd': 'paste', 'text': text});
+
+  @override
+  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) {
+    final from = 120 * devicePixelRatio / pixelWidth * 65535;
+    final center = _point(physicalX, physicalY, 0);
+    return _call({
+      'cmd': 'pinch',
+      'cx': center[0],
+      'cy': center[1],
+      'fromSpan': from,
+      'toSpan': (from * scale).clamp(800, 60000),
+      'ms': durationMs,
+    }, extraMs: durationMs);
+  }
+
+  @override
+  Future<void> edgeSwipe(ScreenEdge edge) => switch (edge) {
+        ScreenEdge.left => pressHardwareButton(HardwareButton.back),
+        ScreenEdge.bottom => pressHardwareButton(HardwareButton.home),
+        ScreenEdge.bottomHold => pressHardwareButton(HardwareButton.appSwitcher),
+        ScreenEdge.topLeft => _edgeDrag(0.15, 0, 0.15, 0.5),
+        ScreenEdge.topRight => _edgeDrag(0.85, 0, 0.85, 0.5),
+      };
 
   @override
   Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) => _call({

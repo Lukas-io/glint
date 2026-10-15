@@ -8,6 +8,7 @@ import 'tools/drag_tool.dart';
 import 'tools/hardware_button_tool.dart';
 import 'tools/key_tool.dart';
 import 'tools/long_press_tool.dart';
+import 'tools/pinch_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
 import 'tools/scroll_tool.dart';
 import 'tools/swipe_tool.dart';
@@ -28,6 +29,7 @@ const Map<String, GlintTool> kBatchStepTools = {
   'scroll_to_find': ScrollToFindTool(),
   'swipe': SwipeTool(),
   'long_press': LongPressTool(),
+  'pinch': PinchTool(),
   'drag': DragTool(),
   'hardware_button': HardwareButtonTool(),
   'wait_for_settle': WaitForSettleTool(),

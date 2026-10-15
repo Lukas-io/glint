@@ -5,7 +5,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent4';
+const String kAgentExtension = 'ext.flutter.glintAgent5';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -165,6 +165,39 @@ const String _source = r'''
       }
       return {'status': 'ok'};
     }
+    if (op == 'pinch') {
+      if (covered()) return {'status': 'systemSurface'};
+      final view = b.platformDispatcher.implicitView;
+      if (view == null) return {'status': 'outside'};
+      final cx = double.parse(p['cx']!);
+      final cy = double.parse(p['cy']!);
+      final from = double.parse(p['from']!);
+      final to = double.parse(p['to']!);
+      final ms = int.parse(p['ms'] ?? '400');
+      final base = int.parse(p['pointer']!);
+      final steps = ms ~/ 16 < 3 ? 3 : ms ~/ 16;
+      final t0 = DateTime.now().microsecondsSinceEpoch;
+      Offset at(int finger, double span) => Offset(cx + (finger == 0 ? -span / 2 : span / 2), cy);
+      for (var finger = 0; finger < 2; finger++) {
+        b.handlePointerEvent(PointerDownEvent(viewId: view.viewId, pointer: base + finger, kind: PointerDeviceKind.touch, position: at(finger, from), timeStamp: Duration(microseconds: t0)));
+      }
+      var prev = from;
+      for (var i = 1; i <= steps; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+        final span = from + (to - from) * i / steps;
+        final stamp = Duration(microseconds: DateTime.now().microsecondsSinceEpoch);
+        for (var finger = 0; finger < 2; finger++) {
+          final pos = at(finger, span);
+          b.handlePointerEvent(PointerMoveEvent(viewId: view.viewId, pointer: base + finger, kind: PointerDeviceKind.touch, position: pos, delta: pos - at(finger, prev), timeStamp: stamp));
+        }
+        prev = span;
+      }
+      final end = Duration(microseconds: DateTime.now().microsecondsSinceEpoch);
+      for (var finger = 0; finger < 2; finger++) {
+        b.handlePointerEvent(PointerUpEvent(viewId: view.viewId, pointer: base + finger, kind: PointerDeviceKind.touch, position: at(finger, to), timeStamp: end));
+      }
+      return {'status': 'ok'};
+    }
     final miss = editable();
     if (miss != null) return {'status': miss};
     if (op == 'type') {
@@ -198,7 +231,7 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent4', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent5', callback: handle);
   } catch (e) {
     return 'present';
   }
