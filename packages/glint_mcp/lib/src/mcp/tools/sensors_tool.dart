@@ -54,11 +54,8 @@ class SensorsTool extends GlintTool {
       _ => null,
     };
     if (motion == null) {
-      return StructuredResponse.error(
-        summary: 'sensors work on Android devices and the iOS simulator; a physical iPhone exposes no motion state to glint',
-        errorKind: GlintErrorKind.unsupportedBackendAction,
-        nextSteps: const ['ask the user how the phone is held, or test on the simulator'],
-      );
+      return StructuredResponse.refuse(dev, Ability.sensors) ??
+          StructuredResponse.error(summary: 'sensors are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice);
     }
     if (motion is _IosMotion && motion.error != null) return motion.error!;
 

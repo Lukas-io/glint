@@ -1,5 +1,6 @@
 import 'package:dart_mcp/server.dart';
 
+import '../native_target.dart';
 import '../../../interaction.dart';
 import '../../../perception.dart';
 import '../armed.dart';
@@ -109,6 +110,19 @@ class TapTool extends GlintTool {
       return withCoordinateChange(
         session,
         () => coordinateTap(session, pt.x, pt.y),
+        returnScene: t.returnScene,
+        fetchScene: t.fetchScene,
+      );
+    }
+
+    final native = await resolveNativeTarget(session,
+        glintId: args['glintId'] as String?, text: args['text'] as String?);
+    if (native != null) {
+      final hit = native.hit;
+      if (hit == null) return native.error!;
+      return withCoordinateChange(
+        session,
+        () => coordinateTap(session, hit.x, hit.y, label: hit.label),
         returnScene: t.returnScene,
         fetchScene: t.fetchScene,
       );

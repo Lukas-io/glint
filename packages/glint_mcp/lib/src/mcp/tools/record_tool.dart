@@ -77,6 +77,7 @@ class RecordTool extends GlintTool {
         nextSteps: const ['call attach first'],
       );
     }
+    if (StructuredResponse.refuse(session.device, Ability.record) case final refused?) return refused;
     if (!session.backend.capabilities.record) {
       return StructuredResponse.error(
         summary: '${session.backend.label} cannot record the display',

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
+import '../../perception.dart' show NativeSurface;
 
 /// Common reply shape: [summary] + optional [warnings] + [nextSteps].
 /// Renders both human text and `structuredContent` so callers can
@@ -44,6 +45,19 @@ class StructuredResponse {
         detail: e.detail,
         nextSteps: e.nextSteps,
       );
+
+  /// [ability] refused on a device that lacks it, with the reason and what to do instead from [gap].
+  factory StructuredResponse.notOnThisDevice(Ability ability, AbilityGap gap) => StructuredResponse.error(
+        summary: '${ability.label} is not available on this device: ${gap.reason}',
+        errorKind: GlintErrorKind.notOnThisDevice,
+        nextSteps: [if (gap.instead != null) gap.instead!],
+      ).mergeData({'ability': ability.name, if (gap.instead != null) 'instead': gap.instead});
+
+  /// [ability] on [device]: a refusal when the device lacks it, null when it has it.
+  static StructuredResponse? refuse(DeviceTarget device, Ability ability) {
+    final gap = device.abilities.gaps[ability];
+    return gap == null ? null : StructuredResponse.notOnThisDevice(ability, gap);
+  }
 
   /// A backend exception as a reply: a [BackendFailure] keeps its kind, data and next steps; anything unknown is a `backendToolError`.
   factory StructuredResponse.backendError(String summary, Object e) => switch (e) {
@@ -135,6 +149,11 @@ class StructuredResponse {
     final changed = data?['changed'];
     if (!isError && changed is bool) {
       buf.write(changed ? ' · ${data?['changeCategory'] ?? 'changed'}' : ' · nothing changed');
+    }
+    final surface = data?['surface'];
+    if (surface is Map<String, Object?>) {
+      buf.writeln();
+      buf.write(NativeSurface.fromJson(surface).line);
     }
     // Surface the first line of detail on errors so agents see the real reason
     // without having to parse structuredContent.

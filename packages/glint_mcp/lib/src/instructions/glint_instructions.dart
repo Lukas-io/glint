@@ -19,7 +19,7 @@ const _feedback = '''
 Every action already answers "what did that do?": `tap` / `type` / `scroll` settle and return `changed` + `changeCategory` (routeChanged / overlayAppeared / overlayDismissed / contentChanged / nothing), plus `state` when the screen is loading.
 
 1. `changed:false` = tree, text, values and selection unchanged. Re-read; never retry blind.
-2. No `wait_for_settle` after an action — it already settled. `wait_for_settle` is for async work you started. `state: native` attaches a screenshot; `tap x,y` uses its `coordinates` scale.
+2. No `wait_for_settle` after an action — it already settled. `wait_for_settle` is for async work you started. `state: native`: a system surface covers the app (`surface` lists it); tap its items by text or id.
 3. Failures explain: read `detail` + `nextSteps`; a "did you mean" names the live id.
 4. When in doubt: `get_scene`. The framework is truth, not your prediction.
 ''';
@@ -86,8 +86,8 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial` — part landed (`data.delivered` of `data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` — follow `detail` + `nextSteps`.
-- `invalidArgument` — fix per tool description.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` — follow `detail` + `nextSteps`.
+- `invalidArgument` — fix the argument.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';
 
@@ -113,7 +113,6 @@ tap glintId=floating_action_button                → changed:true · routeChang
 type text="user@example.com" focus="email_field"
 scroll_to_find text="Password" direction="down"
 get_scene glintId="list_view_in_orders"           # drill into one list
-attach app:"Acme Pay"
 ```
 ''';
 

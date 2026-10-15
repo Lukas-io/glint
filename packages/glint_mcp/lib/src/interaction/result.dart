@@ -29,6 +29,8 @@ enum GlintErrorKind {
   developerImageMissing,
   /// Another host holds the phone's screen session (Xcode's Device Hub or another viewer).
   deviceBusy,
+  /// This kind of device cannot do it (a physical iPhone has no notification list); `data.ability`, `data.instead`.
+  notOnThisDevice,
   /// Only part of a text edit landed; `data.delivered` of `data.of`, and nothing was retried.
   inputPartial,
   // the simulator / emulator behind the session is no longer booted

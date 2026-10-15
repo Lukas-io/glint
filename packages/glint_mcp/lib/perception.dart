@@ -8,6 +8,7 @@ export 'src/perception/id_suggest.dart';
 export 'src/perception/inspector_client.dart';
 export 'src/perception/android_native_reader.dart';
 export 'src/perception/native_scene_reader.dart';
+export 'src/perception/native_surface.dart';
 export 'src/perception/ocr_native_reader.dart';
 export 'src/perception/runner_native_reader.dart';
 export 'src/perception/readiness_gate.dart';

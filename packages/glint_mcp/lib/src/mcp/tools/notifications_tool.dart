@@ -59,10 +59,8 @@ class NotificationsTool extends GlintTool {
             )
           : _android(session, dev, op, args),
       IosSimulator() => op == 'send' ? _send(dev.udid, app.bundleId, args, inFront: app.lastLifecycle == 'resumed' || app.lastLifecycle == 'inactive') : _ios(session, dev, op, args, request),
-      _ => StructuredResponse.error(
-          summary: 'notifications work on Android devices and the iOS simulator, not on a physical iPhone yet',
-          errorKind: GlintErrorKind.unsupportedBackendAction,
-        ),
+      _ => StructuredResponse.refuse(dev, Ability.notifications) ??
+          StructuredResponse.error(summary: 'notifications are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice),
     };
   }
 

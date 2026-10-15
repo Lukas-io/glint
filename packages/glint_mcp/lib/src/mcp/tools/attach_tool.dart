@@ -647,7 +647,8 @@ class AttachTool extends GlintTool {
             'at $vmUri'
             '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}'
             '${openedAppId != null ? "\nopened installed $openedAppId without a rebuild: this is the installed build, not the current source" : ""}'
-            '\ninput: ${device.route.name} · ${input.line}',
+            '\ninput: ${device.route.name} · ${input.line}'
+            '${device.abilities.line == null ? '' : '\nnot on this device: ${device.abilities.line}'}',
         warnings: warnings,
         nextSteps: [
           if (!returnScene) 'call `get_scene` to read the current screen',
@@ -672,6 +673,7 @@ class AttachTool extends GlintTool {
             'dartVersion': dartVersion.split(' ').first,
           if (lifecycle != null) 'appState': lifecycle,
           'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
+          if (device.abilities.gaps.isNotEmpty) 'abilities': {'missing': device.abilities.toJson()},
           'autoDetected': {
             'vmUri': vmUriArg == null,
             'platform': platformArg == null,
@@ -1048,7 +1050,8 @@ class AttachTool extends GlintTool {
 
     return StructuredResponse(
       summary: 'attached (device mode) to ${simStatus?.name ?? target.name} '
-          '(${target.id}) — no Flutter app; drive via screenshot + coordinates',
+          '(${target.id}) — no Flutter app; drive via screenshot + coordinates'
+          '${device.abilities.line == null ? '' : '\nnot on this device: ${device.abilities.line}'}',
       warnings: warnings,
       nextSteps: const [
         'call `device op:screenshot` to see the screen',
@@ -1064,6 +1067,7 @@ class AttachTool extends GlintTool {
         if (simStatus?.appearance != null) 'appearance': simStatus!.appearance,
         'mode': 'device',
         'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
+        if (device.abilities.gaps.isNotEmpty) 'abilities': {'missing': device.abilities.toJson()},
         if (screen != null) 'screen': screen,
         if (toolchain != null) 'toolchain': toolchain.toJson(),
       },

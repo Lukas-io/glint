@@ -56,7 +56,7 @@ Future<StructuredResponse> appendPostAction(
   if (post == null) return response;
   final merged = response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
   final shot = post.screenshot;
-  if (shot == null) return merged;
+  if (shot == null || (post.surface?.hasContent ?? false)) return merged;
   final sent = await session.modelImage(shot);
   return merged
       .mergeData({'coordinates': sent.coordinates})
@@ -197,8 +197,12 @@ class PostActionState {
     this.scrolledPx,
     this.screenshot,
     this.nativeSurface,
+    this.surface,
     this.note,
   });
+
+  /// The native surface over the app, read as data, when it could be read.
+  final NativeSurface? surface;
 
   /// A warning for the reply, e.g. that a native surface did not react.
   final String? note;
@@ -230,6 +234,7 @@ class PostActionState {
         if (state != 'loaded') 'state': state,
         if (screenshot != null) 'screenshot': screenshot,
         if (nativeSurface != null) 'nativeSurface': nativeSurface,
+        if (surface != null) 'surface': surface!.toJson(),
         if (sceneText != null) 'postScene': sceneText,
       };
 }
@@ -318,12 +323,14 @@ Future<PostActionState?> readPostActionState(
           differ = capture == null ? null : await screensDiffer(before!, capture.path);
         }
         final unchanged = differ == false;
+        final surface = await _readSurface(app, capture?.path);
         return PostActionState(
           changed: wasNative ? differ : true,
           changeCategory: unchanged ? 'nothing' : 'nativeSurface',
           state: 'native',
           screenshot: capture?.path,
           nativeSurface: app.nativeSurfaceName,
+          surface: surface,
           note: unchanged
               ? 'the native surface looks the same after the action, so the input may not have reached it '
                   '(system dialogs can refuse injected input). Check the coordinates on the screenshot; '
@@ -347,6 +354,19 @@ Future<PostActionState?> readPostActionState(
       state = await readOnce();
     }
     return state;
+  } on Object {
+    return null;
+  }
+}
+
+/// The native surface over [app] as data, reusing [shot] when the reader works from screenshots; null when it cannot be read.
+Future<NativeSurface?> _readSurface(AppSession app, String? shot) async {
+  final reader = app.nativeReader;
+  if (reader == null) return null;
+  try {
+    final scene = reader is OcrNativeReader && shot != null ? await reader.readFrom(shot) : await reader.readSnapshot();
+    if (scene.root.glintId == '_native_surface') return null;
+    return classifySurface(scene, owner: app.nativeSurfaceName);
   } on Object {
     return null;
   }

@@ -14,6 +14,8 @@ Map<String, Object?> _ok(GlintSession session, Map<String, Object?> extra, Input
 
 String _via(InputReport? input) => input == null ? '' : ' · ${input.label}';
 
+String _n(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
 /// Runs a raw-coordinate [action] and, in Flutter mode with [returnScene], adds
 /// the changed-signal via pre/post snapshots — so a raw x,y tap answers "did
 /// anything happen?" the same way a glintId tap does. Device mode has no Flutter
@@ -35,8 +37,9 @@ Future<StructuredResponse> withCoordinateChange(
       : response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
 }
 
+/// Taps logical point [x], [y]; [label] names a native item the point was resolved from.
 Future<StructuredResponse> coordinateTap(
-    GlintSession session, double x, double y) async {
+    GlintSession session, double x, double y, {String? label}) async {
   final dpr = session.device.devicePixelRatio;
   try {
     await session.backend
@@ -46,13 +49,13 @@ Future<StructuredResponse> coordinateTap(
   }
   final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: 'tapped ($x, $y)${_via(input)}',
-    data: _ok(session, {'x': x, 'y': y}, input),
+    summary: '${label == null ? 'tapped' : 'tapped "$label" at'} (${_n(x)}, ${_n(y)})${_via(input)}',
+    data: _ok(session, {'x': x, 'y': y, if (label != null) 'native': label}, input),
   );
 }
 
 Future<StructuredResponse> coordinateLongPress(
-    GlintSession session, double x, double y, int durationMs) async {
+    GlintSession session, double x, double y, int durationMs, {String? label}) async {
   final dpr = session.device.devicePixelRatio;
   try {
     await session.backend.longPress(
@@ -65,8 +68,8 @@ Future<StructuredResponse> coordinateLongPress(
   }
   final input = session.backend.takeInput();
   return StructuredResponse(
-    summary: 'long-pressed ($x, $y) for ${durationMs}ms${_via(input)}',
-    data: _ok(session, {'x': x, 'y': y}, input),
+    summary: '${label == null ? 'long-pressed' : 'long-pressed "$label" at'} (${_n(x)}, ${_n(y)}) for ${durationMs}ms${_via(input)}',
+    data: _ok(session, {'x': x, 'y': y, if (label != null) 'native': label}, input),
   );
 }
 

@@ -4,6 +4,22 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `tap` and `long_press` take `text:` or `glintId:` on a native surface too: a system prompt, an alert, an Android picker, a phone screen read by OCR. glint finds the item on the surface and touches its center, through real touches when the app is covered. An exact label wins over text that only contains it, so `tap text:"Allow"` presses Allow and not the question. A miss is `targetNotFound`, listing what the surface shows.
+- Native surfaces come back as data. `get_scene` in native mode, and every action that leaves one over the app, carry `data.surface`:
+  - `kind`: permissionPrompt, alert, otherApp or unknown;
+  - `title`: the question it asks;
+  - `choices`: each button's text and id;
+  - the other text on it.
+
+  Replies print it as one line, e.g. `surface: permission prompt · "Allow “Media Fixture” to access your microphone?" · choices: Don’t Allow (native_don_t_allow), Allow (native_allow)`. When the surface could be read, the post-action screenshot is no longer attached.
+- What a device cannot do is declared once (`DeviceAbilities`). attach lists it (`not on this device: notifications, sensors, record, …` and `data.abilities`), and tools refuse with `errorKind: notOnThisDevice`, `data.ability` and `data.instead`. On a physical iPhone this replaces:
+  - the scattered refusals in notifications, sensors, record and location permission;
+  - device status, appearance, openurl, privacy and biometric, which used to fail with a simctl error;
+  - `media`, which mistook the phone for an Android device;
+  - `shutdown_sim`.
+
 ### Changed
 
 - One input vocabulary on every device. `attach input:` picks where gestures go:
