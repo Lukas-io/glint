@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' show min;
 
@@ -531,6 +532,7 @@ class AttachTool extends GlintTool {
       // ── 7. Hand the resolved target to the session ────────────────────────
       final rebuilt = rebuild?.deviceId == deviceId;
       await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
+      unawaited(session.backend.warm());
 
       // ── 8. Gather post-attach context ─────────────────────────────────────
       final caps = session.backend.capabilities;
@@ -1040,6 +1042,7 @@ class AttachTool extends GlintTool {
     }
 
     final bound = await session.attachDevice(device: device);
+    unawaited(session.backend.warm());
     deviceClaims.claim(target.id);
 
     final caps = session.backend.capabilities;

@@ -151,4 +151,7 @@ class FlutterInputBackend extends InteractionBackend {
 
   @override
   Future<void> close() => native.close();
+
+  @override
+  Future<void> warm() => native.warm();
 }

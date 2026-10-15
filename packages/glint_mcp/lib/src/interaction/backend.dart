@@ -62,6 +62,9 @@ abstract class InteractionBackend {
   /// Releases helper processes this backend started.
   Future<void> close() async {}
 
+  /// Starts slow connections ahead of the first input, so it lands without a cold start; failures surface on that input instead.
+  Future<void> warm() async {}
+
   /// Capture a PNG to [path] for device-mode perception; also the coordinate reference (ratio = pixel / size).
   Future<ScreenshotResult> screenshot(String path);
 }

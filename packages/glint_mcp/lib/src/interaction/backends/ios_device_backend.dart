@@ -82,8 +82,11 @@ class IosDeviceBackend extends InteractionBackend {
   }
 
   @override
-  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) =>
-      tapEachInTurn(this, points, intervalMs);
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) => _call({
+        'cmd': 'taps',
+        'points': [for (final p in points) _point(p.x, p.y, 0).sublist(0, 2)],
+        'intervalMs': intervalMs,
+      }, extraMs: points.length * (intervalMs + 80));
 
   @override
   Future<void> typeText(String text, {int? keyDelayMs}) =>
@@ -119,7 +122,23 @@ class IosDeviceBackend extends InteractionBackend {
   Future<void> close() => hid.stop();
 
   @override
+  Future<void> warm() async {
+    try {
+      await hid.start();
+    } on DeviceHidError {
+      // reported on the first input that needs the helper
+    }
+  }
+
+  @override
   Future<ScreenshotResult> screenshot(String path) async {
+    try {
+      await hid.call({'cmd': 'screenshot', 'path': path}, timeout: const Duration(seconds: 10));
+      final size = pngSize(path);
+      if (size != null) return ScreenshotResult(path: path, width: size.$1, height: size.$2);
+    } on DeviceHidError {
+      // devicectl below still works without the helper
+    }
     final ProcessResult r;
     try {
       r = await run('xcrun', ['devicectl', 'device', 'capture', 'screenshot', '--device', udid, '--destination', path, '-q']);

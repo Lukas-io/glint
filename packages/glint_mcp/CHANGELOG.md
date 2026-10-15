@@ -6,6 +6,9 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Faster screenshots on a physical iPhone. glint's Device Hub helper captures the screen through CoreDevice's screen capture service: about 310 ms, against about 2 s for `devicectl`. The first capture of a session takes about 700 ms to connect. It is used for `device op:screenshot`, captures after actions, and reading native surfaces. `devicectl` remains the fallback.
+- attach starts the iPhone helper in the background, so the first real touch does not also pay for the connection. `tap sequence` on the phone is one helper command. The helper keeps its screen session for 120 s without input (was 30 s), and speaks protocol 2.
+
 - Actions reply about twice as fast. glint installs a small agent inside the app once per isolate (one eval, the `ext.flutter.glintAgent4` service extension), and three things move into it:
   - **Input.** Taps, swipes, typing and editing keys on the app path each become one call, with nothing to compile per gesture.
   - **Settle.** After an action the agent waits inside the app until:
