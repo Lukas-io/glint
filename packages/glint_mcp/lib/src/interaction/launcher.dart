@@ -6,9 +6,12 @@ import 'device.dart';
 
 /// Raised when a launch can't complete; [logTail] holds the last `flutter run` lines.
 class LaunchError implements Exception {
-  LaunchError(this.message, {this.logTail});
+  LaunchError(this.message, {this.logTail, this.signing = false});
   final String message;
   final String? logTail;
+
+  /// Xcode could not sign the build: no team, no certificate, or a bundle id another team owns.
+  final bool signing;
   @override
   String toString() => 'LaunchError: $message';
 }
@@ -22,6 +25,22 @@ String? flutterAppProblem(String dir) {
   if (!declaresFlutter) return '$dir/pubspec.yaml does not depend on the flutter SDK';
   if (!File('$dir/lib/main.dart').existsSync()) return 'no lib/main.dart in $dir';
   return null;
+}
+
+/// Other `flutter run` processes debugging [deviceId], with their project folders; a phone runs one Xcode debug session at a time.
+Future<List<({int pid, String dir})>> flutterRunsOn(String deviceId, {Set<int> except = const {}}) async {
+  final ps = await Process.run('ps', ['-Ao', 'pid=,command=']);
+  final runs = <({int pid, String dir})>[];
+  for (final line in '${ps.stdout}'.split('\n')) {
+    final m = RegExp(r'^\s*(\d+)\s+.*flutter_tools\.snapshot (?:run|attach) .*-d ' + RegExp.escape(deviceId)).firstMatch(line);
+    if (m == null) continue;
+    final pid = int.parse(m.group(1)!);
+    if (except.contains(pid)) continue;
+    final cwd = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
+    final dir = '${cwd.stdout}'.split('\n').where((l) => l.startsWith('n')).map((l) => l.substring(1)).firstOrNull ?? '?';
+    runs.add((pid: pid, dir: dir));
+  }
+  return runs;
 }
 
 /// Boots devices and starts/stops Flutter apps so `attach` can recover from cold.
@@ -62,6 +81,8 @@ class AppLauncher {
     Duration poll = const Duration(seconds: 2),
     Duration progressEvery = const Duration(seconds: 15),
     void Function(int elapsedSec, String? phase)? onProgress,
+    Map<String, String>? environment,
+    Future<void> Function()? whileWaiting,
   }) async {
     final verb = attachTo == null ? 'run' : 'attach';
     final Process proc;
@@ -70,6 +91,7 @@ class AppLauncher {
         flutterPath,
         [verb, '-d', deviceId, if (attachTo != null) ...['--debug-url', '$attachTo']],
         workingDirectory: projectDir,
+        environment: environment,
       );
     } on Object catch (e) {
       throw LaunchError('could not start `$flutterPath $verb`: $e');
@@ -96,8 +118,9 @@ class AppLauncher {
       }
       if (exited || _looksFailed(text)) {
         proc.kill();
-        throw LaunchError('flutter $verb failed', logTail: _tail(text));
+        throw LaunchError('flutter $verb failed', logTail: _tail(text), signing: _signingFailed(text));
       }
+      if (whileWaiting != null && text.contains('Installing and launching')) await whileWaiting();
       final now = DateTime.now();
       if (onProgress != null && now.isAfter(nextUpdate)) {
         onProgress(now.difference(start).inSeconds, _phase(text));
@@ -172,6 +195,11 @@ class AppLauncher {
   static final vmUriPattern = RegExp(
     r'http://(?:127\.0\.0\.1|localhost):\d+/[A-Za-z0-9_=+\-/]*',
   );
+
+  static bool _signingFailed(String text) => RegExp(
+        r'No profiles for|requires a development team|Failed Registering Bundle Identifier|No Account for Team|'
+        r'Signing for .* requires|Provisioning profile .* doesn.t|is not available for this team|No signing certificate',
+      ).hasMatch(text);
 
   static bool _looksFailed(String text) =>
       text.contains('Error launching application') ||

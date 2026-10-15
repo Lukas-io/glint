@@ -6,6 +6,19 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `attach launch:"<project>"` builds and runs on a physical iPhone. It no longer tries to boot the phone as a simulator.
+  - **Signing without file edits.** glint passes the team to Xcode through `FLUTTER_XCODE_DEVELOPMENT_TEAM` and picks it in this order:
+    1. `signingTeam:`;
+    2. the project's own team, if this Mac has its certificate;
+    3. the team glint last signed with on this Mac (`~/.glint/signing.json`);
+    4. the only team with a certificate;
+    5. the team that already has a profile for the app on this phone.
+
+    The reply says which team and why, and names the others. With several teams and nothing to decide between them, or when Xcode cannot sign, the error is `signingFailed` with `data.teams`.
+  - **Local network prompt.** While the build launches, glint watches the phone (Device Hub screenshot and OCR) and answers "Allow" on the debug build's "find devices on local networks" prompt. Flutter cannot find the VM service until someone does, and the reply says glint answered it.
+  - **One debug session per phone.** A phone runs one Xcode debug session at a time. When another `flutter run` is already debugging it, attach answers at once with `deviceBusy`, naming that process and its project, instead of waiting out the launch timeout.
+- Device claims record when their session last acted (at most every 30 s). A claim with no input for 15 minutes reads as idle. attach then drives the device and says so, instead of refusing or warning that input will interleave.
+
 - Faster screenshots on a physical iPhone. glint's Device Hub helper captures the screen through CoreDevice's screen capture service: about 310 ms, against about 2 s for `devicectl`. The first capture of a session takes about 700 ms to connect. It is used for `device op:screenshot`, captures after actions, and reading native surfaces. `devicectl` remains the fallback.
 - attach starts the iPhone helper in the background, so the first real touch does not also pay for the connection. `tap sequence` on the phone is one helper command. The helper keeps its screen session for 120 s without input (was 30 s), and speaks protocol 2.
 

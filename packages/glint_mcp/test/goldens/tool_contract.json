@@ -42,6 +42,10 @@
         "type": "string",
         "description": "auto (default) | dtuhid | indigo: the simulator's real-touch transport; auto picks dtuhid where Xcode ships it."
       },
+      "signingTeam": {
+        "type": "string",
+        "description": "Apple team id to sign a physical-iPhone build with, when attach launch: should not choose. iOS phones only."
+      },
       "androidInput": {
         "type": "string",
         "description": "auto (default) | server | adb. server = glint's resident input server. Android only."

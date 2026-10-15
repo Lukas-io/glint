@@ -81,6 +81,9 @@ class AttachTool extends GlintTool {
               description:
                   "auto (default) | dtuhid | indigo: the simulator's real-touch transport; auto picks dtuhid where Xcode ships it.",
             ),
+            'signingTeam': Schema.string(
+              description: 'Apple team id to sign a physical-iPhone build with, when attach launch: should not choose. iOS phones only.',
+            ),
             'androidInput': Schema.string(
               description: "auto (default) | server | adb. server = glint's resident input server. Android only.",
             ),
@@ -154,6 +157,7 @@ class AttachTool extends GlintTool {
       );
     }
     final inputArg = args['input'] as String?;
+    final launchNotes = <String>[];
     final requestedRoute = InputRoute.parse(inputArg) ?? (iosInputArg == 'flutter' ? InputRoute.app : null);
     if (inputArg != null && InputRoute.parse(inputArg) == null) {
       return StructuredResponse.error(
@@ -277,7 +281,7 @@ class AttachTool extends GlintTool {
       openedAppId = launchPath;
     } else if (launchPath != null && launchPath.isNotEmpty) {
       final r = await _launchPath(
-          session, scan, launchPath, deviceArg, platformArg, onProgress);
+          session, scan, launchPath, deviceArg, platformArg, onProgress, launchNotes, args['signingTeam'] as String?);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
       launchedDeviceId = r.deviceId;
@@ -313,6 +317,8 @@ class AttachTool extends GlintTool {
           projectDir: rec.projectDir!,
           deviceId: deviceArg,
           platform: platform,
+          notes: launchNotes,
+          signingTeam: args['signingTeam'] as String?,
           onProgress: onProgress);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
@@ -415,13 +421,13 @@ class AttachTool extends GlintTool {
       }
 
       // ── 6. Build the device target (+ iOS bridge preflight, viewport) ─────
-      final warnings = <String>[];
+      final warnings = <String>[...launchNotes];
       final deviceClaims = claims ?? DeviceClaims();
       final claim = deviceClaims.heldByOther(deviceId);
       if (claim != null) {
-        if (deviceArg == null) return _claimed(deviceId, claim);
+        if (deviceArg == null && !claim.idle) return _claimed(deviceId, claim);
         warnings.add('another glint session is driving $deviceId (${claim.describe}); '
-            'your input and its input will interleave');
+            '${claim.idle ? 'it is idle, so this session drives it' : 'your input and its input will interleave'}');
       }
       final DeviceTarget device;
       IosToolchain? toolchain;
@@ -971,9 +977,9 @@ class AttachTool extends GlintTool {
     final deviceClaims = claims ?? DeviceClaims();
     final claim = deviceClaims.heldByOther(target.id);
     if (claim != null) {
-      if (args['device'] == null) return _claimed(target.id, claim);
+      if (args['device'] == null && !claim.idle) return _claimed(target.id, claim);
       warnings.add('another glint session is driving ${target.id} (${claim.describe}); '
-          'your input and its input will interleave');
+          '${claim.idle ? 'it is idle, so this session drives it' : 'your input and its input will interleave'}');
     }
     final DeviceTarget device;
     IosToolchain? toolchain;
@@ -1218,53 +1224,106 @@ class AttachTool extends GlintTool {
     ].join('\n');
   }
 
-  /// Boot [deviceId], `flutter run` [projectDir] on it, track the process, and return its VM URI (or a ready error).
+  /// Boot [deviceId] (or pick a signing team for a phone), `flutter run` [projectDir] on it, track the process, and return its VM URI (or a ready error).
   Future<({Uri? vmUri, String? deviceId, StructuredResponse? error})>
       _launchProject(
     GlintSession session, {
     required String projectDir,
     required String deviceId,
     required DevicePlatform platform,
+    required List<String> notes,
+    String? signingTeam,
     void Function(int, String?)? onProgress,
   }) async {
     const launcher = AppLauncher();
-    onProgress?.call(0, 'booting $deviceId');
-    final bootErr = await launcher.ensureBooted(platform, deviceId);
-    if (bootErr != null) {
-      return (
-        vmUri: null,
-        deviceId: null,
-        error: StructuredResponse.error(
+    final phone = platform == DevicePlatform.ios && isPhysicalIosUdid(deviceId);
+    ({Uri? vmUri, String? deviceId, StructuredResponse? error}) failed(StructuredResponse error) =>
+        (vmUri: null, deviceId: null, error: error);
+    SigningChoice? signing;
+    if (phone) {
+      final busy = await flutterRunsOn(deviceId);
+      if (busy.isNotEmpty) {
+        return failed(StructuredResponse.error(
+          summary: 'another flutter run is debugging $deviceId, and a phone runs one debug session at a time',
+          errorKind: GlintErrorKind.deviceBusy,
+          detail: busy.map((r) => 'pid ${r.pid} in ${r.dir}').join('; '),
+          nextSteps: [
+            'attach to the app it runs instead: attach device:"$deviceId"',
+            'or stop that run first (kill_app if this session started it; otherwise ask whoever owns it)',
+          ],
+        ).mergeData({'flutterRuns': [for (final r in busy) {'pid': r.pid, 'dir': r.dir}]}));
+      }
+      onProgress?.call(0, 'choosing a signing team for $deviceId');
+      try {
+        signing = await pickSigningTeam(projectDir, deviceId, requested: signingTeam);
+      } on SigningUndecided catch (e) {
+        return failed(StructuredResponse.error(
+          summary: 'several teams could sign $projectDir for the phone, and nothing says which',
+          errorKind: GlintErrorKind.signingFailed,
+          detail: 'teams with a certificate on this Mac: ${e.teams.join(', ')}'
+              '${e.projectTeam == null ? '' : '; the project names ${e.projectTeam}, which has none here'}',
+          nextSteps: ['attach again with signingTeam:"<team>", one of ${e.teams.join(', ')}'],
+        ).mergeData({'teams': e.teams}));
+      }
+      notes.add('signed with team ${signing.team} because ${signing.why}'
+          '${signing.others.isEmpty ? '' : '; signingTeam:"<team>" picks another (${signing.others.join(', ')})'}');
+    } else {
+      onProgress?.call(0, 'booting $deviceId');
+      final bootErr = await launcher.ensureBooted(platform, deviceId);
+      if (bootErr != null) {
+        return failed(StructuredResponse.error(
           summary: 'could not boot device $deviceId',
           errorKind: GlintErrorKind.backendToolError,
           detail: bootErr,
-        ),
-      );
+        ));
+      }
     }
     onProgress?.call(0, 'running flutter run');
+    final watcher = phone ? LocalNetworkPromptWatcher(deviceId) : null;
     try {
       final r = await launcher.launchApp(
         projectDir: projectDir,
         deviceId: deviceId,
         timeout: Duration(milliseconds: session.config.launchTimeoutMs),
         onProgress: onProgress,
+        environment: signing == null || signing.team == projectTeam(projectDir)
+            ? null
+            : {'FLUTTER_XCODE_DEVELOPMENT_TEAM': signing.team},
+        whileWaiting: watcher?.check,
       );
       session.registerLaunchedApp(deviceId, r.process);
+      if (signing != null) rememberTeam(signing.team);
+      if (watcher?.answered case final q?) {
+        notes.add('answered "Allow" on the prompt "$q": a debug build needs it for glint to find its VM service');
+      }
       return (vmUri: r.uri, deviceId: deviceId, error: null);
     } on LaunchError catch (e) {
-      return (
-        vmUri: null,
-        deviceId: null,
-        error: StructuredResponse.error(
-          summary: 'failed to launch $projectDir',
-          errorKind: GlintErrorKind.targetNotFound,
-          detail: [e.message, if (e.logTail != null) '\n${e.logTail}'].join(),
-          nextSteps: const [
-            'check the build output in detail',
-            'raise the wait for slow builds: config set launchTimeoutMs <ms>',
+      final detail = [e.message, if (e.logTail != null) '\n${e.logTail}'].join();
+      if (e.signing) {
+        return failed(StructuredResponse.error(
+          summary: 'Xcode could not sign $projectDir for the phone${signing == null ? '' : ' with team ${signing.team}'}',
+          errorKind: GlintErrorKind.signingFailed,
+          detail: detail,
+          nextSteps: [
+            if (signing != null && signing.others.isNotEmpty)
+              'attach again with signingTeam:"<team>", one of ${signing.others.join(', ')}',
+            'if another team owns the bundle id, give the app a bundle id of your own in Xcode (Runner > Signing & Capabilities)',
           ],
-        ),
-      );
+        ).mergeData({'teams': [if (signing != null) signing.team, ...?signing?.others]}));
+      }
+      return failed(StructuredResponse.error(
+        summary: 'failed to launch $projectDir',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: detail,
+        nextSteps: [
+          if (phone && watcher?.answered == null)
+            'if the phone shows a local network prompt, a debug build needs "Allow" before its VM service can be found',
+          'check the build output in detail',
+          'raise the wait for slow builds: config set launchTimeoutMs <ms>',
+        ],
+      ));
+    } finally {
+      await watcher?.close();
     }
   }
 
@@ -1444,6 +1503,8 @@ class AttachTool extends GlintTool {
     String? deviceArg,
     String? platformArg,
     void Function(int, String?)? onProgress,
+    List<String> notes,
+    String? signingTeam,
   ) async {
     final problem = flutterAppProblem(path);
     if (problem != null) {
@@ -1487,6 +1548,8 @@ class AttachTool extends GlintTool {
         projectDir: path,
         deviceId: deviceId,
         platform: platform,
+        notes: notes,
+        signingTeam: signingTeam,
         onProgress: onProgress);
   }
 
