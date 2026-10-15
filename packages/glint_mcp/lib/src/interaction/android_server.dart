@@ -5,7 +5,7 @@ import 'dart:io';
 import '../version.dart';
 
 /// Must equal `PROTOCOL` in native/android_server/src/dev/glint/server/Server.java.
-const int expectedAndroidServerProtocol = 1;
+const int expectedAndroidServerProtocol = 2;
 
 /// The server's dex relative to glint's package root, as `native/android_server/build.sh` writes it.
 const String kAndroidServerDex = 'native/android_server/build/glint-android-server.dex';
