@@ -82,7 +82,11 @@ class IosToolchain {
     this.bridgeError,
     this.downloadError,
     this.allowUntested = false,
+    this.skippedBuild,
   });
+
+  /// Why a local bridge build was passed over for the downloaded one, when it was.
+  final String? skippedBuild;
 
   final XcodeInfo xcode;
   final BridgeLocation bridge;
@@ -119,6 +123,7 @@ class IosToolchain {
       ];
 
   List<String> get warnings => [
+        if (skippedBuild != null) skippedBuild!,
         if (blocker != null) '$blocker; tap / swipe / type will be refused',
         if (bridge.found && _untestedXcode && allowUntested)
           'Xcode ${xcode.version} is untested; $allowUntestedXcodeEnv is on, so '
@@ -186,10 +191,28 @@ Future<IosToolchain> checkIosToolchain(String? explicitBridge,
     detectXcode(run: run),
     if (bridge.found) bridgeHandshake(bridge.path, run: run),
   ]);
-  final handshake = bridge.found
+  var handshake = bridge.found
       ? results[1] as ({int? protocol, String? error})
       : null;
+  String? skippedBuild;
+  final staleBecause = bridge.source == BridgeSource.build && handshake != null ? _staleBuild(bridge.path, handshake) : null;
+  if (staleBecause != null && environment[noBridgeDownloadEnv] != 'true') {
+    final cached = cachedBridgePath(env: environment);
+    try {
+      if (!File(cached).existsSync()) await downloadBridge(cached, fetch: fetch, onPhase: onPhase);
+      final fresh = await bridgeHandshake(cached, run: run);
+      if (fresh.protocol == expectedBridgeProtocol) {
+        skippedBuild = 'skipped the local bridge build at ${bridge.path} ($staleBecause) and used the downloaded one; '
+            'rebuild it (swift build -c release in native/ios_sim_bridge) to use a local build';
+        bridge = BridgeLocation(cached, BridgeSource.cache);
+        handshake = fresh;
+      }
+    } on Object {
+      // no usable download either: keep the local build and its warning
+    }
+  }
   return IosToolchain(
+    skippedBuild: skippedBuild,
     xcode: results[0] as XcodeInfo,
     bridge: bridge,
     bridgeProtocol: handshake?.protocol,
@@ -197,4 +220,16 @@ Future<IosToolchain> checkIosToolchain(String? explicitBridge,
     downloadError: downloadError,
     allowUntested: environment[allowUntestedXcodeEnv] == 'true',
   );
+}
+
+/// Why a local bridge build is stale, or null when it is current: it predates the handshake, speaks another protocol, or is older than the bridge sources beside it (an old checkout's build silently missing later fixes).
+String? _staleBuild(String path, ({int? protocol, String? error}) handshake) {
+  if (handshake.protocol == null) return handshake.error ?? 'it gave no protocol';
+  if (handshake.protocol != expectedBridgeProtocol) return 'protocol ${handshake.protocol}, glint expects $expectedBridgeProtocol';
+  final build = File(path);
+  final sources = Directory('${build.parent.parent.parent.path}/Sources');
+  if (!build.existsSync() || !sources.existsSync()) return null;
+  final built = build.lastModifiedSync();
+  final newer = sources.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.swift') && f.lastModifiedSync().isAfter(built));
+  return newer.isEmpty ? null : 'it is older than its sources';
 }
