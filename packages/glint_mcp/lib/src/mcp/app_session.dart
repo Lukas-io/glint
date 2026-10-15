@@ -5,6 +5,7 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
+import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
 import 'capture_ring.dart';
 
@@ -103,6 +104,7 @@ class AppSession {
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
+  StreamSubscription<String>? _lifecycleSub;
   bool _disposed = false;
 
   String get id => device.id;
@@ -234,11 +236,33 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _reconnect(runtimeFactory));
 
     _lifecyclePollTimer?.cancel();
-    if (nativeReader is NativeSceneReader || nativeReader is RunnerNativeReader || nativeReader is OcrNativeReader) {
+    final pushed = await _subscribeLifecycle(rt);
+    final polled = nativeReader is RunnerNativeReader || (!pushed && (nativeReader is NativeSceneReader || nativeReader is OcrNativeReader));
+    if (polled) {
       _lifecyclePollTimer = Timer.periodic(
         const Duration(milliseconds: 500),
         (_) => _pollLifecycle(background: true),
       );
+    }
+  }
+
+  /// Installs glint's in-app agent and follows the lifecycle changes it posts; false when the app cannot host it, so the caller polls instead.
+  Future<bool> _subscribeLifecycle(FlutterRuntime rt) async {
+    final agent = AppAgent.of(rt);
+    if (agent == null) return false;
+    await _lifecycleSub?.cancel();
+    _lifecycleSub = agent.lifecycle.listen((state) {
+      if (nativeReader != null && nativeSurfaceName == null) {
+        sceneMode = state == 'resumed' ? SceneMode.flutter : SceneMode.native;
+      }
+      _onLifecycle(state);
+    });
+    try {
+      final now = await agent.call(const {'op': 'lifecycle'}).timeout(lifecycleProbeTimeout);
+      _onLifecycle('${now['state']}');
+      return true;
+    } on Object {
+      return false;
     }
   }
 
@@ -260,6 +284,8 @@ class AppSession {
   Future<void> _teardownRuntime() async {
     _lifecyclePollTimer?.cancel();
     _lifecyclePollTimer = null;
+    await _lifecycleSub?.cancel();
+    _lifecycleSub = null;
     await _disconnectSub?.cancel();
     _disconnectSub = null;
     await appLogs.unsubscribe();

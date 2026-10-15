@@ -65,6 +65,7 @@ class VmServiceRuntime implements FlutterRuntime {
       EventStreams.kStderr,
       EventStreams.kStdout,
       EventStreams.kLogging,
+      EventStreams.kExtension,
     ]) {
       try {
         await _vm.service.streamListen(stream).timeout(VmClient.readTimeout);
@@ -94,19 +95,20 @@ class VmServiceRuntime implements FlutterRuntime {
   /// Longest a single VM service call may take before it is reported as [RuntimeUnresponsiveError].
   static const callTimeout = Duration(seconds: 10);
 
-  Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call'}) async {
+  Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call', Duration? timeout}) async {
     await _vm.ready();
+    final limit = timeout ?? callTimeout;
     try {
       try {
-        return await fn().timeout(callTimeout);
+        return await fn().timeout(limit);
       } on SentinelException {
         await _reselectIsolate(op);
-        return await fn().timeout(callTimeout);
+        return await fn().timeout(limit);
       }
     } on SentinelException catch (e) {
       throw RuntimeConnectionLostError(e);
     } on TimeoutException {
-      throw RuntimeUnresponsiveError(op, callTimeout);
+      throw RuntimeUnresponsiveError(op, limit);
     } on StateError catch (e) {
       throw RuntimeConnectionLostError(e);
     } on RPCError catch (e) {
@@ -132,6 +134,23 @@ class VmServiceRuntime implements FlutterRuntime {
       throw RuntimeConnectionLostError('$op: the Flutter isolate is gone ($e)');
     }
   }
+
+  /// Calls service extension [method] in the Flutter isolate; null when the isolate has not registered it.
+  Future<Map<String, Object?>?> callExtensionOrNull(String method, Map<String, String> args, {Duration? timeout}) async {
+    try {
+      final resp = await _guard(
+          () => _vm.service.callServiceExtension(method, isolateId: flutterIsolateId, args: args),
+          op: method,
+          timeout: timeout);
+      return resp.json?.cast<String, Object?>();
+    } on RPCError catch (e) {
+      if (e.code == -32601 || e.message.contains('not found')) return null;
+      rethrow;
+    }
+  }
+
+  /// Events apps post with `postEvent`, such as the agent's lifecycle changes.
+  Stream<Event> get extensionEvents => _vm.service.onExtensionEvent;
 
   // ── inspector ─────────────────────────────────────────────────────
 
