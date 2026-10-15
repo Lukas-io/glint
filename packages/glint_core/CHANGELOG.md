@@ -4,6 +4,8 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-15
+
 ### Changed
 
 - An example (`example/glint_core_example.dart`), the package's own analysis options and `dart format` across the package, so it scores fully on pub.dev.
