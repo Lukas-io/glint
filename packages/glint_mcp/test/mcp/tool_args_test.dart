@@ -98,9 +98,9 @@ void main() {
 
     test('are refused with the likely intended name', () {
       final r = GlintTool.checkArguments(tool,
-          CallToolRequest(name: 'scroll_to_find', arguments: {'glintId': 'x'}));
-      expect(r?.summary, 'scroll_to_find: unknown argument glintId');
-      expect(r?.nextSteps.first, 'use targetGlintId instead of glintId');
+          CallToolRequest(name: 'scroll_to_find', arguments: {'glintID': 'x'}));
+      expect(r?.summary, 'scroll_to_find: unknown argument glintID');
+      expect(r?.nextSteps.first, 'use targetGlintId instead of glintID');
     });
 
     test('closestArgName tries containment, then edit distance', () {
