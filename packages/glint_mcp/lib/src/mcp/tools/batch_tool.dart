@@ -20,14 +20,14 @@ class BatchTool extends GlintTool {
   Tool get definition => Tool(
         name: 'batch',
         description:
-            'Run several steps in one call: steps:[{tool,args}] over tap, type, key, scroll, scroll_to_find, swipe, long_press, drag, hardware_button, wait_for_settle. Each step settles and reports changed; the batch stops at the first error, or (stopOnNoChange, default true) at the first step that changed nothing. Targeted steps default to awaitReady:true. For known sequences (a form, a wizard); use single calls when the next move depends on what you see.',
+            'Run several steps in one call: steps:[{tool,args}] over tap, type, key, scroll, scroll_to_find, swipe, long_press, drag, hardware_button, wait_for_settle, wait_for. Step args may name app:"<name>" to run on another attached app, so one batch can drive several devices (A taps call, B wait_for "Incoming call", B taps Answer). Each step settles and reports changed; the batch stops at the first error, or (stopOnNoChange, default true) at the first step that changed nothing. Targeted steps default to awaitReady:true. For known sequences (a form, a wizard); use single calls when the next move depends on what you see.',
         inputSchema: ObjectSchema(
           properties: {
             'steps': batchStepsSchema(
               _maxSteps,
               description:
                   'Ordered steps, each {tool: "<name>", args: {…}} with the '
-                  'same args the tool takes on its own. Max $_maxSteps.',
+                  'same args the tool takes on its own, plus app:"<name>" to run that step on another attached app. Max $_maxSteps.',
             ),
             'stopOnNoChange': Schema.bool(
               description:
@@ -52,8 +52,7 @@ class BatchTool extends GlintTool {
     if (parsed.error != null) return parsed.error!;
     final steps = parsed.steps!;
 
-    final run =
-        await runBatchSteps(session, steps, stopOnNoChange: stopOnNoChange);
+    final run = await runBatchSteps(session, steps, stopOnNoChange: stopOnNoChange, meta: request.meta);
 
     final results = [for (final o in run.outcomes) o.toJson()];
     final lines = [for (final o in run.outcomes) o.line()];

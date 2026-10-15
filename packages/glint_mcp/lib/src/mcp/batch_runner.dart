@@ -14,6 +14,7 @@ import 'tools/swipe_tool.dart';
 import 'tools/tap_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
+import 'tools/wait_for_tool.dart';
 
 /// A validated batch step: a step tool name plus that tool's own arguments.
 typedef BatchStep = ({String tool, Map<String, Object?> args});
@@ -30,6 +31,7 @@ const Map<String, GlintTool> kBatchStepTools = {
   'drag': DragTool(),
   'hardware_button': HardwareButtonTool(),
   'wait_for_settle': WaitForSettleTool(),
+  'wait_for': WaitForTool(),
 };
 
 /// Steps that resolve a glintId: default to awaitReady so a step can target what the previous step reveals.
@@ -121,6 +123,7 @@ class StepOutcome {
   Map<String, Object?> toJson({DateTime? origin}) => {
         'step': index,
         'tool': tool,
+        if (args['app'] != null) 'app': args['app'],
         'ok': !isError,
         'elapsedMs': elapsedMs,
         if (origin != null)
@@ -141,7 +144,8 @@ class StepOutcome {
     final fired = origin == null
         ? ''
         : ', fired at ${startedAt.difference(origin).inMilliseconds} ms';
-    return '$index. $tool ${stepTarget(args)} → '
+    final app = args['app'];
+    return '$index. ${app == null ? '' : '[$app] '}$tool ${stepTarget(args)} → '
         '${isError ? "FAIL ${response.data?['errorKind']}: " : ""}'
         '${shortSummary(response.summary)}'
         '${changeCategory != null ? " · $changeCategory" : ""}'
@@ -167,6 +171,7 @@ Future<BatchRun> runBatchSteps(
   List<BatchStep> steps, {
   required bool stopOnNoChange,
   void Function(int index, String tool)? onStepStart,
+  MetaWithProgressToken? meta,
 }) async {
   final outcomes = <StepOutcome>[];
   String? reason;
@@ -186,14 +191,25 @@ Future<BatchRun> runBatchSteps(
         'awaitReady': true,
       if (step.tool != 'hardware_button' &&
           step.tool != 'wait_for_settle' &&
+          step.tool != 'wait_for' &&
           !step.args.containsKey('returnScene'))
         'returnScene': true,
       'fetchScene': false,
     };
-    final request = CallToolRequest(name: step.tool, arguments: stepArgs);
+    final request = CallToolRequest(name: step.tool, arguments: stepArgs, meta: meta);
+    final appTarget = step.args['app'] as String?;
+    final matches = appTarget == null ? null : session.matchApps(appTarget);
     StructuredResponse r;
     try {
-      r = invalid ?? await tool.handle(session, request);
+      if (invalid != null) {
+        r = invalid;
+      } else if (matches == null) {
+        r = await tool.handle(session, request);
+      } else if (matches.length != 1) {
+        r = GlintTool.unknownAppResponse(session, appTarget!, matches);
+      } else {
+        r = await session.withApp(matches.single, () async => await tool.handle(session, request));
+      }
     } on SessionNotAttachedError {
       rethrow;
     } on Object catch (e) {
