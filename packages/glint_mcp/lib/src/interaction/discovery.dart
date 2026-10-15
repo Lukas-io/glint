@@ -571,9 +571,16 @@ class DeviceDiscovery {
       return null;
     }
     if (ps.exitCode != 0) return null;
-    final appPaths = appBundlePathsForDevice(ps.stdout as String, udid);
+    final appPaths = flutterBundlesFirst(appBundlePathsForDevice(ps.stdout as String, udid),
+        isFlutter: (p) => Directory('$p/Frameworks/Flutter.framework').existsSync());
     if (appPaths.length != 1) return null; // none, or ambiguous
     return await _readBundleInfo(appPaths.first);
+  }
+
+  /// The Flutter apps among [paths] when there are any: a VM service belongs to one, so another app on the simulator (glint's own XCTest runner host, a system helper) must not make the device ambiguous.
+  static List<String> flutterBundlesFirst(List<String> paths, {required bool Function(String path) isFlutter}) {
+    final flutter = paths.where(isFlutter).toList();
+    return flutter.isEmpty ? paths : flutter;
   }
 
   /// Distinct `…app` bundle paths for [udid] found in `ps` [output]. More than
