@@ -141,13 +141,16 @@ class SemanticButton extends SemanticNode {
   /// Selection read from the widget or its `Semantics` by [SemanticsFlagEnricher]; null when it says nothing.
   bool? selected;
 
+  /// False when the widget has no handler, so a tap does nothing; set by [ButtonFactsEnricher].
+  bool? enabled;
+
   @override
   SemanticRole get role => SemanticRole.button;
 
   @override
   String get displayLabel {
     final state = toggleState != null ? '[$toggleState]' : null;
-    return [label, state, if (selected == true) '[selected]'].nonNulls.join(' ');
+    return [label, state, if (selected == true) '[selected]', if (enabled == false) '[disabled]'].nonNulls.join(' ');
   }
 
   @override
@@ -155,6 +158,7 @@ class SemanticButton extends SemanticNode {
         if (label != null) 'label': label,
         if (toggleState != null) 'toggleState': toggleState,
         if (selected != null) 'selected': selected,
+        if (enabled != null) 'enabled': enabled,
       };
 }
 

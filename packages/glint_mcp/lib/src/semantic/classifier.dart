@@ -112,7 +112,7 @@ class AppBarClassifier extends WidgetClassifier {
     final buttons = <SemanticNode>[];
     void collect(List<SemanticNode> ns) {
       for (final n in ns) {
-        if (n is SemanticButton) {
+        if (n is SemanticButton || (n is SemanticContainer && n.hint == 'tabs')) {
           buttons.add(n);
         } else {
           collect(n.children);
@@ -218,7 +218,7 @@ class SegmentedClassifier extends WidgetClassifier {
 class TabBarClassifier extends WidgetClassifier {
   const TabBarClassifier();
 
-  static const labels = {'NavigationBar', 'BottomNavigationBar', 'NavigationRail', 'CupertinoTabBar'};
+  static const labels = {'NavigationBar', 'BottomNavigationBar', 'NavigationRail', 'CupertinoTabBar', 'TabBar'};
 
   @override
   int get priority => 46;
@@ -226,13 +226,17 @@ class TabBarClassifier extends WidgetClassifier {
   @override
   bool matches(SceneNode node) => _labelOneOf(node, labels);
 
+  /// One tab per item the app built (a destination, an item's icon, a Tab), even when the item reads as empty, since its label is a string the enricher fills.
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) => SemanticContainer(
         glintId: node.glintId,
         hint: 'tabs',
         children: [
-          for (final c in children)
-            c is SemanticButton ? c : SemanticButton(glintId: c.glintId, children: c is SemanticIcon ? [c] : c.children),
+          for (final raw in node.children.where((c) => !c.isOffstage))
+            SemanticButton(glintId: raw.glintId, children: [
+              for (final c in children)
+                if (c is SemanticIcon && c.glintId == raw.glintId) c,
+            ]),
         ],
       );
 }
