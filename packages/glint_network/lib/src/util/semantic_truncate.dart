@@ -40,7 +40,7 @@ const int kSemanticInputCap = 262144;
 ///   trailing marker `{"_truncated": "<dropped> more, <shown> of <total>"}`
 ///   so the agent sees the shape but not the bulk.
 /// - String values longer than [stringLeafBytes] are clipped with a
-///   "...(<n> chars)" suffix.
+///   `...(<n> chars)` suffix.
 /// - Objects are preserved key-for-key (the SHAPE of the response is what
 ///   the agent needs); recursion descends into values.
 ///

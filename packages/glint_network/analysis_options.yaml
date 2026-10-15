@@ -11,5 +11,6 @@ analyzer:
 linter:
   rules:
     - prefer_single_quotes
+    - unintended_html_in_doc_comment
     - prefer_const_constructors
     - prefer_const_declarations

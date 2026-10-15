@@ -41,8 +41,8 @@ List<DtdAppCandidate> matchAppsAcrossDtds(
 /// Stable logical identity for an app across hot restarts (issue #16). Two
 /// attaches with the same identity are the same logical app even though
 /// their VM service URIs differ (every hot restart rotates the URI). Parses
-/// the DTD app-name shape "Kind: Flutter - Device: <device> - Package: <pkg>"
-/// into "<pkg>@<device>"; falls back to the whole lowercased name when the
+/// the DTD app-name shape `Kind: Flutter - Device: <device> - Package: <pkg>`
+/// into `<pkg>@<device>`; falls back to the whole lowercased name when the
 /// shape does not match. Returns null for an empty / null name.
 String? appSessionIdentity(String? appName) {
   if (appName == null || appName.trim().isEmpty) return null;

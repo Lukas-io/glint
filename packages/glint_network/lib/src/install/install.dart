@@ -146,8 +146,8 @@ Future<void> runInstall(List<String> args) async {
 /// running install. Under the JIT wrapper, `Platform.script` points at the
 /// activated source file directly. Under an already-compiled AOT binary
 /// we still want to re-compile from the same source location — derived
-/// via the pub-cache structure (`<pub_cache>/git/glint_network-*/bin/
-/// glint_network.dart`).
+/// via the pub-cache structure
+/// (`<pub_cache>/git/glint_network-*/bin/glint_network.dart`).
 String? _resolveSourcePath() {
   final script = io.Platform.script.toFilePath();
   if (script.endsWith('.dart') && io.File(script).existsSync()) {

@@ -1,5 +1,5 @@
 /// Probe G1 diagnosis: for each Scaffold in the summary tree, evaluate
-/// findAncestorWidgetOfExactType<Offstage>() and also check Visibility.
+/// `findAncestorWidgetOfExactType<Offstage>()` and also check Visibility.
 library;
 
 import 'package:vm_service/vm_service.dart';

@@ -7,3 +7,4 @@ linter:
   rules:
     - prefer_single_quotes
     - unawaited_futures
+    - unintended_html_in_doc_comment
