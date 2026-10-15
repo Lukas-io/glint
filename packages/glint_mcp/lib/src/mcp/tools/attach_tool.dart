@@ -550,8 +550,8 @@ class AttachTool extends GlintTool {
       if (lifecycle != null && lifecycle != 'resumed') {
         warnings.add(
           'the app is $lifecycle: a native layer (permission dialog, sheet, '
-          'or control center) is over it. get_scene returns that screenshot; '
-          'tap x,y in logical points to dismiss it',
+          'or control center) is over it. get_scene reads it; '
+          'tap its button by text (tap text:"Allow") to dismiss it',
         );
         try {
           await session.active!.captureNow('lifecycle');
@@ -1293,6 +1293,7 @@ class AttachTool extends GlintTool {
       );
       session.registerLaunchedApp(deviceId, r.process);
       if (signing != null) rememberTeam(signing.team);
+      await watcher?.afterLaunch();
       if (watcher?.answered case final q?) {
         notes.add('answered "Allow" on the prompt "$q": a debug build needs it for glint to find its VM service');
       }

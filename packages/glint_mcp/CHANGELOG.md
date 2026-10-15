@@ -4,6 +4,13 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- **Typing on a physical iPhone with `input:device`** froze the app when the text had characters the hardware keyboard cannot type (`café ✓`). iOS asks "would like to paste from dtpasteboardd" before an app reads text another process put on the pasteboard, and the prompt blocked the app. glint now taps "Allow Paste" itself (it caused the prompt), and puts the old pasteboard text back only after the app has read the new one. The helper speaks protocol 7.
+- **The local network prompt after launch.** `attach launch:` on a phone answered the debug build's local network prompt only while waiting for the VM service, but Flutter can find the service before iOS shows the prompt. glint now also watches for 8 s after the launch.
+- **Passcode wording.** `device op:status` said "passcode set" when the phone was locked and needed its passcode; it now says that.
+- **Covered-app warning.** attach's warning about an app covered by a system surface now says to tap its button by text, not by x,y.
+
 ## [0.4.0] - 2026-10-15
 
 ### Added
