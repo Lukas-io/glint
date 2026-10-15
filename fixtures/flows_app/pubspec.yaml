@@ -1,0 +1,22 @@
+name: flows_fixture
+description: "glint fixture: small real-world flows (send money, ride, verify phone, chat, checkout), each in a different Flutter style."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.4.3
+  flutter_bloc: ^9.1.1
+  get: ^4.7.3
+  go_router: ^18.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
