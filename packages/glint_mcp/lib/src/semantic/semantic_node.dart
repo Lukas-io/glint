@@ -130,7 +130,7 @@ class SemanticButton extends SemanticNode {
 
   /// Best-effort human label — contained text or tooltip. Icons stay as children
   /// so [IconEnricher] can populate their name post-classify.
-  final String? label;
+  String? label;
 
   /// True for Checkbox / Switch / Radio-shaped widgets ([ToggleClassifier]).
   final bool isToggle;

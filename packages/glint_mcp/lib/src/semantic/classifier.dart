@@ -23,6 +23,7 @@ class ClassifierRegistry {
         ToggleClassifier(),
         ButtonClassifier(),
         SegmentedClassifier(),
+        TabBarClassifier(),
         ListClassifier(),
         TextClassifier(),
         IconClassifier(),
@@ -211,6 +212,29 @@ class SegmentedClassifier extends WidgetClassifier {
         ];
     return SemanticContainer(glintId: node.glintId, hint: 'segments', children: segments(children));
   }
+}
+
+/// A navigation bar: its destinations' labels are strings, so only their icons reach the scene; each item becomes a tab button that `TabLabelEnricher` names.
+class TabBarClassifier extends WidgetClassifier {
+  const TabBarClassifier();
+
+  static const labels = {'NavigationBar', 'BottomNavigationBar', 'NavigationRail', 'CupertinoTabBar'};
+
+  @override
+  int get priority => 46;
+
+  @override
+  bool matches(SceneNode node) => _labelOneOf(node, labels);
+
+  @override
+  SemanticNode build(SceneNode node, List<SemanticNode> children) => SemanticContainer(
+        glintId: node.glintId,
+        hint: 'tabs',
+        children: [
+          for (final c in children)
+            c is SemanticButton ? c : SemanticButton(glintId: c.glintId, children: c is SemanticIcon ? [c] : c.children),
+        ],
+      );
 }
 
 class ButtonClassifier extends WidgetClassifier {

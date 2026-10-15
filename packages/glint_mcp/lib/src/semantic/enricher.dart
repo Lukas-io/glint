@@ -575,3 +575,50 @@ String? imageSourceName(String provider) {
 String _middleCut(String name, {int max = 24}) => name.length <= max
     ? name
     : '${name.substring(0, max - 11)}…${name.substring(name.length - 10)}';
+
+/// Names the tabs of each navigation bar and marks the selected one, from the bar's destinations or items, whose labels are plain strings the scene never sees.
+class TabLabelEnricher implements SemanticEnricher {
+  TabLabelEnricher({required this.runtime});
+
+  final FlutterRuntime runtime;
+
+  static const _labels = '(Element e) { final w = e.widget as dynamic; var l = <String>[]; int? sel; '
+      "String text(Object? x) => x is String ? x : (x is Text ? (x.data ?? '') : ''); "
+      'try { l = [for (final d in w.destinations) text(d.label)]; sel = w.selectedIndex as int?; } catch (_) {} '
+      'if (l.isEmpty) { try { l = [for (final i in w.items) text(i.label)]; sel = w.currentIndex as int?; } catch (_) {} } '
+      "return l.map((s) => s.replaceAll(';', ',')).join('\\u001f') + '\\u001e' + (sel?.toString() ?? ''); }";
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final bars = <(SemanticContainer, String)>[];
+    for (final c in scene.allNodes().whereType<SemanticContainer>()) {
+      final id = c.glintId;
+      final source = id == null ? null : scene.sourceFor(id);
+      if (c.hint == 'tabs' && source != null && source.inspectorId.isNotEmpty) bars.add((c, source.inspectorId));
+    }
+    if (bars.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(batchOverElements([for (final b in bars) b.$2], _labels));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != bars.length) return;
+    for (final (i, part) in parts.indexed) {
+      final (bar, _) = bars[i];
+      final halves = part.split('\u001e');
+      final labels = halves.first.isEmpty ? const <String>[] : halves.first.split('\u001f');
+      final selected = halves.length > 1 ? int.tryParse(halves[1]) : null;
+      final tabs = bar.children.whereType<SemanticButton>().toList();
+      if (labels.length != tabs.length) continue;
+      for (final (j, tab) in tabs.indexed) {
+        if (labels[j].isNotEmpty && tab.label == null) {
+          tab.label = labels[j];
+          if (tab.children.isNotEmpty && tab.children.every((c) => c is SemanticIcon)) tab.children.clear();
+        }
+        if (selected != null) tab.selected = j == selected;
+      }
+    }
+  }
+}

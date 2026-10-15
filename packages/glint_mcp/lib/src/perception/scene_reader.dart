@@ -93,8 +93,9 @@ class SceneReader {
   /// Probes hidden-subtree candidates and marks them [SceneNode.isOffstage] so
   /// id assignment, [firstAddressableId], page selection and the classifier
   /// skip them. Candidates: Scaffolds (GoRouter shell branches sit under
-  /// `Offstage`) and IndexedStack children (hidden via
-  /// `Visibility.maintain(visible:false)` since Flutter 3.7 — never Offstage).
+  /// `Offstage`) and IndexedStack children, hidden through a visibility scope
+  /// (a `Visibility` widget before Flutter 3.47, a private scope after), so
+  /// `Visibility.of` asks rather than looking for the widget.
   /// Both wrappers are framework-created and filtered from the summary tree,
   /// so we probe ancestors per candidate rather than detect structurally.
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
@@ -114,8 +115,7 @@ class SceneReader {
           expression:
               '((WidgetInspectorService.instance.selection.currentElement!'
               '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
-              ' || !(WidgetInspectorService.instance.selection.currentElement!'
-              '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true))'
+              ' || !Visibility.of(WidgetInspectorService.instance.selection.currentElement!))'
               '.toString()',
           inspectorId: candidate.inspectorId,
           groupName: groupName,
