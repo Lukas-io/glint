@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:path/path.dart' as p;
 import '../util/network_env.dart';
 import '../install/repo_layout.dart';
+import '../version.dart';
 
 /// D6 (audit RC10/F8): the deep per-tool guides and the response contract
 /// live under `docs/` in the repo, and every tool description points at
@@ -12,6 +13,9 @@ import '../install/repo_layout.dart';
 /// traced straight to an unreachable schema doc. This module locates the
 /// shipped `docs/` tree and exposes each file as an MCP resource under
 /// `glint-network://docs/...`, making the guidance in-band.
+/// The guides' directory in the package; pub's layout convention names it `doc`.
+const String docDirName = 'doc';
+
 class DocResources {
   /// Resolves the repo `docs/` directory. The package is installed via
   /// `dart pub global activate -sgit`, so the FULL git checkout (docs
@@ -24,13 +28,15 @@ class DocResources {
     if (own != null) return own;
     final script = io.Platform.script.toFilePath();
     if (script.endsWith('.dart')) {
-      // .../<root>/bin/glint_network.dart -> <root>/docs
+      // .../<root>/bin/glint_network.dart -> <root>/doc
       final root = p.dirname(p.dirname(script));
-      final docs = io.Directory(p.join(root, 'docs'));
+      final docs = io.Directory(p.join(root, docDirName));
       if (docs.existsSync()) return docs;
     }
     final cache = _pubCacheDir();
     if (cache == null) return null;
+    final hosted = io.Directory(p.join(cache, 'hosted', 'pub.dev', '$packageName-$packageVersion', docDirName));
+    if (hosted.existsSync()) return hosted;
     final gitDir = io.Directory(p.join(cache, 'git'));
     if (!gitDir.existsSync()) return null;
     io.Directory? newest;
@@ -38,7 +44,7 @@ class DocResources {
     for (final entity in gitDir.listSync()) {
       if (entity is! io.Directory) continue;
       if (!p.basename(entity.path).startsWith(repoCheckoutPrefix)) continue;
-      final docs = io.Directory(p.join(entity.path, packageGitPath, 'docs'));
+      final docs = io.Directory(p.join(entity.path, packageGitPath, docDirName));
       if (!docs.existsSync()) continue;
       final stamp = docs.statSync().modified;
       if (stamp.isAfter(newestStamp)) {
@@ -75,14 +81,14 @@ class DocResources {
     return out;
   }
 
-  /// The `docs/` beside this package's own `lib/`, so the guides match the running code; null in a compiled binary, which has no package config.
+  /// The `doc/` beside this package's own `lib/`, so the guides match the running code; null in a compiled binary, which has no package config.
   static io.Directory? _docsNextToPackage() {
     try {
       final lib = Isolate.resolvePackageUriSync(
           Uri.parse('package:glint_network/'));
       if (lib == null) return null;
       final docs = io.Directory(
-          p.join(p.dirname(p.normalize(lib.toFilePath())), 'docs'));
+          p.join(p.dirname(p.normalize(lib.toFilePath())), docDirName));
       return io.File(p.join(docs.path, 'RESPONSE_CONTRACT.md')).existsSync()
           ? docs
           : null;

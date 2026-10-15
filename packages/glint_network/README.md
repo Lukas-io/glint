@@ -38,11 +38,13 @@ Not for: production observability, traffic outside `dart:io` HTTP, or release bu
 ## Install
 
 ```bash
-dart pub global activate -s git https://github.com/Lukas-io/glint.git --git-path packages/glint_network
+dart pub global activate glint_network
 glint_network install
 ```
 
-The `install` step compiles a native binary so the server starts in under 100ms instead of recompiling a JIT snapshot on every launch. Skipping it can cause the agent host to intermittently mark the server as failed on first connect.
+`glint_network install` is optional but recommended: it compiles a native binary that starts in under 100 ms, against about 270 ms without it, so the agent host never times out on a cold start. `glint_network update` later installs the newest release and compiles it again.
+
+An install from git (`dart pub global activate -s git ...`) keeps working; `glint_network update` moves it to pub.dev.
 
 ## Moving from flutter_network_mcp
 
@@ -108,9 +110,9 @@ The server exposes 50 tools across HTTP, sockets, WebSockets, logs, alerts, sear
 
 ## Documentation
 
-- [Tool reference](docs/tools): every tool has its own page, including when not to use it.
-- [Configuration and environment variables](docs/configuration.md): capability gating, auto-attach, data directory, database size caps.
-- [Telemetry and privacy](docs/telemetry.md): what is collected, what is never collected, the local audit log, and how to opt out.
+- [Tool reference](doc/tools): every tool has its own page, including when not to use it.
+- [Configuration and environment variables](doc/configuration.md): capability gating, auto-attach, data directory, database size caps.
+- [Telemetry and privacy](doc/telemetry.md): what is collected, what is never collected, the local audit log, and how to opt out.
 
 ## Contributing
 
