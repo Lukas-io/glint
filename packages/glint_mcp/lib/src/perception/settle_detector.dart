@@ -1,3 +1,4 @@
+import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
 import 'scene_reader.dart';
 
@@ -35,6 +36,11 @@ class SettleDetector {
     bool checkLoadingAffordances = true,
     int quietGraceMs = 1500,
   }) async {
+    final quick = await _agentSettle(ceilingMs.clamp(0, quietGraceMs), quietFramesNeeded);
+    if (quick != null) {
+      if (!checkLoadingAffordances) return SettleResult.settled(elapsedMs: quick);
+      if ((await _findLoadingAffordances()).isEmpty) return SettleResult.settled(elapsedMs: quick);
+    }
     final start = DateTime.now();
     var consecutiveQuiet = 0;
     var stabilityChecked = false;
@@ -87,6 +93,19 @@ class SettleDetector {
                 elapsedMs: elapsed, loadingAffordances: spinnersSeen);
       }
       await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
+    }
+  }
+
+  /// Waits inside the app until no frame has drawn for about [quietFrames] frames; the elapsed ms when it settled, null when frames kept coming or the agent is unavailable.
+  Future<int?> _agentSettle(int ceilingMs, int quietFrames) async {
+    final agent = AppAgent.of(runtime);
+    if (agent == null) return null;
+    try {
+      final r = await agent.call({'op': 'settle', 'quietMs': '${quietFrames * 33}', 'ceilingMs': '$ceilingMs'},
+          timeout: Duration(milliseconds: ceilingMs + 5000));
+      return r['status'] == 'settled' ? (r['ms'] as num?)?.toInt() : null;
+    } on Object {
+      return null;
     }
   }
 

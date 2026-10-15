@@ -6,6 +6,27 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Actions reply about twice as fast. glint installs a small agent inside the app once per isolate (one eval, the `ext.flutter.glintAgent4` service extension), and three things move into it:
+  - **Input.** Taps, swipes, typing and editing keys on the app path each become one call, with nothing to compile per gesture.
+  - **Settle.** After an action the agent waits inside the app until:
+    - no route or dialog is animating;
+    - the scheduler is idle;
+    - nothing has rebuilt for 100 ms, or 300 ms have passed, so a blinking caret or a spinner cannot stall it.
+
+    Ink ripples and other paint-only frames are not waited for. Route and sheet transitions are waited out in full, so the reply still reads `routeChanged` or `overlayAppeared` after the animation.
+  - **Lifecycle.** The agent posts lifecycle changes, so glint learns a system surface covered the app without polling twice a second. The poll stays only where it also looks for foreign windows (the simulator's XCTest runner).
+
+  On the iPhone 17 simulator with Ember, main → this:
+  - tap a field: 1,072 → 764 ms;
+  - type 15 characters: 702 → 457 ms;
+  - three backspaces: 675 → 397 ms.
+
+  On the media fixture: tap by glintId 587 → 289 ms, by text 612 → 321 ms, raw x,y 540 → 269 ms. A hot restart re-installs the agent on the next call.
+
+### Fixed
+
+- An action that opened a system surface (Control Center, a permission prompt) could report `nothing changed`, because whether the app was covered was read after the action instead of before it. The pre-action snapshot records it now.
+
 - `tap` and `long_press` take `text:` or `glintId:` on a native surface too: a system prompt, an alert, an Android picker, a phone screen read by OCR. glint finds the item on the surface and touches its center, through real touches when the app is covered. An exact label wins over text that only contains it, so `tap text:"Allow"` presses Allow and not the question. A miss is `targetNotFound`, listing what the surface shows.
 - Native surfaces come back as data. `get_scene` in native mode, and every action that leaves one over the app, carry `data.surface`:
   - `kind`: permissionPrompt, alert, otherApp or unknown;

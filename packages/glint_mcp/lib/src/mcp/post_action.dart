@@ -1,6 +1,7 @@
 import '../../interaction.dart' show screensDiffer;
 import '../../observability.dart' show StateObserver;
 import '../../perception.dart';
+import '../../runtime.dart' show AppAgent;
 import '../../semantic.dart';
 import 'envelope.dart';
 import 'session.dart';
@@ -31,7 +32,8 @@ Future<ActionScene> openActionScene(GlintSession session,
     return ActionScene(
       scene: scene,
       semantic: semantic,
-      pre: snapshotOf(semantic, paintHash: await paintSignature(session)),
+      pre: snapshotOf(semantic, paintHash: await paintSignature(session))
+        ..coveredBefore = session.sceneMode == SceneMode.native,
     );
   } on Object {
     await scene.dispose();
@@ -78,6 +80,9 @@ class SceneSnapshot {
 
   /// What the render tree paints beyond text (fills, opacity, elevation), so a colour-only change still registers.
   final int? paintHash;
+
+  /// Whether a native surface covered the app when this was taken; a lifecycle event can land mid-action, so the post-action read must not ask afterwards.
+  bool? coveredBefore;
 
   /// Hashes the WHOLE tree (id, role, text, input value, button label/toggle)
   /// plus overlay content — a deep change (tab swap, text edit, toggle flip)
@@ -243,8 +248,9 @@ class PostActionState {
 /// Prefer [openActionScene] when the caller also needs the live scene.
 Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
+    final covered = session.sceneMode == SceneMode.native;
     return await session.withScene(
-      (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session)),
+      (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session))..coveredBefore = covered,
       detail: SceneDetail.interactive,
     );
   } on Object {
@@ -275,12 +281,12 @@ Future<PostActionState?> readPostActionState(
 }) async {
   final app = session.active;
   final watchesNative = app != null && app.nativeReader != null;
-  final wasNative = watchesNative && app.sceneMode == SceneMode.native;
+  final wasNative = watchesNative && (pre?.coveredBefore ?? app.sceneMode == SceneMode.native);
   try {
     try {
       // A route push/pop animation starts a frame or two AFTER the tap; poll
       // too early and settle catches the idle gap before the animation.
-      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (AppAgent.of(session.runtime) == null) await Future<void>.delayed(const Duration(milliseconds: 120));
       await session.settleDetector.awaitSettle(
         ceilingMs: session.config.postActionSettleMs,
         quietFramesNeeded: session.config.settleQuietFrames,

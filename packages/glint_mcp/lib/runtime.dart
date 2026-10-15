@@ -4,5 +4,6 @@
 /// `ext.flutter.inspector.*` RPCs or `evaluate` calls directly.
 library;
 
+export 'src/runtime/app_agent.dart';
 export 'src/runtime/flutter_runtime.dart';
 export 'src/runtime/vm_service_runtime.dart';
