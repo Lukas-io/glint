@@ -7,6 +7,7 @@ import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 import 'scroll_tool.dart';
+import 'tap_tool.dart';
 
 /// Loops `get_scene` + `scroll` until a target (glintId or text content)
 /// is hittable, or the ceiling is reached. Stops early if already visible.
@@ -17,7 +18,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen and hittable, then return its glintId. Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never hittable), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen and hittable, then return its glintId (tap:true also taps it). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never hittable), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -41,6 +42,9 @@ class ScrollToFindTool extends GlintTool {
             'amountFraction': Schema.num(
               description: 'Scroll size per step. Default 0.6.',
             ),
+            'tap': Schema.bool(
+              description: 'Tap it once found (its nearest tappable ancestor when the match is text) and return the tap result. Default false.',
+            ),
           },
         ),
       );
@@ -58,6 +62,7 @@ class ScrollToFindTool extends GlintTool {
     final amount = (argNum(args, 'amountFraction') ??
             session.config.scrollAmountFraction)
         .toDouble();
+    final tap = argBool(args, 'tap') ?? false;
 
     if ((targetGlintId == null) == (targetText == null)) {
       return StructuredResponse.error(
@@ -88,6 +93,8 @@ class ScrollToFindTool extends GlintTool {
     var lastTexts = const <String>[];
     var lastIds = const <String>[];
 
+    String? tapId;
+    StructuredResponse? foundReply;
     for (var i = 0; i <= maxScrolls; i++) {
       final scene = await session.reader.readSummary();
       try {
@@ -107,7 +114,7 @@ class ScrollToFindTool extends GlintTool {
             // On-viewport is required: a hittable-but-scrolled-out target
             // would send the agent straight back into an offViewport refusal.
             if (coord.hittable && coord.centerOnViewport) {
-              return StructuredResponse(
+              final found = StructuredResponse(
                 summary: 'found $criterion after $i scroll(s)',
                 data: {
                   'attempts': i,
@@ -117,6 +124,10 @@ class ScrollToFindTool extends GlintTool {
                   if (hit.textPreview != null) 'matchedText': hit.textPreview,
                 },
               );
+              if (!tap) return found;
+              tapId = tapTargetFor([scene.root, ...scene.overlayRoots], hit) ?? hit.glintId;
+              foundReply = found;
+              break;
             }
           } on Exception {
             // resolve can fail mid-scroll if the node was just replaced;
@@ -127,7 +138,7 @@ class ScrollToFindTool extends GlintTool {
         await scene.dispose();
       }
 
-      if (i == maxScrolls) break;
+      if (tapId != null || i == maxScrolls) break;
       final step = await scroller.handle(session, scrollArgs);
       if (step.isError) {
         return StructuredResponse.error(
@@ -136,6 +147,12 @@ class ScrollToFindTool extends GlintTool {
           detail: step.summary,
         );
       }
+    }
+
+    if (tapId != null && foundReply != null) {
+      final tapped = await const TapTool()
+          .handle(session, CallToolRequest(name: 'tap', arguments: {'glintId': tapId}));
+      return tapped.copyWith(summary: '${foundReply.summary}, ${tapped.summary}').mergeData({'found': foundReply.data});
     }
 
     // Return a diagnostic failure message that distinguishes the root cause.

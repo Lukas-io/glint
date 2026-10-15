@@ -4,7 +4,9 @@ import '../../../interaction.dart';
 import '../../../perception.dart';
 import '../envelope.dart';
 import '../session.dart';
+import '../text_target.dart';
 import '../tool.dart';
+import '../tool_args.dart';
 
 /// Read-only geometry lookup. Resolves a glintId against the live render
 /// tree and returns its physical-pixel center, bounds, painted, hittable
@@ -30,8 +32,10 @@ class ResolveTool extends GlintTool {
             'glintId': Schema.string(
               description: 'Stable id from `get_scene`.',
             ),
+            'text': Schema.string(
+              description: 'Visible text of the target instead of glintId, matched as tap does.',
+            ),
           },
-          required: ['glintId'],
         ),
       );
 
@@ -39,7 +43,9 @@ class ResolveTool extends GlintTool {
   Future<StructuredResponse> handle(
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final glintId = args['glintId']! as String;
+    final target = await readTarget(session, args, readTargetedArgs(args, session.config), tool: 'resolve', coordinates: '');
+    if (target.error != null) return target.error!;
+    final glintId = target.glintId!;
 
     final scene = await session.reader.readSummary();
     try {

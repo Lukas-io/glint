@@ -6,6 +6,11 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- Fewer wasted calls when targeting (#169):
+  - `tap`, `long_press` and `resolve` take `text:` instead of `glintId`: the visible text of a button, tile or label, matched exactly first (ignoring case), then as a substring. An open dialog is searched before the screen, so a dialog button with a generic id (`gesture_detector_in_overflow_bar#xm3q`) is one call: `tap text:"Try again"`. The tap lands on the nearest tappable ancestor of the text. Several matches fail with each candidate's id and text; no match fails with the text on screen. With `awaitReady` the text is waited for.
+  - `glintId` is accepted on every tool whose target has its own name: `type` (`focus`) and `scroll_to_find` (`targetGlintId`).
+  - `key key:back` presses the system back, the same as `hardware_button button:back`. Other device buttons passed to `key` point at `hardware_button`.
+  - `scroll_to_find tap:true` taps the target once it is on screen (its nearest tappable ancestor for a text match) and returns the tap's result, so finding and tapping an item below the fold is one call.
 - `device op:privacy` works on Android (pass the adb serial as `udid`; `bundleId` defaults to the attached app). Services keep the iOS names where they exist: notifications, microphone, camera, contacts, location, location-always, photos, media-library, calendar, motion, plus phone, sms and all. `grant`, `revoke` (marked as the user's answer) and `reset` (the app asks again) go through `pm`, after checking the app declares the permission, and are read back. `screen-capture` sets the MediaProjection app op (`appops set <package> PROJECT_MEDIA allow|ignore|default`). Before, every Android call failed with simctl's "Invalid device"; the other `device` ops now say they are iOS-only (#166).
 - `map`, a new tool that drives a Google map like a finger (#148, phase 5):
   - `op:read` gives the camera and the markers with their screen points.

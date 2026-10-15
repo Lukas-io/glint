@@ -8,6 +8,7 @@ import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tap_sequence.dart';
+import '../text_target.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
@@ -18,9 +19,12 @@ class TapTool extends GlintTool {
   Tool get definition => Tool(
         name: 'tap',
         description:
-            'Tap a node by glintId from get_scene, or x,y (device mode: screenshot pixels; flutter mode: logical points). Returns changed and changeCategory: routeChanged, overlayAppeared, overlayDismissed, contentChanged, nothing, nativeSurface (with a screenshot) or nativeDismissed.',
+            'Tap a node by glintId from get_scene, by its visible text, or x,y (device mode: screenshot pixels; flutter mode: logical points). Returns changed and changeCategory: routeChanged, overlayAppeared, overlayDismissed, contentChanged, nothing, nativeSurface (with a screenshot) or nativeDismissed.',
         inputSchema: ObjectSchema(
           properties: {
+            'text': Schema.string(
+              description: 'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
+            ),
             'glintId': Schema.string(
               description:
                   'Stable id from `get_scene`, e.g. floating_action_button',
@@ -110,16 +114,9 @@ class TapTool extends GlintTool {
       );
     }
 
-    final glintId = args['glintId'] as String?;
-    if (glintId == null) {
-      return StructuredResponse.error(
-        summary: 'tap needs either glintId or x + y',
-        errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: const [
-          'pass glintId from get_scene, or x,y coordinates',
-        ],
-      );
-    }
+    final target = await readTarget(session, args, t, tool: 'tap');
+    if (target.error != null) return target.error!;
+    final glintId = target.glintId!;
     final refuse = argBool(args, 'refuseNotHittable');
 
     final arming = await maybeAwaitReady(

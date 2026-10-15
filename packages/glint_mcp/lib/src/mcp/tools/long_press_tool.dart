@@ -6,6 +6,7 @@ import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
+import '../text_target.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
@@ -16,7 +17,7 @@ class LongPressTool extends GlintTool {
   Tool get definition => Tool(
         name: 'long_press',
         description:
-            'Long-press a node by glintId, OR pass x,y for raw coordinates '
+            'Long-press a node by glintId or visible text, OR pass x,y for raw coordinates '
             '(device mode: screenshot pixels; flutter mode: logical points). '
             "Default duration 800ms, past Flutter's 500ms long-press threshold. "
             'Supports awaitReady / readyTimeoutMs to gate on the target '
@@ -26,6 +27,9 @@ class LongPressTool extends GlintTool {
             'or sheets that appear after a long press.',
         inputSchema: ObjectSchema(
           properties: {
+            'text': Schema.string(
+              description: 'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
+            ),
             'glintId': Schema.string(
               description: 'Stable id from get_scene.',
             ),
@@ -70,16 +74,9 @@ class LongPressTool extends GlintTool {
       );
     }
 
-    final glintId = args['glintId'] as String?;
-    if (glintId == null) {
-      return StructuredResponse.error(
-        summary: 'long_press needs either glintId or x + y',
-        errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: const [
-          'pass glintId from get_scene, or x,y coordinates',
-        ],
-      );
-    }
+    final target = await readTarget(session, args, t, tool: 'long_press');
+    if (target.error != null) return target.error!;
+    final glintId = target.glintId!;
 
     final arming = await maybeAwaitReady(
       session: session,

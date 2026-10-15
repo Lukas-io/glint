@@ -82,6 +82,22 @@ SceneNode? _activePage(SceneNode root) {
   return last;
 }
 
+/// The id a tap on [node] should use: its nearest tappable ancestor-or-self, else its own id.
+String? tapTargetFor(Iterable<SceneNode> roots, SceneNode node) {
+  String? found;
+  bool visit(SceneNode n, String? tappable) {
+    final here = n.glintId != null && _tappable(n.baseLabel) ? n.glintId : tappable;
+    if (identical(n, node)) {
+      found = here ?? n.glintId;
+      return true;
+    }
+    return n.children.any((c) => visit(c, here));
+  }
+
+  roots.any((r) => visit(r, null));
+  return found;
+}
+
 bool _tappable(String label) =>
     label.endsWith('Button') ||
     const {'InkWell', 'InkResponse', 'GestureDetector', 'ListTile', 'Checkbox', 'Switch'}
