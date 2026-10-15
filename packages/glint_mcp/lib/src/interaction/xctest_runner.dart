@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Must equal `runnerProtocol` in native/ios_xctest_runner/UITests/Router.swift.
-const int expectedRunnerProtocol = 3;
+const int expectedRunnerProtocol = 4;
 
 /// The runner's Xcode project relative to glint's package root.
 const String kRunnerProject = 'native/ios_xctest_runner/GlintRunner.xcodeproj';
