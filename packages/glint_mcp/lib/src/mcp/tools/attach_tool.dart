@@ -72,8 +72,10 @@ class AttachTool extends GlintTool {
             ),
             'iosInput': Schema.string(
               description:
-                  'auto (default) | dtuhid | indigo. How taps and keys reach '
-                  'the simulator; auto picks dtuhid where Xcode ships it. iOS only.',
+                  'auto (default) | dtuhid | indigo | flutter. How taps and keys reach an iOS device. '
+                  'Simulator: auto picks dtuhid where Xcode ships it. Physical iPhone: auto delivers '
+                  'inside the Flutter app and uses real Device Hub touches for system surfaces, the '
+                  'keyboard and buttons; dtuhid = real touches only; flutter = in-app only.',
             ),
             'androidInput': Schema.string(
               description: "auto (default) | server | adb. server = glint's resident input server. Android only.",
@@ -140,11 +142,11 @@ class AttachTool extends GlintTool {
       );
     }
     final iosInput = (args['iosInput'] as String?) ?? 'auto';
-    if (!const {'auto', 'dtuhid', 'indigo'}.contains(iosInput)) {
+    if (!const {'auto', 'dtuhid', 'indigo', 'flutter'}.contains(iosInput)) {
       return StructuredResponse.error(
         summary: 'unknown iosInput: $iosInput',
         errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: const ['use one of: auto, dtuhid, indigo'],
+        nextSteps: const ['use one of: auto, dtuhid, indigo (simulator), flutter (physical iPhone)'],
       );
     }
 
@@ -449,9 +451,22 @@ class AttachTool extends GlintTool {
               timeoutMs: session.config.attachProbeTimeoutMs,
             );
           }
-          device = IosDevice(udid: deviceId, logicalWidth: vp.w, logicalHeight: vp.h, devicePixelRatio: vp.dpr);
-          warnings.add('physical iPhone: get_scene, screenshots and hot_reload work, but glint cannot tap or type '
-              'on it yet; input tools say where to ask the user to tap');
+          if (iosInput == 'indigo') {
+            return StructuredResponse.error(
+              summary: 'iosInput:indigo is a simulator transport',
+              errorKind: GlintErrorKind.invalidArgument,
+              nextSteps: const ['on a physical iPhone use iosInput auto, dtuhid or flutter'],
+            );
+          }
+          final route = _iphoneRoute(iosInput);
+          device = IosDevice(udid: deviceId, logicalWidth: vp.w, logicalHeight: vp.h, devicePixelRatio: vp.dpr, route: route);
+          if (route != InputRoute.flutter) {
+            final missing = await _deviceHidMissing(onProgress);
+            if (missing != null) {
+              warnings.add('device input (system surfaces, the keyboard, buttons) is unavailable: $missing; '
+                  'input inside the Flutter app still works');
+            }
+          }
         case DevicePlatform.ios:
           toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
               onPhase: (phase) => onProgress?.call(0, phase));
@@ -621,10 +636,7 @@ class AttachTool extends GlintTool {
         warnings: warnings,
         nextSteps: [
           if (!returnScene) 'call `get_scene` to read the current screen',
-          if (device is IosDevice)
-            'to act, ask the user to tap or type on the phone (tap and type reply with the exact point), then get_scene'
-          else
-            'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
+          'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
           if (others.isNotEmpty)
             'switch with attach app:"<name>", or target once with app:"<name>" '
                 'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',
@@ -939,6 +951,31 @@ class AttachTool extends GlintTool {
     final DeviceTarget device;
     IosToolchain? toolchain;
     switch (target.platform) {
+      case DevicePlatform.ios when target.physical:
+        if (screen == null) {
+          return StructuredResponse.error(
+            summary: 'could not capture the screen to size iPhone ${target.id}',
+            errorKind: GlintErrorKind.backendToolError,
+            detail: shot.error,
+            nextSteps: const ['unlock the iPhone and check `xcrun devicectl list devices` shows it connected, then retry'],
+          );
+        }
+        final missing = await _deviceHidMissing(onProgress);
+        if (missing != null) {
+          return StructuredResponse.error(
+            summary: 'device input for iPhone ${target.id} is unavailable',
+            errorKind: GlintErrorKind.unsupportedBackendAction,
+            detail: missing,
+            nextSteps: DeviceHidError('missing', missing).nextSteps,
+          );
+        }
+        device = IosDevice(
+          udid: target.id,
+          logicalWidth: shot.width!.toDouble(),
+          logicalHeight: shot.height!.toDouble(),
+          devicePixelRatio: 1.0,
+          route: InputRoute.native,
+        );
       case DevicePlatform.ios:
         toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
             onPhase: (phase) => onProgress?.call(0, phase));
@@ -1015,11 +1052,35 @@ class AttachTool extends GlintTool {
   /// adb backend.
   Future<ScreenshotResult> _probeScreenSize(
       BootedDevice target, String adbPath, String path) {
+    if (target.platform == DevicePlatform.ios && target.physical) {
+      return IosDevice(udid: target.id, logicalWidth: 1, logicalHeight: 1, devicePixelRatio: 1)
+          .createBackend()
+          .screenshot(path);
+    }
     return target.platform == DevicePlatform.ios
         ? const SimControl().screenshot(target.id, path)
         : AndroidDevice(serial: target.id, adbPath: adbPath)
             .createBackend()
             .screenshot(path);
+  }
+
+  /// The input route a physical iPhone takes for [iosInput].
+  InputRoute _iphoneRoute(String iosInput) => switch (iosInput) {
+        'dtuhid' => InputRoute.native,
+        'flutter' => InputRoute.flutter,
+        _ => InputRoute.auto,
+      };
+
+  /// Fetches the Device Hub helper when this install has none; the reason when it cannot, null when it is ready.
+  Future<String?> _deviceHidMissing(void Function(int, String?)? onProgress) async {
+    if (locateDeviceHid() != null) return null;
+    onProgress?.call(0, 'downloading the glint-devicehid helper');
+    try {
+      await ensureDeviceHid();
+      return null;
+    } on DeviceHidError catch (e) {
+      return e.detail;
+    }
   }
 
   /// The app lifecycle from the probe runtime, or null when the eval fails; used to explain a failed probe.
@@ -1409,7 +1470,11 @@ class AttachTool extends GlintTool {
   String? _inputOf(DeviceTarget device) => switch (device) {
         IosSimulator(:final runner) => runner != null ? 'xctest' : 'bridge',
         AndroidDevice(:final server) => server != null ? 'server' : 'adb',
-        _ => null,
+        IosDevice(:final route) => switch (route) {
+            InputRoute.auto => 'auto',
+            InputRoute.native => 'dtuhid',
+            InputRoute.flutter => 'flutter',
+          },
       };
 
   /// Says which backend the rebuilt session really uses, since an Android server that fails to start falls back to adb.
@@ -1426,6 +1491,8 @@ class AttachTool extends GlintTool {
     final ios = args['iosBackend'] as String?;
     final now = _inputOf(device);
     if (device is IosSimulator && ios != null && !app.deviceMode && ios != now) return (from: now!, to: ios);
+    final iphone = args['iosInput'] as String?;
+    if (device is IosDevice && iphone != null && !app.deviceMode && iphone != now) return (from: now!, to: iphone);
     final input = args['androidInput'] as String?;
     if (device is AndroidDevice && input != null && input != 'auto' && input != now) return (from: now!, to: input);
     return null;

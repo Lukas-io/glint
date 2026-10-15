@@ -49,6 +49,22 @@ jobs:
           cd "$RUNNER_TEMP/assets"
           shasum -a 256 glint-iossim-macos > glint-iossim-macos.sha256
           cat glint-iossim-macos.sha256
+      - name: Build the universal glint-devicehid helper
+        if: steps.tag.outputs.package == 'glint_mcp'
+        working-directory: packages/glint_mcp/native/ios_device_hid
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+          mkdir -p "$RUNNER_TEMP/assets"
+          bin="$RUNNER_TEMP/assets/glint-devicehid-macos"
+          lipo -create -output "$bin" target/aarch64-apple-darwin/release/glint-devicehid target/x86_64-apple-darwin/release/glint-devicehid
+          lipo "$bin" -verify_arch arm64 x86_64
+          codesign --force --sign - "$bin"
+          "$bin" version
+          cd "$RUNNER_TEMP/assets"
+          shasum -a 256 glint-devicehid-macos > glint-devicehid-macos.sha256
+          cat glint-devicehid-macos.sha256
       - name: Build the glint Android server
         if: steps.tag.outputs.package == 'glint_mcp'
         working-directory: packages/glint_mcp/native/android_server

@@ -97,8 +97,8 @@ const List<TestedSetup> testedSetups = [
     xcodeMajor: 27,
     hostMajor: 27,
     status: SetupStatus.verified,
-    checkedOn: '2026-10-11',
-    evidence: 'attach, get_scene, screenshot and hot_reload on a paired iPhone 15 Pro, iOS 27.0, over USB (#136); input is refused by design',
+    checkedOn: '2026-10-15',
+    evidence: 'on a paired iPhone 15 Pro, iOS 27.0, over USB: tap, type, backspace and swipe inside the app through the VM; Control Center opened, read by OCR and dismissed through Device Hub; a system prompt answered through Device Hub',
   ),
   TestedSetup(
     platform: 'ios',

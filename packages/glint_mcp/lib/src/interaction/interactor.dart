@@ -18,7 +18,9 @@ class Interactor {
 
   Future<ActionResult> run(Scene scene, Action action) async {
     try {
-      return await _dispatch(scene, action);
+      final result = await _dispatch(scene, action);
+      final via = backend.takeRoute();
+      return via == null || !result.ok ? result : result.withVia(via);
     } on IosToolchainBlocked catch (e) {
       return ActionResult.failure(
         action: action,

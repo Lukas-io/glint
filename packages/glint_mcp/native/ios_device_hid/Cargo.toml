@@ -1,0 +1,26 @@
+[package]
+name = "glint-devicehid"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "glint-devicehid"
+path = "src/main.rs"
+
+[dependencies]
+idevice = { git = "https://github.com/jkcoxson/idevice", rev = "3854a5df4a5a6dee71ffce4d8befc2ea356a8065", default-features = false, features = [
+  "ring",
+  "usbmuxd",
+  "core_device_proxy",
+  "tunnel_tcp_stack",
+  "display_stream",
+] }
+tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "sync"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+strip = true
+lto = true

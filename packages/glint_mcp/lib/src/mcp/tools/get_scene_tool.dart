@@ -69,7 +69,8 @@ class GetSceneTool extends GlintTool {
 
     if (session.sceneMode == SceneMode.native ||
         session.nativeReader is AndroidNativeReader ||
-        session.nativeReader is RunnerNativeReader) {
+        session.nativeReader is RunnerNativeReader ||
+        session.nativeReader is OcrNativeReader) {
       await session.active?.refreshSceneMode();
     }
     if (session.sceneMode == SceneMode.native) {
@@ -319,10 +320,14 @@ class GetSceneTool extends GlintTool {
     final isSentinel = nativeScene.root.glintId == '_native_surface';
     final dpr = session.device.devicePixelRatio;
     final surface = app?.nativeSurfaceName;
-    final listed = surface != null && !isSentinel && nativeScene.root.children.isNotEmpty;
+    final ocr = nativeReader is OcrNativeReader;
+    final listed = (surface != null || ocr) && !isSentinel && nativeScene.root.children.isNotEmpty;
     final sent = capture == null || listed ? null : await session.modelImage(capture.path);
-    final readProblem =
-        nativeReader is AndroidNativeReader ? nativeReader.lastReadProblem : null;
+    final readProblem = switch (nativeReader) {
+      AndroidNativeReader() => nativeReader.lastReadProblem,
+      OcrNativeReader() => nativeReader.lastReadProblem,
+      _ => null,
+    };
     return StructuredResponse(
       summary: [
         '--- native surface active ---',
@@ -344,8 +349,9 @@ class GetSceneTool extends GlintTool {
         if (readProblem != null) readProblem,
       ],
       nextSteps: [
-        if (surface != null && !isSentinel)
+        if ((surface != null || ocr) && !isSentinel)
           'tap an element above with tap x,y using its @ coordinates (logical points)',
+        if (ocr && !isSentinel) 'these are the text lines read off the screen; a button is the line with its label',
         if (surface != null && nativeReader is AndroidNativeReader) 'hardware_button back closes it without choosing',
         if (surface != null && nativeReader is RunnerNativeReader)
           'to close it without choosing, tap its Cancel or Close element, or tap outside a menu',

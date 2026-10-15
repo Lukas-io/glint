@@ -49,6 +49,7 @@ class ActionResult {
     this.hittable,
     this.warnings = const [],
     this.nextSteps = const [],
+    this.via,
   })  : ok = true,
         error = null,
         errorKind = null;
@@ -64,7 +65,8 @@ class ActionResult {
     this.hittable,
     this.warnings = const [],
     this.nextSteps = const [],
-  }) : ok = false;
+  }) : ok = false,
+        via = null;
 
   final Action action;
   final bool ok;
@@ -77,6 +79,22 @@ class ActionResult {
   final List<String> nextSteps;
   final String? error;
   final GlintErrorKind? errorKind;
+
+  /// The input path a routed backend used (`flutter`, `device input (...)`); null for single-path backends.
+  final String? via;
+
+  /// This success with [via] recorded.
+  ActionResult withVia(String via) => ActionResult.success(
+        action: action,
+        summary: '$summary · via $via',
+        physicalCenter: physicalCenter,
+        devicePixelRatio: devicePixelRatio,
+        painted: painted,
+        hittable: hittable,
+        warnings: warnings,
+        nextSteps: nextSteps,
+        via: via,
+      );
 
   Map<String, Object?> toJson() => {
         'action': action.label,
@@ -91,5 +109,6 @@ class ActionResult {
         if (nextSteps.isNotEmpty) 'nextSteps': nextSteps,
         if (error != null) 'error': error,
         if (errorKind != null) 'errorKind': errorKind!.name,
+        if (via != null) 'via': via,
       };
 }

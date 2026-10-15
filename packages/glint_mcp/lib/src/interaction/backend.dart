@@ -54,6 +54,12 @@ abstract class InteractionBackend {
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
 
+  /// The path the last input took (`flutter`, `device input (...)`), cleared on read; null for single-path backends.
+  String? takeRoute() => null;
+
+  /// Releases helper processes this backend started.
+  Future<void> close() async {}
+
   /// Capture a PNG to [path] for device-mode perception; also the coordinate reference (ratio = pixel / size).
   Future<ScreenshotResult> screenshot(String path);
 }

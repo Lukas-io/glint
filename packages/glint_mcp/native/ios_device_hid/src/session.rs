@@ -1,0 +1,257 @@
+use crate::keys;
+use idevice::{
+    IdeviceService, ReadWrite, RsdService,
+    core_device::{
+        CallInfoBlob, DisplayServiceClient, build_screen_audio_offer, build_screen_video_offer,
+        build_start_audio_parameters, build_start_video_parameters,
+        hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient},
+    },
+    core_device_proxy::CoreDeviceProxy,
+    rsd::RsdHandshake,
+    tcp::handle::AdapterHandle,
+    usbmuxd::{UsbmuxdAddr, UsbmuxdConnection},
+};
+use serde_json::{Value, json};
+use std::time::{Duration, Instant};
+use tokio::task::JoinHandle;
+
+/// What Device Hub sends as the controller's own feature mask; the device's larger mask yields an invalid video config.
+const CLIENT_SUPPORTED_FEATURES: u64 = 140;
+const MAIN_DISPLAY: i64 = 1;
+
+pub struct SessionError {
+    pub kind: &'static str,
+    pub detail: String,
+}
+
+fn err(kind: &'static str, detail: impl Into<String>) -> SessionError {
+    SessionError { kind, detail: detail.into() }
+}
+
+struct Live {
+    /// False when another host was already streaming; stopping would end its session too.
+    sole_stream: bool,
+    display: DisplayServiceClient<Box<dyn ReadWrite>>,
+    drains: Vec<JoinHandle<()>>,
+    touch: UniversalHidServiceClient<Box<dyn ReadWrite>>,
+    indigo: IndigoHidClient<Box<dyn ReadWrite>>,
+}
+
+pub struct Session {
+    adapter: AdapterHandle,
+    handshake: RsdHandshake,
+    live: Option<Live>,
+}
+
+impl Session {
+    pub async fn connect(udid: &str) -> Result<Self, SessionError> {
+        let mut mux = UsbmuxdConnection::default()
+            .await
+            .map_err(|e| err("usbmuxd", format!("cannot reach usbmuxd: {e:?}")))?;
+        let device = mux
+            .get_device(udid)
+            .await
+            .map_err(|e| err("deviceNotFound", format!("{udid} is not connected: {e:?}")))?;
+        let addr = UsbmuxdAddr::from_env_var().map_err(|e| err("usbmuxd", format!("{e:?}")))?;
+        let provider = device.to_provider(addr, "glint-devicehid");
+        let proxy = CoreDeviceProxy::connect(&provider)
+            .await
+            .map_err(|e| err("tunnel", format!("no CoreDevice tunnel (is the phone unlocked, trusted and in Developer Mode?): {e:?}")))?;
+        let rsd_port = proxy.tunnel_info().server_rsd_port;
+        let adapter = proxy
+            .create_software_tunnel()
+            .map_err(|e| err("tunnel", format!("{e:?}")))?;
+        let mut adapter = adapter.to_async_handle();
+        let stream = adapter
+            .connect(rsd_port)
+            .await
+            .map_err(|e| err("tunnel", format!("no service directory: {e:?}")))?;
+        let handshake = RsdHandshake::new(stream)
+            .await
+            .map_err(|e| err("tunnel", format!("service directory handshake failed: {e:?}")))?;
+        Ok(Self { adapter, handshake, live: None })
+    }
+
+    pub async fn stream_status(&mut self) -> Result<String, SessionError> {
+        let mut display = DisplayServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no display service: {e:?}")))?;
+        display
+            .get_media_stream_server_status()
+            .await
+            .map(|v| format!("{v:?}"))
+            .map_err(|e| err("stream", format!("{e:?}")))
+    }
+
+    pub fn streaming(&self) -> bool {
+        self.live.is_some()
+    }
+
+    pub async fn handle(&mut self, request: &Value) -> Result<Value, SessionError> {
+        let cmd = request["cmd"].as_str().unwrap_or_default();
+        let opened = self.ensure_live().await?;
+        let live = self.live.as_mut().expect("ensure_live");
+        let started = Instant::now();
+        let result = match cmd {
+            "touch" => touch(live, request).await,
+            "type" => type_text(live, request).await,
+            "key" => key(live, request).await,
+            "button" => button(live, request).await,
+            other => Err(err("badRequest", format!("unknown cmd {other:?}"))),
+        };
+        if result.as_ref().is_err_and(|e| e.kind == "input") {
+            self.stop_stream().await;
+        }
+        result.map(|()| json!({"streamOpened": opened, "ms": started.elapsed().as_millis() as u64}))
+    }
+
+    async fn ensure_live(&mut self) -> Result<bool, SessionError> {
+        if self.live.is_some() {
+            return Ok(false);
+        }
+        let mut display = DisplayServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no display service (the developer disk image may not be mounted): {e:?}")))?;
+        let sole_stream = !display
+            .get_media_stream_server_status()
+            .await
+            .ok()
+            .and_then(|v| v.as_dictionary().and_then(|d| d.get("running")).and_then(|r| r.as_boolean()))
+            .unwrap_or(false);
+        let audio = self.adapter.bind_udp(0).await.map_err(|e| err("stream", format!("{e:?}")))?;
+        let video = self.adapter.bind_udp(0).await.map_err(|e| err("stream", format!("{e:?}")))?;
+        let receiver = self.adapter.host_ip().to_string();
+        let sender = self.adapter.peer_ip().to_string();
+        let call_info = CallInfoBlob {
+            call_id: 0,
+            client_version: 1,
+            device_type: "Mac17,7".into(),
+            framework_version: "2205.3.1".into(),
+            os_version: "25F71".into(),
+            device_name: None,
+            audio_device_uid: None,
+        };
+        let session_id = uuid::Uuid::new_v4();
+        let audio_offer = build_screen_audio_offer(&uuid::Uuid::new_v4().to_string().to_uppercase(), &call_info)
+            .map_err(|e| err("stream", format!("{e:?}")))?;
+        display
+            .start_media_stream(build_start_audio_parameters(&receiver, audio.local_port(), &sender, 50000, audio_offer, CLIENT_SUPPORTED_FEATURES, session_id))
+            .await
+            .map_err(|e| err("deviceBusy", format!("the phone refused a screen session (another Device Hub may be viewing it): {e:?}")))?;
+        let video_offer = build_screen_video_offer(&uuid::Uuid::new_v4().to_string().to_uppercase(), &call_info, uuid::Uuid::new_v4().as_u128() as u32)
+            .map_err(|e| err("stream", format!("{e:?}")))?;
+        display
+            .start_media_stream(build_start_video_parameters(&receiver, video.local_port(), &sender, 50001, video_offer, CLIENT_SUPPORTED_FEATURES, MAIN_DISPLAY, session_id))
+            .await
+            .map_err(|e| err("stream", format!("video start failed: {e:?}")))?;
+        let drains = [audio, video]
+            .into_iter()
+            .map(|socket| tokio::spawn(async move { while socket.recv().await.is_ok() {} }))
+            .collect();
+        // backboardd needs a moment to re-match the HID surfaces against the new stream before reports land.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let touch = UniversalHidServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no touch service: {e:?}")))?;
+        let indigo = IndigoHidClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no keyboard/button service: {e:?}")))?;
+        self.live = Some(Live { sole_stream, display, drains, touch, indigo });
+        Ok(true)
+    }
+
+    pub async fn stop_stream(&mut self) {
+        let Some(mut live) = self.live.take() else { return };
+        if live.sole_stream {
+            let _ = live.display.stop_media_stream().await;
+        }
+        for d in live.drains {
+            d.abort();
+        }
+    }
+}
+
+fn input(e: impl std::fmt::Debug) -> SessionError {
+    err("input", format!("{e:?}"))
+}
+
+/// Contacts at each `[x, y, ms]` (x, y in 0..=65535 of the screen), then a release at the last point.
+async fn touch(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let points: Vec<(u16, u16, u64)> = request["points"]
+        .as_array()
+        .ok_or_else(|| err("badRequest", "points must be [[x, y, ms], ...]"))?
+        .iter()
+        .map(|p| {
+            let n = |i: usize| p.get(i).and_then(Value::as_f64).unwrap_or(-1.0);
+            (n(0), n(1), n(2))
+        })
+        .map(|(x, y, t)| {
+            if (0.0..=65535.0).contains(&x) && (0.0..=65535.0).contains(&y) && t >= 0.0 {
+                Ok((x.round() as u16, y.round() as u16, t.round() as u64))
+            } else {
+                Err(err("badRequest", "x and y must be in 0..=65535, ms >= 0"))
+            }
+        })
+        .collect::<Result<_, _>>()?;
+    let Some(&(lx, ly, _)) = points.last() else {
+        return Err(err("badRequest", "points is empty"));
+    };
+    let start = Instant::now();
+    for (x, y, at) in points {
+        let due = Duration::from_millis(at).saturating_sub(start.elapsed());
+        if !due.is_zero() {
+            tokio::time::sleep(due).await;
+        }
+        live.touch.send_touchscreen(TOUCHSCREEN_STATE_CONTACT, x, y, None).await.map_err(input)?;
+    }
+    live.touch.send_touchscreen(TOUCHSCREEN_STATE_RELEASE, lx, ly, None).await.map_err(input)
+}
+
+async fn press(indigo: &mut IndigoHidClient<Box<dyn ReadWrite>>, usage: u64, held: &[u64]) -> Result<(), SessionError> {
+    for &m in held {
+        indigo.send_keyboard(m, ButtonState::Down).await.map_err(input)?;
+    }
+    indigo.send_keyboard(usage, ButtonState::Down).await.map_err(input)?;
+    indigo.send_keyboard(usage, ButtonState::Up).await.map_err(input)?;
+    for &m in held.iter().rev() {
+        indigo.send_keyboard(m, ButtonState::Up).await.map_err(input)?;
+    }
+    Ok(())
+}
+
+async fn type_text(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let text = request["text"].as_str().ok_or_else(|| err("badRequest", "text is required"))?;
+    let gap = Duration::from_millis(request["keyDelayMs"].as_u64().unwrap_or(12));
+    let strokes: Vec<(u64, bool)> = text
+        .chars()
+        .map(|c| keys::usage_for(c).ok_or(c))
+        .collect::<Result<_, _>>()
+        .map_err(|c| err("unsupportedText", format!("{c:?} has no key on the US keyboard; only printable ASCII can be typed")))?;
+    for (usage, shift) in strokes {
+        press(&mut live.indigo, usage, if shift { &[keys::LEFT_SHIFT] } else { &[] }).await?;
+        tokio::time::sleep(gap).await;
+    }
+    Ok(())
+}
+
+async fn key(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let name = request["key"].as_str().unwrap_or_default();
+    let usage = keys::named(name).ok_or_else(|| err("badRequest", format!("unknown key {name:?}")))?;
+    let held: Vec<u64> = request["modifiers"]
+        .as_array()
+        .map(|m| m.iter().filter_map(Value::as_str).filter_map(keys::modifier).collect())
+        .unwrap_or_default();
+    for _ in 0..request["count"].as_u64().unwrap_or(1).max(1) {
+        press(&mut live.indigo, usage, &held).await?;
+        tokio::time::sleep(Duration::from_millis(12)).await;
+    }
+    Ok(())
+}
+
+async fn button(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let name = request["name"].as_str().unwrap_or_default();
+    let (page, usage, hold) = keys::button(name).ok_or_else(|| err("badRequest", format!("unknown button {name:?}")))?;
+    live.indigo.send_button(page, usage, ButtonState::Down).await.map_err(input)?;
+    tokio::time::sleep(Duration::from_millis(hold)).await;
+    live.indigo.send_button(page, usage, ButtonState::Up).await.map_err(input)
+}

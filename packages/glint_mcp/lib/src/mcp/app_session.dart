@@ -179,6 +179,7 @@ class AppSession {
     final sem = Semanticizer();
 
     runtime = rt;
+    if (backend case final FlutterInputBackend routed) routed.runtime = rt;
     inspector = insp;
     reader = rd;
     resolver = res;
@@ -207,7 +208,14 @@ class AppSession {
           fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
         ),
       IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
-      IosDevice() => null,
+      IosDevice() => OcrNativeReader(
+          capture: () async {
+            final shot = await backend.screenshot('${Directory.systemTemp.path}/glint-native-${dev.udid}.png');
+            return shot.error == null ? shot.path : null;
+          },
+          recognize: readText,
+          devicePixelRatio: () => dev.devicePixelRatio,
+        ),
       AndroidDevice() => AndroidNativeReader(
           serial: dev.serial,
           adbPath: dev.adbPath,
@@ -226,7 +234,7 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _reconnect(runtimeFactory));
 
     _lifecyclePollTimer?.cancel();
-    if (nativeReader is NativeSceneReader || nativeReader is RunnerNativeReader) {
+    if (nativeReader is NativeSceneReader || nativeReader is RunnerNativeReader || nativeReader is OcrNativeReader) {
       _lifecyclePollTimer = Timer.periodic(
         const Duration(milliseconds: 500),
         (_) => _pollLifecycle(background: true),
@@ -278,6 +286,7 @@ class AppSession {
       }
     }
     await _teardownRuntime();
+    await backend.close();
     captures.clear();
   }
 

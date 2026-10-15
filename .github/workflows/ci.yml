@@ -81,9 +81,23 @@ jobs:
           swift build
           .build/debug/glint-iossim version
 
+  device-hid:
+    name: iPhone Device Hub helper (Rust)
+    needs: changes
+    if: needs.changes.outputs.bridge == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        working-directory: packages/glint_mcp/native/ios_device_hid
+        run: |
+          cargo build --release --locked
+          target/release/glint-devicehid version
+
   passed:
     name: CI passed
-    needs: [changes, package, tooling, ios-bridge]
+    needs: [changes, package, tooling, ios-bridge, device-hid]
     if: always()
     runs-on: ubuntu-latest
     steps:
