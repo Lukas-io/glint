@@ -1,5 +1,7 @@
 /// Probe G1 diagnosis: for each Scaffold in the summary tree, evaluate
 /// findAncestorWidgetOfExactType<Offstage>() and also check Visibility.
+library;
+
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -11,15 +13,18 @@ void main(List<String> args) async {
   for (final ref in vm.isolates ?? <IsolateRef>[]) {
     if (ref.id == null) continue;
     final iso = await ws.getIsolate(ref.id!);
-    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) { flutter = iso; break; }
+    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) {
+      flutter = iso;
+      break;
+    }
   }
   final isoId = flutter!.id!;
   final rootLibId = flutter.rootLib?.id!;
 
   // Read summary tree
   final r = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree',
-    isolateId: isoId,
-    args: {'groupName': 'g-eval', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
+      isolateId: isoId,
+      args: {'groupName': 'g-eval', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
   final tree = (r.json?['result'] as Map?)?.cast<String, Object?>() ?? {};
 
   // Find all Scaffold nodes
@@ -30,37 +35,56 @@ void main(List<String> args) async {
   for (final s in scaffolds) {
     final id = s['valueId'] as String? ?? '';
     final desc = s['description'] ?? s['widgetRuntimeType'] ?? '?';
-    if (id.isEmpty) { print('  $desc: no valueId'); continue; }
+    if (id.isEmpty) {
+      print('  $desc: no valueId');
+      continue;
+    }
 
     await ws.callServiceExtension('ext.flutter.inspector.setSelectionById',
-      isolateId: isoId, args: {'arg': id, 'objectGroup': 'g-eval'});
+        isolateId: isoId, args: {'arg': id, 'objectGroup': 'g-eval'});
 
     // Check Offstage ancestor
     try {
-      final res = await ws.evaluate(isoId, rootLibId!,
-        '(WidgetInspectorService.instance.selection.currentElement!'
-        '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()');
-      if (res is InstanceRef) print('  [$id] $desc → offstage ancestor: ${res.valueAsString}');
-      else print('  [$id] $desc → eval returned ${res.runtimeType}');
-    } catch (e) { print('  [$id] $desc → eval threw: $e'); }
+      final res = await ws.evaluate(
+          isoId,
+          rootLibId!,
+          '(WidgetInspectorService.instance.selection.currentElement!'
+          '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false).toString()');
+      if (res is InstanceRef) {
+        print('  [$id] $desc → offstage ancestor: ${res.valueAsString}');
+      } else {
+        print('  [$id] $desc → eval returned ${res.runtimeType}');
+      }
+    } catch (e) {
+      print('  [$id] $desc → eval threw: $e');
+    }
 
     // Also check Visibility ancestor
     try {
-      final res = await ws.evaluate(isoId, rootLibId!,
-        '(WidgetInspectorService.instance.selection.currentElement!'
-        '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true).toString()');
+      final res = await ws.evaluate(
+          isoId,
+          rootLibId!,
+          '(WidgetInspectorService.instance.selection.currentElement!'
+          '.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true).toString()');
       if (res is InstanceRef) print('  [$id] $desc → visibility ancestor visible: ${res.valueAsString}');
-    } catch (e) { print('  [$id] $desc → visibility eval threw: $e'); }
+    } catch (e) {
+      print('  [$id] $desc → visibility eval threw: $e');
+    }
 
     // Check if paint bounds are NaN
     try {
-      final res = await ws.evaluate(isoId, rootLibId!,
-        '(WidgetInspectorService.instance.selection.current?.paintBounds.toString() ?? "null")');
+      final res = await ws.evaluate(
+          isoId, rootLibId!, '(WidgetInspectorService.instance.selection.current?.paintBounds.toString() ?? "null")');
       if (res is InstanceRef) print('  [$id] $desc → paintBounds: ${res.valueAsString}');
-    } catch (e) { print('  [$id] $desc → paintBounds eval threw: $e'); }
+    } catch (e) {
+      print('  [$id] $desc → paintBounds eval threw: $e');
+    }
   }
 
-  try { await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'g-eval'}); } on Object {}
+  try {
+    await ws
+        .callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'g-eval'});
+  } on Object catch (_) {}
   await ws.dispose();
 }
 
@@ -68,7 +92,11 @@ void _findByType(Map<String, Object?> node, String type, List<Map<String, Object
   final t = node['widgetRuntimeType'] as String? ?? node['description'] as String? ?? '';
   if (t == type) results.add(node);
   final kids = node['children'];
-  if (kids is List) { for (final c in kids) { if (c is Map) _findByType(c.cast<String, Object?>(), type, results); } }
+  if (kids is List) {
+    for (final c in kids) {
+      if (c is Map) _findByType(c.cast<String, Object?>(), type, results);
+    }
+  }
 }
 
 String _toWs(String u) {

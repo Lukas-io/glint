@@ -18,8 +18,7 @@ class ResolveTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'resolve',
-        description:
-            'Drill-down geometry for a glintId. Needs a Flutter app (device '
+        description: 'Drill-down geometry for a glintId. Needs a Flutter app (device '
             'mode: errorKind flutterModeRequired). Returns: physicalCenter (px), '
             'logicalBounds (logical px), logicalViewSize, devicePixelRatio, '
             'painted (visible to human), hittable (would receive a tap), '
@@ -40,10 +39,10 @@ class ResolveTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final target = await readTarget(session, args, readTargetedArgs(args, session.config), tool: 'resolve', coordinates: '');
+    final target =
+        await readTarget(session, args, readTargetedArgs(args, session.config), tool: 'resolve', coordinates: '');
     if (target.error != null) return target.error!;
     final glintId = target.glintId!;
 

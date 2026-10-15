@@ -61,8 +61,7 @@ Future<void> runInstall(List<String> args) async {
   // MCP host config (which runs [output]) is unchanged.
   final output = outputs.first;
   final bundleDir = p.join(p.dirname(output), '.glint_network_aot');
-  final exePath =
-      p.join(bundleDir, 'bundle', 'bin', p.basenameWithoutExtension(source));
+  final exePath = p.join(bundleDir, 'bundle', 'bin', p.basenameWithoutExtension(source));
 
   io.stderr.writeln(
     'glint_network install: building $source\n'
@@ -123,8 +122,7 @@ Future<void> runInstall(List<String> args) async {
   try {
     for (final target in outputs) {
       final legacy = p.basenameWithoutExtension(target) == legacyName;
-      io.File(target).writeAsStringSync(
-          execShim(exePath, launchedAs: legacy ? legacyName : null));
+      io.File(target).writeAsStringSync(execShim(exePath, launchedAs: legacy ? legacyName : null));
       await io.Process.run('chmod', ['0755', target]);
     }
   } catch (e) {
@@ -160,7 +158,8 @@ String? _resolveSourcePath() {
   if (installed != null) return installed;
   final cache = _pubCacheDir();
   if (cache == null) return null;
-  final hosted = io.File(p.join(cache, 'hosted', 'pub.dev', '$packageName-$packageVersion', 'bin', 'glint_network.dart'));
+  final hosted =
+      io.File(p.join(cache, 'hosted', 'pub.dev', '$packageName-$packageVersion', 'bin', 'glint_network.dart'));
   if (hosted.existsSync()) return hosted.path;
   final gitDir = io.Directory(p.join(cache, 'git'));
   if (!gitDir.existsSync()) return null;
@@ -182,7 +181,9 @@ String? _installedPackageSource() {
 /// A package root `dart build cli` can build [source] in: its own, inside a git checkout of the glint workspace, or a copy beside [outputDir] for a pub.dev install, whose pubspec names a workspace that is not there.
 Future<String> _buildableRoot(String source, String outputDir) async {
   final root = p.dirname(p.dirname(source));
-  if (!io.File(p.join(root, 'pubspec.yaml')).readAsStringSync().contains(RegExp(r'^resolution:\s*workspace', multiLine: true)) ||
+  if (!io.File(p.join(root, 'pubspec.yaml'))
+          .readAsStringSync()
+          .contains(RegExp(r'^resolution:\s*workspace', multiLine: true)) ||
       _hasWorkspaceRoot(root)) {
     return root;
   }
@@ -190,8 +191,10 @@ Future<String> _buildableRoot(String source, String outputDir) async {
   if (staged.existsSync()) staged.deleteSync(recursive: true);
   _copyTree(io.Directory(root), staged);
   final pubspec = io.File(p.join(staged.path, 'pubspec.yaml'));
-  pubspec.writeAsStringSync(pubspec.readAsStringSync().replaceAll(RegExp(r'^resolution:\s*workspace\s*$', multiLine: true), ''));
-  final get = await io.Process.start('dart', ['pub', 'get'], workingDirectory: staged.path, mode: io.ProcessStartMode.inheritStdio);
+  pubspec.writeAsStringSync(
+      pubspec.readAsStringSync().replaceAll(RegExp(r'^resolution:\s*workspace\s*$', multiLine: true), ''));
+  final get = await io.Process.start('dart', ['pub', 'get'],
+      workingDirectory: staged.path, mode: io.ProcessStartMode.inheritStdio);
   final code = await get.exitCode;
   if (code != 0) throw StateError('dart pub get exited $code in ${staged.path}');
   return staged.path;
@@ -202,7 +205,9 @@ bool _hasWorkspaceRoot(String root) {
   var dir = p.dirname(root);
   for (var i = 0; i < 4; i++) {
     final pubspec = io.File(p.join(dir, 'pubspec.yaml'));
-    if (pubspec.existsSync() && pubspec.readAsStringSync().contains(RegExp(r'^workspace:', multiLine: true))) return true;
+    if (pubspec.existsSync() && pubspec.readAsStringSync().contains(RegExp(r'^workspace:', multiLine: true))) {
+      return true;
+    }
     final parent = p.dirname(dir);
     if (parent == dir) break;
     dir = parent;

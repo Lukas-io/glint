@@ -14,8 +14,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('alert_noise_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
   });
   tearDown(() {
     CapturesDatabase.instance.close();
@@ -55,15 +54,13 @@ void main() {
     }
     expect(dao.capPendingAlerts(), 5);
     expect(dao.pendingAlertCount(sessionId: sid), 200);
-    final oldest = CapturesDatabase.instance.raw
-        .select('SELECT MIN(ts_ms) AS m FROM alerts WHERE session_id=?', [sid])
-        .first['m'];
+    final oldest =
+        CapturesDatabase.instance.raw.select('SELECT MIN(ts_ms) AS m FROM alerts WHERE session_id=?', [sid]).first['m'];
     expect(oldest, 1005);
   });
 
   test('replies without a session in scope carry no pendingAlerts', () {
-    dao.insertAlert(
-        sessionId: sid, severity: 'warning', kind: 'http_4xx', title: 't', signature: 's');
+    dao.insertAlert(sessionId: sid, severity: 'warning', kind: 'http_4xx', title: 't', signature: 's');
     final r = jsonResult({'summary': 'x'});
     final sc = r.structuredContent as Map<String, Object?>;
     expect(sc.containsKey('pendingAlerts'), isFalse);

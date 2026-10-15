@@ -10,8 +10,7 @@ import 'result.dart';
 
 final bodiesPurgeTool = Tool(
   name: 'bodies_purge',
-  description:
-      'Drops captured request/response bodies but keeps the request '
+  description: 'Drops captured request/response bodies but keeps the request '
       'metadata, to shrink the DB. Scope with sessionId and/or olderThanMs. '
       'Dry-run unless confirm:true.',
   inputSchema: Schema.object(
@@ -73,15 +72,12 @@ FutureOr<CallToolResult> bodiesPurge(CallToolRequest request) async {
       });
     }
 
-    final (:purged, :sessions) =
-        dao.purgeBodies(sessionId: sessionId, olderThanMs: olderThanMs);
+    final (:purged, :sessions) = dao.purgeBodies(sessionId: sessionId, olderThanMs: olderThanMs);
     sessions.forEach(PlaintextIndex.instance.forget);
     final elsewhere = sessions.isEmpty ? const <int>{} : dao.sessionsCapturedElsewhere();
     final capturing = [
       for (final sid in sessions)
-        if (SessionRegistry.instance.attachedById(sid) != null ||
-            elsewhere.contains(sid))
-          sid,
+        if (SessionRegistry.instance.attachedById(sid) != null || elsewhere.contains(sid)) sid,
     ]..sort();
     return jsonResult({
       'summary': purged == 0

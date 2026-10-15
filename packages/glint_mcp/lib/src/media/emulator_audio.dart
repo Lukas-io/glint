@@ -86,7 +86,10 @@ class EmulatorAudio {
     if ((!quiet || end == s.length) && quietFrom != null) {
       final to = quiet ? end : w * window;
       if (to - quietFrom >= minSilence.inMicroseconds * sampleRate ~/ 1000000) {
-        silences.add((Duration(microseconds: quietFrom * 1000000 ~/ sampleRate), Duration(microseconds: to * 1000000 ~/ sampleRate)));
+        silences.add((
+          Duration(microseconds: quietFrom * 1000000 ~/ sampleRate),
+          Duration(microseconds: to * 1000000 ~/ sampleRate)
+        ));
       }
       quietFrom = null;
     }

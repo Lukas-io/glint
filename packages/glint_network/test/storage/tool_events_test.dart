@@ -51,18 +51,16 @@ void main() {
       ev('logs_tail', 'error');
 
       final counts = dao.toolEventCounts();
-      int countFor(String tool, String outcome) => counts
-          .firstWhere((r) => r['tool'] == tool && r['outcome'] == outcome)['count'] as int;
+      int countFor(String tool, String outcome) =>
+          counts.firstWhere((r) => r['tool'] == tool && r['outcome'] == outcome)['count'] as int;
       expect(countFor('network_list', 'ok'), 2);
       expect(countFor('network_list', 'empty'), 1);
       expect(countFor('logs_tail', 'error'), 1);
     });
 
     test('since filter excludes older events', () {
-      dao.insertToolEvent(
-          tsMs: 1000, correlationId: 'c', tool: 'old', outcome: 'ok');
-      dao.insertToolEvent(
-          tsMs: 9000, correlationId: 'c', tool: 'new', outcome: 'ok');
+      dao.insertToolEvent(tsMs: 1000, correlationId: 'c', tool: 'old', outcome: 'ok');
+      dao.insertToolEvent(tsMs: 9000, correlationId: 'c', tool: 'new', outcome: 'ok');
       final recent = dao.recentToolEvents(sinceMs: 5000);
       expect(recent.map((r) => r['tool']), ['new']);
       final counts = dao.toolEventCounts(sinceMs: 5000);
@@ -71,8 +69,7 @@ void main() {
 
     test('recentToolEvents is newest-first and respects limit', () {
       for (var i = 0; i < 5; i++) {
-        dao.insertToolEvent(
-            tsMs: 1000 + i, correlationId: 'c', tool: 't$i', outcome: 'ok');
+        dao.insertToolEvent(tsMs: 1000 + i, correlationId: 'c', tool: 't$i', outcome: 'ok');
       }
       final rows = dao.recentToolEvents(limit: 2);
       expect(rows.map((r) => r['tool']), ['t4', 't3']);
@@ -80,8 +77,7 @@ void main() {
 
     test('toolEventsAfterId returns only newer rows, carrying id + ts_ms', () {
       for (var i = 0; i < 4; i++) {
-        dao.insertToolEvent(
-            tsMs: 1000 + i, correlationId: 'c', tool: 't$i', outcome: 'ok');
+        dao.insertToolEvent(tsMs: 1000 + i, correlationId: 'c', tool: 't$i', outcome: 'ok');
       }
       // ids are 1..4. After id=2 -> ids 3,4.
       final rows = dao.toolEventsAfterId(afterId: 2);

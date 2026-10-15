@@ -96,9 +96,11 @@ class IosDeviceBackend extends InteractionBackend {
 
   /// ASCII goes key by key; other text goes through the pasteboard, which the hardware keyboard cannot type.
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) => text.codeUnits.every((c) => c >= 0x20 && c < 0x7f || c == 0x0a || c == 0x09)
-      ? _call({'cmd': 'type', 'text': text, if (keyDelayMs != null) 'keyDelayMs': keyDelayMs}, extraMs: text.length * ((keyDelayMs ?? 12) + 20))
-      : _paste(text);
+  Future<void> typeText(String text, {int? keyDelayMs}) =>
+      text.codeUnits.every((c) => c >= 0x20 && c < 0x7f || c == 0x0a || c == 0x09)
+          ? _call({'cmd': 'type', 'text': text, if (keyDelayMs != null) 'keyDelayMs': keyDelayMs},
+              extraMs: text.length * ((keyDelayMs ?? 12) + 20))
+          : _paste(text);
 
   /// Pastes [text], allows the paste prompt iOS shows for text from another process, then puts the old pasteboard back.
   Future<void> _paste(String text) async {
@@ -110,7 +112,11 @@ class IosDeviceBackend extends InteractionBackend {
     }
     for (var i = 0; i < 3; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 500));
-      if (await answerPhonePrompt(hid, udid, question: RegExp('would like to paste', caseSensitive: false), button: 'Allow Paste') != null) break;
+      if (await answerPhonePrompt(hid, udid,
+              question: RegExp('would like to paste', caseSensitive: false), button: 'Allow Paste') !=
+          null) {
+        break;
+      }
     }
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (r['previous'] case final String previous) {
@@ -154,13 +160,18 @@ class IosDeviceBackend extends InteractionBackend {
       }, extraMs: count * 40);
 
   @override
-  Future<void> selectAll() => _call({'cmd': 'key', 'key': 'a', 'modifiers': ['cmd']});
+  Future<void> selectAll() => _call({
+        'cmd': 'key',
+        'key': 'a',
+        'modifiers': ['cmd']
+      });
 
   /// A real drag between two fractions of the screen, [ms] long; a back swipe from x = 0 registers, a drag from the bottom edge does not.
   Future<void> _edgeDrag(double fx1, double fy1, double fx2, double fy2, {int ms = 300}) {
     int px(double f) => (f * pixelWidth).round();
     int py(double f) => (f * pixelHeight).round();
-    return _touch([for (final p in dragPath(px(fx1), py(fy1), px(fx2), py(fy2), durationMs: ms)) _point(p.x, p.y, p.ms)]);
+    return _touch(
+        [for (final p in dragPath(px(fx1), py(fy1), px(fx2), py(fy2), durationMs: ms)) _point(p.x, p.y, p.ms)]);
   }
 
   @override
@@ -176,7 +187,8 @@ class IosDeviceBackend extends InteractionBackend {
       case HardwareButton.unlock:
         final status = await phoneStatus(udid);
         if (status?['passcodeRequired'] == true) {
-          throw BackendFailure(GlintErrorKind.notOnThisDevice, 'the iPhone has a passcode, which only its owner can enter',
+          throw BackendFailure(
+              GlintErrorKind.notOnThisDevice, 'the iPhone has a passcode, which only its owner can enter',
               nextSteps: const ['ask the user to unlock the phone, then retry'], data: const {'ability': 'unlock'});
         }
         await _call({'cmd': 'button', 'name': 'lock'});
@@ -191,7 +203,8 @@ class IosDeviceBackend extends InteractionBackend {
     try {
       await hid.call({'cmd': 'recordStart', 'path': raw});
     } on DeviceHidError catch (e) {
-      throw BackendFailure(e.failure.errorKind, 'recording the iPhone could not start: ${e.detail}', nextSteps: e.nextSteps);
+      throw BackendFailure(e.failure.errorKind, 'recording the iPhone could not start: ${e.detail}',
+          nextSteps: e.nextSteps);
     }
     return _DeviceHubRecording(hid, raw, path, run);
   }
@@ -219,7 +232,8 @@ class IosDeviceBackend extends InteractionBackend {
     }
     final ProcessResult r;
     try {
-      r = await run('xcrun', ['devicectl', 'device', 'capture', 'screenshot', '--device', udid, '--destination', path, '-q']);
+      r = await run(
+          'xcrun', ['devicectl', 'device', 'capture', 'screenshot', '--device', udid, '--destination', path, '-q']);
     } on Object catch (e) {
       return ScreenshotResult(error: 'could not run devicectl: $e');
     }
@@ -250,7 +264,8 @@ class _DeviceHubRecording implements ScreenRecording {
     final frames = (r['frames'] as num?)?.toInt() ?? 0;
     final seconds = (r['seconds'] as num?)?.toDouble() ?? 0;
     final fps = seconds <= 0 || frames == 0 ? 30.0 : (frames / seconds).clamp(1, 120).toDouble();
-    final mux = await run('ffmpeg', ['-v', 'error', '-y', '-r', fps.toStringAsFixed(2), '-i', raw, '-c', 'copy', '-tag:v', 'hvc1', path]);
+    final mux = await run(
+        'ffmpeg', ['-v', 'error', '-y', '-r', fps.toStringAsFixed(2), '-i', raw, '-c', 'copy', '-tag:v', 'hvc1', path]);
     if (mux.exitCode != 0) return raw;
     try {
       File(raw).deleteSync();

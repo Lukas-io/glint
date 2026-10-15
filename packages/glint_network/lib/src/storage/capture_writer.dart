@@ -19,8 +19,7 @@ import '../util/network_env.dart';
 /// captures DB. Also drives the alert detector on each upserted request and
 /// indexes utf8-decoded bodies into the FTS search table.
 class CaptureWriter {
-  CaptureWriter({Duration? pollInterval})
-      : pollInterval = pollInterval ?? _envPollInterval();
+  CaptureWriter({Duration? pollInterval}) : pollInterval = pollInterval ?? _envPollInterval();
 
   final Duration pollInterval;
 
@@ -32,6 +31,7 @@ class CaptureWriter {
     final clamped = parsed < 50 ? 50 : (parsed > 60000 ? 60000 : parsed);
     return Duration(milliseconds: clamped);
   }
+
   final CapturesDao _dao = CapturesDao();
   late final AlertDetector _detector = AlertDetector(_dao);
 
@@ -155,8 +155,7 @@ class CaptureWriter {
       for (final entry in pending) {
         if (!vm.isConnected || !DateTime.now().isBefore(stopAt)) return;
         tried.add(entry.vmId);
-        await _fetchAndStoreBody(vm, sid, entry,
-            searchOn: searchOn, timeout: flushFetchTimeout);
+        await _fetchAndStoreBody(vm, sid, entry, searchOn: searchOn, timeout: flushFetchTimeout);
       }
     }
   }
@@ -221,9 +220,7 @@ class CaptureWriter {
     if (_ticksSinceCapCheck < _capCheckEveryNTicks) return;
     _ticksSinceCapCheck = 0;
     if (!DbCapManager.instance.isEnabled) return;
-    final protected = SessionRegistry.instance.attached.values
-        .map((s) => s.id)
-        .toSet();
+    final protected = SessionRegistry.instance.attached.values.map((s) => s.id).toSet();
     DbCapManager.instance.maybeSweep(protectedSessionIds: protected);
   }
 
@@ -370,8 +367,7 @@ class CaptureWriter {
   static const int _maxBodyFetchAttempts = 3;
 
   Future<void> _backfillBodies(VmClient vm, int sid) async {
-    final staleBeforeUs =
-        DateTime.now().microsecondsSinceEpoch - _bodyBackfillGraceUs;
+    final staleBeforeUs = DateTime.now().microsecondsSinceEpoch - _bodyBackfillGraceUs;
     final pending = _dao.pendingBodyFetches(
       sid,
       limit: 10,
@@ -398,10 +394,8 @@ class CaptureWriter {
     if (isolateId == null) return;
     try {
       final fetch = vm.getHttpProfileRequestForIsolate(isolateId, entry.vmId);
-      final detail =
-          await (timeout == null ? fetch : fetch.timeout(timeout));
-      final hasBody = (detail.requestBody?.isNotEmpty ?? false) ||
-          (detail.responseBody?.isNotEmpty ?? false);
+      final detail = await (timeout == null ? fetch : fetch.timeout(timeout));
+      final hasBody = (detail.requestBody?.isNotEmpty ?? false) || (detail.responseBody?.isNotEmpty ?? false);
       if (hasBody) {
         _dao.storeBodies(sid, detail);
         if (searchOn) _indexForSearch(sid, detail, isolateId: isolateId);
@@ -431,8 +425,7 @@ class CaptureWriter {
     try {
       final before = {for (final i in vm.httpProfilingIsolates) i.id};
       final fresh = await vm.discoverHttpProfilingIsolates();
-      final socketsOn =
-          CapabilityConfig.instance.isEnabled(Category.sockets);
+      final socketsOn = CapabilityConfig.instance.isEnabled(Category.sockets);
       for (final iso in fresh) {
         if (before.contains(iso.id)) continue;
         try {
@@ -504,10 +497,8 @@ class CaptureWriter {
     String? isolateId,
   }) {
     final url = detail.uri.toString();
-    final reqHeaders =
-        detail.request?.hasError == true ? null : detail.request?.headers;
-    final respHeaders =
-        detail.response?.hasError == true ? null : detail.response?.headers;
+    final reqHeaders = detail.request?.hasError == true ? null : detail.request?.headers;
+    final respHeaders = detail.response?.hasError == true ? null : detail.response?.headers;
     final reqCt = firstHeader(reqHeaders, 'content-type');
     final respCt = firstHeader(respHeaders, 'content-type');
     _dao.indexForSearch(
@@ -519,5 +510,4 @@ class CaptureWriter {
       responseText: searchableText(detail.responseBody, respCt),
     );
   }
-
 }

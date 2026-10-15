@@ -47,8 +47,7 @@ class SimControl {
 
   /// Full status for [udid], or null if no such device exists.
   /// True when [udid] is currently booted; false when shut down or unknown.
-  Future<bool> isBooted(String udid) async =>
-      (await status(udid))?.state == 'Booted';
+  Future<bool> isBooted(String udid) async => (await status(udid))?.state == 'Booted';
 
   Future<SimStatus?> status(String udid) async {
     final target = udid.toUpperCase();
@@ -71,7 +70,12 @@ class SimControl {
   Future<bool?> isLocked(String udid) async {
     try {
       final res = await Process.run('xcrun', [
-        'simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.lockstate',
+        'simctl',
+        'spawn',
+        udid,
+        'notifyutil',
+        '-g',
+        'com.apple.springboard.lockstate',
       ]);
       if (res.exitCode != 0) return null;
       return switch ((res.stdout as String).trim().split(' ').last) {
@@ -89,8 +93,7 @@ class SimControl {
   /// The enrolment the Simulator's Features > Face ID menu toggles; null when unreadable.
   Future<bool?> biometricEnrolled(String udid) async {
     try {
-      final res = await Process.run(
-          'xcrun', ['simctl', 'spawn', udid, 'notifyutil', '-g', _enrollmentKey]);
+      final res = await Process.run('xcrun', ['simctl', 'spawn', udid, 'notifyutil', '-g', _enrollmentKey]);
       if (res.exitCode != 0) return null;
       return switch ((res.stdout as String).trim().split(' ').last) {
         '1' => true,
@@ -108,9 +111,7 @@ class SimControl {
       await _run(['spawn', udid, 'notifyutil', '-p', _enrollmentKey]);
 
   /// Answers a pending biometric prompt with a matching or non-matching face ([touch] false) or finger.
-  Future<String?> biometricAttempt(String udid,
-          {required bool match, required bool touch}) =>
-      _run([
+  Future<String?> biometricAttempt(String udid, {required bool match, required bool touch}) => _run([
         'spawn',
         udid,
         'notifyutil',
@@ -120,12 +121,10 @@ class SimControl {
       ]);
 
   /// Set the simulator appearance. [mode] is `light` or `dark`.
-  Future<String?> setAppearance(String udid, String mode) =>
-      _run(['ui', udid, 'appearance', mode]);
+  Future<String?> setAppearance(String udid, String mode) => _run(['ui', udid, 'appearance', mode]);
 
   /// Open a URL / deeplink on the simulator.
-  Future<String?> openUrl(String udid, String url) =>
-      _run(['openurl', udid, url]);
+  Future<String?> openUrl(String udid, String url) => _run(['openurl', udid, url]);
 
   /// Capture a PNG to [path] (works headless); returns saved path + pixel size (also the tap-ratio reference: `ratio = pixel / size`) or an error.
   Future<ScreenshotResult> screenshot(String udid, String path) async {

@@ -35,8 +35,7 @@ void main() {
   });
 
   int session({bool ended = true}) {
-    final id = dao.createSession(
-        appName: 'app', vmServiceUri: 'ws://s${vm++}', isolateId: null, projectPath: null);
+    final id = dao.createSession(appName: 'app', vmServiceUri: 'ws://s${vm++}', isolateId: null, projectPath: null);
     if (ended) dao.endSession(id);
     return id;
   }
@@ -50,8 +49,7 @@ void main() {
   }
 
   Future<Map<String, Object?>> call(
-      FutureOr<CallToolResult> Function(CallToolRequest) tool,
-      Map<String, Object?> args) async {
+      FutureOr<CallToolResult> Function(CallToolRequest) tool, Map<String, Object?> args) async {
     final res = await tool(CallToolRequest(name: 't', arguments: args));
     return res.structuredContent!;
   }

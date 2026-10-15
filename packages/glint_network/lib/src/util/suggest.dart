@@ -2,8 +2,7 @@ import 'package:glint_core/glint_core.dart' show editDistance;
 
 /// What the capture can and cannot see — said wherever an empty result
 /// could otherwise read as "the app made no such request" (#91).
-const String kCaptureBoundary =
-    'Only dart:io traffic (HttpClient, package:http, dio) is captured; native '
+const String kCaptureBoundary = 'Only dart:io traffic (HttpClient, package:http, dio) is captured; native '
     'SDK traffic (analytics, crash reporting, ads, maps, payments) never '
     'touches dart:io and is not visible here — absence of a host is not '
     'evidence the SDK is idle.';
@@ -50,4 +49,3 @@ List<String> closestPaths(Iterable<String> paths, String query, {int max = 5}) {
   }
   return (pattern: pattern, ignoreCase: ignoreCase);
 }
-

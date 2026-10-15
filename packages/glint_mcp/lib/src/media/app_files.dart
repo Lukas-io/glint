@@ -27,11 +27,14 @@ class AppFileListing {
 
 /// A glob over a file name (`*.mp4`), or over the whole path when it holds a slash.
 RegExp globToRegExp(String glob) {
-  final body = glob.split('').map((c) => switch (c) {
-        '*' => '.*',
-        '?' => '.',
-        _ => RegExp.escape(c),
-      }).join();
+  final body = glob
+      .split('')
+      .map((c) => switch (c) {
+            '*' => '.*',
+            '?' => '.',
+            _ => RegExp.escape(c),
+          })
+      .join();
   return RegExp('^$body\$', caseSensitive: false);
 }
 
@@ -50,7 +53,8 @@ class AppFiles {
 
   /// The iOS data container of the app on the simulator.
   Future<String> iosContainer() async {
-    final run = await device.simctl(['get_app_container', device.id, appId, 'data'], timeout: const Duration(seconds: 20));
+    final run =
+        await device.simctl(['get_app_container', device.id, appId, 'data'], timeout: const Duration(seconds: 20));
     if (!run.ok) throw GalleryError('no data container for $appId on this simulator', run.errTail());
     return run.text.trim();
   }
@@ -106,17 +110,24 @@ class AppFiles {
     final internal = await device.adb(
         ['shell', "run-as $appId find ${_androidDirs.join(' ')} -type f -exec stat -c '%Y %s %n' {} + 2>/dev/null"],
         timeout: const Duration(seconds: 60));
-    if (internal.text.contains('not debuggable') || internal.err.contains('not debuggable') || internal.text.contains('is unknown')) {
-      notes.add('the app sandbox is not readable (run-as needs a debuggable build); only its external storage is listed');
+    if (internal.text.contains('not debuggable') ||
+        internal.err.contains('not debuggable') ||
+        internal.text.contains('is unknown')) {
+      notes.add(
+          'the app sandbox is not readable (run-as needs a debuggable build); only its external storage is listed');
     } else {
       files.addAll(_statLines(internal, internalRoot, skew));
     }
     final externalRoot = '/sdcard/Android/data/$appId';
-    final external = await device.adb(['shell', "find $externalRoot -type f -exec stat -c '%Y %s %n' {} + 2>/dev/null"], timeout: const Duration(seconds: 60));
+    final external = await device.adb(['shell', "find $externalRoot -type f -exec stat -c '%Y %s %n' {} + 2>/dev/null"],
+        timeout: const Duration(seconds: 60));
     files.addAll(_statLines(external, externalRoot, skew));
     final shown = [
       for (final f in files)
-        if ((since == null || f.modified.isAfter(since)) && (glob == null || globMatches(glob, f.path.startsWith(internalRoot) ? f.path.substring(internalRoot.length + 1) : f.path)))
+        if ((since == null || f.modified.isAfter(since)) &&
+            (glob == null ||
+                globMatches(
+                    glob, f.path.startsWith(internalRoot) ? f.path.substring(internalRoot.length + 1) : f.path)))
           f,
     ]..sort((a, b) => b.modified.compareTo(a.modified));
     return AppFileListing(files: shown, total: shown.length, roots: [internalRoot, externalRoot], notes: notes);
@@ -124,7 +135,8 @@ class AppFiles {
 
   /// Copies [path] (as listed, or relative to the app's data) to the host pulled folder; returns the host file.
   Future<File> pull(String path, {PhaseReporter? phases}) async {
-    final out = File('${mediaDir('pulled')}/${device.id.substring(0, 8)}-${DateTime.now().millisecondsSinceEpoch}-${path.split('/').last}');
+    final out = File(
+        '${mediaDir('pulled')}/${device.id.substring(0, 8)}-${DateTime.now().millisecondsSinceEpoch}-${path.split('/').last}');
     if (device.isIos) {
       final root = await iosContainer();
       final source = File(path.startsWith('/') ? path : '$root/$path');
@@ -132,20 +144,24 @@ class AppFiles {
       return source.copy(out.path);
     }
     final internalRoot = '/data/user/0/$appId';
-    final relative = path.startsWith('$internalRoot/') ? path.substring(internalRoot.length + 1) : (path.startsWith('/') ? null : path);
+    final relative = path.startsWith('$internalRoot/')
+        ? path.substring(internalRoot.length + 1)
+        : (path.startsWith('/') ? null : path);
     Future<File> copy() async {
       if (relative == null) {
         final run = await device.adb(['pull', path, out.path], timeout: const Duration(minutes: 10));
         if (!run.ok) throw GalleryError('adb pull failed for $path', run.errTail());
         return out;
       }
-      final process = await Process.start(device.adbPath, ['-s', device.id, 'exec-out', 'run-as', appId, 'cat', relative]);
+      final process =
+          await Process.start(device.adbPath, ['-s', device.id, 'exec-out', 'run-as', appId, 'cat', relative]);
       final sink = out.openWrite();
       await process.stdout.pipe(sink);
       final code = await process.exitCode;
       if (code != 0 || out.lengthSync() == 0) {
         if (out.existsSync()) out.deleteSync();
-        throw GalleryError('could not read $relative from the app sandbox', 'run-as $appId cat exited $code (is the build debuggable?)');
+        throw GalleryError('could not read $relative from the app sandbox',
+            'run-as $appId cat exited $code (is the build debuggable?)');
       }
       return out;
     }

@@ -20,8 +20,7 @@ const int _kPerValueBytes = 2048;
 
 final networkBodyQueryTool = Tool(
   name: 'network_body_query',
-  description:
-      'Search or extract WITHIN one captured body, returning only the '
+  description: 'Search or extract WITHIN one captured body, returning only the '
       'matching slice(s) instead of paging the whole thing. Two modes: '
       'grep:"<regex>" (text match with context windows + offsets) or '
       'jsonPath:"\$.data[*].symbol" (extract nodes by path). Pair with '
@@ -34,8 +33,7 @@ final networkBodyQueryTool = Tool(
         description: 'Regex to match against the decoded text body. Returns matches with offsets + context.',
       ),
       'jsonPath': Schema.string(
-        description:
-            'Path to extract from a JSON body: \$.a.b, a[0].b, a[*].b (wildcard '
+        description: 'Path to extract from a JSON body: \$.a.b, a[0].b, a[*].b (wildcard '
             'across an array/map). No filter predicates — use grep for value matching.',
       ),
       'ignoreCase': Schema.bool(description: 'Case-insensitive grep. Default false.'),
@@ -57,39 +55,32 @@ FutureOr<CallToolResult> networkBodyQuery(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final id = args['id'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — list captured requests and pick an id',
-            'network_search query:"..." — find a request by content',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — list captured requests and pick an id',
+        'network_search query:"..." — find a request by content',
+      ],
+    });
   }
   final whichArg = (args['which'] as String?) ?? 'response';
   if (whichArg != 'request' && whichArg != 'response') {
-    return errorResult('`which` must be "request" or "response".',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with which:"response" (default)'],
-        });
+    return errorResult('`which` must be "request" or "response".', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with which:"response" (default)'],
+    });
   }
   final which = whichArg;
   final grep = args['grep'] as String?;
   final jsonPath = args['jsonPath'] as String?;
   if ((grep == null || grep.isEmpty) && (jsonPath == null || jsonPath.isEmpty)) {
-    return errorResult('Provide exactly one of `grep` or `jsonPath`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_body_query id:<id> grep:"<regex>" — text search the body',
-            'network_body_query id:<id> jsonPath:"\$.data[*].id" — extract by path',
-          ],
-        });
+    return errorResult('Provide exactly one of `grep` or `jsonPath`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_body_query id:<id> grep:"<regex>" — text search the body',
+        'network_body_query id:<id> jsonPath:"\$.data[*].id" — extract by path',
+      ],
+    });
   }
   if (grep != null && grep.isNotEmpty && jsonPath != null && jsonPath.isNotEmpty) {
-    return errorResult('Provide only one of `grep` or `jsonPath`, not both.',
-        kind: ErrorKind.badArgument);
+    return errorResult('Provide only one of `grep` or `jsonPath`, not both.', kind: ErrorKind.badArgument);
   }
   final ignoreCase = (args['ignoreCase'] as bool?) ?? false;
   final maxMatches = (args['maxMatches'] as int?) ?? _kDefaultMaxMatches;
@@ -100,8 +91,7 @@ FutureOr<CallToolResult> networkBodyQuery(CallToolRequest request) async {
   scope!;
 
   try {
-    final fetch = await fetchBodyBytes(scope, id, which,
-        isolateId: args['isolateId'] as String?);
+    final fetch = await fetchBodyBytes(scope, id, which, isolateId: args['isolateId'] as String?);
     if (fetch.error != null) return fetch.error!;
     final bytes = fetch.bytes;
     final mimeType = fetch.mimeType;
@@ -143,16 +133,14 @@ FutureOr<CallToolResult> networkBodyQuery(CallToolRequest request) async {
       maxMatches: maxMatches < 1 ? _kDefaultMaxMatches : maxMatches,
     );
   } catch (e) {
-    return errorResult('body query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'id': id,
-          'which': which,
-          'nextSteps': const [
-            'network_body_outline id:<id> — inspect the structure first',
-            'network_body id:<id> which:response — page raw bytes',
-          ],
-        });
+    return errorResult('body query failed: $e', kind: ErrorKind.internal, extra: {
+      'id': id,
+      'which': which,
+      'nextSteps': const [
+        'network_body_outline id:<id> — inspect the structure first',
+        'network_body id:<id> which:response — page raw bytes',
+      ],
+    });
   }
 }
 
@@ -189,11 +177,9 @@ CallToolResult _grep({
     final norm = normalizeGrep(pattern, ignoreCase);
     re = RegExp(norm.pattern, caseSensitive: !norm.ignoreCase, multiLine: true);
   } catch (e) {
-    return errorResult('Invalid grep regex: $e',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with a valid Dart RegExp pattern'],
-        });
+    return errorResult('Invalid grep regex: $e', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with a valid Dart RegExp pattern'],
+    });
   }
   final matches = <Map<String, Object?>>[];
   var totalMatches = 0;
@@ -251,27 +237,23 @@ CallToolResult _jsonPath({
   try {
     decoded = json.decode(utf8.decode(bytes));
   } catch (e) {
-    return errorResult('Body is not valid JSON (${e.runtimeType}) — use grep.',
-        kind: ErrorKind.badArgument,
-        extra: {
-          'id': id,
-          'nextSteps': const [
-            'network_body_query id:<id> grep:"<regex>" — text search instead',
-          ],
-        });
+    return errorResult('Body is not valid JSON (${e.runtimeType}) — use grep.', kind: ErrorKind.badArgument, extra: {
+      'id': id,
+      'nextSteps': const [
+        'network_body_query id:<id> grep:"<regex>" — text search instead',
+      ],
+    });
   }
   List<PathMatch> hits;
   try {
     hits = extractJsonPath(decoded, path);
   } on JsonPathParseException catch (e) {
-    return errorResult(e.message,
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'Use a supported path: \$.a.b, a[0].b, a[*].b (no filter predicates)',
-            'network_body_query id:<id> grep:"<regex>" — for value matching',
-          ],
-        });
+    return errorResult(e.message, kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'Use a supported path: \$.a.b, a[0].b, a[*].b (no filter predicates)',
+        'network_body_query id:<id> grep:"<regex>" — for value matching',
+      ],
+    });
   }
   final totalHits = hits.length;
   final shown = hits.take(maxMatches).map((h) {
@@ -311,5 +293,4 @@ CallToolResult _jsonPath({
   }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
 }
 
-String _cap(String s, int max) =>
-    s.length <= max ? s : '${s.substring(0, max)}…(+${s.length - max} chars)';
+String _cap(String s, int max) => s.length <= max ? s : '${s.substring(0, max)}…(+${s.length - max} chars)';

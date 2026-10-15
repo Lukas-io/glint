@@ -10,8 +10,7 @@ import 'result.dart';
 
 final networkDiffSessionTool = Tool(
   name: 'network_diff_session',
-  description:
-      'What changed between two runs: diffs the current session against a '
+  description: 'What changed between two runs: diffs the current session against a '
       'baseline session by endpoint (method+host+pathTemplate). Returns '
       'newEndpoints, goneEndpoints, and changed (error-rate / p95 shifts). '
       'Answers "what is different about today\'s run".',
@@ -21,16 +20,14 @@ final networkDiffSessionTool = Tool(
         description: 'The OLDER run to compare against (id from session_list).',
       ),
       'sessionId': Schema.int(
-        description:
-            'The NEWER/current session. Omit to auto-resolve (the live '
+        description: 'The NEWER/current session. Omit to auto-resolve (the live '
             'attached session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the current session by app-name substring.',
       ),
       'minCount': Schema.int(
-        description:
-            'Ignore endpoints with fewer than this many requests on each '
+        description: 'Ignore endpoints with fewer than this many requests on each '
             'side. Default 1.',
       ),
     },
@@ -44,13 +41,11 @@ FutureOr<CallToolResult> networkDiffSession(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final baselineId = args['baselineSessionId'] as int?;
   if (baselineId == null) {
-    return errorResult('Missing required arg `baselineSessionId`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'session_list — pick a past session id to compare against',
-          ],
-        });
+    return errorResult('Missing required arg `baselineSessionId`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'session_list — pick a past session id to compare against',
+      ],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
@@ -72,8 +67,7 @@ FutureOr<CallToolResult> networkDiffSession(CallToolRequest request) async {
   final int currentRows;
   try {
     final dao = CapturesDao();
-    final baselineRows =
-        dao.queryHttpRequests(sessionId: baselineId, limit: _kRawRowsCap);
+    final baselineRows = dao.queryHttpRequests(sessionId: baselineId, limit: _kRawRowsCap);
     if (baselineRows.isEmpty) {
       final exists = dao.getSession(baselineId) != null;
       return errorResult(
@@ -91,20 +85,17 @@ FutureOr<CallToolResult> networkDiffSession(CallToolRequest request) async {
             ],
           });
     }
-    final currentRaw =
-        dao.queryHttpRequests(sessionId: currentId, limit: _kRawRowsCap);
+    final currentRaw = dao.queryHttpRequests(sessionId: currentId, limit: _kRawRowsCap);
     currentRows = currentRaw.length;
     current = summarizeRequests(currentRaw, minCount: minCount);
     baseline = summarizeRequests(baselineRows, minCount: minCount);
   } catch (e) {
-    return errorResult('network_diff_session query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'nextSteps': const [
-            'session_list — confirm both session ids exist',
-            'network_summarize — check each session resolves on its own',
-          ],
-        });
+    return errorResult('network_diff_session query failed: $e', kind: ErrorKind.internal, extra: {
+      'nextSteps': const [
+        'session_list — confirm both session ids exist',
+        'network_summarize — check each session resolves on its own',
+      ],
+    });
   }
 
   final diff = diffEndpointSummaries(current, baseline);
@@ -112,8 +103,7 @@ FutureOr<CallToolResult> networkDiffSession(CallToolRequest request) async {
   final goneEndpoints = diff['goneEndpoints'] as List;
   final changed = diff['changed'] as List;
 
-  final summary =
-      'Session $currentId vs baseline $baselineId: ${newEndpoints.length} new, '
+  final summary = 'Session $currentId vs baseline $baselineId: ${newEndpoints.length} new, '
       '${goneEndpoints.length} gone, ${changed.length} changed endpoint(s).';
 
   return jsonResult({
@@ -130,10 +120,8 @@ FutureOr<CallToolResult> networkDiffSession(CallToolRequest request) async {
             'endpoint reads as gone.',
       ],
     'nextSteps': [
-      if (changed.isNotEmpty)
-        'network_summarize — drill into the current session endpoint stats',
-      if (newEndpoints.isNotEmpty)
-        'network_list hostContains:"..." — inspect a new endpoint live',
+      if (changed.isNotEmpty) 'network_summarize — drill into the current session endpoint stats',
+      if (newEndpoints.isNotEmpty) 'network_list hostContains:"..." — inspect a new endpoint live',
       'session_list — pick a different baseline session',
     ],
   }, scopeSessionId: currentId, scopeNote: scope.note);
@@ -171,10 +159,7 @@ Map<String, Object?> diffEndpointSummaries(
     final aP95 = a['p95LatencyMs'] as int?;
     final bP95 = b['p95LatencyMs'] as int?;
     final errDelta = aErr - bErr;
-    final p95Regressed = aP95 != null &&
-        bP95 != null &&
-        bP95 > 0 &&
-        (aP95 > 2 * bP95 || bP95 > 2 * aP95);
+    final p95Regressed = aP95 != null && bP95 != null && bP95 > 0 && (aP95 > 2 * bP95 || bP95 > 2 * aP95);
     if (errDelta.abs() >= 0.1 || p95Regressed) {
       changed.add({
         'endpoint': entry.key,
@@ -188,9 +173,8 @@ Map<String, Object?> diffEndpointSummaries(
       });
     }
   }
-  changed.sort((x, y) => ((y['errorRate'] as Map)['delta'] as num)
-      .abs()
-      .compareTo(((x['errorRate'] as Map)['delta'] as num).abs()));
+  changed.sort((x, y) =>
+      ((y['errorRate'] as Map)['delta'] as num).abs().compareTo(((x['errorRate'] as Map)['delta'] as num).abs()));
 
   return {
     'newEndpoints': newEndpoints,

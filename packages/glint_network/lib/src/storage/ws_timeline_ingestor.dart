@@ -30,10 +30,7 @@ class WsTimelineIngestor {
       final connKey = 'connect:$isolateId:${e['id']}';
       if (e['ph'] == 'b') {
         _dao.wsConnectStarted(sid,
-            connKey: connKey,
-            isolateId: isolateId,
-            uri: args['uri'] as String?,
-            startedUs: tsUs);
+            connKey: connKey, isolateId: isolateId, uri: args['uri'] as String?, startedUs: tsUs);
       } else if (e['ph'] == 'e') {
         _dao.wsConnectFinished(sid,
             connKey: connKey,
@@ -90,12 +87,7 @@ class WsTimelineIngestor {
             });
       case 'WebSocket.Error':
         final error = args['error'] as String? ?? 'unknown error';
-        _dao.insertWsMessage(sid,
-            connKey: connKey,
-            tsUs: tsUs,
-            kind: 'error',
-            detail: error,
-            dedupKey: dedupKey);
+        _dao.insertWsMessage(sid, connKey: connKey, tsUs: tsUs, kind: 'error', detail: error, dedupKey: dedupKey);
         _dao.wsConnectionError(sid, connKey: connKey, error: error);
     }
   }
@@ -106,20 +98,14 @@ class WsTimelineIngestor {
     final cached = _connKeys[cacheKey];
     if (cached != null) return cached;
     final key = _dao.wsConnKeyFor(sid, isolateId, connectionId) ??
-        _dao
-            .wsBindConnection(sid,
-                isolateId: isolateId,
-                connectionId: connectionId,
-                firstSeenUs: tsUs)
-            ?.connKey ??
+        _dao.wsBindConnection(sid, isolateId: isolateId, connectionId: connectionId, firstSeenUs: tsUs)?.connKey ??
         _unseenConnect(sid, isolateId, connectionId);
     return _connKeys[cacheKey] = key;
   }
 
   String _unseenConnect(int sid, String? isolateId, int connectionId) {
     final key = 'conn:$isolateId:$connectionId';
-    _dao.wsConnectionSeen(sid,
-        connKey: key, isolateId: isolateId, connectionId: connectionId);
+    _dao.wsConnectionSeen(sid, connKey: key, isolateId: isolateId, connectionId: connectionId);
     return key;
   }
 

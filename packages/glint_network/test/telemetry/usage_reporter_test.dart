@@ -47,8 +47,7 @@ void main() {
 
   group('buildUsagePayload (pure, privacy-safe rollup)', () {
     late Directory dataDir;
-    setUp(
-        () => dataDir = Directory.systemTemp.createTempSync('usage_payload_'));
+    setUp(() => dataDir = Directory.systemTemp.createTempSync('usage_payload_'));
     tearDown(() => dataDir.deleteSync(recursive: true));
 
     test('carries kind, version, machineHash, window, aggregates', () {
@@ -65,13 +64,11 @@ void main() {
       expect((p['tools'] as List), isNotEmpty);
     });
 
-    test('window.toEventId is the MAX id even when rows are not id-ordered',
-        () {
+    test('window.toEventId is the MAX id even when rows are not id-ordered', () {
       final s = sampleRows();
       final shuffled = [s[2], s[0], s[1]];
-      final w =
-          buildUsagePayload(rows: shuffled, dataDir: dataDir.path, identity: networkUsageIdentity())['window']
-              as Map<String, Object?>;
+      final w = buildUsagePayload(rows: shuffled, dataDir: dataDir.path, identity: networkUsageIdentity())['window']
+          as Map<String, Object?>;
       expect(w['toEventId'], 3);
       expect(w['firstEventMs'], 1000);
       expect(w['lastEventMs'], 2000);
@@ -103,8 +100,7 @@ void main() {
       expect(telemetryDisabled({}), isFalse);
     });
 
-    test('the install id is random, stable and never derived from the path',
-        () {
+    test('the install id is random, stable and never derived from the path', () {
       final one = Directory.systemTemp.createTempSync('install_id_');
       final two = Directory.systemTemp.createTempSync('install_id_');
       addTearDown(() {
@@ -118,28 +114,12 @@ void main() {
     });
 
     test('sharing is off unless opted in, and DO_NOT_TRACK always wins', () {
-      expect(sharingOffReason(env: {}),
-          contains('GLINT_NETWORK_TELEMETRY=on'));
-      expect(sharingOffReason(env: {'GLINT_NETWORK_TELEMETRY': 'on'}),
-          isNull);
-      expect(
-          sharingOffReason(env: {
-            'GLINT_NETWORK_TELEMETRY': 'on',
-            'DO_NOT_TRACK': '1'
-          }),
-          contains('DO_NOT_TRACK'));
-      expect(
-          sharingOffReason(env: {
-            'GLINT_NETWORK_TELEMETRY': 'on',
-            'GLINT_NETWORK_NO_USAGE': 'true'
-          }, usage: true),
+      expect(sharingOffReason(env: {}), contains('GLINT_NETWORK_TELEMETRY=on'));
+      expect(sharingOffReason(env: {'GLINT_NETWORK_TELEMETRY': 'on'}), isNull);
+      expect(sharingOffReason(env: {'GLINT_NETWORK_TELEMETRY': 'on', 'DO_NOT_TRACK': '1'}), contains('DO_NOT_TRACK'));
+      expect(sharingOffReason(env: {'GLINT_NETWORK_TELEMETRY': 'on', 'GLINT_NETWORK_NO_USAGE': 'true'}, usage: true),
           contains('NO_USAGE'));
-      expect(
-          sharingOffReason(env: {
-            'GLINT_NETWORK_TELEMETRY': 'on',
-            'GLINT_NETWORK_NO_USAGE': 'true'
-          }),
-          isNull);
+      expect(sharingOffReason(env: {'GLINT_NETWORK_TELEMETRY': 'on', 'GLINT_NETWORK_NO_USAGE': 'true'}), isNull);
     });
   });
 
@@ -179,8 +159,7 @@ void main() {
     File auditFile() => File('${dir.path}/${AuditLog.fileName}');
     File stateFile() => File('${dir.path}/${UsageReporter.stateFileName}');
 
-    test('first ship records to the audit log and advances the watermark',
-        () async {
+    test('first ship records to the audit log and advances the watermark', () async {
       seed(3);
       final r = await UsageReporter.ship(dataDir: dir.path);
       expect(r.shipped, isTrue);
@@ -198,8 +177,7 @@ void main() {
       expect(state['shipCount'], 1);
     });
 
-    test('re-ship with no new events is a no-op (no second audit entry)',
-        () async {
+    test('re-ship with no new events is a no-op (no second audit entry)', () async {
       seed(3);
       await UsageReporter.ship(dataDir: dir.path);
       final r2 = await UsageReporter.ship(dataDir: dir.path);

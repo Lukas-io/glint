@@ -7,12 +7,10 @@ class _ProseRuntime implements FlutterRuntime {
   final String reply;
 
   @override
-  Future<void> setInspectorSelection(
-          {required String inspectorId, required String groupName}) async {}
+  Future<void> setInspectorSelection({required String inspectorId, required String groupName}) async {}
 
   @override
-  Future<String?> evaluateString(String expression,
-          {bool rethrowErrors = false}) async => reply;
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async => reply;
 
   @override
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
@@ -30,20 +28,17 @@ SceneNode _node(String glintId) => SceneNode(
 
 void main() {
   group('CoordinateResolver eval decoding', () {
-    test('a non-JSON eval reply is a GeometryResolveError, not a crash',
-        () async {
+    test('a non-JSON eval reply is a GeometryResolveError, not a crash', () async {
       final resolver = CoordinateResolver(_ProseRuntime("Instance of 'Offset'"));
       final scene = Scene.forTesting(root: _node('label'));
       await expectLater(
         resolver.resolve(scene, 'label'),
-        throwsA(isA<GeometryResolveError>().having(
-            (e) => e.message, 'message', contains('non-JSON'))),
+        throwsA(isA<GeometryResolveError>().having((e) => e.message, 'message', contains('non-JSON'))),
       );
     });
 
     test('node-free viewport probe decodes the implicit view blob', () async {
-      final resolver =
-          CoordinateResolver(_ProseRuntime('{"dpr":3,"vw":420,"vh":912}'));
+      final resolver = CoordinateResolver(_ProseRuntime('{"dpr":3,"vw":420,"vh":912}'));
       final v = await resolver.resolveViewportNodeFree();
       expect(v.dpr, 3);
       expect(v.w, 420);

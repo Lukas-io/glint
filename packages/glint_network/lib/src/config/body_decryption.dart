@@ -36,8 +36,7 @@ class BodyDecryption {
   static const _keyBytes = {'aes-256-ctr': 32, 'aes-128-ctr': 16};
 
   /// Identifies the key in replies without revealing it.
-  String get keyFingerprint =>
-      sha256.convert(_key).toString().substring(0, 12);
+  String get keyFingerprint => sha256.convert(_key).toString().substring(0, 12);
 
   Map<String, Object?> toBlock() => {
         'active': true,
@@ -58,10 +57,7 @@ class BodyDecryption {
     final algorithm = ((m['algorithm'] as String?) ?? 'aes-256-ctr').toLowerCase();
     final keyBytes = _keyBytes[algorithm];
     if (keyBytes == null) {
-      return (
-        config: null,
-        error: 'algorithm "$algorithm" is not supported; use aes-256-ctr or aes-128-ctr'
-      );
+      return (config: null, error: 'algorithm "$algorithm" is not supported; use aes-256-ctr or aes-128-ctr');
     }
     final keyText = m['key'];
     if (keyText is! String || keyText.isEmpty) {
@@ -86,12 +82,8 @@ class BodyDecryption {
             '${key.length} bytes as $keyEncoding'
       );
     }
-    final encoding = PayloadEncoding.values
-        .where((e) => e.name == ((m['encoding'] as String?) ?? 'hex'))
-        .firstOrNull;
-    final ivMode = IvMode.values
-        .where((e) => e.name == ((m['ivMode'] as String?) ?? 'prefix'))
-        .firstOrNull;
+    final encoding = PayloadEncoding.values.where((e) => e.name == ((m['encoding'] as String?) ?? 'hex')).firstOrNull;
+    final ivMode = IvMode.values.where((e) => e.name == ((m['ivMode'] as String?) ?? 'prefix')).firstOrNull;
     if (encoding == null) {
       return (config: null, error: 'encoding must be hex, base64 or raw');
     }
@@ -139,8 +131,7 @@ class BodyDecryption {
     } on FormatException catch (e) {
       return raw(e.message);
     }
-    final ctr = CTRStreamCipher(AESEngine())
-      ..init(false, ParametersWithIV(KeyParameter(_key), iv));
+    final ctr = CTRStreamCipher(AESEngine())..init(false, ParametersWithIV(KeyParameter(_key), iv));
     final plain = ctr.process(cipher);
     try {
       utf8.decode(plain);

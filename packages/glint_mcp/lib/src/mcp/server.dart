@@ -45,4 +45,3 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
     await super.shutdown();
   }
 }
-

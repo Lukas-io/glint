@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- An example (`example/example.md`), `dart format` across the package and sqlite's `close()` in place of the deprecated `dispose()`, so it scores fully on pub.dev.
+
 ## [0.13.0] - 2026-10-15
 
 ### Changed

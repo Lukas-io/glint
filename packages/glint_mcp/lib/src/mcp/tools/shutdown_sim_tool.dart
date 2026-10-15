@@ -13,8 +13,7 @@ class ShutdownSimTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'shutdown_sim',
-        description:
-            'Shut down a simulator/emulator. device: the one to stop (defaults '
+        description: 'Shut down a simulator/emulator. device: the one to stop (defaults '
             'to the attached device). all:true shuts down every booted device. '
             'Detaches first if glint is driving the device. A device this '
             'session never attached or launched on is refused unless force:true. '
@@ -35,15 +34,12 @@ class ShutdownSimTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final all = argBool(args, 'all') ?? false;
     final force = argBool(args, 'force') ?? false;
     final attachedDevice = session.active?.device;
-    final adbPath = attachedDevice is AndroidDevice
-        ? attachedDevice.adbPath
-        : resolveAdbPath(null) ?? 'adb';
+    final adbPath = attachedDevice is AndroidDevice ? attachedDevice.adbPath : resolveAdbPath(null) ?? 'adb';
     const launcher = AppLauncher();
     final scan = await DeviceDiscovery(adbPath: adbPath).scan();
 
@@ -54,7 +50,10 @@ class ShutdownSimTool extends GlintTool {
           data: const {'shutDown': []},
         );
       }
-      final foreign = [for (final d in scan.devices) if (!session.ownsDevice(d.id)) d.id];
+      final foreign = [
+        for (final d in scan.devices)
+          if (!session.ownsDevice(d.id)) d.id
+      ];
       if (foreign.isNotEmpty && !force) return _notOwned(foreign);
       final done = <String>[];
       for (final d in scan.devices) {
@@ -69,8 +68,7 @@ class ShutdownSimTool extends GlintTool {
     }
 
     final deviceArg = args['device'] as String?;
-    final deviceId =
-        deviceArg ?? (session.isAttached ? session.device.id : null);
+    final deviceId = deviceArg ?? (session.isAttached ? session.device.id : null);
     if (deviceId == null) {
       return StructuredResponse.error(
         summary: 'no device — pass device, all:true, or attach first',
@@ -112,15 +110,12 @@ class ShutdownSimTool extends GlintTool {
 
   // Booted scan first; else the attached device; else infer from the id shape
   // (an iOS UDID is 36-char hyphenated hex).
-  DevicePlatform _platformOf(
-      String id, DiscoveryResult scan, GlintSession session) {
+  DevicePlatform _platformOf(String id, DiscoveryResult scan, GlintSession session) {
     for (final d in scan.devices) {
       if (d.id == id) return d.platform;
     }
     final pooled = session.appFor(id);
     if (pooled != null) return pooled.platform;
-    return id.length == 36 && id.contains('-')
-        ? DevicePlatform.ios
-        : DevicePlatform.android;
+    return id.length == 36 && id.contains('-') ? DevicePlatform.ios : DevicePlatform.android;
   }
 }

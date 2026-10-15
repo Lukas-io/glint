@@ -3,12 +3,10 @@ import 'dart:io';
 import '../version.dart';
 
 /// The glint-iossim bridge path relative to glint's package root.
-const String kDefaultBridgePath =
-    'native/ios_sim_bridge/.build/debug/glint-iossim';
+const String kDefaultBridgePath = 'native/ios_sim_bridge/.build/debug/glint-iossim';
 
 /// The release build of the bridge, relative to glint's package root.
-const String kReleaseBridgePath =
-    'native/ios_sim_bridge/.build/release/glint-iossim';
+const String kReleaseBridgePath = 'native/ios_sim_bridge/.build/release/glint-iossim';
 
 /// Env var naming a bridge binary to use instead of the one glint finds.
 const String bridgePathEnv = 'GLINT_IOS_BRIDGE';
@@ -32,8 +30,7 @@ String cachedBridgePath({Map<String, String>? env}) {
 }
 
 /// Finds the bridge: explicit arg, then [bridgePathEnv], then a build inside glint's package (newest of release and debug), then the download cache; [BridgeSource.missing] points at the cache path.
-BridgeLocation locateIosBridge(String? explicit,
-    {Map<String, String>? env, String? scriptPath}) {
+BridgeLocation locateIosBridge(String? explicit, {Map<String, String>? env, String? scriptPath}) {
   if (explicit != null && explicit.isNotEmpty) {
     return BridgeLocation(explicit, BridgeSource.argument);
   }
@@ -44,8 +41,7 @@ BridgeLocation locateIosBridge(String? explicit,
   final built = _bridgeUnderGlintRoot(scriptPath);
   if (built != null) return BridgeLocation(built, BridgeSource.build);
   final cached = cachedBridgePath(env: env);
-  return BridgeLocation(
-      cached, File(cached).existsSync() ? BridgeSource.cache : BridgeSource.missing);
+  return BridgeLocation(cached, File(cached).existsSync() ? BridgeSource.cache : BridgeSource.missing);
 }
 
 /// The bridge path [locateIosBridge] picks.

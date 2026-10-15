@@ -13,8 +13,7 @@ import 'body_fetch.dart';
 
 final networkDriftTool = Tool(
   name: 'network_drift',
-  description:
-      'Response-shape drift for an endpoint: compares the JSON structure of '
+  description: 'Response-shape drift for an endpoint: compares the JSON structure of '
       'its captured responses over time and reports fields added, removed, or '
       'changed type. Answers "did the API contract change mid-session". Filter '
       'with hostContains / pathContains.',
@@ -34,8 +33,7 @@ final networkDriftTool = Tool(
         description: 'Time window in ms. Omit or 0 for the whole session.',
       ),
       'limit': Schema.int(
-        description:
-            'Max responses to decode (default 100, cap 1000). Sampled from '
+        description: 'Max responses to decode (default 100, cap 1000). Sampled from '
             'BOTH ends of the window so the oldest shape is always compared.',
       ),
     },
@@ -68,14 +66,12 @@ FutureOr<CallToolResult> networkDrift(CallToolRequest request) async {
       limit: _kScanCap,
     );
   } catch (e) {
-    return errorResult('network_drift query failed: $e',
-        kind: ErrorKind.internal,
-        extra: const {
-          'nextSteps': [
-            'network_status — confirm the session is reachable',
-            'network_summarize — see which endpoints have JSON traffic',
-          ],
-        });
+    return errorResult('network_drift query failed: $e', kind: ErrorKind.internal, extra: const {
+      'nextSteps': [
+        'network_status — confirm the session is reachable',
+        'network_summarize — see which endpoints have JSON traffic',
+      ],
+    });
   }
 
   // Pre-filter to matching JSON rows (no body decode yet), oldest-first.
@@ -89,8 +85,7 @@ FutureOr<CallToolResult> networkDrift(CallToolRequest request) async {
     if (r['vm_id'] == null) continue;
     matched.add(r);
   }
-  matched.sort((a, b) =>
-      ((a['start_us'] as int?) ?? 0).compareTo((b['start_us'] as int?) ?? 0));
+  matched.sort((a, b) => ((a['start_us'] as int?) ?? 0).compareTo((b['start_us'] as int?) ?? 0));
 
   // Sample BOTH ends of the timeline so the oldest (pre-drift) shape is always
   // compared against the newest, even on high-volume sessions past maxSamples.
@@ -152,9 +147,8 @@ FutureOr<CallToolResult> networkDrift(CallToolRequest request) async {
   if (samples.length < 2) {
     return jsonResult({
       'scope': scope.toBlock(),
-      'summary':
-          'Not enough JSON responses to compare (${samples.length} found; '
-              'need 2+).',
+      'summary': 'Not enough JSON responses to compare (${samples.length} found; '
+          'need 2+).',
       'sessionId': sid,
       'scanned': samples.length,
       ...decryption,
@@ -172,9 +166,7 @@ FutureOr<CallToolResult> networkDrift(CallToolRequest request) async {
   var diff = <String, Object?>{'added': [], 'removed': [], 'changed': []};
   for (final s in samples.skip(1)) {
     final d = diffShapes(first, s['shape'] as Map<String, String>);
-    if ((d['added'] as List).isNotEmpty ||
-        (d['removed'] as List).isNotEmpty ||
-        (d['changed'] as List).isNotEmpty) {
+    if ((d['added'] as List).isNotEmpty || (d['removed'] as List).isNotEmpty || (d['changed'] as List).isNotEmpty) {
       diff = d;
       driftAt = {
         'id': s['id'],

@@ -26,26 +26,21 @@ void main() {
 
     test('all healthy → no degraded entries', () {
       final r = sessionCapabilities(httpOk: true, socketOk: true, logsOk: true);
-      expect(r.capabilities,
-          {'http': 'ok', 'socket': 'ok', 'logs': 'ok'});
+      expect(r.capabilities, {'http': 'ok', 'socket': 'ok', 'logs': 'ok'});
       expect(r.degraded, isEmpty);
     });
 
     test('enabled-but-failed socket is flagged degraded', () {
-      final r =
-          sessionCapabilities(httpOk: true, socketOk: false, logsOk: true);
+      final r = sessionCapabilities(httpOk: true, socketOk: false, logsOk: true);
       expect(r.capabilities['socket'], 'unavailable');
       expect(r.degraded, ['socket']);
     });
 
     test('globally-disabled category is "disabled", not "degraded"', () {
-      CapabilityConfig.install(
-          CapabilityConfig.fromFlags(denylist: 'sockets'));
-      final r =
-          sessionCapabilities(httpOk: true, socketOk: false, logsOk: true);
+      CapabilityConfig.install(CapabilityConfig.fromFlags(denylist: 'sockets'));
+      final r = sessionCapabilities(httpOk: true, socketOk: false, logsOk: true);
       expect(r.capabilities['socket'], 'disabled');
-      expect(r.degraded, isEmpty,
-          reason: 'turning a capability off on purpose is not degradation');
+      expect(r.degraded, isEmpty, reason: 'turning a capability off on purpose is not degradation');
     });
   });
 }

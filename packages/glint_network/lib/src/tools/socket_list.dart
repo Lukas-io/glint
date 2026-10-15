@@ -12,22 +12,19 @@ import 'result.dart';
 
 final socketListTool = Tool(
   name: 'socket_list',
-  description:
-      'Lists dart:io socket stats (TCP/UDP): address, port, byte counts, '
+  description: 'Lists dart:io socket stats (TCP/UDP): address, port, byte counts, '
       'open/closed. Never payloads (sockets do not capture them).',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to merge '
+        description: 'Restrict to one isolate (id from network_status). Omit to merge '
             'all isolates.',
       ),
       'limit': Schema.int(description: 'Max sockets (default 50, cap 200).'),
@@ -63,9 +60,8 @@ FutureOr<CallToolResult> socketList(CallToolRequest request) async {
     );
   }
 
-  final isolateIds = isolateFilter == null
-      ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id]
-      : [isolateFilter];
+  final isolateIds =
+      isolateFilter == null ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id] : [isolateFilter];
   final perIsolate = <(dynamic, String)>[];
   var scannedTotal = 0;
   var isoFailures = 0;
@@ -89,8 +85,7 @@ FutureOr<CallToolResult> socketList(CallToolRequest request) async {
       caps,
       isolateFilter,
       limit,
-      degradedReason:
-          'Live socket read failed for every isolate ($lastError); returned '
+      degradedReason: 'Live socket read failed for every isolate ($lastError); returned '
           'the persisted DB snapshot instead.',
     );
   }

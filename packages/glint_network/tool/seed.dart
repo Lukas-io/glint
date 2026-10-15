@@ -188,8 +188,7 @@ void main(List<String> args) {
       kind: 'flutter_error',
       title: '══════ EXCEPTION CAUGHT BY WIDGETS LIBRARY ═══════',
     ),
-    detail:
-        'Null check operator used on a null value at _MyHomePageState.build (line 42)',
+    detail: 'Null check operator used on a null value at _MyHomePageState.build (line 42)',
     sourceKind: 'log',
     sourceId: 'log:$logId2',
     tsMs: 1700000020000,

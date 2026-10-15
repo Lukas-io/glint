@@ -57,12 +57,10 @@ class AutoAttacher {
   /// Reads `GLINT_NETWORK_AUTO_ATTACH_POLL_MS` (1000–60000).
   /// Default 5000ms.
   static Duration _envPollInterval() {
-    final raw =
-        networkEnv['GLINT_NETWORK_AUTO_ATTACH_POLL_MS'];
+    final raw = networkEnv['GLINT_NETWORK_AUTO_ATTACH_POLL_MS'];
     final parsed = raw == null ? null : int.tryParse(raw);
     if (parsed == null) return const Duration(seconds: 5);
-    final clamped =
-        parsed < 1000 ? 1000 : (parsed > 60000 ? 60000 : parsed);
+    final clamped = parsed < 1000 ? 1000 : (parsed > 60000 ? 60000 : parsed);
     return Duration(milliseconds: clamped);
   }
 
@@ -108,9 +106,7 @@ class AutoAttacher {
     if (_timer != null) return;
     _startedAt = DateTime.now();
     _schedule();
-    final denyLine = deniedAppPatterns.isEmpty
-        ? ''
-        : '; denylist: ${deniedAppPatterns.join(", ")}';
+    final denyLine = deniedAppPatterns.isEmpty ? '' : '; denylist: ${deniedAppPatterns.join(", ")}';
     io.stderr.writeln(
       'glint_network: auto-attach watcher started '
       '(poll ${pollInterval.inMilliseconds}ms; allowlist: '
@@ -134,9 +130,7 @@ class AutoAttacher {
   /// for the first minute after start; the configured interval otherwise.
   Duration nextInterval({int? liveCount, DateTime? now}) {
     final live = liveCount ?? SessionRegistry.instance.liveCount;
-    final since = _startedAt == null
-        ? const Duration(days: 1)
-        : (now ?? DateTime.now()).difference(_startedAt!);
+    final since = _startedAt == null ? const Duration(days: 1) : (now ?? DateTime.now()).difference(_startedAt!);
     const fast = Duration(seconds: 1);
     if (live == 0 || since < const Duration(seconds: 60)) {
       return fast < pollInterval ? fast : pollInterval;
@@ -249,9 +243,8 @@ class AutoAttacher {
 
       final newIdentity = appSessionIdentity(appName);
       if (newIdentity != null &&
-          SessionRegistry.instance.attached.values.any((s) =>
-              s.vmServiceUri != uri &&
-              appSessionIdentity(s.appName) == newIdentity)) {
+          SessionRegistry.instance.attached.values
+              .any((s) => s.vmServiceUri != uri && appSessionIdentity(s.appName) == newIdentity)) {
         io.stderr.writeln(
           'glint_network: auto-attach skipped $uri (app "$displayName"): '
           'looks like a hot restart of an already-tracked app; the '

@@ -57,7 +57,10 @@ NativeCrash? parseIpsCrash(String ips, {required String bundleId, String? path})
     final reasons = (termination['reasons'] as List?)?.cast<Object?>().join('; ');
     final reason = [
       if (type != null) signal == null ? type : '$type ($signal)',
-      if (reasons != null && reasons.isNotEmpty) reasons else if (termination['indicator'] != null) '${termination['indicator']}',
+      if (reasons != null && reasons.isNotEmpty)
+        reasons
+      else if (termination['indicator'] != null)
+        '${termination['indicator']}',
     ].join(': ');
     final images = (body['usedImages'] as List?) ?? const [];
     final threads = (body['threads'] as List?)?.cast<Map>() ?? const [];
@@ -103,9 +106,7 @@ Future<List<NativeCrash>> androidCrashes({
   try {
     final r = await run(adbPath, ['-s', serial, 'logcat', '-b', 'crash', '-d', '-v', 'year']);
     if (r.exitCode != 0) return const [];
-    return parseAndroidCrashes(r.stdout as String, package: package)
-        .where((c) => !c.time.isBefore(since))
-        .toList()
+    return parseAndroidCrashes(r.stdout as String, package: package).where((c) => !c.time.isBefore(since)).toList()
       ..sort((a, b) => b.time.compareTo(a.time));
   } on Object {
     return const [];
@@ -128,11 +129,17 @@ List<NativeCrash> parseAndroidCrashes(String logcat, {required String package}) 
         : text.contains('>>> $package <<<');
     if (ours) {
       final frames = kind == 'java'
-          ? [for (final l in body) if (l.trimLeft().startsWith('at ')) l.trim().substring(3)]
+          ? [
+              for (final l in body)
+                if (l.trimLeft().startsWith('at ')) l.trim().substring(3)
+            ]
           : [
               for (final l in body)
                 if (RegExp(r'^\s*#\d+ pc ').hasMatch(l))
-                  l.trim().replaceFirst(RegExp(r'^#\d+ pc [0-9a-f]+\s+'), '').replaceFirst(RegExp(r'\s*\(BuildId: \w+\)$'), ''),
+                  l
+                      .trim()
+                      .replaceFirst(RegExp(r'^#\d+ pc [0-9a-f]+\s+'), '')
+                      .replaceFirst(RegExp(r'\s*\(BuildId: \w+\)$'), ''),
             ];
       final reason = kind == 'java'
           ? body.firstWhere((l) => !l.startsWith('FATAL EXCEPTION') && !l.startsWith('Process:') && l.trim().isNotEmpty,
@@ -141,7 +148,8 @@ List<NativeCrash> parseAndroidCrashes(String logcat, {required String package}) 
               RegExp(r'signal \d+ \(\w+\)').firstMatch(text)?.group(0) ?? 'native crash',
               if (RegExp(r"Abort message: '([^']*)'").firstMatch(text) case final m?) m.group(1)!,
             ].join(': ');
-      out.add(NativeCrash(time: start!, reason: reason.trim(), frames: frames.take(6).toList(), source: 'logcat -b crash'));
+      out.add(
+          NativeCrash(time: start!, reason: reason.trim(), frames: frames.take(6).toList(), source: 'logcat -b crash'));
     }
     start = null;
     kind = null;
@@ -175,11 +183,24 @@ List<NativeCrash> parseAndroidCrashes(String logcat, {required String package}) 
 }
 
 /// Crash reports a physical iPhone holds for [bundleId] since [since], newest first, fetched with devicectl.
-Future<List<NativeCrash>> phoneCrashes({required String udid, required String bundleId, required DateTime since}) async {
+Future<List<NativeCrash>> phoneCrashes(
+    {required String udid, required String bundleId, required DateTime since}) async {
   final tmp = await Directory.systemTemp.createTemp('glint-crashes-');
   try {
     final list = '${tmp.path}/files.json';
-    await Process.run('xcrun', ['devicectl', 'device', 'info', 'files', '--device', udid, '--domain-type', 'systemCrashLogs', '--json-output', list, '-q']);
+    await Process.run('xcrun', [
+      'devicectl',
+      'device',
+      'info',
+      'files',
+      '--device',
+      udid,
+      '--domain-type',
+      'systemCrashLogs',
+      '--json-output',
+      list,
+      '-q'
+    ]);
     final files = ((jsonDecode(File(list).readAsStringSync()) as Map)['result']?['files'] as List?) ?? const [];
     final out = <NativeCrash>[];
     for (final f in files.cast<Map>()) {
@@ -187,7 +208,21 @@ Future<List<NativeCrash>> phoneCrashes({required String udid, required String bu
       final modified = DateTime.tryParse('${(f['metadata'] as Map?)?['lastModDate']}');
       if (!name.endsWith('.ips') || modified == null || modified.isBefore(since)) continue;
       final local = '${tmp.path}/${name.replaceAll('/', '_')}';
-      await Process.run('xcrun', ['devicectl', 'device', 'copy', 'from', '--device', udid, '--domain-type', 'systemCrashLogs', '--source', name, '--destination', local, '-q']);
+      await Process.run('xcrun', [
+        'devicectl',
+        'device',
+        'copy',
+        'from',
+        '--device',
+        udid,
+        '--domain-type',
+        'systemCrashLogs',
+        '--source',
+        name,
+        '--destination',
+        local,
+        '-q'
+      ]);
       final file = File(local);
       if (!file.existsSync()) continue;
       final crash = parseIpsCrash(file.readAsStringSync(), bundleId: bundleId, path: 'iPhone:$name');

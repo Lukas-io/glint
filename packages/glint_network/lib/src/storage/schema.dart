@@ -419,16 +419,16 @@ const List<String> migrationV10toV11 = [
 /// index below can be built, then enforce uniqueness on the live URI going
 /// forward; createSession reuses the open row instead of inserting a second.
 const List<String> migrationV11toV12 = [
-  "UPDATE sessions "
+  'UPDATE sessions '
       "SET ended_at = CAST(strftime('%s','now') AS INTEGER) * 1000, "
       "note = COALESCE(note || ' ', '') || '[deduped]' "
-      "WHERE ended_at IS NULL AND vm_service_uri IS NOT NULL AND id NOT IN ("
-      "  SELECT MIN(id) FROM sessions "
-      "  WHERE ended_at IS NULL AND vm_service_uri IS NOT NULL "
-      "  GROUP BY vm_service_uri)",
-  "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_live_uri "
-      "ON sessions(vm_service_uri) "
-      "WHERE vm_service_uri IS NOT NULL AND ended_at IS NULL",
+      'WHERE ended_at IS NULL AND vm_service_uri IS NOT NULL AND id NOT IN ('
+      '  SELECT MIN(id) FROM sessions '
+      '  WHERE ended_at IS NULL AND vm_service_uri IS NOT NULL '
+      '  GROUP BY vm_service_uri)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_live_uri '
+      'ON sessions(vm_service_uri) '
+      'WHERE vm_service_uri IS NOT NULL AND ended_at IS NULL',
 ];
 
 /// v13 (#97 follow-up): several server processes share one session row, so a

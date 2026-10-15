@@ -11,8 +11,7 @@ import 'result.dart';
 
 final sessionExportTool = Tool(
   name: 'session_export',
-  description:
-      'Write a session to disk as HAR 1.2 (Chrome DevTools / Insomnia / '
+  description: 'Write a session to disk as HAR 1.2 (Chrome DevTools / Insomnia / '
       'Postman) or NDJSON (one record per line for grep/jq).',
   inputSchema: Schema.object(
     properties: {
@@ -20,8 +19,7 @@ final sessionExportTool = Tool(
       'format': Schema.string(description: '"har" | "ndjson".'),
       'outPath': Schema.string(description: 'Absolute path to write to.'),
       'redact': Schema.bool(
-        description:
-            'Mask secret headers, tokens, passwords and keys (headers and '
+        description: 'Mask secret headers, tokens, passwords and keys (headers and '
             'bodies). Default true, because exports get shared; pass false '
             'only for a file that stays on this machine.',
       ),

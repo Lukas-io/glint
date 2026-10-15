@@ -46,7 +46,8 @@ class FlutterInputBackend extends InteractionBackend {
     );
   }
 
-  Future<void> _deliver(Future<FlutterInputMiss?> Function(FlutterInput) viaFlutter, Future<void> Function() viaNative) async {
+  Future<void> _deliver(
+      Future<FlutterInputMiss?> Function(FlutterInput) viaFlutter, Future<void> Function() viaNative) async {
     final clock = Stopwatch()..start();
     final rt = runtime;
     if (route == InputRoute.device || rt == null || !rt.isAttached) {
@@ -64,12 +65,16 @@ class FlutterInputBackend extends InteractionBackend {
     switch (miss) {
       case FlutterInputMiss.partial:
         final p = input.lastPartial;
-        throw BackendFailure(GlintErrorKind.inputPartial, '${miss.reason}$why',
-            nextSteps: const ['call get_scene to see what landed, then send only the rest; nothing was retried, so nothing landed twice'],
-            data: {if (p != null) 'delivered': p.delivered, if (p != null) 'of': p.of});
+        throw BackendFailure(GlintErrorKind.inputPartial, '${miss.reason}$why', nextSteps: const [
+          'call get_scene to see what landed, then send only the rest; nothing was retried, so nothing landed twice'
+        ], data: {
+          if (p != null) 'delivered': p.delivered,
+          if (p != null) 'of': p.of
+        });
       case FlutterInputMiss.evalFailed:
-        throw BackendFailure(GlintErrorKind.backendToolError, '${miss.reason}$why',
-            nextSteps: const ['call get_scene: if the app answers, retry once; it was not sent another way, so it did not land twice']);
+        throw BackendFailure(GlintErrorKind.backendToolError, '${miss.reason}$why', nextSteps: const [
+          'call get_scene: if the app answers, retry once; it was not sent another way, so it did not land twice'
+        ]);
       case _ when route == InputRoute.app:
         throw BackendFailure(GlintErrorKind.unsupportedBackendAction, 'the app could not take it: ${miss.reason}',
             nextSteps: const ['attach again with input:auto so real touches handle what the app cannot'],
@@ -80,15 +85,18 @@ class FlutterInputBackend extends InteractionBackend {
     }
   }
 
-  ({double x, double y, int ms}) _logical(int x, int y, int ms) => (x: x / devicePixelRatio, y: y / devicePixelRatio, ms: ms);
+  ({double x, double y, int ms}) _logical(int x, int y, int ms) =>
+      (x: x / devicePixelRatio, y: y / devicePixelRatio, ms: ms);
 
   @override
-  Future<void> tap({required int physicalX, required int physicalY}) => _deliver((f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
+  Future<void> tap({required int physicalX, required int physicalY}) => _deliver(
+        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
         () => native.tap(physicalX: physicalX, physicalY: physicalY),
       );
 
   @override
-  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) => _deliver((f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
+  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) => _deliver(
+        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
         () => native.longPress(physicalX: physicalX, physicalY: physicalY, durationMs: durationMs),
       );
 
@@ -102,7 +110,8 @@ class FlutterInputBackend extends InteractionBackend {
     int holdMs = 0,
   }) {
     final path = dragPath(physicalX1, physicalY1, physicalX2, physicalY2, durationMs: durationMs, holdMs: holdMs);
-    return _deliver((f) => f.touch([for (final p in path) _logical(p.x, p.y, p.ms)]),
+    return _deliver(
+      (f) => f.touch([for (final p in path) _logical(p.x, p.y, p.ms)]),
       () => native.swipe(
           physicalX1: physicalX1,
           physicalY1: physicalY1,
@@ -114,15 +123,18 @@ class FlutterInputBackend extends InteractionBackend {
   }
 
   @override
-  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) => tapEachInTurn(this, points, intervalMs);
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) =>
+      tapEachInTurn(this, points, intervalMs);
 
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) => _deliver((f) => f.type(text, gapMs: keyDelayMs ?? 0),
+  Future<void> typeText(String text, {int? keyDelayMs}) => _deliver(
+        (f) => f.type(text, gapMs: keyDelayMs ?? 0),
         () => native.typeText(text, keyDelayMs: keyDelayMs),
       );
 
   @override
-  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) => _deliver((f) async => modifiers.isEmpty ? f.key(key.name, count: count) : FlutterInputMiss.unsupportedKey,
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) => _deliver(
+        (f) async => modifiers.isEmpty ? f.key(key.name, count: count) : FlutterInputMiss.unsupportedKey,
         () => native.pressKey(key, count: count, modifiers: modifiers),
       );
 
@@ -131,10 +143,11 @@ class FlutterInputBackend extends InteractionBackend {
 
   /// Pinch through the app when allowed, else real fingers; with no multi-touch on the device the app path still serves it.
   @override
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async {
+  Future<void> pinch(
+      {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async {
     final from = 120 * devicePixelRatio;
-    final viaApp = (FlutterInput f) =>
-        f.pinch(physicalX / devicePixelRatio, physicalY / devicePixelRatio, from / devicePixelRatio, from * scale / devicePixelRatio, durationMs);
+    Future<FlutterInputMiss?> viaApp(FlutterInput f) => f.pinch(physicalX / devicePixelRatio,
+        physicalY / devicePixelRatio, from / devicePixelRatio, from * scale / devicePixelRatio, durationMs);
     if (route == InputRoute.device) {
       try {
         await native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs);
@@ -148,7 +161,8 @@ class FlutterInputBackend extends InteractionBackend {
       _last = (path: InputPath.app, reason: null, ms: durationMs);
       return;
     }
-    await _deliver(viaApp, () => native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs));
+    await _deliver(
+        viaApp, () => native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs));
   }
 
   @override

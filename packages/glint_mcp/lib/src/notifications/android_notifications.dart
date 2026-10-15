@@ -40,7 +40,8 @@ class PostedNotification {
       ].join(' ');
 }
 
-final _record = RegExp(r'^\s*NotificationRecord\(0x[0-9a-f]+: pkg=(\S+) .*? id=(-?\d+) .*? key=(\S+): Notification\(channel=(\S+) .*?flags=(\S+)');
+final _record = RegExp(
+    r'^\s*NotificationRecord\(0x[0-9a-f]+: pkg=(\S+) .*? id=(-?\d+) .*? key=(\S+): Notification\(channel=(\S+) .*?flags=(\S+)');
 final _extra = RegExp(r'^\s*android\.(title|text|bigText)=\w*String \((.*)\)\s*$');
 final _action = RegExp(r'^\s*\[\d+\] "(.*)" -> ');
 final _when = RegExp(r'^\s*when=(\d+)/');
@@ -122,7 +123,9 @@ class ShadeRow {
 ({List<ShadeRow> rows, List<int>? clearAll}) parseShade(Map<String, Object?> windows) {
   final rows = <ShadeRow>[];
   List<int>? clearAll;
-  List<int> rect(Map<String, Object?> n) => [for (final v in (n['bounds'] as List? ?? const [0, 0, 0, 0])) (v as num).toInt()];
+  List<int> rect(Map<String, Object?> n) => [
+        for (final v in (n['bounds'] as List? ?? const [0, 0, 0, 0])) (v as num).toInt()
+      ];
   Iterable<Map<String, Object?>> walk(Map<String, Object?> n) sync* {
     yield n;
     for (final c in (n['children'] as List? ?? const [])) {
@@ -138,7 +141,8 @@ class ShadeRow {
     for (final n in walk(root)) {
       final id = n['id'] as String? ?? '';
       final text = n['text'] as String?;
-      if (clearAll == null && (id.endsWith('clear_all') || id.endsWith('dismiss_text') || text?.toLowerCase() == 'clear all')) {
+      if (clearAll == null &&
+          (id.endsWith('clear_all') || id.endsWith('dismiss_text') || text?.toLowerCase() == 'clear all')) {
         clearAll = rect(n);
       }
       if (!id.endsWith('expandableNotificationRow')) continue;
@@ -149,7 +153,10 @@ class ShadeRow {
         final did = d['id'] as String? ?? '';
         final t = d['text'] as String?;
         if ((did == 'android:id/title' || did.endsWith(':id/notification_title')) && t != null) title ??= t;
-        if ((did == 'android:id/text' || did == 'android:id/big_text' || did.endsWith(':id/notification_text')) && t != null) body ??= t;
+        if ((did == 'android:id/text' || did == 'android:id/big_text' || did.endsWith(':id/notification_text')) &&
+            t != null) {
+          body ??= t;
+        }
         if (did == 'android:id/expand_button') expand = rect(d);
         if ((d['class'] as String? ?? '').endsWith('Button') && t != null && t.isNotEmpty) actions[t] = rect(d);
       }
@@ -187,7 +194,12 @@ Map<String, Object?> uiDumpAsWindows(String xml) {
   final stack = <Map<String, Object?>>[];
   final tag = RegExp(r'<node\b([^>]*?)(/?)>|</node>');
   String? attr(String attrs, String name) => RegExp('$name="([^"]*)"').firstMatch(attrs)?.group(1);
-  String unescape(String v) => v.replaceAll('&quot;', '"').replaceAll('&apos;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
+  String unescape(String v) => v
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
   for (final m in tag.allMatches(xml)) {
     if (m.group(0) == '</node>') {
       if (stack.isNotEmpty) stack.removeLast();
@@ -205,7 +217,15 @@ Map<String, Object?> uiDumpAsWindows(String xml) {
     };
     if (stack.isEmpty) {
       final pkg = attr(a, 'package') ?? '';
-      byPackage.putIfAbsent(pkg, () => {'package': pkg, 'root': {'bounds': [0, 0, 0, 0], 'children': <Map<String, Object?>>[]}});
+      byPackage.putIfAbsent(
+          pkg,
+          () => {
+                'package': pkg,
+                'root': {
+                  'bounds': [0, 0, 0, 0],
+                  'children': <Map<String, Object?>>[]
+                }
+              });
       ((byPackage[pkg]!['root']! as Map)['children']! as List).add(node);
     } else {
       (stack.last['children']! as List).add(node);

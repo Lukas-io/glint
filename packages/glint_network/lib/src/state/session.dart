@@ -40,14 +40,10 @@ class Session {
   /// 2 history sessions at once is not useful (you're reading the past).
   int? viewedSessionId;
 
-  VmClient get vm =>
-      SessionRegistry.instance.soleAttached?.vm ?? _stubVm;
-  CaptureWriter get captureWriter =>
-      SessionRegistry.instance.soleAttached?.captureWriter ?? _stubCaptureWriter;
-  LogBuffer get logBuffer =>
-      SessionRegistry.instance.soleAttached?.logBuffer ?? _stubLogBuffer;
-  LogStreamSubscriber get logStream =>
-      SessionRegistry.instance.soleAttached?.logStream ?? _stubLogStream;
+  VmClient get vm => SessionRegistry.instance.soleAttached?.vm ?? _stubVm;
+  CaptureWriter get captureWriter => SessionRegistry.instance.soleAttached?.captureWriter ?? _stubCaptureWriter;
+  LogBuffer get logBuffer => SessionRegistry.instance.soleAttached?.logBuffer ?? _stubLogBuffer;
+  LogStreamSubscriber get logStream => SessionRegistry.instance.soleAttached?.logStream ?? _stubLogStream;
 
   final VmClient _stubVm = VmClient();
   final CaptureWriter _stubCaptureWriter = CaptureWriter();
@@ -55,23 +51,19 @@ class Session {
   final LogStreamSubscriber _stubLogStream = LogStreamSubscriber();
 
   /// Human-readable app name from DTD (e.g. `Flutter - iPhone 17`).
-  String? get attachedAppName =>
-      SessionRegistry.instance.soleAttached?.appName;
+  String? get attachedAppName => SessionRegistry.instance.soleAttached?.appName;
 
   /// Live capture session id. Returns null when nothing is attached or when
   /// 2+ are attached (the multi-attach case Phase 5 enables — tools should
   /// route via the registry to disambiguate).
   int? get liveSessionId => SessionRegistry.instance.soleAttached?.id;
 
-  bool get httpProfilingEnabled =>
-      SessionRegistry.instance.soleAttached?.httpProfilingEnabled ?? false;
-  bool get socketProfilingEnabled =>
-      SessionRegistry.instance.soleAttached?.socketProfilingEnabled ?? false;
+  bool get httpProfilingEnabled => SessionRegistry.instance.soleAttached?.httpProfilingEnabled ?? false;
+  bool get socketProfilingEnabled => SessionRegistry.instance.soleAttached?.socketProfilingEnabled ?? false;
 
   /// Cursor used by live `network_list` when caller omits `since`. Mutated
   /// by network_list; null when nothing is attached.
-  DateTime? get lastHttpCursor =>
-      SessionRegistry.instance.soleAttached?.lastHttpCursor;
+  DateTime? get lastHttpCursor => SessionRegistry.instance.soleAttached?.lastHttpCursor;
   set lastHttpCursor(DateTime? v) {
     final s = SessionRegistry.instance.soleAttached;
     if (s != null) s.lastHttpCursor = v;
@@ -80,8 +72,7 @@ class Session {
   /// True when exactly one session is attached AND its VM is connected
   /// with a resolved isolate. Equivalent to today's semantics for the
   /// single-attach case; Phase 5 reworks for multi-attach.
-  bool get isAttached =>
-      dtd.isConnected && vm.isConnected && vm.isolateId != null;
+  bool get isAttached => dtd.isConnected && vm.isConnected && vm.isolateId != null;
   bool get isViewingHistory => viewedSessionId != null;
 
   /// The session id to read FROM in query tools. Prefers explicit view,
@@ -274,8 +265,7 @@ class SessionRegistry {
 
   int get attachedCount => _attached.length;
 
-  AttachedSession? attachedByUri(String vmServiceUri) =>
-      _attached[canonicalVmServiceUri(vmServiceUri)];
+  AttachedSession? attachedByUri(String vmServiceUri) => _attached[canonicalVmServiceUri(vmServiceUri)];
 
   AttachedSession? attachedById(int sessionId) {
     for (final s in _attached.values) {
@@ -287,16 +277,13 @@ class SessionRegistry {
   /// Case-insensitive substring match on `appName`. Empty when no match.
   List<AttachedSession> findByAppName(String contains) {
     final lc = contains.toLowerCase();
-    return _attached.values
-        .where((s) => (s.appName ?? '').toLowerCase().contains(lc))
-        .toList();
+    return _attached.values.where((s) => (s.appName ?? '').toLowerCase().contains(lc)).toList();
   }
 
   /// Returns the single attached session iff exactly one is attached.
   /// Used by the Phase 3 scope resolver as the auto-resolve default when
   /// no `sessionId` / `appNameContains` arg is passed.
-  AttachedSession? get soleAttached =>
-      _attached.length == 1 ? _attached.values.first : null;
+  AttachedSession? get soleAttached => _attached.length == 1 ? _attached.values.first : null;
 
   /// Live sessions only — dead ones have already been evicted.
   int get liveCount => _attached.length;
@@ -332,8 +319,7 @@ class SessionRegistry {
   /// app moved without another probe.
   Map<String, String> lastLiveApps = const {};
 
-  void recordLiveApps(Map<String, String> uriToName) =>
-      lastLiveApps = Map.unmodifiable(uriToName);
+  void recordLiveApps(Map<String, String> uriToName) => lastLiveApps = Map.unmodifiable(uriToName);
 
   /// Evicts [s] as dead: stops its capture, ends its DB row, frees its slot,
   /// and remembers it so reads and status can explain what happened.
@@ -377,8 +363,7 @@ class SessionRegistry {
 
   /// A session re-attached under the same id (hot-restart migration) is no
   /// longer dead.
-  void forgetDead(int sessionId) =>
-      _dead.removeWhere((d) => d.sessionId == sessionId);
+  void forgetDead(int sessionId) => _dead.removeWhere((d) => d.sessionId == sessionId);
 
   Timer? _heartbeat;
 
@@ -394,8 +379,7 @@ class SessionRegistry {
     _heartbeat = null;
   }
 
-  Future<void> heartbeatOnce(
-      {Duration timeout = const Duration(seconds: 3)}) async {
+  Future<void> heartbeatOnce({Duration timeout = const Duration(seconds: 3)}) async {
     for (final s in List<AttachedSession>.from(_attached.values)) {
       if (!_attached.containsKey(canonicalVmServiceUri(s.vmServiceUri))) continue;
       final ok = await s.vm.isResponsive(timeout: timeout);

@@ -25,8 +25,7 @@ void main() {
       );
       expect(url, contains('scroll+%26+wait'));
       expect(url, contains('%3A'), reason: ': must be percent-encoded');
-      expect(url, contains('%60%60%60'),
-          reason: 'triple backtick must be percent-encoded');
+      expect(url, contains('%60%60%60'), reason: 'triple backtick must be percent-encoded');
       expect(url, contains('throw+Error%28%22oops%22%29%3B'));
     });
 
@@ -48,13 +47,11 @@ void main() {
 
   group('selectApplicableLabels', () {
     test('keeps only labels the repo has', () {
-      expect(selectApplicableLabels(['bug', 'agent-filed'], {'bug', 'question'}),
-          ['bug']);
+      expect(selectApplicableLabels(['bug', 'agent-filed'], {'bug', 'question'}), ['bug']);
     });
 
     test('a failed lookup passes every label through', () {
-      expect(selectApplicableLabels(['bug', 'agent-filed'], null),
-          ['bug', 'agent-filed']);
+      expect(selectApplicableLabels(['bug', 'agent-filed'], null), ['bug', 'agent-filed']);
     });
 
     test('nothing matches, nothing applied', () {
@@ -64,10 +61,7 @@ void main() {
 
   group('isMissingLabelError', () {
     test('matches the real gh wording', () {
-      expect(
-          isMissingLabelError(
-              "could not add label: 'agent-filed' not found"),
-          isTrue);
+      expect(isMissingLabelError("could not add label: 'agent-filed' not found"), isTrue);
     });
 
     test('ignores unrelated failures', () {
@@ -99,8 +93,7 @@ void main() {
       };
     }
 
-    ProcessResult r(int code, {String out = '', String err = ''}) =>
-        ProcessResult(0, code, out, err);
+    ProcessResult r(int code, {String out = '', String err = ''}) => ProcessResult(0, code, out, err);
 
     test('labels the repo lacks are dropped before the create', () async {
       final calls = <List<String>>[];
@@ -108,8 +101,7 @@ void main() {
         r(0, out: '[{"name":"bug"},{"name":"question"}]'),
         r(0, out: 'https://github.com/o/r/issues/7\n'),
       ], calls);
-      final f = await fileWithGh(
-          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug', 'agent-filed']);
+      final f = await fileWithGh(run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug', 'agent-filed']);
       expect(f.url, 'https://github.com/o/r/issues/7');
       expect(f.applied, ['bug']);
       expect(f.droppedLabels, ['agent-filed']);
@@ -124,8 +116,7 @@ void main() {
         r(1, err: "could not add label: 'agent-filed' not found"),
         r(0, out: 'https://github.com/o/r/issues/8'),
       ], calls);
-      final f = await fileWithGh(
-          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['ux-friction', 'agent-filed']);
+      final f = await fileWithGh(run: run, repo: 'o/r', title: 't', body: 'b', labels: ['ux-friction', 'agent-filed']);
       expect(f.url, 'https://github.com/o/r/issues/8');
       expect(f.applied, isEmpty);
       expect(f.droppedLabels, ['ux-friction', 'agent-filed']);
@@ -139,8 +130,7 @@ void main() {
         r(0, out: '[]'),
         r(1, err: 'authentication required'),
       ], calls);
-      final f = await fileWithGh(
-          run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug']);
+      final f = await fileWithGh(run: run, repo: 'o/r', title: 't', body: 'b', labels: ['bug']);
       expect(f.url, isNull);
       expect(f.reason, contains('authentication required'));
       expect(calls.length, 2);
@@ -149,7 +139,10 @@ void main() {
     test('a missing gh binary reads as unavailable', () async {
       final f = await fileWithGh(
         run: (exe, args) async => throw const ProcessException('gh', [], 'not found', 2),
-        repo: 'o/r', title: 't', body: 'b', labels: ['bug'],
+        repo: 'o/r',
+        title: 't',
+        body: 'b',
+        labels: ['bug'],
       );
       expect(f.url, isNull);
       expect(f.reason, startsWith('unavailable'));

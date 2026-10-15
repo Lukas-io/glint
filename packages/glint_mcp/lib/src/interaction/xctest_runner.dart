@@ -66,7 +66,8 @@ class XcTestRunner {
   }
 
   /// Reuses a runner already answering, else builds (once per Xcode) and starts one; [onPhase] names each slow step.
-  Future<void> ensureStarted({void Function(String phase)? onPhase, Duration timeout = const Duration(seconds: 180)}) async {
+  Future<void> ensureStarted(
+      {void Function(String phase)? onPhase, Duration timeout = const Duration(seconds: 180)}) async {
     final running = await ping();
     if (running == expectedRunnerProtocol) return;
     if (running != null) await stop();
@@ -76,10 +77,14 @@ class XcTestRunner {
     final log = File('$cacheDir/runner-$udid.log').openWrite();
     final process = await Process.start('xcodebuild', [
       'test-without-building',
-      '-xctestrun', xctestrun,
-      '-destination', 'platform=iOS Simulator,id=$udid',
+      '-xctestrun',
+      xctestrun,
+      '-destination',
+      'platform=iOS Simulator,id=$udid',
       '-only-testing:GlintRunnerUITests/RunnerTests/testServe',
-    ], environment: {'TEST_RUNNER_GLINT_RUNNER_PORT': '$port'});
+    ], environment: {
+      'TEST_RUNNER_GLINT_RUNNER_PORT': '$port'
+    });
     _process = process;
     process.stdout.listen(log.add);
     process.stderr.listen(log.add);
@@ -93,7 +98,9 @@ class XcTestRunner {
     }
     await stop();
     throw XcTestRunnerError(
-      exited ? 'the XCTest runner exited before it answered' : 'the XCTest runner did not answer within ${timeout.inSeconds}s',
+      exited
+          ? 'the XCTest runner exited before it answered'
+          : 'the XCTest runner did not answer within ${timeout.inSeconds}s',
       detail: 'log: $cacheDir/runner-$udid.log',
       nextSteps: const ['read the runner log for the xcodebuild error', 'or attach again with iosBackend:bridge'],
     );
@@ -110,10 +117,14 @@ class XcTestRunner {
     onPhase?.call('building the XCTest runner (first use on this Xcode, about a minute)');
     final r = await Process.run('xcodebuild', [
       'build-for-testing',
-      '-project', projectPath,
-      '-scheme', 'GlintRunner',
-      '-destination', 'generic/platform=iOS Simulator',
-      '-derivedDataPath', '$cacheDir/build',
+      '-project',
+      projectPath,
+      '-scheme',
+      'GlintRunner',
+      '-destination',
+      'generic/platform=iOS Simulator',
+      '-derivedDataPath',
+      '$cacheDir/build',
       'CODE_SIGNING_ALLOWED=NO',
     ]);
     final built = findXctestrun('$cacheDir/build/Build/Products');
@@ -122,7 +133,10 @@ class XcTestRunner {
       final tail = '${r.stdout}\n${r.stderr}'.trim().split('\n').where((l) => l.contains('error')).take(5).join('\n');
       throw XcTestRunnerError('could not build the XCTest runner',
           detail: tail.isEmpty ? 'xcodebuild exited ${r.exitCode}' : tail,
-          nextSteps: const ['check that Xcode and an iOS Simulator SDK are installed', 'or attach again with iosBackend:bridge']);
+          nextSteps: const [
+            'check that Xcode and an iOS Simulator SDK are installed',
+            'or attach again with iosBackend:bridge'
+          ]);
     }
     return built;
   }
@@ -132,7 +146,11 @@ class XcTestRunner {
     var h = 0x811c9dc5;
     final root = Directory(projectPath).parent;
     if (!root.existsSync()) return '';
-    final files = root.listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.swift') || f.path.endsWith('.pbxproj')).toList()
+    final files = root
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.swift') || f.path.endsWith('.pbxproj'))
+        .toList()
       ..sort((a, b) => a.path.compareTo(b.path));
     for (final f in files) {
       for (final b in f.readAsBytesSync()) {

@@ -16,8 +16,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('replay_test_');
     CapturesDatabase.open(dataDir: dir.path);
-    sid = CapturesDao().createSession(
-        appName: 'app', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = CapturesDao().createSession(appName: 'app', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
   });
 
   tearDown(() {

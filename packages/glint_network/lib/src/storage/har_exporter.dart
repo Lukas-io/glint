@@ -66,21 +66,17 @@ class HarExporter {
         },
         'pages': const <dynamic>[],
         'entries': [
-          for (final r in requests)
-            _entryFor(session['id'] as int, r, redactNames),
+          for (final r in requests) _entryFor(session['id'] as int, r, redactNames),
         ],
       },
     };
   }
 
-  Map<String, Object?> _entryFor(
-      int sessionId, Map<String, Object?> r, Set<String> redactNames) {
+  Map<String, Object?> _entryFor(int sessionId, Map<String, Object?> r, Set<String> redactNames) {
     final vmId = r['vm_id'] as String;
     final startUs = r['start_us'] as int?;
     final endUs = r['end_us'] as int?;
-    final durationMs = endUs == null || startUs == null
-        ? -1
-        : ((endUs - startUs) / 1000).round();
+    final durationMs = endUs == null || startUs == null ? -1 : ((endUs - startUs) / 1000).round();
     final reqHeaders = _parseHeaders(r['request_headers_json']);
     final respHeaders = _parseHeaders(r['response_headers_json']);
     final reqBody = _dao.getBody(sessionId, vmId, 'request');
@@ -89,10 +85,9 @@ class HarExporter {
     final respContentType = _firstHeader(respHeaders, 'content-type');
 
     return {
-      'startedDateTime':
-          startUs == null
-              ? '1970-01-01T00:00:00.000Z'
-              : DateTime.fromMicrosecondsSinceEpoch(startUs).toUtc().toIso8601String(),
+      'startedDateTime': startUs == null
+          ? '1970-01-01T00:00:00.000Z'
+          : DateTime.fromMicrosecondsSinceEpoch(startUs).toUtc().toIso8601String(),
       'time': durationMs,
       'request': {
         'method': r['method'] ?? '',
@@ -193,8 +188,7 @@ class HarExporter {
     return '';
   }
 
-  List<Map<String, Object?>> _harHeaders(
-      Map<String, dynamic>? headers, Set<String> redactNames) {
+  List<Map<String, Object?>> _harHeaders(Map<String, dynamic>? headers, Set<String> redactNames) {
     if (headers == null) return const [];
     final out = <Map<String, Object?>>[];
     for (final e in headers.entries) {
@@ -216,8 +210,7 @@ class HarExporter {
 
   /// Redacts auth header VALUES inside the raw *_headers_json columns for the
   /// NDJSON export path (D5).
-  Map<String, Object?> _redactRow(
-      Map<String, Object?> r, Set<String> redactNames) {
+  Map<String, Object?> _redactRow(Map<String, Object?> r, Set<String> redactNames) {
     if (redactNames.isEmpty) return r;
     final out = Map<String, Object?>.of(r);
     for (final col in ['request_headers_json', 'response_headers_json']) {

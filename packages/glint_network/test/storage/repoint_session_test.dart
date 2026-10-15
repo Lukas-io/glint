@@ -35,8 +35,7 @@ void main() {
         [sid, 'req-before', 100],
       );
 
-      dao.repointSession(sid,
-          vmServiceUri: 'ws://new/ws', isolateId: 'isolates/2');
+      dao.repointSession(sid, vmServiceUri: 'ws://new/ws', isolateId: 'isolates/2');
 
       final row = CapturesDatabase.instance.raw.select(
         'SELECT vm_service_uri, isolate_id FROM sessions WHERE id=?',
@@ -54,8 +53,7 @@ void main() {
         'SELECT COUNT(*) AS c FROM http_requests WHERE session_id=?',
         [sid],
       );
-      expect(count.single['c'], 2,
-          reason: 'before + after restart share one session id');
+      expect(count.single['c'], 2, reason: 'before + after restart share one session id');
     });
   });
 }

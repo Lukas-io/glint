@@ -29,8 +29,7 @@ void main() {
 
     test('null movement (anchor gone) falls back to tree category', () {
       expect(ScrollTool.mergeScrollSignal('nothing', null).category, 'nothing');
-      expect(ScrollTool.mergeScrollSignal('routeChanged', null).category,
-          'routeChanged');
+      expect(ScrollTool.mergeScrollSignal('routeChanged', null).category, 'routeChanged');
     });
 
     test('route change is preserved even if the anchor also moved', () {

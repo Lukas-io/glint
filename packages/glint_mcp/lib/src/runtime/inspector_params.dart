@@ -37,8 +37,7 @@ class InspectorParams {
       {'arg': inspectorId, 'objectGroup': groupName};
 
   /// `disposeGroup` force-unwraps `objectGroup`; sending `groupName` instead throws a null-check error in the app.
-  static Map<String, String> disposeGroup(String groupName) =>
-      {'objectGroup': groupName};
+  static Map<String, String> disposeGroup(String groupName) => {'objectGroup': groupName};
 
   /// `addPubRootDirectories` is var-args: arg0, arg1, … one per directory.
   static Map<String, String> pubRootDirectories(List<String> dirs) =>

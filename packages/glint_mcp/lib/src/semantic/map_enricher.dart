@@ -75,9 +75,15 @@ class MapEnricher implements SemanticEnricher {
       if (done == null || (int.tryParse(done) ?? 0) >= maps.length) break;
     }
     final raw = await _readLong(boxId);
-    final lines = [for (final l in (raw ?? '').split('\n')) if (l.isNotEmpty) l.split(_sep)];
+    final lines = [
+      for (final l in (raw ?? '').split('\n'))
+        if (l.isNotEmpty) l.split(_sep)
+    ];
     for (final (i, (map, _)) in maps.indexed) {
-      _fill(map, [for (final l in lines) if (l.length > 1 && l[1] == '$i') l]);
+      _fill(map, [
+        for (final l in lines)
+          if (l.length > 1 && l[1] == '$i') l
+      ]);
     }
   }
 
@@ -104,7 +110,10 @@ class MapEnricher implements SemanticEnricher {
   }
 
   void _fill(SemanticMap map, List<List<String>> lines) {
-    final points = {for (final l in lines) if (l.first == 'P' && l.length >= 5) l[2]: (at: l[3], onScreen: l[4] == 'true')};
+    final points = {
+      for (final l in lines)
+        if (l.first == 'P' && l.length >= 5) l[2]: (at: l[3], onScreen: l[4] == 'true')
+    };
     final children = map.children;
     for (final l in lines) {
       switch (l.first) {
@@ -121,9 +130,15 @@ class MapEnricher implements SemanticEnricher {
         case 'M' when l.length >= 5:
           final p = points[l[2]];
           final xy = p == null || !p.onScreen ? null : p.at.split(',').map(int.tryParse).toList();
-          map.markers.add((id: l[2], title: l[3], at: l[4], screen: xy == null || xy.length != 2 || xy.contains(null) ? null : (x: xy[0]!, y: xy[1]!)));
+          map.markers.add((
+            id: l[2],
+            title: l[3],
+            at: l[4],
+            screen: xy == null || xy.length != 2 || xy.contains(null) ? null : (x: xy[0]!, y: xy[1]!)
+          ));
           final where = p == null ? '' : (p.onScreen ? ' @ ${p.at}' : ' (off screen)');
-          children.add(SemanticMapItem(role: SemanticRole.marker, label: '${l[2]}${l[3].isEmpty ? '' : ' "${l[3]}"'} at ${l[4]}$where'));
+          children.add(SemanticMapItem(
+              role: SemanticRole.marker, label: '${l[2]}${l[3].isEmpty ? '' : ' "${l[3]}"'} at ${l[4]}$where'));
         case 'X':
           children.add(SemanticMapItem(role: SemanticRole.marker, label: '… ${l[2]} more markers'));
         case 'R' when l.length >= 6:

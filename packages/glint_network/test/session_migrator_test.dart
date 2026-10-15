@@ -6,8 +6,7 @@ import 'package:test/test.dart';
 /// only migrates when there is exactly one safe target.
 void main() {
   // DTD app-name shape appSessionIdentity understands.
-  String app(String pkg, {String device = 'iPhone 17'}) =>
-      'Flutter - Device: $device - Package: $pkg';
+  String app(String pkg, {String device = 'iPhone 17'}) => 'Flutter - Device: $device - Package: $pkg';
 
   ({int id, String uri, String? appName}) sess(
     int id,

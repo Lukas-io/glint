@@ -14,11 +14,10 @@ class VmClient {
   bool get isConnected => _service != null;
   Uri? get connectedUri => _connectedUri;
 
-  VmService get service =>
-      _service ?? (throw StateError('VM service is not connected.'));
+  VmService get service => _service ?? (throw StateError('VM service is not connected.'));
 
-  Isolate get flutterIsolate => _flutterIsolate ??
-      (throw StateError('No Flutter isolate selected. Call attach() first.'));
+  Isolate get flutterIsolate =>
+      _flutterIsolate ?? (throw StateError('No Flutter isolate selected. Call attach() first.'));
 
   String get flutterIsolateId => flutterIsolate.id!;
 
@@ -40,9 +39,8 @@ class VmClient {
   Future<void> ready() => _reselecting ?? Future.value();
 
   /// Picks the Flutter isolate again, e.g. after a hot restart replaced it; concurrent callers share one attempt.
-  Future<void> reselect() => _reselecting ??=
-      _reselectUntilFound(exclude: _flutterIsolate?.id)
-          .whenComplete(() => _reselecting = null);
+  Future<void> reselect() =>
+      _reselecting ??= _reselectUntilFound(exclude: _flutterIsolate?.id).whenComplete(() => _reselecting = null);
 
   /// Waits for an isolate with a widget tree; a restarted app may take seconds of start-up work before its UI isolate builds one, while a background engine's isolate is already there.
   Future<void> _reselectUntilFound({String? exclude}) async {
@@ -143,5 +141,4 @@ class VmClient {
     _connectedUri = null;
     if (svc != null) await svc.dispose();
   }
-
 }

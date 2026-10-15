@@ -56,7 +56,10 @@ Map<String, SensorSample> parseSensorService(String dump) {
       if (line.trim().isEmpty || !line.startsWith('\t')) flush();
       continue;
     }
-    final values = [for (final v in e.group(2)!.split(',')) if (v.trim().isNotEmpty) double.tryParse(v.trim()) ?? 0];
+    final values = [
+      for (final v in e.group(2)!.split(','))
+        if (v.trim().isNotEmpty) double.tryParse(v.trim()) ?? 0
+    ];
     last = (values: values, wall: e.group(1));
   }
   flush();

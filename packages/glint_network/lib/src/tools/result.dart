@@ -43,11 +43,13 @@ CallToolResult jsonResult(
   if (!isError && scopeNote != null) {
     final existing = (data['warnings'] as List?)?.cast<String>() ?? const [];
     if (!existing.contains(scopeNote)) {
-      enriched = {...data, 'warnings': [scopeNote, ...existing]};
+      enriched = {
+        ...data,
+        'warnings': [scopeNote, ...existing]
+      };
     }
   }
-  final payload =
-      isError ? enriched : _maybeAnnotatePendingAlerts(enriched, scopeSessionId);
+  final payload = isError ? enriched : _maybeAnnotatePendingAlerts(enriched, scopeSessionId);
   final pretty = const JsonEncoder.withIndent('  ').convert(payload);
   return CallToolResult(
     content: [TextContent(text: pretty)],

@@ -64,8 +64,7 @@ void main() {
     expect(res.isError, isFalse);
     final code = res.structuredContent!['test'] as String;
     expect(code, contains("import 'package:test/test.dart';"));
-    expect(code,
-        contains("http.Request('POST', Uri.parse('https://api.example.com/login'))"));
+    expect(code, contains("http.Request('POST', Uri.parse('https://api.example.com/login'))"));
     expect(code, contains('expect(response.statusCode, 200);'));
     expect(code, contains("request.body = '{\"user\":\"a\"}';"));
     // authorization is redacted (commented out) by default
@@ -95,8 +94,7 @@ void main() {
     );
   }
 
-  Future<Map<String, Object?>> replay(String id) async =>
-      (await networkReplayAsTest(CallToolRequest(
+  Future<Map<String, Object?>> replay(String id) async => (await networkReplayAsTest(CallToolRequest(
         name: 'network_replay_as_test',
         arguments: {'id': id, 'sessionId': sid},
       )))

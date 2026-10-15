@@ -43,7 +43,10 @@ bool cellShowsTime(String label, DateTime at) {
 
 /// The cell for the seeded asset added at [addedAt]; [laterInSameWindow] is how many other seeded assets were added after it within the label's precision, since those sit ahead of it. Null when no cell fits.
 int? cellForAsset(List<PickerCell> cells, DateTime addedAt, {int laterInSameWindow = 0}) {
-  final fitting = [for (var i = 0; i < cells.length; i++) if (cellShowsTime(cells[i].label, addedAt)) i];
+  final fitting = [
+    for (var i = 0; i < cells.length; i++)
+      if (cellShowsTime(cells[i].label, addedAt)) i
+  ];
   if (fitting.isEmpty) return null;
   return fitting[laterInSameWindow.clamp(0, fitting.length - 1)];
 }

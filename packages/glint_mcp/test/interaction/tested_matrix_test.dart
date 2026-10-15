@@ -66,9 +66,12 @@ void main() {
     test('iOS reads the simulator runtime and the macOS major', () async {
       final setup = await readIosSetup('ABC', 27, run: (exe, args) async {
         if (exe == 'sw_vers') return ProcessResult(0, 0, '27.0.1\n', '');
-        return ProcessResult(0, 0,
+        return ProcessResult(
+            0,
+            0,
             '{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-27-0":[{"udid":"ABC"}],'
-            '"com.apple.CoreSimulator.SimRuntime.iOS-26-5":[{"udid":"XYZ"}]}}', '');
+                '"com.apple.CoreSimulator.SimRuntime.iOS-26-5":[{"udid":"XYZ"}]}}',
+            '');
       });
       expect((setup.runtimeMajor, setup.runtime, setup.hostMajor), (27, 'iOS 27.0', 27));
     });
@@ -84,8 +87,9 @@ void main() {
     });
 
     test('auto reports why it fell back to indigo', () async {
-      final t = await readIosTransport('/b', 'ABC', 'auto', run: (_, __) async => ProcessResult(0, 0,
-          'hid indigo coresimulator 1171.7 (dtuhid unavailable: no reply within 4s)\n', ''));
+      final t = await readIosTransport('/b', 'ABC', 'auto',
+          run: (_, __) async =>
+              ProcessResult(0, 0, 'hid indigo coresimulator 1171.7 (dtuhid unavailable: no reply within 4s)\n', ''));
       expect((t.transport, t.fallback), ('indigo', 'no reply within 4s'));
     });
 
@@ -101,8 +105,8 @@ void main() {
     });
 
     test('Android reads the API level', () async {
-      final setup = await readAndroidSetup('emulator-5554', 'adb',
-          run: (_, __) async => ProcessResult(0, 0, '35\n', ''));
+      final setup =
+          await readAndroidSetup('emulator-5554', 'adb', run: (_, __) async => ProcessResult(0, 0, '35\n', ''));
       expect(setup.runtimeMajor, 35);
     });
   });

@@ -18,7 +18,8 @@ class MapTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'map',
-        description: 'A Google map in the attached app, driven like a finger. op: read (camera and markers with their screen points), '
+        description:
+            'A Google map in the attached app, driven like a finger. op: read (camera and markers with their screen points), '
             'tap (marker: its id), pan (dx, dy in logical points, or to: "lat,lng" or marker: id to center it), zoom (direction: in | out, one finger). '
             'Each reply gives the camera before and after. errorKind: sessionNotAttached, targetNotFound, invalidArgument.',
         inputSchema: ObjectSchema(
@@ -81,7 +82,8 @@ class MapTool extends GlintTool {
 
   String _camera(SemanticMap m) => '${m.center} zoom ${m.zoom?.toStringAsFixed(1)}';
 
-  StructuredResponse _reply(GlintSession session, String did, SemanticMap before, SemanticMap after, {List<String> warnings = const []}) {
+  StructuredResponse _reply(GlintSession session, String did, SemanticMap before, SemanticMap after,
+      {List<String> warnings = const []}) {
     final moved = _camera(before) != _camera(after);
     return StructuredResponse(
       summary: did == 'map'
@@ -94,7 +96,13 @@ class MapTool extends GlintTool {
         'zoom': after.zoom,
         'shows': after.shows,
         'markers': [
-          for (final m in after.markers) {'id': m.id, if (m.title.isNotEmpty) 'title': m.title, 'at': m.at, if (m.screen != null) 'screen': '${m.screen!.x},${m.screen!.y}'},
+          for (final m in after.markers)
+            {
+              'id': m.id,
+              if (m.title.isNotEmpty) 'title': m.title,
+              'at': m.at,
+              if (m.screen != null) 'screen': '${m.screen!.x},${m.screen!.y}'
+            },
         ],
         if (did != 'map') 'cameraMoved': moved,
       },
@@ -130,7 +138,10 @@ class MapTool extends GlintTool {
 
   Future<StructuredResponse> _tap(GlintSession session, Map<String, Object?> args, SemanticMap before) async {
     final id = args['marker'] as String?;
-    if (id == null) return _bad('tap needs marker: the marker id', nextSteps: ['markers here: ${before.markers.map((m) => m.id).join(', ')}']);
+    if (id == null) {
+      return _bad('tap needs marker: the marker id',
+          nextSteps: ['markers here: ${before.markers.map((m) => m.id).join(', ')}']);
+    }
     final marker = before.markers.where((m) => m.id == id).firstOrNull;
     if (marker == null) {
       return StructuredResponse.error(
@@ -148,7 +159,11 @@ class MapTool extends GlintTool {
     }
     await _tapAt(session, marker.screen!.x.toDouble(), marker.screen!.y.toDouble());
     final after = await _settled(session, before, argInt(args, 'index') ?? 0);
-    return _reply(session, 'tapped marker $id${marker.title.isEmpty ? '' : ' "${marker.title}"'} at ${marker.screen!.x},${marker.screen!.y}', before, after);
+    return _reply(
+        session,
+        'tapped marker $id${marker.title.isEmpty ? '' : ' "${marker.title}"'} at ${marker.screen!.x},${marker.screen!.y}',
+        before,
+        after);
   }
 
   /// Logical points the map content must move so [target] lands on the camera center, from Web Mercator at the current zoom (256 points per tile).
@@ -167,10 +182,12 @@ class MapTool extends GlintTool {
     final token = request.meta?.progressToken;
     final notifier = session.progressNotifier;
     if (token == null || notifier == null) return null;
-    return (sec, phase) => notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
+    return (sec, phase) =>
+        notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
   }
 
-  Future<StructuredResponse> _pan(GlintSession session, CallToolRequest request, Map<String, Object?> args, SemanticMap before) async {
+  Future<StructuredResponse> _pan(
+      GlintSession session, CallToolRequest request, Map<String, Object?> args, SemanticMap before) async {
     final rect = before.rect;
     if (rect == null || rect.w <= 0 || rect.h <= 0) return _bad('the map has no size on screen yet');
     final index = argInt(args, 'index') ?? 0;
@@ -188,10 +205,14 @@ class MapTool extends GlintTool {
         restY -= sy;
         steps++;
       }
-      return _reply(session, 'panned by ${dx.round()},${dy.round()} in $steps drag${steps == 1 ? '' : 's'}', before, await _settled(session, before, index));
+      return _reply(session, 'panned by ${dx.round()},${dy.round()} in $steps drag${steps == 1 ? '' : 's'}', before,
+          await _settled(session, before, index));
     }
     final at = markerId != null ? before.markers.where((m) => m.id == markerId).firstOrNull?.at : toRaw;
-    if (at == null) return _bad('no marker "$markerId" on the map', nextSteps: ['markers: ${before.markers.map((m) => m.id).join(', ')}']);
+    if (at == null) {
+      return _bad('no marker "$markerId" on the map',
+          nextSteps: ['markers: ${before.markers.map((m) => m.id).join(', ')}']);
+    }
     final parts = at.split(',').map((v) => double.tryParse(v.trim())).toList();
     if (parts.length != 2 || parts.contains(null)) return _bad('to must be "lat,lng"; got $at');
     final target = (lat: parts[0]!, lng: parts[1]!);
@@ -211,21 +232,25 @@ class MapTool extends GlintTool {
       left = _offsetTo(now, target);
       if (clock.elapsed - lastReport >= const Duration(seconds: 15)) {
         lastReport = clock.elapsed;
-        sink?.call(clock.elapsed.inSeconds, 'panning to ${markerId ?? at}: $steps drags, ${left == null ? '?' : '${left.dx.round()},${left.dy.round()}'} points to go');
+        sink?.call(clock.elapsed.inSeconds,
+            'panning to ${markerId ?? at}: $steps drags, ${left == null ? '?' : '${left.dx.round()},${left.dy.round()}'} points to go');
       }
     }
     if (stuck >= 2) {
       return StructuredResponse.error(
         summary: 'the map does not move under drags (camera stayed at ${_camera(now)})',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'two drags in a row left the camera where it was: the map may have scroll gestures off, or not be drawn (an Android map without a valid API key draws nothing and ignores touches)',
+        detail:
+            'two drags in a row left the camera where it was: the map may have scroll gestures off, or not be drawn (an Android map without a valid API key draws nothing and ignores touches)',
         nextSteps: const ['get_scene, then device op:screenshot to see the map'],
       );
     }
     final there = left != null && left.dx.abs() <= 25 && left.dy.abs() <= 25;
-    return _reply(session, 'panned to ${markerId ?? at} in $steps drag${steps == 1 ? '' : 's'}', before, now, warnings: [
-      if (!there) 'stopped ${left == null ? 'without a camera to check' : '${left.dx.round()},${left.dy.round()} points short'} after $steps drags; far targets take many drags at this zoom',
-    ]);
+    return _reply(session, 'panned to ${markerId ?? at} in $steps drag${steps == 1 ? '' : 's'}', before, now,
+        warnings: [
+          if (!there)
+            'stopped ${left == null ? 'without a camera to check' : '${left.dx.round()},${left.dy.round()} points short'} after $steps drags; far targets take many drags at this zoom',
+        ]);
   }
 
   Future<StructuredResponse> _zoom(GlintSession session, Map<String, Object?> args, SemanticMap before) async {
@@ -236,7 +261,9 @@ class MapTool extends GlintTool {
     final cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
     final dpr = session.device.devicePixelRatio;
     if (direction == 'in') {
-      await session.backend.tapSequence([(x: (cx * dpr).round(), y: (cy * dpr).round()), (x: (cx * dpr).round(), y: (cy * dpr).round())], intervalMs: 120);
+      await session.backend.tapSequence(
+          [(x: (cx * dpr).round(), y: (cy * dpr).round()), (x: (cx * dpr).round(), y: (cy * dpr).round())],
+          intervalMs: 120);
     } else {
       await _tapAt(session, cx, cy);
       await _drag(session, (x: cx, y: cy), (x: cx, y: cy - rect.h * 0.25));

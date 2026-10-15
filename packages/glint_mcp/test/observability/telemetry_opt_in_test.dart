@@ -12,17 +12,9 @@ void main() {
     });
 
     test('DO_NOT_TRACK and the old kill switches always win', () {
-      expect(
-          sharingEnabled(const {'GLINT_TELEMETRY': '1', 'DO_NOT_TRACK': '1'}),
-          isFalse);
-      expect(
-          sharingEnabled(
-              const {'GLINT_TELEMETRY': '1', 'GLINT_NO_TELEMETRY': 'true'}),
-          isFalse);
-      expect(
-          sharingEnabled(
-              const {'GLINT_TELEMETRY': '1', 'GLINT_NO_USAGE': 'yes'}),
-          isFalse);
+      expect(sharingEnabled(const {'GLINT_TELEMETRY': '1', 'DO_NOT_TRACK': '1'}), isFalse);
+      expect(sharingEnabled(const {'GLINT_TELEMETRY': '1', 'GLINT_NO_TELEMETRY': 'true'}), isFalse);
+      expect(sharingEnabled(const {'GLINT_TELEMETRY': '1', 'GLINT_NO_USAGE': 'yes'}), isFalse);
     });
   });
 
@@ -30,14 +22,9 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('glint-ship-');
     addTearDown(() => dir.deleteSync(recursive: true));
     final r = UsageRecorder.config(enabled: true)
-      ..record(
-          tool: 'tap',
-          outcome: ToolOutcome.ok,
-          argKeys: const [],
-          durationMs: 1,
-          resultBytes: 0);
-    final res = await UsageReporter(r, env: const {}).ship(
-        dataDir: dir.path, endpointOverride: 'http://127.0.0.1:1/v1/telemetry');
+      ..record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 0);
+    final res = await UsageReporter(r, env: const {})
+        .ship(dataDir: dir.path, endpointOverride: 'http://127.0.0.1:1/v1/telemetry');
     expect(res.shipped, isFalse);
     expect(res.message, contains('GLINT_TELEMETRY=on'));
     expect(Directory(dir.path).listSync(), isEmpty);

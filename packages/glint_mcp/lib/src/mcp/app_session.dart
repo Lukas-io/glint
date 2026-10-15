@@ -112,8 +112,7 @@ class AppSession {
   DevicePlatform get platform => device.platform;
 
   /// Best human label for this attachment.
-  String get label =>
-      displayName ?? package ?? bundleId ?? (deviceMode ? 'device' : 'app');
+  String get label => displayName ?? package ?? bundleId ?? (deviceMode ? 'device' : 'app');
 
   /// A live VM (or a device-mode binding, which has nothing to lose).
   bool get isLive => deviceMode || (runtime?.isAttached ?? false);
@@ -205,9 +204,10 @@ class AppSession {
     final dev = device;
     nativeReader = switch (dev) {
       IosSimulator(:final runner?) => RunnerNativeReader(
-          tree: (bundleId) => runner.call('GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
+          tree: (bundleId) => runner.call(
+              'GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
               timeout: const Duration(seconds: 5)),
-          bundleId: () => this.bundleId,
+          bundleId: () => bundleId,
           fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
         ),
       IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
@@ -238,7 +238,8 @@ class AppSession {
 
     _lifecyclePollTimer?.cancel();
     final pushed = await _subscribeLifecycle(rt);
-    final polled = nativeReader is RunnerNativeReader || (!pushed && (nativeReader is NativeSceneReader || nativeReader is OcrNativeReader));
+    final polled = nativeReader is RunnerNativeReader ||
+        (!pushed && (nativeReader is NativeSceneReader || nativeReader is OcrNativeReader));
     if (polled) {
       _lifecyclePollTimer = Timer.periodic(
         const Duration(milliseconds: 500),
@@ -394,9 +395,7 @@ class AppSession {
             'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
           )
           .timeout(lifecycleProbeTimeout);
-      sceneMode = (state == null || state == 'resumed')
-          ? SceneMode.flutter
-          : SceneMode.native;
+      sceneMode = (state == null || state == 'resumed') ? SceneMode.flutter : SceneMode.native;
       _onLifecycle(state ?? 'resumed');
     } on TimeoutException {
       // Slow is not suspended (the first eval also resolves the eval library); only a locked device settles it.

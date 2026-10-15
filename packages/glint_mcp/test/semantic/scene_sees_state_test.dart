@@ -10,8 +10,7 @@ class _Runtime implements FlutterRuntime {
   final expressions = <String>[];
 
   @override
-  Future<String?> evaluateString(String expression,
-      {bool rethrowErrors = false}) async {
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async {
     expressions.add(expression);
     return reply;
   }
@@ -20,9 +19,7 @@ class _Runtime implements FlutterRuntime {
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
 }
 
-SceneNode _n(String label,
-        {String? glintId, String? text, List<SceneNode> children = const []}) =>
-    SceneNode(
+SceneNode _n(String label, {String? glintId, String? text, List<SceneNode> children = const []}) => SceneNode(
       depth: 1,
       indexInParent: 0,
       description: label,
@@ -77,9 +74,9 @@ void main() {
           _n('Image'),
         ]),
       ]));
-      await ImageEnricher(runtime: _Runtime(
-              'FileImage("/tmp/picks/profile.jpg", scale: 1.0)|;'
-              'NetworkImage("https://cdn.example.com/a/b/cover.png", scale: 1.0)|true'))
+      await ImageEnricher(
+              runtime: _Runtime('FileImage("/tmp/picks/profile.jpg", scale: 1.0)|;'
+                  'NetworkImage("https://cdn.example.com/a/b/cover.png", scale: 1.0)|true'))
           .enrich(scene);
       final images = scene.root.walk().whereType<SemanticImage>().toList();
       expect(images.map((i) => i.source), ['profile.jpg', 'cdn.example.com/…/cover.png']);
@@ -92,8 +89,7 @@ void main() {
     test('asset, memory and long picker names', () {
       expect(imageSourceName('AssetImage(bundle: null, name: "assets/logo.png")'), 'logo.png');
       expect(imageSourceName('MemoryImage(Uint8List#1a2b3, scale: 1.0)'), 'MemoryImage');
-      expect(
-          imageSourceName('FileImage("/x/image_picker_9ABC7ED8-0EF5-48B0-886F-EE12345678.jpg", scale: 1.0)'),
+      expect(imageSourceName('FileImage("/x/image_picker_9ABC7ED8-0EF5-48B0-886F-EE12345678.jpg", scale: 1.0)'),
           'image_picker_…345678.jpg');
       expect(imageSourceName(''), isNull);
     });
@@ -108,9 +104,7 @@ void main() {
           ]);
       String idOf(SceneNode root, String year) => root
           .walk()
-          .firstWhere((n) =>
-              n.baseLabel == 'GestureDetector' &&
-              n.walk().any((d) => d.textPreview == year))
+          .firstWhere((n) => n.baseLabel == 'GestureDetector' && n.walk().any((d) => d.textPreview == year))
           .glintId!;
       final before = wheel(['1998', '1999', '2000', '2001']);
       final after = wheel(['1996', '1997', '1998', '1999']);

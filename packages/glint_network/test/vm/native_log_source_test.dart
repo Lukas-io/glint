@@ -3,8 +3,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('parses the DTD app name into device and package', () {
-    final p = NativeLogSource.parseAppName(
-        'Kind: Flutter - Device: iPhone 17 - Package: eats_mobile');
+    final p = NativeLogSource.parseAppName('Kind: Flutter - Device: iPhone 17 - Package: eats_mobile');
     expect(p.device, 'iPhone 17');
     expect(p.package, 'eats_mobile');
     expect(NativeLogSource.looksLikeIos('iPhone 17'), isTrue);

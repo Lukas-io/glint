@@ -11,23 +11,20 @@ import 'result.dart';
 
 final socketGetTool = Tool(
   name: 'socket_get',
-  description:
-      'One socket\'s stats by id (from socket_list). Byte counts + lifetime '
+  description: 'One socket\'s stats by id (from socket_list). Byte counts + lifetime '
       'only; no payloads.',
   inputSchema: Schema.object(
     properties: {
       'id': Schema.string(description: 'Socket id from socket_list.'),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to '
+        description: 'Restrict to one isolate (id from network_status). Omit to '
             'auto-resolve.',
       ),
     },
@@ -40,13 +37,11 @@ FutureOr<CallToolResult> socketGet(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final id = args['id'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'socket_list — list current sockets and pick one',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'socket_list — list current sockets and pick one',
+      ],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
@@ -56,15 +51,13 @@ FutureOr<CallToolResult> socketGet(CallToolRequest request) async {
     final sid = scope.sessionId;
     final row = CapturesDao().getSocket(sid, id);
     if (row == null) {
-      return errorResult('Socket `$id` not found in session $sid.',
-          kind: ErrorKind.notFound,
-          extra: {
-            'sessionId': sid,
-            'nextSteps': const [
-              'socket_list — list valid socket ids in this session',
-              'session_list — confirm the session id is correct',
-            ],
-          });
+      return errorResult('Socket `$id` not found in session $sid.', kind: ErrorKind.notFound, extra: {
+        'sessionId': sid,
+        'nextSteps': const [
+          'socket_list — list valid socket ids in this session',
+          'session_list — confirm the session id is correct',
+        ],
+      });
     }
     return _historySuccess(scope, row, caps);
   }
@@ -89,9 +82,8 @@ FutureOr<CallToolResult> socketGet(CallToolRequest request) async {
     final dbRow = CapturesDao().getSocket(scope.sessionId, id);
     resolvedIsolateId = dbRow?['isolate_id'] as String?;
   }
-  final candidateIsolates = resolvedIsolateId != null
-      ? [resolvedIsolateId]
-      : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
+  final candidateIsolates =
+      resolvedIsolateId != null ? [resolvedIsolateId] : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
 
   dynamic foundSocket;
   String? foundIsolateId;
@@ -116,8 +108,7 @@ FutureOr<CallToolResult> socketGet(CallToolRequest request) async {
 
   if (foundSocket == null) {
     final dbRow = CapturesDao().getSocket(scope.sessionId, id);
-    final allFailed =
-        candidateIsolates.isNotEmpty && isoFailures == candidateIsolates.length;
+    final allFailed = candidateIsolates.isNotEmpty && isoFailures == candidateIsolates.length;
     if (dbRow != null) {
       return _historySuccess(
         scope,

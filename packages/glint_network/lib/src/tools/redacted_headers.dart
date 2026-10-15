@@ -10,8 +10,7 @@ const _builtins = CapturesDao.builtInRedactedHeaders;
 
 final redactedHeadersTool = Tool(
   name: 'redacted_headers',
-  description:
-      'Manage the list of header names that network_replay redacts. The '
+  description: 'Manage the list of header names that network_replay redacts. The '
       'built-in set always applies (authorization, cookie, '
       'proxy-authorization, set-cookie, x-api-key, x-auth-token); this tool ADDS '
       'project-specific names (e.g. X-Tenant-Key). Matched case-insensitively.',

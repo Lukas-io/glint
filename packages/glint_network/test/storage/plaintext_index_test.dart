@@ -28,8 +28,7 @@ void main() {
     dir = Directory.systemTemp.createTempSync('plaintext_index_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    sid = dao.createSession(
-        appName: 'bank', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = dao.createSession(appName: 'bank', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     scheme = BodyDecryption.parse({'key': _key, 'ivMode': 'prefix'}).config!;
     PlaintextIndex.instance.clear();
   });
@@ -45,8 +44,7 @@ void main() {
       [sid, vmId, 'response', _body, _body.length],
     );
     dao.indexForSearch(
-        sessionId: sid, vmId: vmId, url: 'http://api.test/balance',
-        responseText: searchableText(_body, 'text/plain'));
+        sessionId: sid, vmId: vmId, url: 'http://api.test/balance', responseText: searchableText(_body, 'text/plain'));
   }
 
   void request(String vmId, {bool withBody = true, int fetched = 1}) {
@@ -99,8 +97,7 @@ void main() {
 
   test('forget drops one session and keeps the others', () {
     request('r1');
-    final other = dao.createSession(
-        appName: 'bank2', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
+    final other = dao.createSession(appName: 'bank2', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
     final keep = sid;
     sid = other;
     request('r1');

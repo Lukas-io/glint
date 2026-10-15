@@ -24,8 +24,7 @@ class KeyTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'key',
-        description:
-            'Press a non-printing key: backspace, delete, enter, tab, escape, '
+        description: 'Press a non-printing key: backspace, delete, enter, tab, escape, '
             'space, up, down, left, right, or back (the system back, as hardware_button back). count repeats it (1-50); modifiers '
             'holds cmd / shift / ctrl / alt around it. Sends to the focused '
             'field, so focus one first (type focus:<id> or tap it). Returns '
@@ -36,14 +35,12 @@ class KeyTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'key': Schema.string(
-              description:
-                  'One of: ${KeyName.values.map((k) => k.name).join(', ')}, back.',
+              description: 'One of: ${KeyName.values.map((k) => k.name).join(', ')}, back.',
             ),
             'count': Schema.int(description: 'Times to press it (1-50). Default 1.'),
             'modifiers': Schema.list(
               items: Schema.string(),
-              description:
-                  'Held around the key: ${KeyModifier.values.map((m) => m.name).join(', ')}.',
+              description: 'Held around the key: ${KeyModifier.values.map((m) => m.name).join(', ')}.',
             ),
             'returnScene': Schema.bool(
               description: 'Read the post-press scene for changed. Default true.',
@@ -54,13 +51,12 @@ class KeyTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
 
     if (args['key'] == 'back') {
-      return const HardwareButtonTool().handle(
-          session, CallToolRequest(name: 'hardware_button', arguments: {'button': 'back'}));
+      return const HardwareButtonTool()
+          .handle(session, CallToolRequest(name: 'hardware_button', arguments: {'button': 'back'}));
     }
     final key = enumByName(KeyName.values, args['key'] as String?);
     if (key == null) {
@@ -89,9 +85,7 @@ class KeyTool extends GlintTool {
         return StructuredResponse.error(
           summary: 'unknown modifier: $raw',
           errorKind: GlintErrorKind.invalidArgument,
-          nextSteps: [
-            'use any of: ${KeyModifier.values.map((m) => m.name).join(', ')}'
-          ],
+          nextSteps: ['use any of: ${KeyModifier.values.map((m) => m.name).join(', ')}'],
         );
       }
       modifiers.add(m);
@@ -107,13 +101,12 @@ class KeyTool extends GlintTool {
         );
       }
       try {
-        await session.backend
-            .pressKey(key, count: count, modifiers: modifiers);
+        await session.backend.pressKey(key, count: count, modifiers: modifiers);
       } on IosToolchainBlocked catch (e) {
         return StructuredResponse.toolchainBlocked(e);
       } on BackendFailure catch (e) {
-      return StructuredResponse.backendError('key ${key.name} failed in device mode', e);
-    } on UnsupportedBackendAction catch (e) {
+        return StructuredResponse.backendError('key ${key.name} failed in device mode', e);
+      } on UnsupportedBackendAction catch (e) {
         return StructuredResponse.error(
           summary: '${session.backend.label}: key not supported',
           errorKind: GlintErrorKind.unsupportedBackendAction,
@@ -135,12 +128,10 @@ class KeyTool extends GlintTool {
 
     final action = await openActionScene(session, snapshot: t.returnScene);
     try {
-      final result = await session.interactor
-          .run(action.scene, PressKey(key, count: count, modifiers: modifiers));
-      var response =
-          StructuredResponse.fromActionResult(result, detail: t.detail);
-      response = await appendPostAction(session, response, action.pre,
-          returnScene: t.returnScene, fetchScene: t.fetchScene);
+      final result = await session.interactor.run(action.scene, PressKey(key, count: count, modifiers: modifiers));
+      var response = StructuredResponse.fromActionResult(result, detail: t.detail);
+      response =
+          await appendPostAction(session, response, action.pre, returnScene: t.returnScene, fetchScene: t.fetchScene);
       if (!response.isError && response.data?['changed'] == false) {
         if (_editingKeys.contains(key)) {
           response = response.addWarnings([

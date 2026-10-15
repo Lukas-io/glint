@@ -17,12 +17,10 @@ import 'package:vm_service/vm_service.dart';
 DateTime? exchangeEndTime(HttpProfileRequestRef r) {
   final responseEnd = r.response?.endTime;
   if (responseEnd != null) return responseEnd;
-  final erred =
-      (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
+  final erred = (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
   if (erred) return r.endTime;
   return null;
 }
 
 /// [exchangeEndTime] minus start; null while the exchange is in flight.
-Duration? exchangeDuration(HttpProfileRequestRef r) =>
-    exchangeEndTime(r)?.difference(r.startTime);
+Duration? exchangeDuration(HttpProfileRequestRef r) => exchangeEndTime(r)?.difference(r.startTime);

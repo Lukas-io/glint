@@ -13,8 +13,7 @@ class KillAppTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'kill_app',
-        description:
-            'Stop a running Flutter app and detach. With no args, stops the '
+        description: 'Stop a running Flutter app and detach. With no args, stops the '
             'app glint launched / is attached to. A glint-launched app is '
             'stopped via its `flutter run`; an attached app is also terminated '
             'on the device when its bundle id is known. '
@@ -37,8 +36,7 @@ class KillAppTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final deviceArg = args['device'] as String?;
     final deviceId = deviceArg ?? session.active?.id;
@@ -66,9 +64,7 @@ class KillAppTool extends GlintTool {
     final isThisDevice = pooled != null;
     final platform = pooled?.platform;
     final pooledDevice = pooled?.device;
-    final adbPath = pooledDevice is AndroidDevice
-        ? pooledDevice.adbPath
-        : resolveAdbPath(null) ?? 'adb';
+    final adbPath = pooledDevice is AndroidDevice ? pooledDevice.adbPath : resolveAdbPath(null) ?? 'adb';
 
     final done = <String>[];
 
@@ -83,8 +79,7 @@ class KillAppTool extends GlintTool {
     // 2. Terminate on device when we know the app id and platform.
     final appId = requestedAppId ?? pooled?.bundleId;
     if (platform != null && appId != null) {
-      final err = await const AppLauncher()
-          .terminateApp(platform, deviceId, appId, adbPath: adbPath);
+      final err = await const AppLauncher().terminateApp(platform, deviceId, appId, adbPath: adbPath);
       done.add(err == null ? 'terminated $appId' : 'terminate failed: $err');
     }
 

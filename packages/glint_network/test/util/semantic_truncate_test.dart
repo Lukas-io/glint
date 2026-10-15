@@ -27,7 +27,9 @@ void main() {
 
     test('large array collapses to sample + truncated marker', () {
       final input = jsonEncode({
-        'items': [for (var i = 0; i < 47; i++) {'id': i, 'name': 'user$i'}],
+        'items': [
+          for (var i = 0; i < 47; i++) {'id': i, 'name': 'user$i'}
+        ],
       });
       final r = truncateJson(input, maxBytes: 4096);
       expect(r.didApply, isTrue);
@@ -57,7 +59,9 @@ void main() {
         'users': [
           {
             'id': 1,
-            'posts': [for (var i = 0; i < 10; i++) {'title': 'post$i'}],
+            'posts': [
+              for (var i = 0; i < 10; i++) {'title': 'post$i'}
+            ],
           },
         ],
       });
@@ -78,7 +82,13 @@ void main() {
 
     test('object keys are preserved (shape > content)', () {
       final input = jsonEncode({
-        'a': 1, 'b': 2, 'c': 3, 'd': 4, 'e': 5, 'f': 6, 'g': 7,
+        'a': 1,
+        'b': 2,
+        'c': 3,
+        'd': 4,
+        'e': 5,
+        'f': 6,
+        'g': 7,
       });
       final r = truncateJson(input, maxBytes: 4096);
       expect(r.didApply, isTrue);

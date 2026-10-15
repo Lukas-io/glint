@@ -10,8 +10,7 @@ void main() {
     });
 
     test('returns sorted keys', () {
-      expect(UsageRecorder.argKeysFrom({'b': 1, 'a': 2, 'c': 3}),
-          ['a', 'b', 'c']);
+      expect(UsageRecorder.argKeysFrom({'b': 1, 'a': 2, 'c': 3}), ['a', 'b', 'c']);
     });
 
     test('VALUES never appear in the output (privacy)', () {
@@ -34,22 +33,19 @@ void main() {
     });
     test('count:0 -> empty', () {
       expect(
-        UsageRecorder.outcomeFrom(
-            threw: false, isError: false, structured: {'count': 0}),
+        UsageRecorder.outcomeFrom(threw: false, isError: false, structured: {'count': 0}),
         'empty',
       );
     });
     test('count>0 -> ok', () {
       expect(
-        UsageRecorder.outcomeFrom(
-            threw: false, isError: false, structured: {'count': 5}),
+        UsageRecorder.outcomeFrom(threw: false, isError: false, structured: {'count': 5}),
         'ok',
       );
     });
     test('no count field -> ok', () {
       expect(
-        UsageRecorder.outcomeFrom(
-            threw: false, isError: false, structured: {'foo': 1}),
+        UsageRecorder.outcomeFrom(threw: false, isError: false, structured: {'foo': 1}),
         'ok',
       );
       expect(UsageRecorder.outcomeFrom(threw: false, isError: false), 'ok');

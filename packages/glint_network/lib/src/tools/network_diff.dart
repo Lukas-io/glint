@@ -13,8 +13,7 @@ import 'body_fetch.dart';
 
 final networkDiffTool = Tool(
   name: 'network_diff',
-  description:
-      'Compare two captured requests: status, method, URL, response headers, '
+  description: 'Compare two captured requests: status, method, URL, response headers, '
       'and a line-based body diff. Use to investigate a regression (a request '
       'that used to work now fails) or confirm two are identical. Both ids '
       'must be in the same session.',
@@ -23,8 +22,7 @@ final networkDiffTool = Tool(
       'idA': Schema.string(description: 'First request id.'),
       'idB': Schema.string(description: 'Second request id.'),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
@@ -47,14 +45,12 @@ FutureOr<CallToolResult> networkDiff(CallToolRequest request) async {
   final idA = args['idA'] as String?;
   final idB = args['idB'] as String?;
   if (idA == null || idA.isEmpty || idB == null || idB.isEmpty) {
-    return errorResult('Both `idA` and `idB` are required.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — find two ids worth comparing',
-            'network_search query:"..." — find ids by content',
-          ],
-        });
+    return errorResult('Both `idA` and `idB` are required.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — find two ids worth comparing',
+        'network_search query:"..." — find ids by content',
+      ],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
@@ -72,41 +68,35 @@ FutureOr<CallToolResult> networkDiff(CallToolRequest request) async {
   final maxLinesRaw = (args['maxBodyLines'] as int?) ?? 200;
   final maxLines = maxLinesRaw <= 0 ? 200 : (maxLinesRaw > 1000 ? 1000 : maxLinesRaw);
   final maxLineLenRaw = (args['maxLineLength'] as int?) ?? 2000;
-  final maxLineLen =
-      maxLineLenRaw <= 0 ? 2000 : (maxLineLenRaw > 8000 ? 8000 : maxLineLenRaw);
+  final maxLineLen = maxLineLenRaw <= 0 ? 2000 : (maxLineLenRaw > 8000 ? 8000 : maxLineLenRaw);
 
   try {
     final dao = CapturesDao();
     final a = dao.getHttpRequest(sessionId, idA);
     final b = dao.getHttpRequest(sessionId, idB);
     if (a == null) {
-      return errorResult('Request `$idA` not found in session $sessionId.',
-          kind: ErrorKind.notFound,
-          extra: {
-            'sessionId': sessionId,
-            'nextSteps': const [
-              'network_list — list valid ids in this session',
-              'session_list — confirm the session exists',
-            ],
-          });
+      return errorResult('Request `$idA` not found in session $sessionId.', kind: ErrorKind.notFound, extra: {
+        'sessionId': sessionId,
+        'nextSteps': const [
+          'network_list — list valid ids in this session',
+          'session_list — confirm the session exists',
+        ],
+      });
     }
     if (b == null) {
-      return errorResult('Request `$idB` not found in session $sessionId.',
-          kind: ErrorKind.notFound,
-          extra: {
-            'sessionId': sessionId,
-            'nextSteps': const [
-              'network_list — list valid ids in this session',
-            ],
-          });
+      return errorResult('Request `$idB` not found in session $sessionId.', kind: ErrorKind.notFound, extra: {
+        'sessionId': sessionId,
+        'nextSteps': const [
+          'network_list — list valid ids in this session',
+        ],
+      });
     }
 
     final headersA = _parseHeaders(a['response_headers_json']);
     final headersB = _parseHeaders(b['response_headers_json']);
     // D5: auth headers are always redacted in the diff view (network_diff
     // has no debug-auth use case — use network_get redact:false for that).
-    final headerDiff =
-        _diffHeaders(headersA, headersB, redactNames: dao.redactedHeaderSet());
+    final headerDiff = _diffHeaders(headersA, headersB, redactNames: dao.redactedHeaderSet());
 
     final ctA = a['content_type'] as String?;
     final ctB = b['content_type'] as String?;
@@ -114,17 +104,14 @@ FutureOr<CallToolResult> networkDiff(CallToolRequest request) async {
     final bodyB = dao.getBody(sessionId, idB, 'response');
     final readableA = bodyA == null ? null : bodyForReading(bodyA, ctA);
     final readableB = bodyB == null ? null : bodyForReading(bodyB, ctB);
-    final textA = readableA == null
-        ? null
-        : decodeBody(readableA.bytes, readableA.mimeType, maxBytes: -1, semantic: false);
-    final textB = readableB == null
-        ? null
-        : decodeBody(readableB.bytes, readableB.mimeType, maxBytes: -1, semantic: false);
+    final textA =
+        readableA == null ? null : decodeBody(readableA.bytes, readableA.mimeType, maxBytes: -1, semantic: false);
+    final textB =
+        readableB == null ? null : decodeBody(readableB.bytes, readableB.mimeType, maxBytes: -1, semantic: false);
 
     Map<String, Object?>? bodyDiff;
     if (textA?.encoding == 'utf8' && textB?.encoding == 'utf8') {
-      bodyDiff = _diffText(textA!.value, textB!.value,
-          maxLines: maxLines, maxLineLength: maxLineLen);
+      bodyDiff = _diffText(textA!.value, textB!.value, maxLines: maxLines, maxLineLength: maxLineLen);
     }
 
     final statusChanged = a['status_code'] != b['status_code'];
@@ -184,10 +171,8 @@ FutureOr<CallToolResult> networkDiff(CallToolRequest request) async {
       'summary': summary,
       'a': {..._summary(a), ...?readableA?.flags},
       'b': {..._summary(b), ...?readableB?.flags},
-      if (statusChanged)
-        'statusDiff': {'a': a['status_code'], 'b': b['status_code']},
-      if (methodChanged)
-        'methodDiff': {'a': a['method'], 'b': b['method']},
+      if (statusChanged) 'statusDiff': {'a': a['status_code'], 'b': b['status_code']},
+      if (methodChanged) 'methodDiff': {'a': a['method'], 'b': b['method']},
       if (urlChanged) 'urlDiff': {'a': a['url'], 'b': b['url']},
       'responseHeaders': headerDiff,
       'responseBody': bodyDiff ??
@@ -201,14 +186,12 @@ FutureOr<CallToolResult> networkDiff(CallToolRequest request) async {
       'nextSteps': nextSteps,
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('network_diff failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': sessionId,
-          'nextSteps': const [
-            'Verify both ids via network_list',
-          ],
-        });
+    return errorResult('network_diff failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': sessionId,
+      'nextSteps': const [
+        'Verify both ids via network_list',
+      ],
+    });
   }
 }
 
@@ -272,8 +255,7 @@ Map<String, Object?> _diffHeaders(
   // tokens in `changed`. Redact the value but still report that the header
   // changed (`<redacted>` vs `<redacted>` collapses to "present in both,
   // masked"), so the diff stays useful without leaking secrets.
-  String show(String key, String value) =>
-      redactNames.contains(key) ? '<redacted>' : value;
+  String show(String key, String value) => redactNames.contains(key) ? '<redacted>' : value;
   final added = <String, String>{};
   final removed = <String, String>{};
   final changed = <String, Map<String, String?>>{};
@@ -325,6 +307,7 @@ Map<String, Object?> _diffText(
     anyLineTruncated = true;
     return '${s.substring(0, maxLineLength)} «…+${s.length - maxLineLength} chars»';
   }
+
   final maxLen = cap1.length > cap2.length ? cap1.length : cap2.length;
   for (var i = 0; i < maxLen; i++) {
     final la = i < cap1.length ? cap1[i] : null;

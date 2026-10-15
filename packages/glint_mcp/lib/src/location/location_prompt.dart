@@ -38,7 +38,9 @@ class LocationPrompt {
     }
 
     final list = nodes.toList();
-    final title = list.map((n) => n.textPreview ?? '').firstWhere((t) => RegExp('location', caseSensitive: false).hasMatch(t), orElse: () => '');
+    final title = list
+        .map((n) => n.textPreview ?? '')
+        .firstWhere((t) => RegExp('location', caseSensitive: false).hasMatch(t), orElse: () => '');
     final answers = <String, PromptButton>{};
     final precision = <bool, PromptButton>{};
     for (final n in list) {

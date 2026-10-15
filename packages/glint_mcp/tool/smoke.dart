@@ -32,18 +32,14 @@ Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('device', help: 'Flutter device id to launch the fixture on.')
     ..addOption('vm-uri', help: 'Attach to an already-running app instead.')
-    ..addOption('tap-mode',
-        allowed: ['adb', 'synthetic'], help: 'How to deliver the tap.')
+    ..addOption('tap-mode', allowed: ['adb', 'synthetic'], help: 'How to deliver the tap.')
     ..addOption('adb-serial', help: 'adb -s serial (when multiple devices).')
     ..addOption('android-package',
-        defaultsTo: 'com.example.counter_fixture',
-        help: 'Android package to foreground before adb taps.')
+        defaultsTo: 'com.example.counter_fixture', help: 'Android package to foreground before adb taps.')
     ..addFlag('help', abbr: 'h', negatable: false);
   final opts = parser.parse(args);
 
-  if (opts.flag('help') ||
-      (opts['device'] == null && opts['vm-uri'] == null) ||
-      opts['tap-mode'] == null) {
+  if (opts.flag('help') || (opts['device'] == null && opts['vm-uri'] == null) || opts['tap-mode'] == null) {
     stdout.writeln('P0 smoke harness.\n${parser.usage}');
     exit(64);
   }
@@ -109,8 +105,7 @@ Future<int> runSmoke(
   Isolate? flutterIsolate;
   for (final ref in vm.isolates ?? const <IsolateRef>[]) {
     final iso = await service.getIsolate(ref.id!);
-    if ((iso.extensionRPCs ?? const [])
-        .any((r) => r.startsWith('ext.flutter.'))) {
+    if ((iso.extensionRPCs ?? const []).any((r) => r.startsWith('ext.flutter.'))) {
       flutterIsolate = iso;
       break;
     }
@@ -123,10 +118,8 @@ Future<int> runSmoke(
   ok('Flutter isolate: ${flutterIsolate.name} ($isolateId)');
 
   section('Access-path pin (evidence for source-of-truth §10)');
-  final rpcs = (flutterIsolate.extensionRPCs ?? const <String>[]).toList()
-    ..sort();
-  final inspector =
-      rpcs.where((r) => r.startsWith('ext.flutter.inspector.')).toList();
+  final rpcs = (flutterIsolate.extensionRPCs ?? const <String>[]).toList()..sort();
+  final inspector = rpcs.where((r) => r.startsWith('ext.flutter.inspector.')).toList();
   info('ext.flutter.* count: '
       '${rpcs.where((r) => r.startsWith('ext.flutter.')).length}');
   info('ext.flutter.inspector.* count: ${inspector.length}');
@@ -166,11 +159,7 @@ Future<int> runSmoke(
   for (final (method, extraArgs) in [
     (
       'ext.flutter.inspector.getRootWidgetTree',
-      {
-        'isSummaryTree': 'true',
-        'withPreviews': 'true',
-        'fullDetails': 'false'
-      }
+      {'isSummaryTree': 'true', 'withPreviews': 'true', 'fullDetails': 'false'}
     ),
     ('ext.flutter.inspector.getRootWidgetSummaryTreeWithPreviews', <String, String>{}),
     ('ext.flutter.inspector.getRootWidgetSummaryTree', <String, String>{}),
@@ -386,12 +375,7 @@ String _toWs(Uri uri) {
   final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
   final segments = [...uri.pathSegments.where((s) => s.isNotEmpty)];
   if (segments.isEmpty || segments.last != 'ws') segments.add('ws');
-  return Uri(
-          scheme: scheme,
-          host: uri.host,
-          port: uri.port,
-          pathSegments: segments)
-      .toString();
+  return Uri(scheme: scheme, host: uri.host, port: uri.port, pathSegments: segments).toString();
 }
 
 /// Spawns `flutter run --machine`, waits for the VM service URI, and can
@@ -415,10 +399,7 @@ class FlutterRunSession {
     );
     final completer = Completer<(Uri, String?)>();
     String? appId;
-    process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
+    process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
       Object? decoded;
       try {
         decoded = jsonDecode(line);
@@ -464,9 +445,7 @@ class FlutterRunSession {
       ]));
       await _process.stdin.flush();
       // Give it a moment to shut down gracefully, then make sure.
-      await _process.exitCode
-          .timeout(const Duration(seconds: 10))
-          .catchError((Object? _) {
+      await _process.exitCode.timeout(const Duration(seconds: 10)).catchError((Object? _) {
         _process.kill();
         return 0;
       });

@@ -43,7 +43,8 @@ class EmulatorCamera {
         'addedVideoPlayback': !_videoPlaybackOn(),
       }));
     }
-    final idle = await runHost(ffmpeg, ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=gray:s=${_frameW}x$_frameH', '-frames:v', '1', _idle]);
+    final idle = await runHost(ffmpeg,
+        ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=c=gray:s=${_frameW}x$_frameH', '-frames:v', '1', _idle]);
     if (!idle.ok) throw StateError('ffmpeg could not make the idle camera frame: ${idle.errTail()}');
     for (final c in cameraNames) {
       _write(_config, 'hw.camera.$c', 'environment');
@@ -70,7 +71,10 @@ class EmulatorCamera {
       _environment.deleteSync();
     }
     if (saved['addedVideoPlayback'] == true && _features.existsSync()) {
-      final kept = _features.readAsLinesSync().where((l) => l.replaceAll(' ', '').toLowerCase() != 'videoplayback=on').join('\n');
+      final kept = _features
+          .readAsLinesSync()
+          .where((l) => l.replaceAll(' ', '').toLowerCase() != 'videoplayback=on')
+          .join('\n');
       kept.trim().isEmpty ? _features.deleteSync() : _features.writeAsStringSync('$kept\n');
     }
     _saved.deleteSync();
@@ -82,20 +86,28 @@ class EmulatorCamera {
   }
 
   bool _videoPlaybackOn() =>
-      _features.existsSync() && _features.readAsLinesSync().any((l) => l.replaceAll(' ', '').toLowerCase() == 'videoplayback=on');
+      _features.existsSync() &&
+      _features.readAsLinesSync().any((l) => l.replaceAll(' ', '').toLowerCase() == 'videoplayback=on');
 
   /// Shows [source] (an image or a video) in both cameras now, fitted whole into what an app sees, through [control].
   Future<String> feed(File source, EmulatorControl control) async {
     final ffmpeg = requireHostBinary('ffmpeg');
     final video = !RegExp(r'\.(png|jpe?g|webp|heic|bmp|gif)$', caseSensitive: false).hasMatch(source.path);
-    for (final old in Directory(mediaDir('camera')).listSync().whereType<File>().where((f) => f.path.contains('$avdName-feed-'))) {
+    for (final old
+        in Directory(mediaDir('camera')).listSync().whereType<File>().where((f) => f.path.contains('$avdName-feed-'))) {
       old.deleteSync();
     }
     final out = '${mediaDir('camera')}/$avdName-feed-${DateTime.now().millisecondsSinceEpoch}.${video ? 'mp4' : 'png'}';
     final fit = 'scale=$_visibleW:$_frameH:force_original_aspect_ratio=decrease,'
         'pad=$_visibleW:$_frameH:(ow-iw)/2:(oh-ih)/2:black,pad=$_frameW:$_frameH:0:0:black';
     final run = await runHost(ffmpeg, [
-      '-y', '-v', 'error', '-i', source.path, '-vf', fit,
+      '-y',
+      '-v',
+      'error',
+      '-i',
+      source.path,
+      '-vf',
+      fit,
       if (video) ...['-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p'] else ...['-frames:v', '1'],
       out,
     ]);

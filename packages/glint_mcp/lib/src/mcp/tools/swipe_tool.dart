@@ -15,8 +15,7 @@ class SwipeTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'swipe',
-        description:
-            'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '
+        description: 'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '
             'between raw coordinates (device mode: screenshot pixels; flutter '
             'mode: logical points) — coordinates bypass glintId resolution. '
             '`awaitReady` gates on the `from` endpoint — the `to` only needs '
@@ -43,27 +42,23 @@ class SwipeTool extends GlintTool {
               description: 'Coordinate swipe duration. Default 300.',
             ),
             'awaitReady': Schema.bool(
-              description:
-                  'Wait until fromGlintId is on screen and hittable, then act. Default false.',
+              description: 'Wait until fromGlintId is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final edgeName = args['edge'] as String?;
     if (edgeName != null) {

@@ -88,16 +88,14 @@ Future<void> _stepScaffoldHostConfig() async {
       return;
     }
   }
-  if (globalExists &&
-      _hasMcpEntry(_readJson(globalPath), 'glint-network')) {
+  if (globalExists && _hasMcpEntry(_readJson(globalPath), 'glint-network')) {
     io.stdout.writeln(
       'Already registered in ~/.claude.json under "glint-network". '
       'Skipping scaffold.',
     );
     return;
   }
-  if (localExists &&
-      _hasMcpEntry(_readJson(localPath), 'glint-network')) {
+  if (localExists && _hasMcpEntry(_readJson(localPath), 'glint-network')) {
     io.stdout.writeln(
       'Already registered in $localPath under "glint-network". '
       'Skipping scaffold.',
@@ -117,8 +115,7 @@ Future<void> _stepScaffoldHostConfig() async {
   }
 
   final existing = _readJson(targetPath);
-  final mcpServers = (existing['mcpServers'] as Map?)?.cast<String, Object?>() ??
-      <String, Object?>{};
+  final mcpServers = (existing['mcpServers'] as Map?)?.cast<String, Object?>() ?? <String, Object?>{};
   mcpServers['glint-network'] = <String, Object?>{
     'type': 'stdio',
     'command': 'glint_network',
@@ -130,9 +127,7 @@ Future<void> _stepScaffoldHostConfig() async {
 
 Future<void> _stepAutoAttach() async {
   io.stdout.writeln('--- Step 2: auto-attach for running apps ---');
-  final candidates = DtdDiscovery.discover(cwd: null)
-      .where((c) => c.isLive)
-      .toList();
+  final candidates = DtdDiscovery.discover(cwd: null).where((c) => c.isLive).toList();
   if (candidates.isEmpty) {
     io.stdout.writeln(
       'No running DTDs found. Start `flutter run` for any app you want '

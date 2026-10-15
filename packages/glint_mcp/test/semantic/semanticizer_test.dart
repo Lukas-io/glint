@@ -64,8 +64,7 @@ SceneNode _counterScene() {
           _n('SingleChildScrollView', children: [
             _n('Column', children: [
               _n('Padding', children: [
-                _n('Text',
-                    textPreview: 'You have pushed the button this many times:'),
+                _n('Text', textPreview: 'You have pushed the button this many times:'),
               ]),
               _n('Text', textPreview: '0'),
               _n('TextField'),
@@ -144,12 +143,10 @@ void main() {
       ]));
       StableIdGenerator().assignIds(tree);
       final reg = ClassifierRegistry.defaults();
-      SemanticNode rec(SceneNode n) => reg.classifierFor(n).build(
-          n, n.children.map(rec).toList());
+      SemanticNode rec(SceneNode n) => reg.classifierFor(n).build(n, n.children.map(rec).toList());
       final bar = rec(tree) as SemanticAppBar;
       expect(bar.title, 'Daily News');
-      expect(bar.actions.whereType<SemanticButton>(), hasLength(2),
-          reason: 'back button + action button preserved');
+      expect(bar.actions.whereType<SemanticButton>(), hasLength(2), reason: 'back button + action button preserved');
     });
     test('FloatingActionButton becomes a SemanticButton with tappable', () {
       final n = classify(_n('FloatingActionButton'));
@@ -221,11 +218,9 @@ void main() {
     });
 
     test('text content survives into SemanticText nodes', () {
-      final texts =
-          root.walk().whereType<SemanticText>().map((t) => t.content).toList();
+      final texts = root.walk().whereType<SemanticText>().map((t) => t.content).toList();
       expect(texts, contains('0'));
-      expect(texts,
-          contains('You have pushed the button this many times:'));
+      expect(texts, contains('You have pushed the button this many times:'));
     });
 
     test('input appears with typeable affordance', () {
@@ -255,10 +250,8 @@ void main() {
       final wrapper = root.walk().whereType<SemanticButton>().first;
       expect(wrapper.children, isNotEmpty, reason: 'wrapper must not swallow content');
       expect(root.walk().whereType<SemanticInput>(), isNotEmpty);
-      expect(root.walk().whereType<SemanticText>().map((t) => t.content),
-          contains('Welcome back'));
-      expect(root.walk().whereType<SemanticButton>().map((b) => b.label),
-          contains('Continue'));
+      expect(root.walk().whereType<SemanticText>().map((t) => t.content), contains('Welcome back'));
+      expect(root.walk().whereType<SemanticButton>().map((b) => b.label), contains('Continue'));
     });
 
     test('GestureDetector around plain caption stays a leaf button', () {
@@ -305,14 +298,12 @@ void main() {
         ]),
       ]));
       StableIdGenerator().assignIds(tree);
-      final stack =
-          tree.walk().firstWhere((n) => n.label == 'IndexedStack');
+      final stack = tree.walk().firstWhere((n) => n.label == 'IndexedStack');
       for (final n in stack.children[1].walk()) {
         n.isOffstage = true;
       }
       final root = Semanticizer()._classifyForTest(tree);
-      final texts =
-          root.walk().whereType<SemanticText>().map((t) => t.content);
+      final texts = root.walk().whereType<SemanticText>().map((t) => t.content);
       expect(texts, contains('active tab'));
       expect(texts, isNot(contains('hidden tab')));
     });
@@ -390,8 +381,7 @@ void main() {
 
     test('expandChild splices nameless containers without hint', () {
       final inner = SemanticText(content: 'x');
-      final wrapper =
-          SemanticContainer(children: [inner]); // no glintId, no hint
+      final wrapper = SemanticContainer(children: [inner]); // no glintId, no hint
       expect(c.expandChild(wrapper), [inner]);
     });
     test('expandChild keeps containers with a hint', () {
@@ -409,8 +399,7 @@ void main() {
 
     test('expandChild folds child-bearing unknowns regardless of glintId', () {
       final inner = SemanticText(content: 'x');
-      final wrap =
-          SemanticUnknown(glintId: 'custom', label: 'MyWidget', children: [inner]);
+      final wrap = SemanticUnknown(glintId: 'custom', label: 'MyWidget', children: [inner]);
       expect(c.expandChild(wrap), [inner]);
     });
 
@@ -426,9 +415,9 @@ void main() {
     });
     test('hoistPage surfaces a page nested under wrappers', () {
       final page = SemanticPage(body: const []);
-      final outer = SemanticUnknown(
-          label: 'CustomApp',
-          children: [SemanticContainer(hint: 'col', children: [page])]);
+      final outer = SemanticUnknown(label: 'CustomApp', children: [
+        SemanticContainer(hint: 'col', children: [page])
+      ]);
       expect(c.hoistPage(outer), page);
     });
   });
@@ -470,8 +459,7 @@ void main() {
     });
 
     test('a text with the tappable affordance renders with * (inline link)', () {
-      final link = SemanticText(glintId: 'signin', content: 'Sign in to account')
-        ..affordances.add(Affordance.tappable);
+      final link = SemanticText(glintId: 'signin', content: 'Sign in to account')..affordances.add(Affordance.tappable);
       final plain = SemanticText(glintId: 'plain', content: 'Welcome');
       final scene = SemanticScene(
         sourceScene: _FakeScene(),
@@ -572,8 +560,7 @@ void main() {
       );
       final out = const PlainTextSceneRenderer().render(scene);
       expect(out, contains('page scaffold#tab'), reason: 'tab page line shown');
-      expect(out, isNot(contains('tab content')),
-          reason: 'tab body summarised away');
+      expect(out, isNot(contains('tab content')), reason: 'tab body summarised away');
     });
 
     test('collapses runs of identical-role siblings sharing an id prefix', () {

@@ -63,8 +63,7 @@ class LogStreamSubscriber {
   final _occurrences = OccurrenceCounter();
 
   /// A record's logger, message, error and stack in full; the VM only sends a 128-char preview of each.
-  Future<List<String?>> _fetchValues(
-      VmService service, String? isoId, LogRecord record) {
+  Future<List<String?>> _fetchValues(VmService service, String? isoId, LogRecord record) {
     Future<String?> text(InstanceRef? ref) => instanceText(service, isoId, ref);
     return Future.wait([
       text(record.loggerName),
@@ -74,8 +73,7 @@ class LogStreamSubscriber {
     ]);
   }
 
-  void _onLogRecord(
-      LogBuffer buffer, Event event, LogRecord record, List<String?> values) {
+  void _onLogRecord(LogBuffer buffer, Event event, LogRecord record, List<String?> values) {
     const source = 'logging';
     final ts = record.time ?? event.timestamp ?? 0;
     final level = record.level;
@@ -186,8 +184,7 @@ class LogStreamSubscriber {
         isolateId: isolateId,
         dedupKey: dedupKey,
       );
-      if (rowId != null &&
-          CapabilityConfig.instance.isEnabled(Category.alerts)) {
+      if (rowId != null && CapabilityConfig.instance.isEnabled(Category.alerts)) {
         _detector?.forLog(
           sessionId: sid,
           logRowId: rowId,
@@ -215,8 +212,7 @@ class LogStreamSubscriber {
 }
 
 /// Short stable digest of [text] for log dedup keys (identical across server processes).
-String logDedupHash(String text) =>
-    sha1.convert(utf8.encode(text)).toString().substring(0, 16);
+String logDedupHash(String text) => sha1.convert(utf8.encode(text)).toString().substring(0, 16);
 
 /// Numbers repeats of a dedup key: a line genuinely printed twice in one millisecond keeps both rows, while the copy another server process receives still collapses onto the same key.
 class OccurrenceCounter {

@@ -12,8 +12,7 @@ const maxSequenceTaps = 50;
 typedef SequenceStep = ({String? glintId, double? x, double? y});
 
 /// Parses `sequence` into steps, or returns the invalidArgument envelope that names the bad step.
-({List<SequenceStep>? steps, StructuredResponse? error}) parseTapSequence(
-    Object? raw) {
+({List<SequenceStep>? steps, StructuredResponse? error}) parseTapSequence(Object? raw) {
   StructuredResponse bad(String why) => StructuredResponse.error(
         summary: 'sequence: $why',
         errorKind: GlintErrorKind.invalidArgument,
@@ -68,9 +67,7 @@ Future<StructuredResponse> runTapSequence(
     );
   }
   final wantsChange = returnScene && !session.isDeviceMode;
-  final action = needsScene || wantsChange
-      ? await openActionScene(session, snapshot: wantsChange)
-      : null;
+  final action = needsScene || wantsChange ? await openActionScene(session, snapshot: wantsChange) : null;
   try {
     final points = <({double x, double y})>[];
     final warnings = <String>[];
@@ -124,8 +121,7 @@ Future<StructuredResponse> runTapSequence(
       },
     );
     if (wantsChange) {
-      response = await appendPostAction(session, response, action!.pre,
-          returnScene: true, fetchScene: fetchScene);
+      response = await appendPostAction(session, response, action!.pre, returnScene: true, fetchScene: fetchScene);
     }
     return response;
   } finally {

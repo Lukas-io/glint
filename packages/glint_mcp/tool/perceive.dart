@@ -18,8 +18,7 @@ import 'package:glint_mcp/glint.dart';
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
     ..addOption('vm-uri', mandatory: true)
-    ..addOption('depth',
-        allowed: ['summary', 'full'], defaultsTo: 'summary')
+    ..addOption('depth', allowed: ['summary', 'full'], defaultsTo: 'summary')
     ..addOption('format', allowed: ['tree', 'json'], defaultsTo: 'tree')
     ..addFlag('help', abbr: 'h', negatable: false);
   final opts = parser.parse(args);
@@ -40,14 +39,11 @@ Future<void> main(List<String> args) async {
   stderr.writeln('flutter isolate id: ${vm.flutterIsolateId}');
 
   final reader = SceneReader(InspectorClient(vm), vm);
-  final scene = (opts['depth'] as String) == 'full'
-      ? await reader.readFull()
-      : await reader.readSummary();
+  final scene = (opts['depth'] as String) == 'full' ? await reader.readFull() : await reader.readSummary();
 
   try {
     if ((opts['format'] as String) == 'json') {
-      stdout.writeln(
-          const JsonEncoder.withIndent('  ').convert(scene.root.toJson()));
+      stdout.writeln(const JsonEncoder.withIndent('  ').convert(scene.root.toJson()));
     } else {
       _printTree(scene.root);
     }
@@ -68,9 +64,7 @@ void _printTree(SceneNode node, {String prefix = '', bool isLast = true}) {
     '${preview == null ? '' : '  "${_escape(preview)}"'}'
     '$localTag',
   );
-  final childPrefix = node.depth == 0
-      ? ''
-      : prefix + (isLast ? '   ' : '│  ');
+  final childPrefix = node.depth == 0 ? '' : prefix + (isLast ? '   ' : '│  ');
   for (var i = 0; i < node.children.length; i++) {
     _printTree(
       node.children[i],
@@ -80,7 +74,4 @@ void _printTree(SceneNode node, {String prefix = '', bool isLast = true}) {
   }
 }
 
-String _escape(String s) => s
-    .replaceAll('\\', r'\\')
-    .replaceAll('\n', r'\n')
-    .replaceAll('"', r'\"');
+String _escape(String s) => s.replaceAll('\\', r'\\').replaceAll('\n', r'\n').replaceAll('"', r'\"');

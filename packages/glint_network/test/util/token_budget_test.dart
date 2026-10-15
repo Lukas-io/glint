@@ -4,8 +4,9 @@ import 'package:test/test.dart';
 /// 0.9.1: token-budget trimming keeps newest-first rows until the estimated
 /// cost exceeds the budget, never returns empty, reports what it dropped.
 void main() {
-  List<Map<String, Object?>> rows(int n) =>
-      [for (var i = 0; i < n; i++) {'id': i, 'pad': 'x' * 40}];
+  List<Map<String, Object?>> rows(int n) => [
+        for (var i = 0; i < n; i++) {'id': i, 'pad': 'x' * 40}
+      ];
 
   test('null / zero budget keeps everything', () {
     expect(trimToTokenBudget(rows(10), null).kept, hasLength(10));

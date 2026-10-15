@@ -1,6 +1,7 @@
 /// Probe: print what the scene reader classifies as overlay content on the current screen.
+library;
+
 import 'package:glint_mcp/glint.dart';
-import 'package:glint_mcp/perception.dart';
 
 Future<void> main(List<String> args) async {
   final vm = VmServiceRuntime();

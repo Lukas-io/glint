@@ -60,13 +60,9 @@ class OverlayEnricher implements SemanticEnricher {
 
     final layers = <SemanticOverlayLayer>[];
     for (final root in roots) {
-      final semantic =
-          semanticizer.classifyNode(root, imageCandidates: true);
+      final semantic = semanticizer.classifyNode(root, imageCandidates: true);
       // Flatten pass-through Unknown roots: surface children directly.
-      final nodes =
-          (semantic is SemanticUnknown && semantic.children.isNotEmpty)
-              ? semantic.children
-              : [semantic];
+      final nodes = (semantic is SemanticUnknown && semantic.children.isNotEmpty) ? semantic.children : [semantic];
       // Skip entirely-unknown layers (e.g. MouseRegion / Focus plumbing
       // overlays in debug mode) — no content, just `--- dialog ---` noise.
       if (!_hasContent(nodes)) continue;
@@ -91,8 +87,7 @@ class OverlayEnricher implements SemanticEnricher {
   static String _inferKind(SceneNode root) {
     for (final n in root.walk()) {
       final l = n.label;
-      if (l.contains('BottomSheet') || l.contains('Sheet'))
-        return 'bottomSheet';
+      if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
       // Transient messages ride in an OverlayEntry too — flag them as such so
       // the agent reads the message but doesn't treat it as a blocking modal.
       if (l.contains('SnackBar')) return 'snackbar';
@@ -131,8 +126,7 @@ class NavigationEnricher implements SemanticEnricher {
   }
 
   Future<bool> _probe(SemanticScene scene, SceneNode? pageSource) async {
-    for (final source
-        in scene.sourceScene.addressableCandidates(within: pageSource)) {
+    for (final source in scene.sourceScene.addressableCandidates(within: pageSource)) {
       final result = await runtime.evaluateWithSelection(
         expression: _routeExpr,
         inspectorId: source.inspectorId,
@@ -186,11 +180,9 @@ class IconEnricher implements SemanticEnricher {
     }
   }
 
-  Future<void> _enrichOne(
-      SceneNode source, String groupName, SemanticIcon target) async {
+  Future<void> _enrichOne(SceneNode source, String groupName, SemanticIcon target) async {
     final raw = await runtime.evaluateWithSelection(
-      expression:
-          '(WidgetInspectorService.instance.selection.currentElement!.widget'
+      expression: '(WidgetInspectorService.instance.selection.currentElement!.widget'
           ' as Icon).icon?.codePoint ?? -1',
       inspectorId: source.inspectorId,
       groupName: groupName,
@@ -223,11 +215,7 @@ class ToggleEnricher implements SemanticEnricher {
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    final toggles = scene.root
-        .walk()
-        .whereType<SemanticButton>()
-        .where((b) => b.isToggle)
-        .toList();
+    final toggles = scene.root.walk().whereType<SemanticButton>().where((b) => b.isToggle).toList();
     final budget = min(toggles.length, maxToggles);
     for (var i = 0; i < budget; i++) {
       final node = toggles[i];
@@ -237,8 +225,7 @@ class ToggleEnricher implements SemanticEnricher {
       if (!_valueToggles.contains(source.baseLabel)) continue;
       try {
         final raw = await runtime.evaluateWithSelection(
-          expression:
-              '((WidgetInspectorService.instance.selection.currentElement!.widget'
+          expression: '((WidgetInspectorService.instance.selection.currentElement!.widget'
               ' as dynamic).value).toString()',
           inspectorId: source.inspectorId,
           groupName: groupFor(scene.sourceScene, source),
@@ -268,19 +255,15 @@ class LinkEnricher implements SemanticEnricher {
 
   // Single-line (the CFE eval rejects newlines, not block bodies): true when
   // any span in the RichText's InlineSpan tree has a recognizer.
-  static const _hasRecognizerExpr =
-      '((r) { if (r is! RichText) return false; var f = false; '
+  static const _hasRecognizerExpr = '((r) { if (r is! RichText) return false; var f = false; '
       'r.text.visitChildren((s) { if (s is TextSpan && s.recognizer != null) f = true; return true; }); '
       'return f; })'
       '(WidgetInspectorService.instance.selection.currentElement!.widget).toString()';
 
   @override
   Future<void> enrich(SemanticScene scene) async {
-    final texts = scene.root
-        .walk()
-        .whereType<SemanticText>()
-        .where((t) => t.glintId != null && t.affordances.isEmpty)
-        .toList();
+    final texts =
+        scene.root.walk().whereType<SemanticText>().where((t) => t.glintId != null && t.affordances.isEmpty).toList();
     final budget = min(texts.length, maxTexts);
     for (var i = 0; i < budget; i++) {
       final node = texts[i];
@@ -328,20 +311,17 @@ class InputEnricher implements SemanticEnricher {
 
   // Arrow-only (the CFE eval rejects statement-block lambdas): read a
   // TextField's labelText, falling back to hintText (placeholder).
-  static const _labelExpr =
-      '((w) => w is TextField ? (w.decoration?.labelText ?? '
+  static const _labelExpr = '((w) => w is TextField ? (w.decoration?.labelText ?? '
       'w.decoration?.hintText ?? "") : "")'
       '(WidgetInspectorService.instance.selection.currentElement!.widget)';
 
   // Current validation error. TextFormField copies the FormField's errorText
   // into the inner TextField's decoration, so reading it here surfaces live
   // validation feedback (why a submit was rejected).
-  static const _errorExpr =
-      '((w) => w is TextField ? (w.decoration?.errorText ?? "") : "")'
+  static const _errorExpr = '((w) => w is TextField ? (w.decoration?.errorText ?? "") : "")'
       '(WidgetInspectorService.instance.selection.currentElement!.widget)';
 
-  Future<void> _enrichOne(
-      SceneNode source, Scene scene, SemanticInput target) async {
+  Future<void> _enrichOne(SceneNode source, Scene scene, SemanticInput target) async {
     final group = groupFor(scene, source);
     // One subtree read serves both label and value lookups.
     Map<String, Object?>? subtree;
@@ -357,8 +337,7 @@ class InputEnricher implements SemanticEnricher {
     // once and reuse for both reads.
     final fieldId = subtree == null
         ? source.inspectorId
-        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ??
-            source.inspectorId);
+        : (_findWidgetId(subtree, const {'TextField', 'CupertinoTextField'}) ?? source.inspectorId);
     try {
       target.hint = await _readDecoration(group, fieldId, _labelExpr);
     } on Object {
@@ -379,8 +358,7 @@ class InputEnricher implements SemanticEnricher {
   /// Evaluates a decoration [expr] against the inner [fieldId] TextField. A
   /// [TextFormField] builds an inner TextField, so [fieldId] is resolved from
   /// the subtree rather than the source (which would be the FormField).
-  Future<String?> _readDecoration(
-      String group, String fieldId, String expr) async {
+  Future<String?> _readDecoration(String group, String fieldId, String expr) async {
     final v = await runtime.evaluateWithSelection(
       expression: expr,
       inspectorId: fieldId,
@@ -389,8 +367,7 @@ class InputEnricher implements SemanticEnricher {
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  Future<String?> _readCurrentValue(
-      String group, Map<String, Object?>? subtree) async {
+  Future<String?> _readCurrentValue(String group, Map<String, Object?>? subtree) async {
     if (subtree == null) return null;
     final editableId = _findWidgetId(subtree, const {'EditableText'});
     if (editableId == null) return null;
@@ -403,8 +380,7 @@ class InputEnricher implements SemanticEnricher {
     return (v == null || v.isEmpty) ? null : v;
   }
 
-  static const _editable =
-      '(WidgetInspectorService.instance.selection.currentElement!.widget as EditableText)';
+  static const _editable = '(WidgetInspectorService.instance.selection.currentElement!.widget as EditableText)';
 
   /// A field with obscureText set returns only [obscuredValuePrefix] and its length, so its text never leaves the app.
   static const _currentValueExpr = '$_editable.obscureText'
@@ -439,8 +415,7 @@ String groupFor(Scene scene, SceneNode source) {
   return id != null && scene.isInOverlay(id) ? (scene.fullGroupName ?? scene.groupName) : scene.groupName;
 }
 
-String batchOverElements(List<String> ids, String f) =>
-    "<String>[${ids.map((i) => "'$i'").join(',')}]"
+String batchOverElements(List<String> ids, String f) => "<String>[${ids.map((i) => "'$i'").join(',')}]"
     '.map((id) => ($f)(WidgetInspectorService.instance.toObject(id) as Element))'
     ".join(';')";
 
@@ -475,8 +450,7 @@ class SemanticsFlagEnricher implements SemanticEnricher {
     if (nodes.isEmpty) return;
     final String? raw;
     try {
-      raw = await runtime.evaluateString(
-          batchOverElements([for (final n in nodes) n.$2], _flags));
+      raw = await runtime.evaluateString(batchOverElements([for (final n in nodes) n.$2], _flags));
     } on Object {
       return;
     }
@@ -553,8 +527,7 @@ class ImageEnricher implements SemanticEnricher {
     if (nodes.isEmpty) return;
     final String? raw;
     try {
-      raw = await runtime.evaluateString(
-          batchOverElements([for (final n in nodes) n.$2], _image));
+      raw = await runtime.evaluateString(batchOverElements([for (final n in nodes) n.$2], _image));
     } on Object {
       return;
     }
@@ -592,9 +565,8 @@ String? imageSourceName(String provider) {
 }
 
 /// Keeps both ends of a long file name (the start and the extension) so the label stays short.
-String _middleCut(String name, {int max = 24}) => name.length <= max
-    ? name
-    : '${name.substring(0, max - 11)}…${name.substring(name.length - 10)}';
+String _middleCut(String name, {int max = 24}) =>
+    name.length <= max ? name : '${name.substring(0, max - 11)}…${name.substring(name.length - 10)}';
 
 /// Names the tabs of each navigation bar and marks the selected one, from the bar's destinations or items, whose labels are plain strings the scene never sees.
 class TabLabelEnricher implements SemanticEnricher {
@@ -655,7 +627,13 @@ class ButtonFactsEnricher implements SemanticEnricher {
   final int maxNodes;
 
   /// App bar buttons whose null `onPressed` means "do the default" (pop, open the drawer), not disabled.
-  static const _defaultActionButtons = {'BackButton', 'CloseButton', 'DrawerButton', 'EndDrawerButton', 'CupertinoNavigationBarBackButton'};
+  static const _defaultActionButtons = {
+    'BackButton',
+    'CloseButton',
+    'DrawerButton',
+    'EndDrawerButton',
+    'CupertinoNavigationBarBackButton'
+  };
 
   static const _facts = '(Element e) { final w = e.widget as dynamic; bool? on; String? tip; '
       'bool has(Object? Function() f) { try { return f() != null; } catch (_) { return false; } } '

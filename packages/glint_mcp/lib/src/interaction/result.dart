@@ -5,6 +5,7 @@ import 'input_route.dart';
 enum GlintErrorKind {
   // interaction-layer failures
   unsupportedBackendAction,
+
   /// The iOS bridge is missing, or the selected Xcode is a major glint has not verified.
   unsupportedToolchain,
   backendToolError,
@@ -21,26 +22,36 @@ enum GlintErrorKind {
   appNotResumed,
   // transport failures
   connectionLost,
+
   /// The isolate stopped answering: device locked, app suspended by the OS, or paused at a breakpoint.
   appUnresponsive,
+
   /// A physical device stopped answering glint's device input: unplugged, locked before trust, or out of Developer Mode.
   deviceNotConnected,
+
   /// The phone has no developer disk image mounted, so its input and screen services are missing.
   developerImageMissing,
+
   /// Another host holds the phone's screen session (Xcode's Device Hub or another viewer).
   deviceBusy,
+
   /// This kind of device cannot do it (a physical iPhone has no notification list); `data.ability`, `data.instead`.
   notOnThisDevice,
+
   /// Xcode could not sign a phone build: several teams and none chosen, no certificate, or a bundle id another team owns; `data.teams`.
   signingFailed,
+
   /// Only part of a text edit landed; `data.delivered` of `data.of`, and nothing was retried.
   inputPartial,
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
+
   /// Another live glint session is driving the device attach would have picked.
   deviceClaimed,
+
   /// A destructive tool was pointed at an app or device this session never attached or launched.
   notOwned,
+
   /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
   flutterModeRequired,
   // armed-intent failures (§7.3 try/catch)
@@ -80,7 +91,7 @@ class ActionResult {
     this.warnings = const [],
     this.nextSteps = const [],
     this.extra = const {},
-  }) : ok = false,
+  })  : ok = false,
         input = null;
 
   final Action action;
@@ -118,8 +129,7 @@ class ActionResult {
         'action': action.label,
         'ok': ok,
         'summary': summary,
-        if (physicalCenter != null)
-          'physicalCenter': {'x': physicalCenter!.x, 'y': physicalCenter!.y},
+        if (physicalCenter != null) 'physicalCenter': {'x': physicalCenter!.x, 'y': physicalCenter!.y},
         if (devicePixelRatio != null) 'devicePixelRatio': devicePixelRatio,
         if (painted != null) 'painted': painted,
         if (hittable != null) 'hittable': hittable,

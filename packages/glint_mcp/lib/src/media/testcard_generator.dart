@@ -31,7 +31,9 @@ class TestCardSpec {
 
   /// The reason this spec cannot be generated, or null.
   String? get problem {
-    if (width < 64 || height < 64 || width.isOdd || height.isOdd) return 'size must be even and at least 64x64, got ${width}x$height';
+    if (width < 64 || height < 64 || width.isOdd || height.isOdd) {
+      return 'size must be even and at least 64x64, got ${width}x$height';
+    }
     if (width > 4096 || height > 4096) return 'size above 4096 is not supported, got ${width}x$height';
     if (fps < 1 || fps > 120) return 'fps must be 1 to 120, got $fps';
     if (!photo && (durationSec <= 0 || frames < 1)) return 'durationSec must be positive';
@@ -96,7 +98,8 @@ String testCardGraph(TestCardSpec s, {required String fontFile}) {
     for (final entry in staticValues.entries) {
       if ((entry.value >> bit) & 1 == 1) parts.add(_box(x, rowY(entry.key), bw, rowHeight(entry.key), 'white'));
     }
-    parts.add(_box(x, rowY(StripRow.frame), bw, rowHeight(StripRow.frame), 'white', enable: 'gt(bitand($frameExpr,${1 << bit}),0)'));
+    parts.add(_box(x, rowY(StripRow.frame), bw, rowHeight(StripRow.frame), 'white',
+        enable: 'gt(bitand($frameExpr,${1 << bit}),0)'));
   }
   final side = w < h ? w : h;
   String text(String body, double yFraction, double sizeFraction) =>
@@ -114,24 +117,66 @@ String testCardAudioGraph(TestCardSpec s) =>
 
 /// The ffmpeg arguments that render a video card to [out] (before any rotation tag).
 List<String> testCardVideoArgs(TestCardSpec s, String out, {required String fontFile}) => [
-      '-y', '-hide_banner', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', testCardGraph(s, fontFile: fontFile),
-      '-f', 'lavfi', '-i', testCardAudioGraph(s),
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
-      '-movflags', '+faststart', out,
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      testCardGraph(s, fontFile: fontFile),
+      '-f',
+      'lavfi',
+      '-i',
+      testCardAudioGraph(s),
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '14',
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-ac',
+      '2',
+      '-movflags',
+      '+faststart',
+      out,
     ];
 
 /// The ffmpeg arguments that render one photo card (frame [TestCardSpec.firstFrame]) to a PNG or JPEG at [out].
 List<String> testCardPhotoArgs(TestCardSpec s, String out, {required String fontFile}) => [
-      '-y', '-hide_banner', '-loglevel', 'error',
-      '-f', 'lavfi', '-i', testCardGraph(s, fontFile: fontFile),
-      '-frames:v', '1', if (out.endsWith('.jpg')) ...['-q:v', '2'], out,
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      testCardGraph(s, fontFile: fontFile),
+      '-frames:v',
+      '1',
+      if (out.endsWith('.jpg')) ...['-q:v', '2'],
+      out,
     ];
 
 /// The ffmpeg arguments that copy [input] to [out] tagged to display turned [clockwise] degrees.
 List<String> rotationTagArgs(String input, String out, int clockwise) => [
-      '-y', '-hide_banner', '-loglevel', 'error',
-      '-display_rotation', '${(360 - clockwise) % 360}', '-i', input,
-      '-c', 'copy', '-movflags', '+faststart', out,
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-display_rotation',
+      '${(360 - clockwise) % 360}',
+      '-i',
+      input,
+      '-c',
+      'copy',
+      '-movflags',
+      '+faststart',
+      out,
     ];

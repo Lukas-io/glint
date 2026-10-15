@@ -65,39 +65,28 @@ void main() {
   });
 
   test('repair includes stored textish bodies, skips binary', () {
-    insertReq('r3', 'https://api.example.com/api/flaky',
-        contentType: 'application/json');
+    insertReq('r3', 'https://api.example.com/api/flaky', contentType: 'application/json');
     insertBody('r3', 'response', '{"detail":"db pool exhausted"}');
-    insertReq('r4', 'https://api.example.com/api/img',
-        contentType: 'image/png');
+    insertReq('r4', 'https://api.example.com/api/img', contentType: 'image/png');
     insertBody('r4', 'response', 'PNGBYTES-not-indexed');
 
     dao.repairSearchIndex();
 
-    final byBody =
-        dao.searchRequests(sessionId: sid, query: 'exhausted', which: 'response');
+    final byBody = dao.searchRequests(sessionId: sid, query: 'exhausted', which: 'response');
     expect(byBody, hasLength(1));
     expect(byBody.first['vm_id'], 'r3');
 
-    final binary =
-        dao.searchRequests(sessionId: sid, query: 'PNGBYTES', which: 'response');
+    final binary = dao.searchRequests(sessionId: sid, query: 'PNGBYTES', which: 'response');
     expect(binary, isEmpty);
   });
 
   test('URL index includes the percent-decoded form (F23 i18n)', () {
     insertReq('r7', 'https://api.example.com/api/ok?coupon=%C3%9CMLAUT');
-    dao.indexForSearch(
-        sessionId: sid,
-        vmId: 'r7',
-        url: 'https://api.example.com/api/ok?coupon=%C3%9CMLAUT');
+    dao.indexForSearch(sessionId: sid, vmId: 'r7', url: 'https://api.example.com/api/ok?coupon=%C3%9CMLAUT');
     // The human spelling matches...
-    expect(
-        dao.searchRequests(sessionId: sid, query: 'ÜMLAUT', which: 'url'),
-        hasLength(1));
+    expect(dao.searchRequests(sessionId: sid, query: 'ÜMLAUT', which: 'url'), hasLength(1));
     // ...and so does the wire encoding.
-    expect(
-        dao.searchRequests(sessionId: sid, query: '9CMLAUT', which: 'url'),
-        hasLength(1));
+    expect(dao.searchRequests(sessionId: sid, query: '9CMLAUT', which: 'url'), hasLength(1));
   });
 
   test('repair is idempotent', () {
@@ -107,16 +96,11 @@ void main() {
     expect(dao.searchIndexSize(sid), 1);
   });
 
-  test('URL-first index row is upgraded, not clobbered, by the body pass',
-      () {
-    insertReq('r6', 'https://api.example.com/api/orders',
-        contentType: 'application/json');
+  test('URL-first index row is upgraded, not clobbered, by the body pass', () {
+    insertReq('r6', 'https://api.example.com/api/orders', contentType: 'application/json');
     // First sight: URL-only (what the writer now does on isNew).
-    dao.indexForSearch(
-        sessionId: sid, vmId: 'r6', url: 'https://api.example.com/api/orders');
-    expect(
-        dao.searchRequests(sessionId: sid, query: 'orders', which: 'url'),
-        hasLength(1));
+    dao.indexForSearch(sessionId: sid, vmId: 'r6', url: 'https://api.example.com/api/orders');
+    expect(dao.searchRequests(sessionId: sid, query: 'orders', which: 'url'), hasLength(1));
 
     // Backfill arrives later with body text — must keep URL searchable.
     dao.indexForSearch(
@@ -125,12 +109,8 @@ void main() {
       url: 'https://api.example.com/api/orders',
       responseText: '{"orderId":"ord-2211"}',
     );
-    expect(
-        dao.searchRequests(sessionId: sid, query: 'orders', which: 'url'),
-        hasLength(1));
-    expect(
-        dao.searchRequests(sessionId: sid, query: 'ord-2211', which: 'response'),
-        hasLength(1));
+    expect(dao.searchRequests(sessionId: sid, query: 'orders', which: 'url'), hasLength(1));
+    expect(dao.searchRequests(sessionId: sid, query: 'ord-2211', which: 'response'), hasLength(1));
     expect(dao.searchIndexSize(sid), 1, reason: 'same rowid, no duplicate');
   });
 
@@ -140,9 +120,18 @@ void main() {
       'INSERT INTO http_requests(session_id, vm_id, url, host, path, content_type, '
       'request_headers_json, response_headers_json, start_us) VALUES (?,?,?,?,?,?,?,?,?)',
       [
-        sid, 'upload', 'http://api.test/avatar', 'api.test', '/avatar', 'image/png',
-        jsonEncode({'content-type': ['application/json']}),
-        jsonEncode({'content-type': ['image/png']}),
+        sid,
+        'upload',
+        'http://api.test/avatar',
+        'api.test',
+        '/avatar',
+        'image/png',
+        jsonEncode({
+          'content-type': ['application/json']
+        }),
+        jsonEncode({
+          'content-type': ['image/png']
+        }),
         1,
       ],
     );
@@ -151,7 +140,6 @@ void main() {
       [sid, 'upload', 'request', Uint8List.fromList(utf8.encode('{"caption":"sunset"}')), 20],
     );
     dao.repairSearchIndex();
-    expect(dao.searchRequests(query: 'sunset', sessionId: sid, which: 'request'),
-        hasLength(1));
+    expect(dao.searchRequests(query: 'sunset', sessionId: sid, which: 'request'), hasLength(1));
   });
 }

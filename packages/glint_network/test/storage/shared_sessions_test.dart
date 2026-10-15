@@ -10,16 +10,13 @@ import 'package:test/test.dart';
 import '../support/schema_rollback.dart';
 
 Set<String> _schemaObjects() => {
-      for (final r in CapturesDatabase.instance.raw.select(
-          "SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
+      for (final r in CapturesDatabase.instance.raw
+          .select("SELECT type, name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
         '${r['type']}:${r['name']}',
     };
 
 bool _ended(int id) =>
-    CapturesDatabase.instance.raw
-        .select('SELECT ended_at FROM sessions WHERE id=?', [id])
-        .first['ended_at'] !=
-    null;
+    CapturesDatabase.instance.raw.select('SELECT ended_at FROM sessions WHERE id=?', [id]).first['ended_at'] != null;
 
 /// #97 follow-up: several server processes share one session row.
 void main() {
@@ -36,8 +33,7 @@ void main() {
     dir.deleteSync(recursive: true);
   });
 
-  int session(String uri) => dao.createSession(
-      appName: 'app', vmServiceUri: uri, isolateId: null, projectPath: null);
+  int session(String uri) => dao.createSession(appName: 'app', vmServiceUri: uri, isolateId: null, projectPath: null);
 
   group('migration v12 -> v13', () {
     test('a DB created fresh at v12 gains the live-URI index and matches a fresh v13 schema', () {
@@ -94,9 +90,8 @@ void main() {
       final sid = session('ws://kept');
       dao.attachProcess(sid);
       dao.releaseAttachment(sid);
-      final held = CapturesDatabase.instance.raw.select(
-          'SELECT COUNT(*) AS n FROM session_attachments WHERE session_id=?',
-          [sid]).first['n'];
+      final held = CapturesDatabase.instance.raw
+          .select('SELECT COUNT(*) AS n FROM session_attachments WHERE session_id=?', [sid]).first['n'];
       expect(held, 0);
       expect(_ended(sid), isFalse);
     });
@@ -127,16 +122,15 @@ void main() {
 
   test('a log record with the same dedup key is stored once', () {
     final sid = session('ws://logs');
-    int? insert(String? key) => dao.insertLog(
-        sessionId: sid, timestampMs: 1, source: 'logging', message: 'm', dedupKey: key);
+    int? insert(String? key) =>
+        dao.insertLog(sessionId: sid, timestampMs: 1, source: 'logging', message: 'm', dedupKey: key);
 
     expect(insert('logging:iso:7:1'), isNotNull);
     expect(insert('logging:iso:7:1'), isNull);
     expect(insert(null), isNotNull);
     expect(insert(null), isNotNull);
     final n = CapturesDatabase.instance.raw
-        .select('SELECT COUNT(*) AS n FROM log_records WHERE session_id=?', [sid])
-        .first['n'];
+        .select('SELECT COUNT(*) AS n FROM log_records WHERE session_id=?', [sid]).first['n'];
     expect(n, 3);
   });
 
@@ -154,16 +148,15 @@ void main() {
       signal.send(true);
       sleep(const Duration(seconds: 1));
       db.execute('COMMIT');
-      db.dispose();
+      db.close();
     });
     await locked.first;
     CapturesDatabase.instance.close();
     CapturesDatabase.open(dataDir: other.path);
     await holder;
-    final version = CapturesDatabase.instance.raw
-        .select("SELECT value FROM _meta WHERE key='schema_version'")
-        .first['value'];
-    expect(version, '${currentVersion}');
+    final version =
+        CapturesDatabase.instance.raw.select("SELECT value FROM _meta WHERE key='schema_version'").first['value'];
+    expect(version, '$currentVersion');
   });
 
   test('parseElapsed reads every ps etime shape', () {

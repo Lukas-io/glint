@@ -34,8 +34,7 @@ void main() {
     CapturesDatabase.instance.raw.execute(
       'INSERT INTO http_requests(session_id, vm_id, method, url, host, path, '
       'status_code, start_us, duration_us) VALUES (?,?,?,?,?,?,?,?,?)',
-      [sid, 'v${vm++}', method, 'https://$host$path', host, path, status, 1000,
-        durMs * 1000],
+      [sid, 'v${vm++}', method, 'https://$host$path', host, path, status, 1000, durMs * 1000],
     );
   }
 

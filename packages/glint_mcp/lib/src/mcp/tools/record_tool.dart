@@ -27,17 +27,12 @@ class RecordTool extends GlintTool {
             'Record the screen while running steps, then return the distinct frames as PNG files, in order. For transitions or screens that only flash. steps:[{tool,args}] as in batch (optional). durationMs: passive capture, or the tail after the steps (default 400); everyMs: sample interval (default 50); distinctOnly (default true); maxFrames (default 12). errorKind: unsupportedBackendAction, appUnresponsive, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
-            'steps': batchStepsSchema(_maxSteps,
-                description: 'Optional steps to run while recording. Max $_maxSteps.'),
+            'steps': batchStepsSchema(_maxSteps, description: 'Optional steps to run while recording. Max $_maxSteps.'),
             'durationMs': Schema.int(
-                description:
-                    'Passive capture with no steps, or the tail after them (0-30000). Default 400.'),
-            'everyMs': Schema.int(
-                description: 'Sample interval in ms (16-1000). Default 50.'),
-            'distinctOnly': Schema.bool(
-                description: 'Keep only frames that differ. Default true.'),
-            'maxFrames':
-                Schema.int(description: 'Max frames returned (1-60). Default 12.'),
+                description: 'Passive capture with no steps, or the tail after them (0-30000). Default 400.'),
+            'everyMs': Schema.int(description: 'Sample interval in ms (16-1000). Default 50.'),
+            'distinctOnly': Schema.bool(description: 'Keep only frames that differ. Default true.'),
+            'maxFrames': Schema.int(description: 'Max frames returned (1-60). Default 12.'),
             'inline': Schema.bool(
                 description:
                     'Attach up to 4 frames as images (512 px longest side), for clients that cannot read files. Default false.'),
@@ -46,8 +41,7 @@ class RecordTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = argInt(args, 'durationMs') ?? 400;
     final everyMs = argInt(args, 'everyMs') ?? 50;
@@ -61,8 +55,7 @@ class RecordTool extends GlintTool {
     if (everyMs < 16 || everyMs > 1000) return _bad('everyMs must be 16-1000');
     if (maxFrames < 1 || maxFrames > 60) return _bad('maxFrames must be 1-60');
 
-    final parsed =
-        parseBatchSteps(args['steps'], maxSteps: _maxSteps, allowEmpty: true);
+    final parsed = parseBatchSteps(args['steps'], maxSteps: _maxSteps, allowEmpty: true);
     if (parsed.error != null) return parsed.error!;
     final steps = parsed.steps!;
     if (steps.isEmpty && durationMs == 0) {
@@ -94,8 +87,7 @@ class RecordTool extends GlintTool {
       for (var i = 0; i < steps.length; i++) {
         final st = steps[i];
         final ok = st.tool == 'hardware_button' ||
-            (_coordSteps.contains(st.tool) &&
-                (readPoint(st.args) != null || readSegment(st.args) != null));
+            (_coordSteps.contains(st.tool) && (readPoint(st.args) != null || readSegment(st.args) != null));
         if (!ok) {
           return _bad('device mode: step ${i + 1} (${st.tool}) needs a Flutter '
               'app; use tap/swipe with x,y or hardware_button, or attach to the app');
@@ -105,8 +97,7 @@ class RecordTool extends GlintTool {
       // The steps cannot run if the isolate is not answering.
       String? lifecycle;
       try {
-        lifecycle =
-            await session.lifecycleState().timeout(const Duration(seconds: 1));
+        lifecycle = await session.lifecycleState().timeout(const Duration(seconds: 1));
       } on Object {
         return StructuredResponse.error(
           summary: 'the app is not answering, so the steps cannot run',
@@ -171,9 +162,8 @@ class RecordTool extends GlintTool {
     }
     final wallMs = stopRequestedAt.difference(t0).inMilliseconds;
 
-    final bridge = session.device is IosSimulator
-        ? (session.device as IosSimulator).bridgePath
-        : resolveIosBridgePath(null);
+    final bridge =
+        session.device is IosSimulator ? (session.device as IosSimulator).bridgePath : resolveIosBridgePath(null);
     final extraction = await FrameExtractor(bridgePath: bridge).extract(
       video: video,
       outDir: '${dir.path}/frames',
@@ -188,19 +178,15 @@ class RecordTool extends GlintTool {
       if (extraction.error != null)
         'frames not extracted: ${extraction.error}. The video is at $video. '
             'Build the bridge: cd native/ios_sim_bridge && swift build',
-      if (extraction.error == null && frames.isEmpty)
-        await _whyNoFrames(session, video),
+      if (extraction.error == null && frames.isEmpty) await _whyNoFrames(session, video),
       if (frames.length == 1)
         'only one distinct frame in $wallMs ms: the screen did not change while '
             'recording, or changed faster than everyMs=$everyMs',
-      if (extraction.capped)
-        'capped at maxFrames=$maxFrames; raise maxFrames or everyMs for more',
+      if (extraction.capped) 'capped at maxFrames=$maxFrames; raise maxFrames or everyMs for more',
       if (session.isDeviceMode) 'device mode: steps ran as coordinate gestures',
     ];
 
-    final stepLines = run == null
-        ? const <String>[]
-        : [for (final o in run.outcomes) o.line(origin: t0)];
+    final stepLines = run == null ? const <String>[] : [for (final o in run.outcomes) o.line(origin: t0)];
 
     final attached = <String>[];
     if (inline) {
@@ -213,10 +199,8 @@ class RecordTool extends GlintTool {
       summary: [
         describeFrames(frames, wallMs, distinctOnly: distinctOnly),
         ...stepLines,
-        if (frames.isNotEmpty && attached.isEmpty)
-          'frames are PNG files under ${dir.path}/frames; read them in order',
-        if (attached.isNotEmpty)
-          '${attached.length} of ${frames.length} frames attached in order',
+        if (frames.isNotEmpty && attached.isEmpty) 'frames are PNG files under ${dir.path}/frames; read them in order',
+        if (attached.isNotEmpty) '${attached.length} of ${frames.length} frames attached in order',
       ].join('\n'),
       warnings: warnings,
       nextSteps: [
@@ -234,8 +218,7 @@ class RecordTool extends GlintTool {
         'capped': extraction.capped,
         if (extraction.tool != null) 'extractedWith': extraction.tool,
         'frames': [for (final f in frames) f.toJson()],
-        if (run != null)
-          'steps': [for (final o in run.outcomes) o.toJson(origin: t0)],
+        if (run != null) 'steps': [for (final o in run.outcomes) o.toJson(origin: t0)],
         if (session.isDeviceMode) 'mode': 'device',
       },
     );
@@ -248,9 +231,7 @@ class RecordTool extends GlintTool {
       return 'no frames decoded from the video ($size bytes at $video)';
     }
     final device = session.device;
-    final others = device is AndroidDevice
-        ? await otherDeviceServers(device.serial, device.adbPath)
-        : const <String>[];
+    final others = device is AndroidDevice ? await otherDeviceServers(device.serial, device.adbPath) : const <String>[];
     return 'the recording is empty ($size bytes): '
         '${others.isNotEmpty ? 'another tool is capturing the device (${others.join(', ')}); stop it and record again' : device is AndroidDevice ? 'another tool capturing the screen (scrcpy, a mobile-mcp server) stops screenrecord from getting frames' : 'the simulator may be asleep or locked'}';
   }
@@ -287,8 +268,7 @@ class RecordTool extends GlintTool {
         }
       }
     }
-    final dir = Directory(
-        '${base.path}/rec-${DateTime.now().millisecondsSinceEpoch}');
+    final dir = Directory('${base.path}/rec-${DateTime.now().millisecondsSinceEpoch}');
     dir.createSync(recursive: true);
     return dir;
   }

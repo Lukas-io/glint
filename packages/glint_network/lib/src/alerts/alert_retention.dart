@@ -21,8 +21,7 @@ import 'alert_rules.dart';
 /// `priorOccurrences` still works within the window, which is the useful
 /// horizon for "is this recurring recently?".
 class AlertRetention {
-  AlertRetention({Duration? interval, this.now})
-      : interval = interval ?? const Duration(hours: 1);
+  AlertRetention({Duration? interval, this.now}) : interval = interval ?? const Duration(hours: 1);
 
   final Duration interval;
 
@@ -66,11 +65,9 @@ class AlertRetention {
     if (days <= 0) return 0; // disabled
     final nowMs = (now ?? _wallMs)();
     final cutoff = nowMs - days * 86400000;
-    final protected =
-        SessionRegistry.instance.attached.values.map((s) => s.id).toSet();
+    final protected = SessionRegistry.instance.attached.values.map((s) => s.id).toSet();
     try {
-      final deleted =
-          _dao.expireOldAlerts(cutoffMs: cutoff, protectedSessionIds: protected);
+      final deleted = _dao.expireOldAlerts(cutoffMs: cutoff, protectedSessionIds: protected);
       if (deleted > 0) {
         io.stderr.writeln(
           'glint_network: alert retention expired $deleted alert(s) '

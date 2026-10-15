@@ -102,10 +102,7 @@ class SceneReader {
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
     final candidates = <SceneNode>{
       ...root.walk().where((n) => kPageScaffolds.contains(n.baseLabel)),
-      ...root
-          .walk()
-          .where((n) => n.baseLabel == 'IndexedStack')
-          .expand((n) => n.children),
+      ...root.walk().where((n) => n.baseLabel == 'IndexedStack').expand((n) => n.children),
     };
     for (final candidate in candidates) {
       if (candidate.inspectorId.isEmpty) continue;
@@ -113,8 +110,7 @@ class SceneReader {
       final String? result;
       try {
         result = await _runtime.evaluateWithSelection(
-          expression:
-              '((WidgetInspectorService.instance.selection.currentElement!'
+          expression: '((WidgetInspectorService.instance.selection.currentElement!'
               '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
               ' || !Visibility.of(WidgetInspectorService.instance.selection.currentElement!)'
               ' || !TickerMode.of(WidgetInspectorService.instance.selection.currentElement!))'
@@ -173,13 +169,22 @@ class SceneReader {
   }
 
   static const _barLabels = {'AppBar', 'SliverAppBar', 'CupertinoNavigationBar', 'CupertinoSliverNavigationBar'};
-  static const _barButtons = {'BackButton', 'CloseButton', 'DrawerButton', 'EndDrawerButton', 'CupertinoNavigationBarBackButton'};
+  static const _barButtons = {
+    'BackButton',
+    'CloseButton',
+    'DrawerButton',
+    'EndDrawerButton',
+    'CupertinoNavigationBarBackButton'
+  };
 
   /// The back, close and drawer buttons an app bar builds for itself never reach the summary tree; each one in a visible bar is copied in as a leaf, matched by inspector id (shared by both reads while their groups live).
   static int _graftBarButtons(SceneNode summaryRoot, SceneNode fullRoot) {
     final bars = summaryRoot.walk().where((n) => !n.isOffstage && _barLabels.contains(n.baseLabel)).toList();
     if (bars.isEmpty) return 0;
-    final fullById = {for (final n in fullRoot.walk()) if (n.inspectorId.isNotEmpty) n.inspectorId: n};
+    final fullById = {
+      for (final n in fullRoot.walk())
+        if (n.inspectorId.isNotEmpty) n.inspectorId: n
+    };
     var grafted = 0;
     for (final bar in bars) {
       final full = fullById[bar.inspectorId];
@@ -187,14 +192,16 @@ class SceneReader {
       final present = bar.walk().map((n) => n.inspectorId).toSet();
       final buttons = full.walk().where((n) => _barButtons.contains(n.baseLabel) && !present.contains(n.inspectorId));
       for (final b in buttons.toList().reversed) {
-        bar.children.insert(0, SceneNode(
-          depth: bar.depth + 1,
-          indexInParent: 0,
-          description: b.description,
-          type: b.type,
-          inspectorId: b.inspectorId,
-          widgetRuntimeType: b.widgetRuntimeType,
-        ));
+        bar.children.insert(
+            0,
+            SceneNode(
+              depth: bar.depth + 1,
+              indexInParent: 0,
+              description: b.description,
+              type: b.type,
+              inspectorId: b.inspectorId,
+              widgetRuntimeType: b.widgetRuntimeType,
+            ));
         grafted++;
       }
     }
@@ -210,16 +217,14 @@ class SceneReader {
   /// seam for overlay classification. Each entry is an [_OverlayEntryWidget]
   /// wrapper, so we dig to the first descendant carrying a glintId.
   @visibleForTesting
-  static List<String?> debugOverlayContentIds(SceneNode fullRoot) =>
-      _extractDialogEntries(fullRoot).contentRoots
-          .map((n) => n.walk().firstWhere((d) => d.glintId != null,
-              orElse: () => n).glintId)
-          .toList();
+  static List<String?> debugOverlayContentIds(SceneNode fullRoot) => _extractDialogEntries(fullRoot)
+      .contentRoots
+      .map((n) => n.walk().firstWhere((d) => d.glintId != null, orElse: () => n).glintId)
+      .toList();
 
   /// Whether a modal barrier covers the top page; the test seam for barrier placement.
   @visibleForTesting
-  static bool debugHasCoveringBarrier(SceneNode fullRoot) =>
-      _extractDialogEntries(fullRoot).hasBarrier;
+  static bool debugHasCoveringBarrier(SceneNode fullRoot) => _extractDialogEntries(fullRoot).hasBarrier;
 
   static _DialogExtraction _extractDialogEntries(SceneNode fullRoot) {
     final overlay = _findNode(fullRoot, 'Overlay');
@@ -235,10 +240,7 @@ class SceneReader {
       // Flutter 3.x introduced _Theater as an intermediate child of Overlay
       // that groups the overlay entries. Walk into it when present so we reach
       // the actual _OverlayEntryWidget children.
-      final entriesParent =
-          (overlay.children.firstOrNull?.label == '_Theater')
-              ? overlay.children.first
-              : overlay;
+      final entriesParent = (overlay.children.firstOrNull?.label == '_Theater') ? overlay.children.first : overlay;
       final entries = entriesParent.children.where(_isEntryWidget).toList();
       final topPage = entries.lastIndexWhere(_hasScaffoldDescendant);
 
@@ -283,12 +285,20 @@ class SceneReader {
 
   /// A nested navigator's sheet also sits inline in the summary tree, inside the page it covers; removes that copy so it is read once, as an overlay, and the page reads as blocked. The inspector gives neither tree creation locations, so the copy is the topmost node holding exactly the sheet's distinct texts (the full tree repeats each one on its RichText).
   static void _detachInlineCopies(SceneNode summaryRoot, List<SceneNode> nestedContent) {
-    String texts(SceneNode n) => ({for (final d in n.walk()) if ((d.textPreview ?? '').isNotEmpty) d.textPreview!}.toList()..sort()).join('\u0000');
+    String texts(SceneNode n) => ({
+          for (final d in n.walk())
+            if ((d.textPreview ?? '').isNotEmpty) d.textPreview!
+        }.toList()
+              ..sort())
+            .join('\u0000');
     final wanted = [for (final entry in nestedContent) texts(entry)]..removeWhere((t) => t.isEmpty);
     if (wanted.isEmpty) return;
     void visit(SceneNode n) {
       if (n.children.any((c) => wanted.contains(texts(c)))) {
-        n.children = [for (final c in n.children) if (!wanted.contains(texts(c))) c];
+        n.children = [
+          for (final c in n.children)
+            if (!wanted.contains(texts(c))) c
+        ];
       }
       for (final c in n.children) {
         visit(c);
@@ -312,8 +322,7 @@ class SceneReader {
     return l == '_OverlayEntryWidget' || l == 'OverlayEntry';
   }
 
-  static bool _hasScaffoldDescendant(SceneNode n) =>
-      n.walk().any((d) => kPageScaffolds.contains(d.baseLabel));
+  static bool _hasScaffoldDescendant(SceneNode n) => n.walk().any((d) => kPageScaffolds.contains(d.baseLabel));
 
   /// Text-editing overlays — cursor drag handles + the copy/paste toolbar —
   /// ride in their own [OverlayEntry] whenever a field is focused. They are
@@ -333,15 +342,13 @@ class SceneReader {
       !n.walk().any((d) => d.baseLabel == 'EditableText');
 
   /// Framework chrome with nothing to read: no text and no widget built by the app.
-  static bool _isEmptyEntry(SceneNode n) => n
-      .walk()
-      .every((d) => (d.textPreview ?? '').isEmpty && !d.createdByLocalProject);
+  static bool _isEmptyEntry(SceneNode n) =>
+      n.walk().every((d) => (d.textPreview ?? '').isEmpty && !d.createdByLocalProject);
 
   /// True when every descendant is a known barrier/gesture-plumbing widget
   /// with no user-meaningful content.
   static bool _isBarrierOnlyEntry(SceneNode n) {
-    if (n.walk().any((d) =>
-        d.baseLabel == 'ModalBarrier' || d.baseLabel == 'AnimatedModalBarrier')) {
+    if (n.walk().any((d) => d.baseLabel == 'ModalBarrier' || d.baseLabel == 'AnimatedModalBarrier')) {
       return true;
     }
     // Widgets that are pass-through / pointer-routing plumbing with no
@@ -366,7 +373,6 @@ class SceneReader {
     };
     return n.walk().skip(1).every((d) => barrierSet.contains(d.label));
   }
-
 }
 
 // ── internal result types ──────────────────────────────────────────────────
@@ -665,18 +671,17 @@ class _NullRuntime implements FlutterRuntime {
   @override
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
   @override
-  Future<InstanceRef> evaluateIn(String expression,
-          {String? librarySuffix, Map<String, String>? scope}) =>
+  Future<InstanceRef> evaluateIn(String expression, {String? librarySuffix, Map<String, String>? scope}) =>
       throw UnimplementedError();
   @override
-  Future<String?> evaluateString(String expression,
-          {bool rethrowErrors = false}) async => null;
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async => null;
   @override
   Future<String?> evaluateWithSelection({
     required String expression,
     required String inspectorId,
     required String groupName,
-  }) async => null;
+  }) async =>
+      null;
   @override
   Stream<Event> get stderrEvents => const Stream.empty();
   @override

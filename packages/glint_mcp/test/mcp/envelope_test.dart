@@ -64,8 +64,7 @@ void main() {
       );
       final env = StructuredResponse.fromActionResult(result);
       expect(env.data?['detail'], 'an absorber covers the target');
-      expect(env.data?.containsKey('error'), isFalse,
-          reason: 'error is folded into detail, not duplicated');
+      expect(env.data?.containsKey('error'), isFalse, reason: 'error is folded into detail, not duplicated');
       expect(env.renderText(), contains('detail: an absorber covers'));
     });
 

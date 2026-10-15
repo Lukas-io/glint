@@ -40,8 +40,7 @@ const Map<String, GlintTool> kBatchStepTools = {
 const Set<String> kTargetedSteps = {'tap', 'type', 'swipe', 'long_press', 'drag'};
 
 /// The `steps` list schema, shared by batch and record.
-Schema batchStepsSchema(int maxSteps, {required String description}) =>
-    Schema.list(
+Schema batchStepsSchema(int maxSteps, {required String description}) => Schema.list(
       description: description,
       items: ObjectSchema(
         properties: {
@@ -128,24 +127,19 @@ class StepOutcome {
         if (args['app'] != null) 'app': args['app'],
         'ok': !isError,
         'elapsedMs': elapsedMs,
-        if (origin != null)
-          'firedAtMs': startedAt.difference(origin).inMilliseconds,
+        if (origin != null) 'firedAtMs': startedAt.difference(origin).inMilliseconds,
         'summary': shortSummary(response.summary),
         if (changed != null) 'changed': changed,
         if (changeCategory != null) 'changeCategory': changeCategory,
         if (isError) 'errorKind': response.data?['errorKind'],
-        if (isError && response.data?['detail'] != null)
-          'detail': response.data?['detail'],
-        if (isError && response.nextSteps.isNotEmpty)
-          'nextSteps': response.nextSteps,
+        if (isError && response.data?['detail'] != null) 'detail': response.data?['detail'],
+        if (isError && response.nextSteps.isNotEmpty) 'nextSteps': response.nextSteps,
         if (response.warnings.isNotEmpty) 'warnings': response.warnings,
       };
 
   /// The one-line prose batch prints per step.
   String line({DateTime? origin}) {
-    final fired = origin == null
-        ? ''
-        : ', fired at ${startedAt.difference(origin).inMilliseconds} ms';
+    final fired = origin == null ? '' : ', fired at ${startedAt.difference(origin).inMilliseconds} ms';
     final app = args['app'];
     return '$index. ${app == null ? '' : '[$app] '}$tool ${stepTarget(args)} → '
         '${isError ? "FAIL ${response.data?['errorKind']}: " : ""}'
@@ -162,9 +156,7 @@ class BatchRun {
   final String? reason;
   final int? stoppedAt;
 
-  int get completed => stoppedAt == null
-      ? outcomes.length
-      : (reason == 'error' ? stoppedAt! - 1 : stoppedAt!);
+  int get completed => stoppedAt == null ? outcomes.length : (reason == 'error' ? stoppedAt! - 1 : stoppedAt!);
 }
 
 /// Runs [steps] in order with batch's arg defaults, logging each under its own tool name. Rethrows [SessionNotAttachedError].
@@ -183,14 +175,11 @@ Future<BatchRun> runBatchSteps(
     onStepStart?.call(i + 1, step.tool);
     final tool = kBatchStepTools[step.tool]!;
     final start = DateTime.now();
-    final own = CallToolRequest(
-        name: step.tool, arguments: {...step.args}..remove('app'));
+    final own = CallToolRequest(name: step.tool, arguments: {...step.args}..remove('app'));
     final invalid = GlintTool.checkArguments(tool.definition, own);
     final stepArgs = {
       ...?own.arguments,
-      if (kTargetedSteps.contains(step.tool) &&
-          !step.args.containsKey('awaitReady'))
-        'awaitReady': true,
+      if (kTargetedSteps.contains(step.tool) && !step.args.containsKey('awaitReady')) 'awaitReady': true,
       if (step.tool != 'hardware_button' &&
           step.tool != 'wait_for_settle' &&
           step.tool != 'wait_for' &&

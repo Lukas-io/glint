@@ -14,8 +14,7 @@ void main() {
   setUp(() {
     dir = Directory.systemTemp.createTempSync('logs_budget_test_');
     CapturesDatabase.open(dataDir: dir.path);
-    sid = CapturesDao().createSession(
-        appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
+    sid = CapturesDao().createSession(appName: 'a', vmServiceUri: 'ws://x', isolateId: null, projectPath: null);
     for (var i = 0; i < 20; i++) {
       CapturesDatabase.instance.raw.execute(
         'INSERT INTO log_records(session_id, timestamp_ms, source, level, message) '
@@ -32,13 +31,11 @@ void main() {
   });
 
   Future<Map<String, Object?>> tail([Map<String, Object?> extra = const {}]) async {
-    final r = await logsTail(CallToolRequest(
-        name: 'logs_tail', arguments: {'sessionId': sid, ...extra}));
+    final r = await logsTail(CallToolRequest(name: 'logs_tail', arguments: {'sessionId': sid, ...extra}));
     return r.structuredContent!;
   }
 
-  test('maxTokens keeps the newest records and reports what it dropped',
-      () async {
+  test('maxTokens keeps the newest records and reports what it dropped', () async {
     final sc = await tail({'maxTokens': 200});
     final entries = sc['entries'] as List;
     final budget = sc['budget'] as Map;

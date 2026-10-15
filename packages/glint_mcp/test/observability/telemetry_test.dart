@@ -178,13 +178,11 @@ void main() {
         resultBytes: 100,
       );
       final reporter = UsageReporter(r, env: const {});
-      final res =
-          await reporter.ship(dataDir: tmp.path, dryRun: true);
+      final res = await reporter.ship(dataDir: tmp.path, dryRun: true);
       expect(res.shipped, false);
       expect(res.dryRun, true);
       expect(res.payloadJson, isNotNull);
-      final payload =
-          jsonDecode(res.payloadJson!) as Map<String, Object?>;
+      final payload = jsonDecode(res.payloadJson!) as Map<String, Object?>;
       expect(payload['kind'], 'usage_rollup');
       expect(payload['version'], 'glint/$glintVersion');
       final tools = payload['tools'] as List;
@@ -252,7 +250,13 @@ void main() {
     test('ids continue across recorder instances and rows persist', () {
       final a = UsageRecorder.config(enabled: true, dataDir: tmp.path);
       a.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
-      a.record(tool: 'get_scene', outcome: ToolOutcome.error, argKeys: const [], durationMs: 2, resultBytes: 20, errorKind: 'internal');
+      a.record(
+          tool: 'get_scene',
+          outcome: ToolOutcome.error,
+          argKeys: const [],
+          durationMs: 2,
+          resultBytes: 20,
+          errorKind: 'internal');
       expect(a.maxId, 2);
 
       final b = UsageRecorder.config(enabled: true, dataDir: tmp.path);
@@ -275,8 +279,7 @@ void main() {
     test('a watermark past every known id ships from the start', () async {
       final r = UsageRecorder.config(enabled: true, dataDir: tmp.path);
       r.record(tool: 'tap', outcome: ToolOutcome.ok, argKeys: const [], durationMs: 1, resultBytes: 10);
-      File('${tmp.path}/usage-ship-state.json')
-          .writeAsStringSync('{"lastShippedEventId": 999, "shipCount": 1}');
+      File('${tmp.path}/usage-ship-state.json').writeAsStringSync('{"lastShippedEventId": 999, "shipCount": 1}');
       final reporter = UsageReporter(r, env: const {});
       expect(reporter.unshippedCount(dataDir: tmp.path), 1);
       final res = await reporter.ship(dataDir: tmp.path, dryRun: true);
@@ -293,7 +296,14 @@ void main() {
   group('summarizeUsage rollup fields', () {
     test('error kinds, outcome-tagged transitions, self-correction, tokens', () {
       final rows = [
-        {'correlation_id': 't1', 'tool': 'tap', 'outcome': 'error', 'error_kind': 'unresolvedTarget', 'duration_ms': 10, 'result_bytes': 400},
+        {
+          'correlation_id': 't1',
+          'tool': 'tap',
+          'outcome': 'error',
+          'error_kind': 'unresolvedTarget',
+          'duration_ms': 10,
+          'result_bytes': 400
+        },
         {'correlation_id': 't1', 'tool': 'get_scene', 'outcome': 'ok', 'duration_ms': 30, 'result_bytes': 4000},
         {'correlation_id': 't1', 'tool': 'tap', 'outcome': 'ok', 'duration_ms': 12, 'result_bytes': 200},
       ];

@@ -2,11 +2,9 @@ import 'package:glint_network/src/tools/network_correlate.dart';
 import 'package:test/test.dart';
 
 void main() {
-  Map<String, Object?> req(int sid, String id, int t) =>
-      {'sessionId': sid, 'id': id, 'startTimeMs': t};
+  Map<String, Object?> req(int sid, String id, int t) => {'sessionId': sid, 'id': id, 'startTimeMs': t};
 
-  test('the earlier request is named the originator, whatever the list order',
-      () {
+  test('the earlier request is named the originator, whatever the list order', () {
     final steps = pairInspectSteps({
       'spanMs': 300,
       'requests': [req(14, 'late', 1300), req(15, 'early', 1000)],

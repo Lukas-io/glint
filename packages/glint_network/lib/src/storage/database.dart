@@ -16,8 +16,7 @@ class CapturesDatabase {
   sql.Database get raw => _db;
 
   static CapturesDatabase? _instance;
-  static CapturesDatabase get instance =>
-      _instance ?? (throw StateError('Database not opened. Call open() first.'));
+  static CapturesDatabase get instance => _instance ?? (throw StateError('Database not opened. Call open() first.'));
   static bool get isOpen => _instance != null;
 
   /// True when the database lives in memory only (no-persist / ephemeral mode,
@@ -106,9 +105,7 @@ class CapturesDatabase {
 
   /// Before upgrading an existing database, copies it to `captures.db.pre-v<N>.bak` so a migration that completes but damages data can be undone; the newest backup replaces older ones.
   static void _backupBeforeMigration(sql.Database db, String dir) {
-    final off = networkEnv['GLINT_NETWORK_NO_MIGRATION_BACKUP']
-        ?.trim()
-        .toLowerCase();
+    final off = networkEnv['GLINT_NETWORK_NO_MIGRATION_BACKUP']?.trim().toLowerCase();
     if (off == 'true' || off == '1' || off == 'yes' || off == 'on') return;
     final version = _storedVersion(db);
     if (version == 0 || version >= currentVersion) return;
@@ -155,9 +152,7 @@ class CapturesDatabase {
     try {
       final cutoff = DateTime.now().subtract(backupRetention);
       for (final f in Directory(dir).listSync()) {
-        if (f is File &&
-            _backupName.hasMatch(p.basename(f.path)) &&
-            f.statSync().modified.isBefore(cutoff)) {
+        if (f is File && _backupName.hasMatch(p.basename(f.path)) && f.statSync().modified.isBefore(cutoff)) {
           f.deleteSync();
         }
       }
@@ -194,9 +189,7 @@ class CapturesDatabase {
       db.execute('BEGIN IMMEDIATE');
       try {
         final row = db.select("SELECT value FROM _meta WHERE key='schema_version'");
-        final version = row.isEmpty
-            ? 0
-            : int.tryParse(row.first['value'] as String? ?? '0') ?? 0;
+        final version = row.isEmpty ? 0 : int.tryParse(row.first['value'] as String? ?? '0') ?? 0;
         if (version > currentVersion) {
           db.execute('ROLLBACK');
           throw NewerDatabaseError(found: version, supported: currentVersion);
@@ -351,8 +344,7 @@ class NewerDatabaseError implements Exception {
   final int supported;
 
   @override
-  String toString() =>
-      'the capture database is at schema v$found, newer than this build '
+  String toString() => 'the capture database is at schema v$found, newer than this build '
       'supports (v$supported). A newer glint_network wrote it. Update '
       'this install the way you installed it, or pass --data-dir <other dir> '
       'to use a separate database.';

@@ -50,30 +50,25 @@ Map<String, Object?> attachedStatusEntry(AttachedSession a) {
     // more restarts, surface the count + when + where-from so the agent knows
     // the captures it's reading span the restart (and didn't silently reset).
     if (a.reattachCount > 0) 'reattachCount': a.reattachCount,
-    if (a.lastReattachAt != null)
-      'lastReattachAtMs': a.lastReattachAt!.millisecondsSinceEpoch,
-    if (a.previousVmServiceUri != null)
-      'previousVmServiceUri': a.previousVmServiceUri,
+    if (a.lastReattachAt != null) 'lastReattachAtMs': a.lastReattachAt!.millisecondsSinceEpoch,
+    if (a.previousVmServiceUri != null) 'previousVmServiceUri': a.previousVmServiceUri,
   };
 }
 
 final networkStatusTool = Tool(
   name: 'network_status',
-  description:
-      'Call first, every session. Reports apps you can attach to (knownApps), '
+  description: 'Call first, every session. Reports apps you can attach to (knownApps), '
       'which sessions are attached, queued alerts, enabled capabilities, and '
       'the DB path. Auto-opens DTD so knownApps populates. Follow its '
       'nextSteps.',
   inputSchema: Schema.object(
     properties: {
       'connectDtd': Schema.bool(
-        description:
-            'Open DTD to populate knownApps. Default true; false for a pure '
+        description: 'Open DTD to populate knownApps. Default true; false for a pure '
             'state read.',
       ),
       'attachIfOne': Schema.bool(
-        description:
-            'If nothing is attached and exactly one app is visible, attach it '
+        description: 'If nothing is attached and exactly one app is visible, attach it '
             '(returned under autoAttached). Default false.',
       ),
     },
@@ -134,8 +129,7 @@ FutureOr<CallToolResult> networkStatus(
       'uri': session.dtd.connectedUri?.toString(),
       'defaultUri': defaultDtdUri,
     },
-    if (session.viewedSessionId != null)
-      'viewedSessionId': session.viewedSessionId,
+    if (session.viewedSessionId != null) 'viewedSessionId': session.viewedSessionId,
   };
 
   // Opportunistic DTD connect so knownApps lands on the first status call.
@@ -143,9 +137,7 @@ FutureOr<CallToolResult> networkStatus(
   if (connectDtd && !session.dtd.isConnected && defaultDtdUri != null) {
     var target = defaultDtdUri;
     try {
-      await session.dtd
-          .connect(Uri.parse(target))
-          .timeout(const Duration(seconds: 5));
+      await session.dtd.connect(Uri.parse(target)).timeout(const Duration(seconds: 5));
       (out['dtd'] as Map<String, Object?>)['connected'] = true;
       (out['dtd'] as Map<String, Object?>)['uri'] = target;
     } catch (e) {
@@ -157,9 +149,7 @@ FutureOr<CallToolResult> networkStatus(
       final candidate = fresh.isEmpty ? null : fresh.first.wsUri;
       if (candidate != null && candidate != target) {
         try {
-          await session.dtd
-              .connect(Uri.parse(candidate))
-              .timeout(const Duration(seconds: 5));
+          await session.dtd.connect(Uri.parse(candidate)).timeout(const Duration(seconds: 5));
           target = candidate;
           (out['dtd'] as Map<String, Object?>)['connected'] = true;
           (out['dtd'] as Map<String, Object?>)['uri'] = candidate;
@@ -191,8 +181,7 @@ FutureOr<CallToolResult> networkStatus(
     out['dbPath'] = CapturesDatabase.instance.path;
     try {
       final dao = CapturesDao();
-      final sessions =
-          dao.rawSelect('SELECT COUNT(*) AS n FROM sessions').first['n'];
+      final sessions = dao.rawSelect('SELECT COUNT(*) AS n FROM sessions').first['n'];
       out['sessionCount'] = sessions;
       if (caps.isEnabled(Category.alerts)) {
         // 0.6.3 surfaces TWO counts: pendingTotal = distinct signatures
@@ -242,8 +231,7 @@ FutureOr<CallToolResult> networkStatus(
           'uri': app.uri,
           if (app.exposedUri != null) 'exposedUri': app.exposedUri,
           'dtdUri': listing.dtdUri.toString(),
-          if (listing.workspaceRoot != null)
-            'workspaceRoot': listing.workspaceRoot,
+          if (listing.workspaceRoot != null) 'workspaceRoot': listing.workspaceRoot,
         });
       }
     }
@@ -274,8 +262,7 @@ FutureOr<CallToolResult> networkStatus(
         if (listing.error != null)
           {
             'dtdUri': listing.dtdUri.toString(),
-            if (listing.workspaceRoot != null)
-              'workspaceRoot': listing.workspaceRoot,
+            if (listing.workspaceRoot != null) 'workspaceRoot': listing.workspaceRoot,
             'error': listing.error,
           },
     ];
@@ -472,29 +459,23 @@ List<String> _suggestNextSteps(
     if (lastUri != null) {
       final knownUris = <String>{
         for (final a in (knownApps ?? const []))
-          if ((a as Map)['uri'] is String)
-            canonicalVmServiceUri(a['uri'] as String),
+          if ((a as Map)['uri'] is String) canonicalVmServiceUri(a['uri'] as String),
       };
       final died = registry.dead
-          .where((d) =>
-              canonicalVmServiceUri(d.vmServiceUri) ==
-              canonicalVmServiceUri(lastUri))
+          .where((d) => canonicalVmServiceUri(d.vmServiceUri) == canonicalVmServiceUri(lastUri))
           .firstOrNull;
       // DTD discovery listing live apps but not this URI is authoritative that
       // the app is gone; an empty discovery, or one where a DTD failed to
       // answer, cannot tell, so we do not infer death from it.
-      final probesFailed =
-          (out['dtdProbeErrors'] as List?)?.isNotEmpty ?? false;
-      final absentFromLiveDtd = !probesFailed &&
-          knownUris.isNotEmpty &&
-          !knownUris.contains(canonicalVmServiceUri(lastUri));
+      final probesFailed = (out['dtdProbeErrors'] as List?)?.isNotEmpty ?? false;
+      final absentFromLiveDtd =
+          !probesFailed && knownUris.isNotEmpty && !knownUris.contains(canonicalVmServiceUri(lastUri));
       final lastIdentity = appSessionIdentity(lastApp);
       String? relaunchUri;
       for (final a in (knownApps ?? const [])) {
         final m = a as Map;
         final uri = m['uri'] as String?;
-        if (uri == null ||
-            canonicalVmServiceUri(uri) == canonicalVmServiceUri(lastUri)) {
+        if (uri == null || canonicalVmServiceUri(uri) == canonicalVmServiceUri(lastUri)) {
           continue;
         }
         if (appSessionIdentity(m['name'] as String?) == lastIdentity) {
@@ -506,9 +487,7 @@ List<String> _suggestNextSteps(
         lastUri: lastUri,
         lastApp: lastApp,
         attachedAgo: attachedAtMs == null ? null : _formatAgo(attachedAtMs),
-        exitedAgo: died == null
-            ? null
-            : _formatAgo(died.diedAt.millisecondsSinceEpoch),
+        exitedAgo: died == null ? null : _formatAgo(died.diedAt.millisecondsSinceEpoch),
         dead: died != null || absentFromLiveDtd,
         relaunchUri: relaunchUri,
       );
@@ -520,9 +499,7 @@ List<String> _suggestNextSteps(
     // Before falling back to "ask the user for a URI", peek at the
     // package:dtd discovery directory — there may be a live DTD here
     // that the agent can attach to without involving the user.
-    final discovered = DtdDiscovery.discover()
-        .where((c) => c.isLive)
-        .toList();
+    final discovered = DtdDiscovery.discover().where((c) => c.isLive).toList();
     final cwdMatches = discovered.where((c) => c.matchesCwd).toList();
     if (cwdMatches.isNotEmpty) {
       final best = cwdMatches.first;

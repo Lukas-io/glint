@@ -10,15 +10,13 @@ import 'result.dart';
 
 final alertsClearTool = Tool(
   name: 'alerts_clear',
-  description:
-      'Permanently DELETES alert rows from the DB, scoped per-session. '
+  description: 'Permanently DELETES alert rows from the DB, scoped per-session. '
       'Default deletes only drained alerts; to also delete undrained ones '
       'pass drainedOnly:false AND confirm:true.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to clear. Omit to auto-resolve (the sole attached, or '
+        description: 'Session to clear. Omit to auto-resolve (the sole attached, or '
             'the opened). Cross-session bulk: use network_query.',
       ),
       'appNameContains': Schema.string(

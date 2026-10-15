@@ -1,4 +1,6 @@
 /// Probe G1: look for Offstage/IndexedStack in full and summary trees.
+library;
+
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
@@ -10,31 +12,42 @@ void main(List<String> args) async {
   for (final ref in vm.isolates ?? <IsolateRef>[]) {
     if (ref.id == null) continue;
     final iso = await ws.getIsolate(ref.id!);
-    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) { flutter = iso; break; }
+    if ((iso.extensionRPCs ?? []).any((e) => e.startsWith('ext.flutter.'))) {
+      flutter = iso;
+      break;
+    }
   }
-  if (flutter == null) { print('No Flutter isolate'); return; }
+  if (flutter == null) {
+    print('No Flutter isolate');
+    return;
+  }
   final isoId = flutter.id!;
 
   // Summary tree - search for Offstage / IndexedStack
   final r = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree',
-    isolateId: isoId,
-    args: {'groupName': 'probe-offstage', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
+      isolateId: isoId,
+      args: {'groupName': 'probe-offstage', 'isSummaryTree': 'true', 'withPreviews': 'false', 'fullDetails': 'false'});
   final tree = (r.json?['result'] as Map?)?.cast<String, Object?>() ?? {};
   print('=== Summary tree: nodes with Offstage or IndexedStack ===');
   _findAndPrint(tree, 0, {'Offstage', 'IndexedStack', 'Padding'});
 
   // Also check full tree briefly for context
   print('\n=== Full tree: Offstage + IndexedStack nodes (for structure) ===');
-  final r2 = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree',
-    isolateId: isoId,
-    args: {'groupName': 'probe-offstage-full', 'isSummaryTree': 'false', 'withPreviews': 'false', 'fullDetails': 'false'});
+  final r2 = await ws.callServiceExtension('ext.flutter.inspector.getRootWidgetTree', isolateId: isoId, args: {
+    'groupName': 'probe-offstage-full',
+    'isSummaryTree': 'false',
+    'withPreviews': 'false',
+    'fullDetails': 'false'
+  });
   final full = (r2.json?['result'] as Map?)?.cast<String, Object?>() ?? {};
   _findAndPrint(full, 0, {'Offstage', 'IndexedStack'});
 
   try {
-    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'probe-offstage'});
-    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup', isolateId: isoId, args: {'groupName': 'probe-offstage-full'});
-  } on Object {}
+    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup',
+        isolateId: isoId, args: {'groupName': 'probe-offstage'});
+    await ws.callServiceExtension('ext.flutter.inspector.disposeGroup',
+        isolateId: isoId, args: {'groupName': 'probe-offstage-full'});
+  } on Object catch (_) {}
   await ws.dispose();
 }
 
@@ -46,7 +59,11 @@ void _findAndPrint(Map<String, Object?> node, int depth, Set<String> needle) {
     print('${'  ' * depth}$local $type [$id]');
   }
   final kids = node['children'];
-  if (kids is List) { for (final c in kids) { if (c is Map) _findAndPrint(c.cast<String, Object?>(), depth + 1, needle); } }
+  if (kids is List) {
+    for (final c in kids) {
+      if (c is Map) _findAndPrint(c.cast<String, Object?>(), depth + 1, needle);
+    }
+  }
 }
 
 String _toWs(String u) {

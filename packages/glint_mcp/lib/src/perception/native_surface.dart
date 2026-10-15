@@ -55,7 +55,10 @@ class NativeSurface {
   Map<String, Object?> toJson() => {
         'kind': kind.name,
         if (title != null) 'title': title,
-        if (choices.isNotEmpty) 'choices': [for (final c in choices) {'text': c.text, 'id': c.id}],
+        if (choices.isNotEmpty)
+          'choices': [
+            for (final c in choices) {'text': c.text, 'id': c.id}
+          ],
         if (texts.isNotEmpty) 'texts': texts.take(_maxTexts).toList(),
         if (owner != null) 'owner': owner,
       };
@@ -63,11 +66,38 @@ class NativeSurface {
 
 /// Words that label a choice on iOS and Android system dialogs.
 const _choiceLabels = {
-  'allow', "don't allow", 'don’t allow', 'allow once', 'allow while using app', 'allow full access',
-  'limit access…', 'limit access...', 'select photos…', 'select photos...', 'keep current selection',
-  'ok', 'cancel', 'not now', 'settings', 'close', 'continue', 'ask app not to track', 'allow paste',
-  "don't allow paste", 'don’t allow paste', 'open', 'delete', 'done', 'deny', 'only this time',
-  'while using the app', 'allow all', 'no thanks', 'later', 'got it', 'dismiss',
+  'allow',
+  "don't allow",
+  'don’t allow',
+  'allow once',
+  'allow while using app',
+  'allow full access',
+  'limit access…',
+  'limit access...',
+  'select photos…',
+  'select photos...',
+  'keep current selection',
+  'ok',
+  'cancel',
+  'not now',
+  'settings',
+  'close',
+  'continue',
+  'ask app not to track',
+  'allow paste',
+  "don't allow paste",
+  'don’t allow paste',
+  'open',
+  'delete',
+  'done',
+  'deny',
+  'only this time',
+  'while using the app',
+  'allow all',
+  'no thanks',
+  'later',
+  'got it',
+  'dismiss',
 };
 
 final _permissionQuestion = RegExp(
@@ -97,7 +127,8 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
       if (!choices.any((c) => c.id == n.glintId)) n.textPreview!.trim(),
   ];
   final question = texts.where(_permissionQuestion.hasMatch).firstOrNull;
-  final permissionOwner = owner != null && RegExp('permissioncontroller|GrantPermissions', caseSensitive: false).hasMatch(owner);
+  final permissionOwner =
+      owner != null && RegExp('permissioncontroller|GrantPermissions', caseSensitive: false).hasMatch(owner);
   final kind = question != null || permissionOwner
       ? SurfaceKind.permissionPrompt
       : choices.isNotEmpty
@@ -106,7 +137,8 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
               ? SurfaceKind.otherApp
               : SurfaceKind.unknown;
   final title = question ?? texts.where((t) => t.endsWith('?') || t.length > 24).firstOrNull;
-  return NativeSurface(kind: kind, title: title, choices: choices, texts: texts.where((t) => t != title).toList(), owner: owner);
+  return NativeSurface(
+      kind: kind, title: title, choices: choices, texts: texts.where((t) => t != title).toList(), owner: owner);
 }
 
 Iterable<SceneNode> _walk(SceneNode n) sync* {

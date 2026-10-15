@@ -63,10 +63,7 @@ void main() {
   test('exits promptly when the host closes stdin', () async {
     final proc = await spawnServer(tmp);
     final stderrLines = <String>[];
-    final sub = proc.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(stderrLines.add);
+    final sub = proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(stderrLines.add);
 
     await awaitBooted(proc);
     await proc.stdin.close();

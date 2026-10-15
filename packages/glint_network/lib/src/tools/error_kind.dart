@@ -48,7 +48,6 @@ enum ErrorKind {
   final String wire;
 }
 
-
 /// D3 (audit RC5/F26): the VM's id-lookup miss ("Unable to find request
 /// with id", surfaced as a -32602 Invalid params RPC error) means the VM is
 /// HEALTHY and the id is wrong — the opposite diagnosis of a transport
@@ -56,6 +55,5 @@ enum ErrorKind {
 bool looksLikeVmIdMiss(Object? e) {
   if (e == null) return false;
   final s = e.toString();
-  return s.contains('Unable to find request') ||
-      (s.contains('-32602') && s.contains('Invalid params'));
+  return s.contains('Unable to find request') || (s.contains('-32602') && s.contains('Invalid params'));
 }

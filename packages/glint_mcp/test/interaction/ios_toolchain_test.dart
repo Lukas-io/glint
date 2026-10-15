@@ -4,11 +4,9 @@ import 'package:crypto/crypto.dart';
 import 'package:glint_mcp/glint.dart';
 import 'package:test/test.dart';
 
-ProcessRunner _runner(Map<String, ProcessResult> byCommand, {List<String>? calls}) =>
-    (exe, args) async {
+ProcessRunner _runner(Map<String, ProcessResult> byCommand, {List<String>? calls}) => (exe, args) async {
       calls?.add([exe, ...args].join(' '));
-      final key = byCommand.keys.firstWhere(
-          (k) => [exe, ...args].join(' ').startsWith(k),
+      final key = byCommand.keys.firstWhere((k) => [exe, ...args].join(' ').startsWith(k),
           orElse: () => throw ProcessException(exe, args, 'not found'));
       return byCommand[key]!;
     };
@@ -20,19 +18,15 @@ const _xcode26 = {
   'plutil': '26.6\n',
 };
 
-ProcessRunner _xcode(String version, {String bridgeOut = 'glint-iossim 2\n'}) =>
-    _runner({
+ProcessRunner _xcode(String version, {String bridgeOut = 'glint-iossim 2\n'}) => _runner({
       'xcode-select -p': _ok(_xcode26['xcode-select -p']!),
       'plutil': _ok('$version\n'),
       '/bridge version': _ok(bridgeOut),
     });
 
-IosToolchain _toolchain(String? version,
-        {bool found = true, bool allow = false, int? protocol = 2}) =>
-    IosToolchain(
+IosToolchain _toolchain(String? version, {bool found = true, bool allow = false, int? protocol = 2}) => IosToolchain(
       xcode: XcodeInfo(version: version),
-      bridge: BridgeLocation(
-          '/bridge', found ? BridgeSource.build : BridgeSource.missing),
+      bridge: BridgeLocation('/bridge', found ? BridgeSource.build : BridgeSource.missing),
       bridgeProtocol: protocol,
       allowUntested: allow,
     );
@@ -70,8 +64,7 @@ void main() {
     });
 
     test('a bridge without the version command is named as outdated', () async {
-      final h = await bridgeHandshake('/bridge',
-          run: _runner({'/bridge version': ProcessResult(0, 1, '', 'usage')}));
+      final h = await bridgeHandshake('/bridge', run: _runner({'/bridge version': ProcessResult(0, 1, '', 'usage')}));
       expect(h.protocol, isNull);
       expect(h.error, contains('predates'));
     });
@@ -138,14 +131,12 @@ void main() {
         return _ok('');
       },
     );
-    await expectLater(backend.tap(physicalX: 10, physicalY: 10),
-        throwsA(isA<IosToolchainBlocked>()));
+    await expectLater(backend.tap(physicalX: 10, physicalY: 10), throwsA(isA<IosToolchainBlocked>()));
     expect(calls, isEmpty);
   });
 
   test('a blocked action maps to unsupportedToolchain with nextSteps', () {
-    final r = StructuredResponse.toolchainBlocked(
-        IosToolchainBlocked('ios-sim', 'Xcode 28.0 is untested', ['switch']));
+    final r = StructuredResponse.toolchainBlocked(IosToolchainBlocked('ios-sim', 'Xcode 28.0 is untested', ['switch']));
     expect(r.isError, isTrue);
     expect(r.data!['errorKind'], 'unsupportedToolchain');
     expect(r.nextSteps, ['switch']);
@@ -157,10 +148,8 @@ void main() {
     tearDown(() => tmp.deleteSync(recursive: true));
 
     test('explicit path, then the env var', () {
-      expect(locateIosBridge('/x', env: {bridgePathEnv: '/y'}).source,
-          BridgeSource.argument);
-      final fromEnv = locateIosBridge(null,
-          env: {bridgePathEnv: '/y'}, scriptPath: '${tmp.path}/bin/glint.dart');
+      expect(locateIosBridge('/x', env: {bridgePathEnv: '/y'}).source, BridgeSource.argument);
+      final fromEnv = locateIosBridge(null, env: {bridgePathEnv: '/y'}, scriptPath: '${tmp.path}/bin/glint.dart');
       expect((fromEnv.path, fromEnv.source), ('/y', BridgeSource.env));
     });
 
@@ -169,14 +158,12 @@ void main() {
       final release = File('${tmp.path}/$kReleaseBridgePath')..createSync(recursive: true);
       debug.setLastModifiedSync(DateTime(2026));
       release.setLastModifiedSync(DateTime(2025));
-      final found = locateIosBridge(null,
-          env: {'HOME': tmp.path}, scriptPath: '${tmp.path}/bin/glint.dart');
+      final found = locateIosBridge(null, env: {'HOME': tmp.path}, scriptPath: '${tmp.path}/bin/glint.dart');
       expect((found.path, found.source), (debug.path, BridgeSource.build));
     });
 
     test('nothing built points at the versioned cache path', () {
-      final found = locateIosBridge(null,
-          env: {'HOME': tmp.path}, scriptPath: '${tmp.path}/bin/glint.dart');
+      final found = locateIosBridge(null, env: {'HOME': tmp.path}, scriptPath: '${tmp.path}/bin/glint.dart');
       expect(found.source, BridgeSource.missing);
       expect(found.path, '${tmp.path}/.glint/bin/glint-iossim-$glintVersion');
     });
@@ -191,15 +178,10 @@ void main() {
 
     test('downloads, verifies and caches a missing bridge', () async {
       final fetched = <Uri>[];
-      final t = await checkIosToolchain(null,
-          env: {'HOME': home.path},
-          run: _xcode('26.6'),
-          fetch: (uri) async {
-            fetched.add(uri);
-            return uri.path.endsWith('.sha256')
-                ? '${sha256.convert(binary)}  $bridgeAssetName\n'.codeUnits
-                : binary;
-          });
+      final t = await checkIosToolchain(null, env: {'HOME': home.path}, run: _xcode('26.6'), fetch: (uri) async {
+        fetched.add(uri);
+        return uri.path.endsWith('.sha256') ? '${sha256.convert(binary)}  $bridgeAssetName\n'.codeUnits : binary;
+      });
       final cached = File(cachedBridgePath(env: {'HOME': home.path}));
       expect(fetched.last, bridgeReleaseUri());
       expect(cached.readAsBytesSync(), binary);
@@ -211,8 +193,7 @@ void main() {
       final t = await checkIosToolchain(null,
           env: {'HOME': home.path},
           run: _xcode('26.6'),
-          fetch: (uri) async =>
-              uri.path.endsWith('.sha256') ? '${'0' * 64}\n'.codeUnits : binary);
+          fetch: (uri) async => uri.path.endsWith('.sha256') ? '${'0' * 64}\n'.codeUnits : binary);
       expect(File(cachedBridgePath(env: {'HOME': home.path})).existsSync(), isFalse);
       expect(t.blocker, contains('checksum mismatch'));
     });
@@ -227,8 +208,7 @@ void main() {
   });
 
   test('glint and the Swift bridge agree on the protocol number', () {
-    final swift = File('native/ios_sim_bridge/Sources/glint-iossim/main.swift')
-        .readAsStringSync();
+    final swift = File('native/ios_sim_bridge/Sources/glint-iossim/main.swift').readAsStringSync();
     final m = RegExp(r'let bridgeProtocol = (\d+)').firstMatch(swift);
     expect(int.parse(m!.group(1)!), expectedBridgeProtocol);
   });

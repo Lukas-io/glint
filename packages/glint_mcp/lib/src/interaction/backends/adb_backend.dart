@@ -74,8 +74,7 @@ class AdbBackend implements InteractionBackend {
 
   @override
   Future<void> tap({required int physicalX, required int physicalY}) async {
-    if (await _viaServer({'cmd': 'tap', 'x': physicalX, 'y': physicalY}))
-      return;
+    if (await _viaServer({'cmd': 'tap', 'x': physicalX, 'y': physicalY})) return;
     await _shell(['input', 'tap', '$physicalX', '$physicalY']);
   }
 
@@ -87,9 +86,7 @@ class AdbBackend implements InteractionBackend {
     required int physicalY,
     required int durationMs,
   }) async {
-    if (await _viaServer(
-        {'cmd': 'longpress', 'x': physicalX, 'y': physicalY, 'ms': durationMs}))
-      return;
+    if (await _viaServer({'cmd': 'longpress', 'x': physicalX, 'y': physicalY, 'ms': durationMs})) return;
     await _shell([
       'input',
       'swipe',
@@ -134,16 +131,14 @@ class AdbBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> tapSequence(List<({int x, int y})> points,
-          {required int intervalMs}) =>
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) =>
       tapEachInTurn(this, points, intervalMs);
 
   /// Through the server any text types (key events, or the field's text for characters no key makes); `adb shell input` is Latin only.
   @override
   Future<void> typeText(String text, {int? keyDelayMs}) async {
     if (server?.running ?? false) {
-      final chunks =
-          keyDelayMs == null || text.length < 2 ? [text] : text.split('');
+      final chunks = keyDelayMs == null || text.length < 2 ? [text] : text.split('');
       var sent = 0;
       for (final c in chunks) {
         if (!await _viaServer({'cmd': 'text', 'text': c})) break;
@@ -167,14 +162,13 @@ class AdbBackend implements InteractionBackend {
 
   Future<void> _inputText(String text) async {
     for (final chunk in splitLiteralPercentS(text)) {
-      await _shell(
-          ['input', 'text', quoteForDeviceShell(chunk.replaceAll(' ', '%s'))]);
+      await _shell(['input', 'text', quoteForDeviceShell(chunk.replaceAll(' ', '%s'))]);
     }
   }
 
   @override
-  Future<ScreenRecording> startRecording(String path) => AdbRecording.start(
-      adbPath: adbPath, serial: deviceSerial, localPath: path);
+  Future<ScreenRecording> startRecording(String path) =>
+      AdbRecording.start(adbPath: adbPath, serial: deviceSerial, localPath: path);
 
   /// Not read on Android yet; callers fall back to the app lifecycle.
   @override
@@ -190,7 +184,8 @@ class AdbBackend implements InteractionBackend {
   Future<void> warm() async {}
 
   @override
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+  Future<void> pinch(
+          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
       throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
 
   @override
@@ -210,15 +205,9 @@ class AdbBackend implements InteractionBackend {
   }
 
   @override
-  Future<void> pressKey(KeyName key,
-      {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
     final code = key.androidKeyCode;
-    if (await _viaServer({
-      'cmd': 'key',
-      'code': code,
-      'meta': androidMetaState(modifiers),
-      'count': count
-    })) return;
+    if (await _viaServer({'cmd': 'key', 'code': code, 'meta': androidMetaState(modifiers), 'count': count})) return;
     if (modifiers.isEmpty) {
       await _shell(['input', 'keyevent', ...List.filled(count, '$code')]);
       return;
@@ -238,7 +227,9 @@ class AdbBackend implements InteractionBackend {
       'cmd': 'key',
       'code': 29,
       'meta': androidMetaState({KeyModifier.ctrl})
-    })) return;
+    })) {
+      return;
+    }
     await _shell(['input', 'keycombination', '113', '29']); // CTRL_LEFT + A
   }
 

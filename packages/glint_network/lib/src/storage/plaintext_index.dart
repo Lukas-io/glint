@@ -33,7 +33,7 @@ class PlaintextIndex {
 
   /// Forgets everything; the next search rebuilds with the current key.
   void clear() {
-    _db?.dispose();
+    _db?.close();
     _db = null;
     _indexed.clear();
   }
@@ -43,8 +43,10 @@ class PlaintextIndex {
     if (_indexed.remove(sessionId) == null) return;
     final db = _db;
     if (db == null) return;
-    db.execute('DELETE FROM plain_search WHERE rowid IN '
-        '(SELECT rowid FROM plain_map WHERE session_id=?)', [sessionId]);
+    db.execute(
+        'DELETE FROM plain_search WHERE rowid IN '
+        '(SELECT rowid FROM plain_map WHERE session_id=?)',
+        [sessionId]);
     db.execute('DELETE FROM plain_map WHERE session_id=?', [sessionId]);
   }
 
@@ -73,8 +75,7 @@ class PlaintextIndex {
         'SELECT which, bytes FROM http_bodies WHERE session_id=? AND vm_id=?',
         [sessionId, vmId],
       )) {
-        final text = plaintextFor(b['bytes'] as Uint8List?,
-            storedContentType(_row(row), b['which'] as String), scheme);
+        final text = plaintextFor(b['bytes'] as Uint8List?, storedContentType(_row(row), b['which'] as String), scheme);
         if (b['which'] == 'request') {
           request = text;
         } else {
@@ -106,12 +107,9 @@ class PlaintextIndex {
     required String? response,
   }) {
     final db = _mem;
-    final existing = db.select(
-        'SELECT rowid FROM plain_map WHERE session_id=? AND vm_id=?',
-        [sessionId, vmId]);
+    final existing = db.select('SELECT rowid FROM plain_map WHERE session_id=? AND vm_id=?', [sessionId, vmId]);
     if (existing.isNotEmpty) {
-      db.execute('DELETE FROM plain_search WHERE rowid=?',
-          [existing.first['rowid']]);
+      db.execute('DELETE FROM plain_search WHERE rowid=?', [existing.first['rowid']]);
       db.execute('DELETE FROM plain_map WHERE rowid=?', [existing.first['rowid']]);
     }
     db.execute(
@@ -171,8 +169,7 @@ class PlaintextIndex {
       ''',
       [matchExpr, sessionId, if (hasIsolate) isolateId, limit],
     );
-    final meta = CapturesDao()
-        .requestSummaries(sessionId, [for (final h in hits) h['vm_id'] as String]);
+    final meta = CapturesDao().requestSummaries(sessionId, [for (final h in hits) h['vm_id'] as String]);
     return [
       for (final h in hits)
         {

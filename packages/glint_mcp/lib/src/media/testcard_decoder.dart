@@ -124,7 +124,9 @@ class StripReadings {
       [for (var f = 0; f < frames; f++) rowValue(f, StripRow.frame.index)],
       [
         for (var f = 0; f < frames; f++)
-          [for (var i = 0; i < bits; i++) bytes[f * bytesPerFrame + probeRow * bits + i]].reduce((a, b) => a + b) / bits > 160,
+          [for (var i = 0; i < bits; i++) bytes[f * bytesPerFrame + probeRow * bits + i]].reduce((a, b) => a + b) /
+                  bits >
+              160,
       ],
       staticValue(StripRow.total),
       staticValue(StripRow.width),
@@ -191,7 +193,10 @@ class FrameStats {
 
 /// Counts dropped, duplicated and trimmed frames from the indices read off a clip whose card holds [total] frames.
 FrameStats frameStats(List<int> indices, int total) {
-  final valid = [for (final i in indices) if (i >= 0 && i < total) i];
+  final valid = [
+    for (final i in indices)
+      if (i >= 0 && i < total) i
+  ];
   final seen = valid.toSet();
   final first = seen.isEmpty ? 0 : seen.reduce(math.min);
   final last = seen.isEmpty ? 0 : seen.reduce(math.max);

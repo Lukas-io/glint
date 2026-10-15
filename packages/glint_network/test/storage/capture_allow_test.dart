@@ -59,10 +59,8 @@ void main() {
     expect(() => dao.addCaptureAllow('a.com/x'), returnsNormally);
     expect(dao.captureAllowSet(), {'a.com/x'});
     // v11 column is back.
-    final cols = CapturesDatabase.instance.raw
-        .select('PRAGMA table_info(http_requests)')
-        .map((r) => r['name'])
-        .toList();
+    final cols =
+        CapturesDatabase.instance.raw.select('PRAGMA table_info(http_requests)').map((r) => r['name']).toList();
     expect(cols, contains('redirects_json'));
 
     CapturesDatabase.instance.close();

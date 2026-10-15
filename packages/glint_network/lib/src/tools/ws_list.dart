@@ -11,8 +11,7 @@ import 'result.dart';
 
 final wsListTool = Tool(
   name: 'ws_list',
-  description:
-      'Lists the app\'s WebSocket connections: url, state, who closed it and '
+  description: 'Lists the app\'s WebSocket connections: url, state, who closed it and '
       'why, message counts and bytes each way. Read from dart:io\'s own '
       'timeline events, so nothing is added to the app. Metadata only: message '
       'contents are not captured. Needs an app built with Dart 3.13+ (Flutter '
@@ -20,21 +19,17 @@ final wsListTool = Tool(
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
-        description:
-            'Pick the session by app-name substring instead of sessionId.',
+        description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'urlContains': Schema.string(
-        description:
-            'Only connections whose url contains this (case-insensitive).',
+        description: 'Only connections whose url contains this (case-insensitive).',
       ),
       'state': Schema.string(
-        description:
-            'Only connections in this state: connecting, open, closed, failed '
+        description: 'Only connections in this state: connecting, open, closed, failed '
             '(the connect itself failed) or error.',
       ),
       'limit': Schema.int(
@@ -51,19 +46,15 @@ FutureOr<CallToolResult> wsList(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final state = args['state'] as String?;
   if (state != null && !wsStates.contains(state)) {
-    return errorResult('`state` must be one of ${wsStates.join(', ')}.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': ['Retry with a valid state, or omit it'],
-        });
+    return errorResult('`state` must be one of ${wsStates.join(', ')}.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': ['Retry with a valid state, or omit it'],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
   scope!;
 
-  final attached = scope.isLive
-      ? SessionRegistry.instance.attachedById(scope.sessionId)
-      : null;
+  final attached = scope.isLive ? SessionRegistry.instance.attachedById(scope.sessionId) : null;
   await attached?.captureWriter.refreshWebSockets();
 
   final urlContains = args['urlContains'] as String?;
@@ -77,15 +68,13 @@ FutureOr<CallToolResult> wsList(CallToolRequest request) async {
       limit: limit,
     );
   } catch (e) {
-    return errorResult('ws_list query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': scope.sessionId,
-          'nextSteps': const [
-            'session_list - confirm the session id',
-            'network_status - check attach state',
-          ],
-        });
+    return errorResult('ws_list query failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': scope.sessionId,
+      'nextSteps': const [
+        'session_list - confirm the session id',
+        'network_status - check attach state',
+      ],
+    });
   }
 
   final connections = [for (final r in rows) wsConnectionJson(r)];
@@ -176,10 +165,8 @@ Map<String, Object?> wsConnectionJson(Map<String, Object?> r) {
     if ((r['uri_inferred'] as int? ?? 0) == 1) 'uriInferred': true,
     'state': r['state'],
     if (startedUs != null) 'startedMs': startedUs ~/ 1000,
-    if (connectUs != null && openedUs != null)
-      'connectMs': (openedUs - connectUs) ~/ 1000,
-    if (startedUs != null && endUs != null && endUs >= startedUs)
-      'durationMs': (endUs - startedUs) ~/ 1000,
+    if (connectUs != null && openedUs != null) 'connectMs': (openedUs - connectUs) ~/ 1000,
+    if (startedUs != null && endUs != null && endUs >= startedUs) 'durationMs': (endUs - startedUs) ~/ 1000,
     'sent': r['sent'] ?? 0,
     'received': r['received'] ?? 0,
     'bytesSent': r['bytes_sent'] ?? 0,

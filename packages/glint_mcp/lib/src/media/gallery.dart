@@ -38,7 +38,8 @@ class MediaDevice {
   Future<HostRun> simctl(List<String> args, {Duration timeout = const Duration(minutes: 2)}) =>
       runHost('xcrun', ['simctl', ...args], timeout: timeout);
 
-  String get photosDb => '${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$id/data/Media/PhotoData/Photos.sqlite';
+  String get photosDb =>
+      '${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$id/data/Media/PhotoData/Photos.sqlite';
   String get dcimDir => '${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$id/data/Media/DCIM';
 }
 
@@ -85,12 +86,15 @@ class Gallery {
     final sqlite = findHostBinary('sqlite3');
     if (sqlite == null) return null;
     for (var attempt = 0; attempt < 10; attempt++) {
-      final run = await runHost(sqlite, [
-        '-readonly',
-        device.photosDb,
-        "select a.ZUUID, a.ZDIRECTORY || '/' || a.ZFILENAME from ZASSET a join ZADDITIONALASSETATTRIBUTES b on b.ZASSET = a.Z_PK "
-            "where b.ZORIGINALFILENAME = '${originalFile.replaceAll("'", "''")}' and a.ZTRASHEDSTATE = 0 order by a.Z_PK desc limit 1",
-      ], timeout: const Duration(seconds: 10));
+      final run = await runHost(
+          sqlite,
+          [
+            '-readonly',
+            device.photosDb,
+            "select a.ZUUID, a.ZDIRECTORY || '/' || a.ZFILENAME from ZASSET a join ZADDITIONALASSETATTRIBUTES b on b.ZASSET = a.Z_PK "
+                "where b.ZORIGINALFILENAME = '${originalFile.replaceAll("'", "''")}' and a.ZTRASHEDSTATE = 0 order by a.Z_PK desc limit 1",
+          ],
+          timeout: const Duration(seconds: 10));
       final parts = run.text.trim().split('|');
       if (run.ok && parts.length == 2) return (uuid: parts[0], path: parts[1]);
       await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -104,19 +108,25 @@ class Gallery {
     final exists = await device.adb(['shell', 'ls', path]);
     if (exists.ok) {
       throw GalleryError('$path already exists on the device', 'glint never overwrites a file it did not just create',
-          nextSteps: const ['pass another name:', '`media op:seed clear:true` first if glint seeded that file earlier']);
+          nextSteps: const [
+            'pass another name:',
+            '`media op:seed clear:true` first if glint seeded that file earlier'
+          ]);
     }
     final push = await device.adb(['push', staged.path, path]);
     if (!push.ok) throw GalleryError('adb push failed', push.errTail());
     await _scan(path);
-    return SeededAsset(name: name, kind: kind, file: file, sizeBytes: staged.lengthSync(), addedAt: DateTime.now(), devicePath: path);
+    return SeededAsset(
+        name: name, kind: kind, file: file, sizeBytes: staged.lengthSync(), addedAt: DateTime.now(), devicePath: path);
   }
 
   /// Has MediaStore index [path] (or forget it when the file is gone) through the scan_file provider call.
   Future<void> _scan(String path) async {
-    final scan = await device.adb(['shell', 'content', 'call', '--uri', 'content://media/external/file', '--method', 'scan_file', '--arg', path]);
+    final scan = await device.adb(
+        ['shell', 'content', 'call', '--uri', 'content://media/external/file', '--method', 'scan_file', '--arg', path]);
     if (scan.ok) return;
-    final broadcast = await device.adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://$path']);
+    final broadcast = await device
+        .adb(['shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', 'file://$path']);
     if (!broadcast.ok) throw GalleryError('MediaStore did not index $path', scan.errTail());
   }
 

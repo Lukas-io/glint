@@ -22,13 +22,11 @@ class ActionScene {
 /// Reads once and, when [snapshot] is set, semanticizes that same read for the
 /// pre-action baseline. Replaces the old read-for-snapshot + read-for-action
 /// pair every gesture paid.
-Future<ActionScene> openActionScene(GlintSession session,
-    {required bool snapshot}) async {
+Future<ActionScene> openActionScene(GlintSession session, {required bool snapshot}) async {
   final scene = await session.reader.readSummary();
   if (!snapshot) return ActionScene(scene: scene);
   try {
-    final semantic =
-        await session.semanticize(scene, detail: SceneDetail.interactive);
+    final semantic = await session.semanticize(scene, detail: SceneDetail.interactive);
     return ActionScene(
       scene: scene,
       semantic: semantic,
@@ -53,16 +51,13 @@ Future<StructuredResponse> appendPostAction(
   required bool fetchScene,
 }) async {
   if (!returnScene || response.isError) return response;
-  final post =
-      await readPostActionState(session, pre, includeSceneText: fetchScene);
+  final post = await readPostActionState(session, pre, includeSceneText: fetchScene);
   if (post == null) return response;
   final merged = response.mergeData(post.toData()).addWarnings([if (post.note != null) post.note!]);
   final shot = post.screenshot;
   if (shot == null || (post.surface?.hasContent ?? false)) return merged;
   final sent = await session.modelImage(shot);
-  return merged
-      .mergeData({'coordinates': sent.coordinates})
-      .copyWith(imagePaths: [sent.image.path]);
+  return merged.mergeData({'coordinates': sent.coordinates}).copyWith(imagePaths: [sent.image.path]);
 }
 
 /// Lightweight snapshot of observable scene state for change detection.
@@ -88,8 +83,7 @@ class SceneSnapshot {
   /// plus overlay content — a deep change (tab swap, text edit, toggle flip)
   /// must register, not just top-level structure.
   factory SceneSnapshot.from(SemanticScene scene) {
-    final route =
-        scene.routeStack.isEmpty ? '' : scene.routeStack.first.name;
+    final route = scene.routeStack.isEmpty ? '' : scene.routeStack.first.name;
     final hasOverlay = scene.overlayLayers.isNotEmpty;
     var hash = 0;
     void mix(String s) {
@@ -303,13 +297,10 @@ Future<PostActionState?> readPostActionState(
               changed: category != 'nothing',
               changeCategory: category,
               state: const StateObserver().observe(semantic).name,
-              sceneText: includeSceneText
-                  ? const PlainTextSceneRenderer().render(semantic)
-                  : null,
+              sceneText: includeSceneText ? const PlainTextSceneRenderer().render(semantic) : null,
               scrolledPx: scrollAnchor == null
                   ? null
-                  : await _anchorDisplacement(
-                      session, semantic, scrollAnchor, horizontalScroll),
+                  : await _anchorDisplacement(session, semantic, scrollAnchor, horizontalScroll),
             );
           },
           detail: includeSceneText ? SceneDetail.full : SceneDetail.interactive,
@@ -390,15 +381,13 @@ Future<void> _awaitNativeGone(AppSession app) async {
 /// How far [anchor] moved along the scroll axis, or null when it is gone or
 /// no longer resolvable (e.g. scrolled off a lazy list — the tree-hash
 /// detector catches that case instead).
-Future<double?> _anchorDisplacement(GlintSession session, SemanticScene semantic,
-    ScrollAnchor anchor, bool horizontal) async {
+Future<double?> _anchorDisplacement(
+    GlintSession session, SemanticScene semantic, ScrollAnchor anchor, bool horizontal) async {
   final scene = semantic.sourceScene;
   if (scene.findByGlintId(anchor.glintId) == null) return null;
   try {
     final c = await session.resolver.resolve(scene, anchor.glintId);
-    return horizontal
-        ? (c.logicalCenter.x - anchor.x).abs()
-        : (c.logicalCenter.y - anchor.y).abs();
+    return horizontal ? (c.logicalCenter.x - anchor.x).abs() : (c.logicalCenter.y - anchor.y).abs();
   } on Object {
     return null;
   }

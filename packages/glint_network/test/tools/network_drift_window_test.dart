@@ -37,8 +37,7 @@ void main() {
     CapturesDatabase.instance.raw.execute(
       'INSERT INTO http_requests(session_id, vm_id, method, url, host, path, '
       'status_code, content_type, start_us) VALUES (?,?,?,?,?,?,?,?,?)',
-      [sid, vmId, 'GET', 'https://api.x/profile', 'api.x', '/profile', 200,
-        'application/json', startUs],
+      [sid, vmId, 'GET', 'https://api.x/profile', 'api.x', '/profile', 200, 'application/json', startUs],
     );
     final bytes = Uint8List.fromList(utf8.encode(jsonEncode(body)));
     CapturesDatabase.instance.raw.execute(

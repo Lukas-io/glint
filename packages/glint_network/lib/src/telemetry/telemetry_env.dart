@@ -24,5 +24,4 @@ String? shortCommit() {
 }
 
 /// POSTs [jsonStr] to the collector as glint_network; callers check `kCollectorEndpoint.isNotEmpty` first and swallow failures.
-Future<int> postTelemetry(String jsonStr) =>
-    postToCollector(jsonStr, userAgent: kTelemetryUserAgent);
+Future<int> postTelemetry(String jsonStr) => postToCollector(jsonStr, userAgent: kTelemetryUserAgent);

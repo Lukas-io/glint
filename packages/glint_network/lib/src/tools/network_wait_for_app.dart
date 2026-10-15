@@ -9,8 +9,7 @@ import 'result.dart';
 
 final networkWaitForAppTool = Tool(
   name: 'network_wait_for_app',
-  description:
-      'Block until a Flutter app registers with DTD, then attach to it and '
+  description: 'Block until a Flutter app registers with DTD, then attach to it and '
       'return the attach result. Use when an app is still starting: '
       'network_status returns immediately with nothing, and the VM service '
       'auth token cannot be recovered from lsof to attach by hand. timeoutMs '
@@ -23,8 +22,7 @@ final networkWaitForAppTool = Tool(
         description: 'How long to wait, in ms (1000-300000). Default 30000.',
       ),
       'appNameContains': Schema.string(
-        description:
-            'Attach only an app whose name contains this (case-insensitive). '
+        description: 'Attach only an app whose name contains this (case-insensitive). '
             'Pass it when several apps may register at once.',
       ),
     },
@@ -121,8 +119,7 @@ FutureOr<CallToolResult> networkWaitForApp(
       if (last['error'] != null) 'lastAttempt': last['error'],
       'nextSteps': [
         'launch the app, or check it is not crashing on start',
-        if (needle == null)
-          'if several apps may run, pass appNameContains to disambiguate',
+        if (needle == null) 'if several apps may run, pass appNameContains to disambiguate',
         'network_status — see what DTD reports right now',
       ],
     },
@@ -147,8 +144,7 @@ Future<Map<String, Object?>> _attachSoleApp(String? defaultDtdUri) async {
         for (final a in apps) {'name': a.name, 'uri': a.uri},
       ],
       'nextSteps': [
-        for (final a in apps)
-          'network_wait_for_app appNameContains:"${a.name ?? a.uri}"',
+        for (final a in apps) 'network_wait_for_app appNameContains:"${a.name ?? a.uri}"',
       ],
     };
   }

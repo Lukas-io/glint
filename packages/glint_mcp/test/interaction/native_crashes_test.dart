@@ -23,7 +23,8 @@ void main() {
 2026-09-27 16:40:12.346  1234  1234 E AndroidRuntime: 	at android.app.Activity.performCreate(Activity.java:8000)
 ''';
       final crash = parseAndroidCrashes(log, package: 'com.example.ember').single;
-      expect(crash.line, 'java.lang.IllegalStateException: boom at com.example.ember.MainActivity.onCreate(MainActivity.kt:12)');
+      expect(crash.line,
+          'java.lang.IllegalStateException: boom at com.example.ember.MainActivity.onCreate(MainActivity.kt:12)');
       expect(crash.time, DateTime(2026, 9, 27, 16, 40, 12, 345));
     });
   });

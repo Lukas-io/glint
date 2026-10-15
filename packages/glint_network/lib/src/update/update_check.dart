@@ -61,8 +61,7 @@ class UpdateCheck {
           '(Silence with GLINT_NETWORK_NO_UPDATE_CHECK=true.)',
         );
       }
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   static bool _alreadyCheckedToday(io.File cacheFile) {
@@ -72,9 +71,7 @@ class UpdateCheck {
       final last = DateTime.tryParse(raw);
       if (last == null) return false;
       final now = DateTime.now().toUtc();
-      return last.year == now.year &&
-          last.month == now.month &&
-          last.day == now.day;
+      return last.year == now.year && last.month == now.month && last.day == now.day;
     } catch (_) {
       return false;
     }
@@ -131,13 +128,10 @@ class UpdateCheck {
       ..connectionTimeout = _connectTimeout
       ..userAgent = 'glint_network-update-check';
     try {
-      final request = await client
-          .getUrl(Uri.parse(_latestUrl))
-          .timeout(_connectTimeout);
+      final request = await client.getUrl(Uri.parse(_latestUrl)).timeout(_connectTimeout);
       final response = await request.close().timeout(_totalTimeout);
       if (response.statusCode != 200) return null;
-      final body =
-          await response.transform(utf8.decoder).join().timeout(_totalTimeout);
+      final body = await response.transform(utf8.decoder).join().timeout(_totalTimeout);
       return _latestVersion(body);
     } catch (_) {
       return null;
@@ -162,8 +156,7 @@ class UpdateCheck {
   /// Public read-time re-verification seam: network_status uses this to
   /// suppress a stale `.update-status.json` claim after an upgrade (the
   /// daily cache blocks a rewrite until tomorrow).
-  static bool isNewerVersion(String upstream, String current) =>
-      _isNewer(upstream, current);
+  static bool isNewerVersion(String upstream, String current) => _isNewer(upstream, current);
 
   static bool _isNewer(String upstream, String current) {
     final u = _parseTriple(upstream);

@@ -44,7 +44,10 @@ class ReadinessGate {
             stableSince = DateTime.now();
           }
           suggestions = suggestIds(
-            [for (final n in scene.root.walk()) if (n.glintId != null && !n.isOffstage) n.glintId!],
+            [
+              for (final n in scene.root.walk())
+                if (n.glintId != null && !n.isOffstage) n.glintId!
+            ],
             glintId,
           );
           final stableMs = DateTime.now().difference(stableSince!).inMilliseconds;

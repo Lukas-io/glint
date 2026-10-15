@@ -9,8 +9,7 @@ import 'package:test/test.dart';
 void main() {
   setUp(SessionFilters.resetForTest);
 
-  CallToolRequest req([Map<String, Object?>? args]) =>
-      CallToolRequest(name: 'session_configure', arguments: args);
+  CallToolRequest req([Map<String, Object?>? args]) => CallToolRequest(name: 'session_configure', arguments: args);
 
   group('SessionFilters state', () {
     test('starts empty', () {

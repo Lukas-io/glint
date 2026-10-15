@@ -17,8 +17,7 @@ class LongPressTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'long_press',
-        description:
-            'Long-press a node by glintId or visible text, OR pass x,y for raw coordinates '
+        description: 'Long-press a node by glintId or visible text, OR pass x,y for raw coordinates '
             '(device mode: screenshot pixels; flutter mode: logical points). '
             "Default duration 800ms, past Flutter's 500ms long-press threshold. "
             'Supports awaitReady / readyTimeoutMs to gate on the target '
@@ -29,7 +28,8 @@ class LongPressTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'text': Schema.string(
-              description: 'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
+              description:
+                  'Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates.',
             ),
             'glintId': Schema.string(
               description: 'Stable id from get_scene.',
@@ -40,27 +40,23 @@ class LongPressTool extends GlintTool {
               description: 'Hold time in ms. Default 800.',
             ),
             'awaitReady': Schema.bool(
-              description:
-                  'Wait until the target is on screen and hittable, then act. Default false.',
+              description: 'Wait until the target is on screen and hittable, then act. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
               description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = argInt(args, 'durationMs') ?? 800;
     final t = readTargetedArgs(args, session.config);
@@ -75,8 +71,8 @@ class LongPressTool extends GlintTool {
       );
     }
 
-    final native = await resolveNativeTarget(session,
-        glintId: args['glintId'] as String?, text: args['text'] as String?);
+    final native =
+        await resolveNativeTarget(session, glintId: args['glintId'] as String?, text: args['text'] as String?);
     if (native != null) {
       final hit = native.hit;
       if (hit == null) return native.error!;

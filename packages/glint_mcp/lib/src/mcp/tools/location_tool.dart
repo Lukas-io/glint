@@ -17,7 +17,20 @@ import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 
-const _ops = ['set', 'get', 'clear', 'route', 'pause', 'resume', 'stop', 'seek', 'wait', 'permission', 'services', 'answer'];
+const _ops = [
+  'set',
+  'get',
+  'clear',
+  'route',
+  'pause',
+  'resume',
+  'stop',
+  'seek',
+  'wait',
+  'permission',
+  'services',
+  'answer'
+];
 const _waits = ['arrived', 'progress', 'waypoint', 'near'];
 const _feeding = {'set', 'route', 'seek', 'resume'};
 
@@ -39,28 +52,39 @@ class LocationTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: _ops.join(' | ')),
-            'device': Schema.string(description: 'Simulator UDID, iPhone UDID or emulator serial. Default: the attached device.'),
+            'device': Schema.string(
+                description: 'Simulator UDID, iPhone UDID or emulator serial. Default: the attached device.'),
             'at': Schema.string(description: 'set: "lat,lng" in degrees, e.g. "6.5244,3.3792".'),
             'heading': Schema.num(description: 'set: compass heading in degrees (Android only).'),
             'points': Schema.list(description: 'route: waypoints as "lat,lng" strings, in order.'),
             'file': Schema.string(description: 'route: a host GPX or KML file.'),
             'polyline': Schema.string(description: 'route: a Google encoded polyline, as directions APIs return.'),
-            'speedKmh': Schema.num(description: 'route: travel speed. Default 30. set: the reported speed (Android only).'),
-            'durationSec': Schema.num(description: 'route: travel the whole route in this many seconds instead of at speedKmh.'),
-            'intervalMs': Schema.int(description: 'route: time between fixes. Default 1000; at least 500 on the iOS simulator, 2000 on an iPhone.'),
+            'speedKmh':
+                Schema.num(description: 'route: travel speed. Default 30. set: the reported speed (Android only).'),
+            'durationSec':
+                Schema.num(description: 'route: travel the whole route in this many seconds instead of at speedKmh.'),
+            'intervalMs': Schema.int(
+                description:
+                    'route: time between fixes. Default 1000; at least 500 on the iOS simulator, 2000 on an iPhone.'),
             'loop': Schema.bool(description: 'route: start over at the end instead of stopping.'),
             'jitterM': Schema.num(description: 'route: GPS noise, about this many meters. Default 0.'),
             'dropout': Schema.num(description: 'route: share of fixes lost, 0 to 1. Default 0.'),
             'progress': Schema.num(description: 'seek, or route start: 0 to 1 along the route.'),
             'meters': Schema.num(description: 'seek: meters along the route.'),
             'waypoint': Schema.int(description: 'seek: waypoint index, 0 = start.'),
-            'value': Schema.string(description: 'permission: whileUsing | always | approximate | deny | reset. services: on | off.'),
+            'value': Schema.string(
+                description: 'permission: whileUsing | always | approximate | deny | reset. services: on | off.'),
             'choice': Schema.string(description: 'answer: whileUsing | once | deny | always | keepWhileUsing.'),
-            'precise': Schema.bool(description: 'answer: pick precise (true) or approximate (false) location first, where the prompt offers it.'),
+            'precise': Schema.bool(
+                description:
+                    'answer: pick precise (true) or approximate (false) location first, where the prompt offers it.'),
             'appId': Schema.string(description: 'permission: bundle id or package. Default: the attached app.'),
-            'until': Schema.string(description: 'wait: ${_waits.join(' | ')} (with progress, waypoint, or at and withinM). Default arrived; omit with text alone to wait for the app.'),
+            'until': Schema.string(
+                description:
+                    'wait: ${_waits.join(' | ')} (with progress, waypoint, or at and withinM). Default arrived; omit with text alone to wait for the app.'),
             'withinM': Schema.num(description: 'wait until:near: meters from at. Default 50.'),
-            'text': Schema.string(description: 'wait: text the attached app must also show (case-insensitive), e.g. "Driver arrived".'),
+            'text': Schema.string(
+                description: 'wait: text the attached app must also show (case-insensitive), e.g. "Driver arrived".'),
             'timeoutSec': Schema.num(description: 'wait: give up after this long. Default 120, max 600.'),
           },
           required: ['op'],
@@ -109,11 +133,14 @@ class LocationTool extends GlintTool {
       );
     } on PermissionRefused catch (e) {
       return StructuredResponse.error(
-        summary: e.unknownApp ? '${args['appId'] ?? app} is not installed on ${backend.label}' : 'the device refused the permission change',
+        summary: e.unknownApp
+            ? '${args['appId'] ?? app} is not installed on ${backend.label}'
+            : 'the device refused the permission change',
         errorKind: e.notDeclared || e.unknownApp ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
         detail: e.detail,
         nextSteps: [
-          if (e.notDeclared) 'the app must declare the permission in its AndroidManifest.xml; this is an app bug or a missing feature',
+          if (e.notDeclared)
+            'the app must declare the permission in its AndroidManifest.xml; this is an app bug or a missing feature',
           if (e.unknownApp) 'pass appId:"<the installed package>"',
         ],
       );
@@ -131,9 +158,11 @@ class LocationTool extends GlintTool {
   }
 
   StructuredResponse _bad(String summary, {String? detail, List<String> nextSteps = const []}) =>
-      StructuredResponse.error(summary: summary, errorKind: GlintErrorKind.invalidArgument, detail: detail, nextSteps: nextSteps);
+      StructuredResponse.error(
+          summary: summary, errorKind: GlintErrorKind.invalidArgument, detail: detail, nextSteps: nextSteps);
 
-  Future<LocationBackend?> _backend(GlintSession session, Map<String, Object?> args, List<StructuredResponse> failure) async {
+  Future<LocationBackend?> _backend(
+      GlintSession session, Map<String, Object?> args, List<StructuredResponse> failure) async {
     final given = (args['device'] as String?)?.trim();
     final attached = session.isAttached ? session.device : null;
     final id = given != null && given.isNotEmpty ? given : attached?.id;
@@ -162,7 +191,8 @@ class LocationTool extends GlintTool {
       failure.add(StructuredResponse.error(
         summary: 'location simulation works on Android emulators, not physical Android phones',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'a phone takes mock locations only from an app selected as its mock location app, and glint installs nothing',
+        detail:
+            'a phone takes mock locations only from an app selected as its mock location app, and glint installs nothing',
         nextSteps: const ['run the flow on an Android emulator', 'or use an iOS simulator or a paired iPhone'],
       ));
       return null;
@@ -232,15 +262,18 @@ class LocationTool extends GlintTool {
     final s = await backend.signals(app);
     final access = await _access(backend, app);
     final background = lifecycle == 'paused' || lifecycle == 'hidden' || lifecycle == 'suspended';
-    final capable = app == null || backend is IosDeviceLocation ? null : await readBackgroundCapable(_mediaDevice(backend), app);
+    final capable =
+        app == null || backend is IosDeviceLocation ? null : await readBackgroundCapable(_mediaDevice(backend), app);
     final warnings = [
       if (background && backend is IosSimulatorLocation && !(capable == true && access == 'always'))
         '$app is in the background${lifecycle == 'suspended' ? ' and suspended' : ''}, where iOS gives it no fixes: that needs the `location` background mode (${capable == true ? 'it has it' : 'it has none'}) and always access (it has ${access ?? 'unknown'})',
       if (background && backend is AndroidEmulatorLocation && s.listening == false)
         '$app is in the background and holds no location request, so it gets no fixes until it is back in front${capable == true ? '' : ' (it does not declare ACCESS_BACKGROUND_LOCATION)'}',
       if (s.servicesOn == false) 'location services are off on ${backend.label}: apps get no position at all',
-      if (access == 'denied') '$app is denied location: it sees no fix; `location op:permission value:whileUsing`, or answer its prompt',
-      if (access == 'notAsked') '$app has not been asked for location yet: it sees no fix until it asks and gets an answer (`location op:answer`)',
+      if (access == 'denied')
+        '$app is denied location: it sees no fix; `location op:permission value:whileUsing`, or answer its prompt',
+      if (access == 'notAsked')
+        '$app has not been asked for location yet: it sees no fix until it asks and gets an answer (`location op:answer`)',
       if (s.listening == false && access != 'denied' && access != 'notAsked')
         '$app has no live location request yet: it shows the fix once it asks (is the screen that tracks location open?)',
     ];
@@ -258,12 +291,18 @@ class LocationTool extends GlintTool {
 
   Future<StructuredResponse> _permission(LocationBackend backend, Map<String, Object?> args, String? app) async {
     final value = args['value'] as String?;
-    if (!locationAccessValues.contains(value)) return _bad('permission needs value: ${locationAccessValues.join(' | ')}; got ${value ?? 'nothing'}');
+    if (!locationAccessValues.contains(value)) {
+      return _bad('permission needs value: ${locationAccessValues.join(' | ')}; got ${value ?? 'nothing'}');
+    }
     if (backend is IosDeviceLocation) {
-      return StructuredResponse.notOnThisDevice(Ability.locationPermission, iphoneAbilities.gaps[Ability.locationPermission]!);
+      return StructuredResponse.notOnThisDevice(
+          Ability.locationPermission, iphoneAbilities.gaps[Ability.locationPermission]!);
     }
     final appId = (args['appId'] as String?) ?? app;
-    if (appId == null) return _bad('no app to set location permission for', nextSteps: const ['attach the app, or pass appId:"<bundle id or package>"']);
+    if (appId == null) {
+      return _bad('no app to set location permission for',
+          nextSteps: const ['attach the app, or pass appId:"<bundle id or package>"']);
+    }
     final before = await _access(backend, appId);
     final done = await setLocationAccess(_mediaDevice(backend), appId, value!);
     final now = await _access(backend, appId);
@@ -271,7 +310,8 @@ class LocationTool extends GlintTool {
       summary: '$appId location permission on ${backend.label}: ${before ?? 'unknown'} -> ${now ?? value}',
       warnings: [if (done.caution != null) done.caution!],
       nextSteps: [
-        if (value == 'reset') 'make the app ask again (its own button, or `hot_reload restart:true`), then `location op:answer`',
+        if (value == 'reset')
+          'make the app ask again (its own button, or `hot_reload restart:true`), then `location op:answer`',
         if (value != 'reset') 'get_scene to see how the app reacts',
       ],
       data: {'device': backend.id, 'appId': appId, 'before': before, 'permission': now, 'applied': done.applied},
@@ -300,14 +340,16 @@ class LocationTool extends GlintTool {
     return StructuredResponse(
       summary: '${backend.label}: location services are now $value',
       warnings: [
-        if (value == 'off') 'Google Play services may put a "turn on location" dialog over the app the next time it asks; get_scene shows it',
+        if (value == 'off')
+          'Google Play services may put a "turn on location" dialog over the app the next time it asks; get_scene shows it',
       ],
       nextSteps: const ['get_scene to see how the app reacts'],
       data: {'device': backend.id, 'servicesOn': value == 'on'},
     );
   }
 
-  Future<StructuredResponse> _wait(GlintSession session, CallToolRequest request, LocationBackend backend, Map<String, Object?> args) async {
+  Future<StructuredResponse> _wait(
+      GlintSession session, CallToolRequest request, LocationBackend backend, Map<String, Object?> args) async {
     final text = (args['text'] as String?)?.trim();
     final until = args['until'] as String? ?? (text != null && text.isNotEmpty ? null : 'arrived');
     if (until != null && !_waits.contains(until)) return _bad('until must be ${_waits.join(', ')}; got $until');
@@ -317,7 +359,9 @@ class LocationTool extends GlintTool {
     final waypoint = argInt(args, 'waypoint');
     final target = _parsePoint(args['at']);
     final withinM = argNum(args, 'withinM') ?? 50;
-    if (until == 'progress' && (progress == null || progress < 0 || progress > 1)) return _bad('until:progress needs progress 0 to 1');
+    if (until == 'progress' && (progress == null || progress < 0 || progress > 1)) {
+      return _bad('until:progress needs progress 0 to 1');
+    }
     if (until == 'waypoint' && waypoint == null) return _bad('until:waypoint needs waypoint');
     if (until == 'near' && target == null) return _bad('until:near needs at:"lat,lng"');
     final registry = LocationRegistry.instance;
@@ -346,7 +390,8 @@ class LocationTool extends GlintTool {
           'arrived' => player!.state == RouteState.finished || player.laps > lapsAtStart,
           'progress' => player!.fraction >= progress!,
           'waypoint' => player!.meters >= player.path.metersAtWaypoint(waypoint!) - 1,
-          'near' => registry.lastFix(backend.id) != null && distanceMeters(registry.lastFix(backend.id)!.at, target!) <= withinM,
+          'near' => registry.lastFix(backend.id) != null &&
+              distanceMeters(registry.lastFix(backend.id)!.at, target!) <= withinM,
           _ => true,
         };
     final sink = _progressSink(session, request);
@@ -389,7 +434,8 @@ class LocationTool extends GlintTool {
       ].join('; '),
       nextSteps: [
         if (located && watching) 'get_scene to see what the app shows instead',
-        if (!located && player != null) '`location op:get` for progress; a longer timeoutSec, or `location op:seek` closer',
+        if (!located && player != null)
+          '`location op:get` for progress; a longer timeoutSec, or `location op:seek` closer',
       ],
     );
   }
@@ -409,12 +455,16 @@ class LocationTool extends GlintTool {
     final token = request.meta?.progressToken;
     final notifier = session.progressNotifier;
     if (token == null || notifier == null) return null;
-    return (sec, phase) => notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
+    return (sec, phase) =>
+        notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
   }
 
-  Future<StructuredResponse> _answer(GlintSession session, LocationBackend backend, Map<String, Object?> args, String? app) async {
+  Future<StructuredResponse> _answer(
+      GlintSession session, LocationBackend backend, Map<String, Object?> args, String? app) async {
     final choice = args['choice'] as String?;
-    if (!locationAnswers.containsKey(choice)) return _bad('answer needs choice: ${locationAnswers.keys.join(' | ')}; got ${choice ?? 'nothing'}');
+    if (!locationAnswers.containsKey(choice)) {
+      return _bad('answer needs choice: ${locationAnswers.keys.join(' | ')}; got ${choice ?? 'nothing'}');
+    }
     final active = session.isAttached && session.device.id == backend.id ? session.active : null;
     final reader = session.nativeReader;
     if (active == null || reader == null) {
@@ -429,7 +479,10 @@ class LocationTool extends GlintTool {
         summary: 'glint cannot read the iOS location prompt on this attach',
         errorKind: GlintErrorKind.unsupportedBackendAction,
         detail: 'the prompt belongs to the system, and only the XCUITest runner can read it',
-        nextSteps: const ['attach iosBackend:"xctest", then answer', 'or set it without a prompt: `location op:permission`'],
+        nextSteps: const [
+          'attach iosBackend:"xctest", then answer',
+          'or set it without a prompt: `location op:permission`'
+        ],
       );
     }
     await active.refreshSceneMode();
@@ -440,7 +493,8 @@ class LocationTool extends GlintTool {
         summary: surface == null ? 'no system prompt is open' : '$surface is open, but it is not a location prompt',
         errorKind: GlintErrorKind.targetNotFound,
         nextSteps: [
-          if (surface == null) 'make the app ask for location (its own button, or `hot_reload restart:true`), then answer',
+          if (surface == null)
+            'make the app ask for location (its own button, or `hot_reload restart:true`), then answer',
           if (surface != null) 'get_scene to see it and answer it with tap',
           'or set it without a prompt: `location op:permission`',
         ],
@@ -451,12 +505,14 @@ class LocationTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'the prompt offers no "$choice"',
         errorKind: GlintErrorKind.targetNotFound,
-        detail: 'it asks "${prompt.title}" and offers: ${prompt.answers.entries.map((e) => '${e.key} ("${e.value.label}")').join(', ')}',
+        detail:
+            'it asks "${prompt.title}" and offers: ${prompt.answers.entries.map((e) => '${e.key} ("${e.value.label}")').join(', ')}',
         nextSteps: [for (final k in prompt.answers.keys) 'choice:"$k"'],
       );
     }
     final dpr = session.device.devicePixelRatio;
-    Future<void> tap(PromptButton b) => session.backend.tap(physicalX: (b.x * dpr).round(), physicalY: (b.y * dpr).round());
+    Future<void> tap(PromptButton b) =>
+        session.backend.tap(physicalX: (b.x * dpr).round(), physicalY: (b.y * dpr).round());
     final precise = argBool(args, 'precise');
     final warnings = <String>[];
     if (precise != null) {
@@ -474,17 +530,27 @@ class LocationTool extends GlintTool {
     final closed = active.nativeSurfaceName == null;
     final now = await _access(backend, app);
     return StructuredResponse(
-      summary: 'answered "${button.label}"${precise == null || prompt.precision.isEmpty ? '' : ' (${precise ? 'precise' : 'approximate'})'}'
+      summary:
+          'answered "${button.label}"${precise == null || prompt.precision.isEmpty ? '' : ' (${precise ? 'precise' : 'approximate'})'}'
           '${closed ? '; the prompt closed' : '; a system surface is still open'}${now == null ? '' : '; $app permission: $now'}',
       warnings: [...warnings, if (!closed) 'something is still over the app: a follow-up prompt, or the tap missed'],
       nextSteps: [closed ? 'get_scene to see how the app reacts' : 'get_scene to see what is open'],
-      data: {'device': backend.id, 'answered': button.label, 'promptClosed': closed, if (now != null) 'permission': now},
+      data: {
+        'device': backend.id,
+        'answered': button.label,
+        'promptClosed': closed,
+        if (now != null) 'permission': now
+      },
     );
   }
 
-  Future<StructuredResponse> _set(LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
+  Future<StructuredResponse> _set(
+      LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
     final at = _parsePoint(args['at']);
-    if (at == null) return _bad('set needs at:"lat,lng" in degrees, got ${args['at'] ?? 'nothing'}', nextSteps: const ['e.g. at:"6.5244,3.3792"']);
+    if (at == null) {
+      return _bad('set needs at:"lat,lng" in degrees, got ${args['at'] ?? 'nothing'}',
+          nextSteps: const ['e.g. at:"6.5244,3.3792"']);
+    }
     final speed = argNum(args, 'speedKmh');
     final fix = (at: at, speed: speed == null ? null : speed / 3.6, heading: argNum(args, 'heading'), altitude: null);
     final registry = LocationRegistry.instance;
@@ -532,7 +598,8 @@ class LocationTool extends GlintTool {
     final pct = (p.fraction * 100).round();
     final where = p.lastFix == null ? '' : ' at ${_fmt(p.lastFix!.at)}';
     return switch (p.state) {
-      RouteState.playing => 'route $pct% done on ${backend.label}$where, ${_km(p.path.lengthMeters - p.meters)} and about ${_dur(p.remaining)} to go${p.laps > 0 ? ', lap ${p.laps + 1}' : ''}',
+      RouteState.playing =>
+        'route $pct% done on ${backend.label}$where, ${_km(p.path.lengthMeters - p.meters)} and about ${_dur(p.remaining)} to go${p.laps > 0 ? ', lap ${p.laps + 1}' : ''}',
       RouteState.paused => 'route paused at $pct% on ${backend.label}$where',
       RouteState.finished => 'route finished on ${backend.label}$where',
       RouteState.stopped => 'route stopped at $pct% on ${backend.label}$where',
@@ -541,7 +608,10 @@ class LocationTool extends GlintTool {
   }
 
   List<String> _routeSteps(LocationPlayer p) => switch (p.state) {
-        RouteState.playing => const ['keep using the app; the position moves on its own', '`location op:pause`, op:seek progress:0.9, or op:stop'],
+        RouteState.playing => const [
+            'keep using the app; the position moves on its own',
+            '`location op:pause`, op:seek progress:0.9, or op:stop'
+          ],
         RouteState.paused => const ['`location op:resume` carries on from here', 'op:seek moves without travelling'],
         _ => const ['`location op:route` starts a new route', 'op:seek progress:0 replays this one paused'],
       };
@@ -574,7 +644,9 @@ class LocationTool extends GlintTool {
     if (!cleared) {
       return StructuredResponse(
         summary: '${backend.label} keeps reporting its last position$routeNote: an emulator has no "no location" state',
-        nextSteps: const ['to test "no location", turn location off or deny the app\'s location permission on the device'],
+        nextSteps: const [
+          'to test "no location", turn location off or deny the app\'s location permission on the device'
+        ],
         data: {'device': backend.id, 'cleared': false},
       );
     }
@@ -585,9 +657,13 @@ class LocationTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _route(LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
+  Future<StructuredResponse> _route(
+      LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
     final sources = [args['points'], args['file'], args['polyline']].where((v) => v != null).length;
-    if (sources != 1) return _bad('route needs exactly one of points, file or polyline', nextSteps: const ['e.g. points:["6.5244,3.3792","6.4281,3.4219"]']);
+    if (sources != 1) {
+      return _bad('route needs exactly one of points, file or polyline',
+          nextSteps: const ['e.g. points:["6.5244,3.3792","6.4281,3.4219"]']);
+    }
     final List<LatLng> points;
     final String from;
     if (args['points'] case final List raw) {
@@ -598,7 +674,10 @@ class LocationTool extends GlintTool {
       from = '${points.length} points';
     } else if (args['file'] case final String path) {
       final file = File(path);
-      if (!file.existsSync()) return _bad('route file not found: $path', nextSteps: const ['pass an absolute host path to a .gpx or .kml file']);
+      if (!file.existsSync()) {
+        return _bad('route file not found: $path',
+            nextSteps: const ['pass an absolute host path to a .gpx or .kml file']);
+      }
       final text = file.readAsStringSync();
       final kml = path.toLowerCase().endsWith('.kml') || text.contains('<kml');
       points = kml ? parseKml(text) : parseGpx(text);
@@ -611,14 +690,22 @@ class LocationTool extends GlintTool {
       }
       from = 'the polyline';
     }
-    if (points.length < 2) return _bad('a route needs at least 2 points, got ${points.length}${args['points'] == null ? ' from $from' : ''}');
+    if (points.length < 2) {
+      return _bad(
+          'a route needs at least 2 points, got ${points.length}${args['points'] == null ? ' from $from' : ''}');
+    }
     final path = GeoPath(points);
-    if (path.lengthMeters < 1) return _bad('the route has no length: all its points are the same place', nextSteps: const ['use `location op:set` for one position']);
+    if (path.lengthMeters < 1) {
+      return _bad('the route has no length: all its points are the same place',
+          nextSteps: const ['use `location op:set` for one position']);
+    }
 
     final durationSec = argNum(args, 'durationSec');
     final speedKmh = argNum(args, 'speedKmh') ?? 30;
     if (durationSec != null && durationSec <= 0) return _bad('durationSec must be above 0');
-    if (durationSec == null && (speedKmh <= 0 || speedKmh > 1200)) return _bad('speedKmh must be above 0 and at most 1200, got $speedKmh');
+    if (durationSec == null && (speedKmh <= 0 || speedKmh > 1200)) {
+      return _bad('speedKmh must be above 0 and at most 1200, got $speedKmh');
+    }
     final speed = durationSec != null ? path.lengthMeters / durationSec : speedKmh / 3.6;
     final askedMs = argInt(args, 'intervalMs') ?? 1000;
     final intervalMs = askedMs < backend.minInterval.inMilliseconds ? backend.minInterval.inMilliseconds : askedMs;
@@ -639,22 +726,34 @@ class LocationTool extends GlintTool {
     final player = LocationPlayer(backend, path, spec)..meters = path.lengthMeters * progress;
     LocationRegistry.instance.play(backend.id, player);
     await player.start();
-    if (player.state == RouteState.failed) throw LocationFailed('the device refused the first fix', player.lastError ?? '');
+    if (player.state == RouteState.failed) {
+      throw LocationFailed('the device refused the first fix', player.lastError ?? '');
+    }
     final (warnings, signals) = await _signals(backend, app, lifecycle);
-    final noise = [if (jitterM > 0) '${jitterM.round()} m noise', if (dropout > 0) '${(dropout * 100).round()}% fixes lost'];
+    final noise = [
+      if (jitterM > 0) '${jitterM.round()} m noise',
+      if (dropout > 0) '${(dropout * 100).round()}% fixes lost'
+    ];
     return StructuredResponse(
-      summary: 'playing a ${_km(path.lengthMeters)} route from $from on ${backend.label} at ${(speed * 3.6).toStringAsFixed(speed * 3.6 < 10 ? 1 : 0)} km/h, '
+      summary:
+          'playing a ${_km(path.lengthMeters)} route from $from on ${backend.label} at ${(speed * 3.6).toStringAsFixed(speed * 3.6 < 10 ? 1 : 0)} km/h, '
           'one fix every ${(intervalMs / 1000).toStringAsFixed(intervalMs % 1000 == 0 ? 0 : 1)} s${noise.isEmpty ? '' : ' (${noise.join(', ')})'}: '
           '${spec.loop ? 'looping' : 'about ${_dur(player.remaining)} to the end'}',
       warnings: [
         ...warnings,
-        if (speed * 3.6 > 1000) 'faster than a plane: Android\'s fused location drops fixes that imply this speed, so the app may not move; use durationSec for a longer time',
+        if (speed * 3.6 > 1000)
+          'faster than a plane: Android\'s fused location drops fixes that imply this speed, so the app may not move; use durationSec for a longer time',
         if (askedMs < intervalMs) 'intervalMs raised to $intervalMs: ${backend.label} takes no fixes faster',
         if (backend is IosDeviceLocation) 'an iPhone takes position only: the app sees no speed or heading',
-        if (backend is IosSimulatorLocation && !player.native) 'with jitterM or dropout the simulator gets one fix at a time, so the app sees no heading',
-        if (backend is IosSimulatorLocation) 'iOS reports speed 0 for simulated travel; apps that show speed must work it out from successive fixes',
+        if (backend is IosSimulatorLocation && !player.native)
+          'with jitterM or dropout the simulator gets one fix at a time, so the app sees no heading',
+        if (backend is IosSimulatorLocation)
+          'iOS reports speed 0 for simulated travel; apps that show speed must work it out from successive fixes',
       ],
-      nextSteps: const ['keep using the app; the position moves in the background', '`location op:get` for progress; pause, resume, seek or stop any time'],
+      nextSteps: const [
+        'keep using the app; the position moves in the background',
+        '`location op:get` for progress; pause, resume, seek or stop any time'
+      ],
       data: {'device': backend.id, ..._routeData(player), ...signals},
     );
   }
@@ -686,17 +785,21 @@ class LocationTool extends GlintTool {
     final player = LocationRegistry.instance.player(backend.id);
     if (player == null) return _noRoute(backend);
     if (player.state == RouteState.stopped || player.state == RouteState.failed) {
-      return _bad('the route on ${backend.label} is ${player.state.name}', nextSteps: const ['`location op:route` starts it again']);
+      return _bad('the route on ${backend.label} is ${player.state.name}',
+          nextSteps: const ['`location op:route` starts it again']);
     }
     final progress = argNum(args, 'progress');
     final meters = argNum(args, 'meters');
     final waypoint = argInt(args, 'waypoint');
-    if ([progress, meters, waypoint].where((v) => v != null).length != 1) return _bad('seek needs exactly one of progress, meters or waypoint');
+    if ([progress, meters, waypoint].where((v) => v != null).length != 1) {
+      return _bad('seek needs exactly one of progress, meters or waypoint');
+    }
     if (progress != null && (progress < 0 || progress > 1)) return _bad('progress must be 0 to 1');
     if (waypoint != null && (waypoint < 0 || waypoint >= player.path.points.length)) {
       return _bad('waypoint must be 0 to ${player.path.points.length - 1}');
     }
-    final to = progress != null ? progress * player.path.lengthMeters : (meters ?? player.path.metersAtWaypoint(waypoint!));
+    final to =
+        progress != null ? progress * player.path.lengthMeters : (meters ?? player.path.metersAtWaypoint(waypoint!));
     await player.seek(to);
     return StructuredResponse(
       summary: 'moved to ${_km(player.meters)} along the route: ${_routeLine(backend, player)}',

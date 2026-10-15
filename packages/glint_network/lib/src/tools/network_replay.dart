@@ -16,8 +16,7 @@ const _kMaxBodyTruncate = 262144;
 
 final networkReplayTool = Tool(
   name: 'network_replay',
-  description:
-      'Emit a runnable curl for a captured request. Auth headers redacted by '
+  description: 'Emit a runnable curl for a captured request. Auth headers redacted by '
       'default (the curl may land in a transcript/log); body truncated to '
       'bodyTruncateBytes (default 4 KB). redact:false to include the real '
       'token when you are debugging auth locally; bodyTruncateBytes:0 for full.',
@@ -25,16 +24,14 @@ final networkReplayTool = Tool(
     properties: {
       'id': Schema.string(description: 'Request id from network_list / network_search.'),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'redact': Schema.bool(
-        description:
-            'Mask auth-like headers with <redacted> (default TRUE — the '
+        description: 'Mask auth-like headers with <redacted> (default TRUE — the '
             'emitted curl can end up in an agent transcript or a pasted '
             'issue). Set redact:false to include the real token when '
             'reproducing an auth flow locally.',
@@ -52,14 +49,12 @@ FutureOr<CallToolResult> networkReplay(CallToolRequest request) async {
   final caps = CapabilityConfig.instance;
   final id = args['id'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — list captured requests and pick an id',
-            'network_search query:"..." — find a request by content',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — list captured requests and pick an id',
+        'network_search query:"..." — find a request by content',
+      ],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
@@ -72,23 +67,20 @@ FutureOr<CallToolResult> networkReplay(CallToolRequest request) async {
   // (redact:false) with intent. Auth debugging still works, now auditable.
   final redact = (args['redact'] as bool?) ?? true;
   final bodyMaxRaw = (args['bodyTruncateBytes'] as int?) ?? _kDefaultBodyTruncate;
-  final bodyMax = bodyMaxRaw <= 0
-      ? _kMaxBodyTruncate
-      : (bodyMaxRaw > _kMaxBodyTruncate ? _kMaxBodyTruncate : bodyMaxRaw);
+  final bodyMax =
+      bodyMaxRaw <= 0 ? _kMaxBodyTruncate : (bodyMaxRaw > _kMaxBodyTruncate ? _kMaxBodyTruncate : bodyMaxRaw);
 
   try {
     final dao = CapturesDao();
     final row = dao.getHttpRequest(sessionId, id);
     if (row == null) {
-      return errorResult('Request `$id` not found in session $sessionId.',
-          kind: ErrorKind.notFound,
-          extra: {
-            'sessionId': sessionId,
-            'nextSteps': const [
-              'network_list — list valid ids in this session',
-              'session_list — confirm the session exists',
-            ],
-          });
+      return errorResult('Request `$id` not found in session $sessionId.', kind: ErrorKind.notFound, extra: {
+        'sessionId': sessionId,
+        'nextSteps': const [
+          'network_list — list valid ids in this session',
+          'session_list — confirm the session exists',
+        ],
+      });
     }
     final method = (row['method'] as String?) ?? 'GET';
     final url = (row['url'] as String?) ?? '';
@@ -103,9 +95,7 @@ FutureOr<CallToolResult> networkReplay(CallToolRequest request) async {
     if (headers != null) {
       for (final e in headers.entries) {
         final name = e.key;
-        final value = e.value is List
-            ? (e.value as List).join(', ')
-            : (e.value?.toString() ?? '');
+        final value = e.value is List ? (e.value as List).join(', ') : (e.value?.toString() ?? '');
         if (value == redactedValue) maskedAtCapture.add(name);
         final isRedacted = redactedSet.contains(name.toLowerCase());
         if (isRedacted) redactedCount++;
@@ -122,8 +112,7 @@ FutureOr<CallToolResult> networkReplay(CallToolRequest request) async {
     if (body != null && body.isNotEmpty) {
       totalSize = body.length;
       bodyTruncated = body.length > bodyMax;
-      final clipped =
-          bodyTruncated ? body.sublist(0, utf8SafeCut(body, bodyMax)) : body;
+      final clipped = bodyTruncated ? body.sublist(0, utf8SafeCut(body, bodyMax)) : body;
       sentSize = clipped.length;
       try {
         final text = utf8.decode(clipped, allowMalformed: false);
@@ -192,23 +181,20 @@ FutureOr<CallToolResult> networkReplay(CallToolRequest request) async {
       'nextSteps': nextSteps,
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('network_replay failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': sessionId,
-          'id': id,
-          'nextSteps': const [
-            'network_list — confirm the id is valid',
-            'network_get id:"..." — see the underlying request data',
-          ],
-        });
+    return errorResult('network_replay failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': sessionId,
+      'id': id,
+      'nextSteps': const [
+        'network_list — confirm the id is valid',
+        'network_get id:"..." — see the underlying request data',
+      ],
+    });
   }
 }
 
 String _shellEscape(String s) => s.replaceAll(r"'", r"'\''");
 
-String _shortUrl(String url) =>
-    url.length > 50 ? '${url.substring(0, 47)}...' : url;
+String _shortUrl(String url) => url.length > 50 ? '${url.substring(0, 47)}...' : url;
 
 Map<String, dynamic>? _parseHeaders(Object? raw) {
   if (raw is! String || raw.isEmpty) return null;

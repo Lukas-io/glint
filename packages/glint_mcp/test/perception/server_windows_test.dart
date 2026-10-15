@@ -5,7 +5,11 @@ import 'package:test/test.dart';
 Map<String, Object?> _window(String type, bool focused, List<Map<String, Object?>> kids) => {
       'type': type,
       'focused': focused,
-      'root': {'class': 'android.widget.FrameLayout', 'bounds': [0, 0, 1080, 2400], 'children': kids},
+      'root': {
+        'class': 'android.widget.FrameLayout',
+        'bounds': [0, 0, 1080, 2400],
+        'children': kids
+      },
     };
 
 void main() {
@@ -14,12 +18,28 @@ void main() {
       'ok': true,
       'windows': [
         _window('application', false, [
-          {'class': 'android.view.View', 'text': 'Ember', 'bounds': [0, 0, 100, 100]},
+          {
+            'class': 'android.view.View',
+            'text': 'Ember',
+            'bounds': [0, 0, 100, 100]
+          },
         ]),
         _window('system', true, [
-          {'class': 'android.widget.TextView', 'text': "Ember isn't responding", 'bounds': [90, 1100, 990, 1200]},
-          {'class': 'android.widget.Button', 'text': 'Close app', 'clickable': true, 'bounds': [90, 1260, 990, 1360]},
-          {'class': 'android.view.View', 'bounds': [0, 0, 10, 10]},
+          {
+            'class': 'android.widget.TextView',
+            'text': "Ember isn't responding",
+            'bounds': [90, 1100, 990, 1200]
+          },
+          {
+            'class': 'android.widget.Button',
+            'text': 'Close app',
+            'clickable': true,
+            'bounds': [90, 1260, 990, 1360]
+          },
+          {
+            'class': 'android.view.View',
+            'bounds': [0, 0, 10, 10]
+          },
         ]),
       ],
     };
@@ -34,10 +54,19 @@ void main() {
     final reply = {
       'windows': [
         _window('inputMethod', false, [
-          {'class': 'android.view.View', 'text': 'q', 'bounds': [0, 2000, 100, 2100]},
+          {
+            'class': 'android.view.View',
+            'text': 'q',
+            'bounds': [0, 2000, 100, 2100]
+          },
         ]),
         _window('application', false, [
-          {'class': 'android.view.View', 'desc': 'Photo 1', 'clickable': true, 'bounds': [0, 0, 300, 300]},
+          {
+            'class': 'android.view.View',
+            'desc': 'Photo 1',
+            'clickable': true,
+            'bounds': [0, 0, 300, 300]
+          },
         ]),
       ],
     };

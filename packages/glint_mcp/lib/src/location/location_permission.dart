@@ -21,7 +21,8 @@ Future<String?> readLocationAccess(MediaDevice device, String appId) async {
 /// The location access a `dumpsys package` dump shows; a revoked permission the user answered reads denied, one never answered notAsked.
 String androidAccess(String dump) {
   final granted = grantedState(dump);
-  String flags(String p) => RegExp('${RegExp.escape(p)}: granted=(?:true|false), flags=\\[([^\\]]*)\\]').firstMatch(dump)?.group(1) ?? '';
+  String flags(String p) =>
+      RegExp('${RegExp.escape(p)}: granted=(?:true|false), flags=\\[([^\\]]*)\\]').firstMatch(dump)?.group(1) ?? '';
   if (granted[_fine] == true || granted[_coarse] == true) {
     if (granted[_background] == true) return 'always';
     if (flags(granted[_fine] == true ? _fine : _coarse).contains('ONE_TIME')) return 'once';
@@ -32,7 +33,8 @@ String androidAccess(String dump) {
 
 /// The simulator's locationd keeps each app's answer in `clients.plist`: Authorization 1 denied, 2 while using, 4 always; Allow Once only sets TemporaryAuthorization.
 Future<String?> _iosAccess(String udid, String bundleId) async {
-  final file = File('${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Caches/locationd/clients.plist');
+  final file = File(
+      '${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Caches/locationd/clients.plist');
   if (!file.existsSync()) return 'notAsked';
   Future<String?> value(String field) async {
     final key = 'i${bundleId.replaceAll('.', r'\.')}:.$field';
@@ -82,7 +84,8 @@ Future<PermissionOutcome> _androidSet(MediaDevice device, String appId, String a
     throw PermissionRefused('$appId requests neither $_fine nor $_coarse', notDeclared: true);
   }
   if (access == 'always' && !requested.contains(_background)) {
-    throw PermissionRefused('$appId does not request $_background, so Android never lets it use location in the background',
+    throw PermissionRefused(
+        '$appId does not request $_background, so Android never lets it use location in the background',
         notDeclared: true);
   }
   final applied = <String>[];
@@ -93,7 +96,10 @@ Future<PermissionOutcome> _androidSet(MediaDevice device, String appId, String a
     applied.add('pm ${args.join(' ')}');
   }
 
-  final all = [for (final p in [_fine, _coarse, _background]) if (requested.contains(p)) p];
+  final all = [
+    for (final p in [_fine, _coarse, _background])
+      if (requested.contains(p)) p
+  ];
   Future<void> grant(String p) async {
     if (requested.contains(p)) await pm(['grant', appId, p]);
   }
@@ -101,7 +107,9 @@ Future<PermissionOutcome> _androidSet(MediaDevice device, String appId, String a
   Future<void> revoke(String p, {bool answered = true}) async {
     if (!requested.contains(p)) return;
     await pm(['revoke', appId, p]);
-    await pm(answered ? ['set-permission-flags', appId, p, 'user-set'] : ['clear-permission-flags', appId, p, 'user-set', 'user-fixed']);
+    await pm(answered
+        ? ['set-permission-flags', appId, p, 'user-set']
+        : ['clear-permission-flags', appId, p, 'user-set', 'user-fixed']);
   }
 
   switch (access) {
@@ -151,7 +159,8 @@ Future<bool?> readBackgroundCapable(MediaDevice device, String appId) async {
   }
   final container = await device.simctl(['get_app_container', device.id, appId, 'app']);
   if (!container.ok) return null;
-  final r = await Process.run('plutil', ['-extract', 'UIBackgroundModes', 'json', '-o', '-', '${container.text.trim()}/Info.plist']);
+  final r = await Process.run(
+      'plutil', ['-extract', 'UIBackgroundModes', 'json', '-o', '-', '${container.text.trim()}/Info.plist']);
   if (r.exitCode != 0) return false;
   return '${r.stdout}'.contains('"location"');
 }

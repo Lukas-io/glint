@@ -34,11 +34,9 @@ void main(List<String> argv) async {
       .asBroadcastStream();
   var nextId = 1;
 
-  Future<Map<String, Object?>> req(
-      String method, Map<String, Object?> params) async {
+  Future<Map<String, Object?>> req(String method, Map<String, Object?> params) async {
     final id = nextId++;
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params}));
     await proc.stdin.flush();
     return incoming.firstWhere((m) => m['id'] == id);
   }
@@ -52,9 +50,7 @@ void main(List<String> argv) async {
     }
     final isError = result['isError'] == true;
     final content = result['content'] as List?;
-    final text = content?.firstOrNull is Map
-        ? (content!.first as Map)['text']
-        : '';
+    final text = content?.firstOrNull is Map ? (content!.first as Map)['text'] : '';
     stdout.writeln('isError=$isError');
     stdout.writeln(text);
     if (isError) {
@@ -71,8 +67,7 @@ void main(List<String> argv) async {
       'capabilities': const {},
       'clientInfo': {'name': 'verify_p4', 'version': '0'},
     });
-    proc.stdin.writeln(
-        jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
+    proc.stdin.writeln(jsonEncode({'jsonrpc': '2.0', 'method': 'notifications/initialized'}));
     await proc.stdin.flush();
 
     note('attach');
@@ -97,9 +92,7 @@ void main(List<String> argv) async {
       'arguments': const {},
     });
     print1(scene);
-    final sceneText = ((scene['result'] as Map)['content'] as List)
-        .map((c) => (c as Map)['text'] as String)
-        .join('\n');
+    final sceneText = ((scene['result'] as Map)['content'] as List).map((c) => (c as Map)['text'] as String).join('\n');
     if (!sceneText.contains('floating_action_button')) {
       stderr.writeln('scene did not contain floating_action_button — abort');
       failed++;
@@ -120,9 +113,8 @@ void main(List<String> argv) async {
       'name': 'get_scene',
       'arguments': const {},
     });
-    final scene2Text = ((scene2['result'] as Map)['content'] as List)
-        .map((c) => (c as Map)['text'] as String)
-        .join('\n');
+    final scene2Text =
+        ((scene2['result'] as Map)['content'] as List).map((c) => (c as Map)['text'] as String).join('\n');
     final counterValue = RegExp(r'"(\d+)"').allMatches(scene2Text).firstOrNull;
     stdout.writeln('counter line: ${counterValue?.group(0)}');
 
@@ -148,8 +140,7 @@ void main(List<String> argv) async {
       'arguments': {'glintId': 'does_not_exist'},
     });
     print1(bad);
-    final badStructured = (bad['result'] as Map)['structuredContent']
-        as Map<String, Object?>;
+    final badStructured = (bad['result'] as Map)['structuredContent'] as Map<String, Object?>;
     if (badStructured['errorKind'] != 'unresolvedTarget') {
       stderr.writeln('expected errorKind=unresolvedTarget; got ${badStructured['errorKind']}');
       failed++;

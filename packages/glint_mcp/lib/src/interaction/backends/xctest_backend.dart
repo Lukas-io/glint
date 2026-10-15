@@ -21,15 +21,17 @@ class XcTestBackend implements InteractionBackend {
   @override
   BackendCapabilities get capabilities => sim.capabilities;
 
-  ({double x, double y}) _logical(int x, int y) =>
-      (x: x / sim.devicePixelRatio, y: y / sim.devicePixelRatio);
+  ({double x, double y}) _logical(int x, int y) => (x: x / sim.devicePixelRatio, y: y / sim.devicePixelRatio);
 
   Future<void> _call(String path, Map<String, Object?> body) async {
     try {
       await runner.call('POST', path, body: body);
     } on XcTestRunnerError catch (e) {
       throw BackendToolError(
-          backend: label, command: 'runner POST $path', exitCode: 1, stderr: [e.message, e.detail].whereType<String>().join(': '));
+          backend: label,
+          command: 'runner POST $path',
+          exitCode: 1,
+          stderr: [e.message, e.detail].whereType<String>().join(': '));
     }
   }
 
@@ -83,9 +85,8 @@ class XcTestBackend implements InteractionBackend {
       });
 
   @override
-  Future<void> pressHardwareButton(HardwareButton button) => button == HardwareButton.home
-      ? _call('/button', {'name': 'home'})
-      : sim.pressHardwareButton(button);
+  Future<void> pressHardwareButton(HardwareButton button) =>
+      button == HardwareButton.home ? _call('/button', {'name': 'home'}) : sim.pressHardwareButton(button);
 
   @override
   Future<ScreenRecording> startRecording(String path) => sim.startRecording(path);
@@ -103,7 +104,8 @@ class XcTestBackend implements InteractionBackend {
   Future<void> warm() async {}
 
   @override
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+  Future<void> pinch(
+          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
       throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
 
   @override

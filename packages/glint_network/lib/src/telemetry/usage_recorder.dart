@@ -27,8 +27,7 @@ import 'telemetry_env.dart';
 /// proxy. The id is `<process-token>-<turnSeq>`, so it carries no PII.
 class UsageRecorder {
   /// Visible-for-testing constructor with explicit config.
-  UsageRecorder.config({required this.enabled, int gapMs = 60000})
-      : _gapMs = gapMs;
+  UsageRecorder.config({required this.enabled, int gapMs = 60000}) : _gapMs = gapMs;
 
   static UsageRecorder? _instance;
   static UsageRecorder get instance => _instance ??= _fromEnv();
@@ -117,6 +116,4 @@ class UsageRecorder {
     final tokens = estimateTokens(resultBytesOf(result));
     return tokens > 0 ? tokens : null;
   }
-
-
 }

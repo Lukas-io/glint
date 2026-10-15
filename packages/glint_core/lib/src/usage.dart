@@ -85,9 +85,7 @@ Map<String, Object?> summarizeUsage(List<Map<String, Object?>> rows, {int topTra
     if (prevCorr == corr && prevTool != null) {
       final key = '$prevTool|$prevOutcome|$tool';
       transitions[key] = (transitions[key] ?? 0) + 1;
-      final signal = prevOutcome == 'error'
-          ? (prevErrorKind ?? 'error')
-          : (prevOutcome == 'empty' ? 'empty' : null);
+      final signal = prevOutcome == 'error' ? (prevErrorKind ?? 'error') : (prevOutcome == 'empty' ? 'empty' : null);
       if (signal != null) {
         final agg = selfCorr.putIfAbsent('$prevTool|$signal', () => [0, 0]);
         agg[0]++;
@@ -297,8 +295,7 @@ class UsageShipper {
       final dir = dataDir();
       if (dir == null) return;
       final last = _readState(dir).lastShippedAtMs;
-      if (last != null &&
-          DateTime.now().millisecondsSinceEpoch - last < autoShipMinInterval.inMilliseconds) {
+      if (last != null && DateTime.now().millisecondsSinceEpoch - last < autoShipMinInterval.inMilliseconds) {
         return;
       }
       await ship(dataDir: dir);
@@ -390,8 +387,8 @@ class UsageShipper {
     var posted = false;
     if (endpoint.isNotEmpty) {
       try {
-        final status = await postToCollector(jsonStr, userAgent: userAgent, endpoint: endpoint)
-            .timeout(kTelemetryTimeout);
+        final status =
+            await postToCollector(jsonStr, userAgent: userAgent, endpoint: endpoint).timeout(kTelemetryTimeout);
         posted = status >= 200 && status < 300;
       } on Object {
         posted = false;

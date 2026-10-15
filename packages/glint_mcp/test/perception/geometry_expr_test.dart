@@ -13,8 +13,7 @@ void main() {
     test('contains all required JSON keys', () {
       final expr = GeometryExpr.build();
       for (final key in ['gx', 'gy', 'bx', 'by', 'bw', 'bh', 'dpr', 'vw', 'vh', 'op', 'vis', 'hit']) {
-        expect(expr, contains('"$key":'),
-            reason: 'missing key "$key" in geometry expression');
+        expect(expr, contains('"$key":'), reason: 'missing key "$key" in geometry expression');
       }
     });
 

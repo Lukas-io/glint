@@ -25,10 +25,8 @@ void main() {
     });
 
     test('two attaches to the same open URI reuse one row', () {
-      final a = dao.createSession(
-          appName: 'app', vmServiceUri: 'ws://x', isolateId: 'i1', projectPath: '/a');
-      final b = dao.createSession(
-          appName: 'app', vmServiceUri: 'ws://x', isolateId: 'i2', projectPath: '/b');
+      final a = dao.createSession(appName: 'app', vmServiceUri: 'ws://x', isolateId: 'i1', projectPath: '/a');
+      final b = dao.createSession(appName: 'app', vmServiceUri: 'ws://x', isolateId: 'i2', projectPath: '/b');
       expect(a, b);
       final n = CapturesDatabase.instance.raw
           .select("SELECT COUNT(*) AS n FROM sessions WHERE vm_service_uri='ws://x'")
@@ -37,19 +35,15 @@ void main() {
     });
 
     test('null URIs stay distinct (nothing to dedupe on)', () {
-      final a = dao.createSession(
-          appName: 'app', vmServiceUri: null, isolateId: null, projectPath: null);
-      final b = dao.createSession(
-          appName: 'app', vmServiceUri: null, isolateId: null, projectPath: null);
+      final a = dao.createSession(appName: 'app', vmServiceUri: null, isolateId: null, projectPath: null);
+      final b = dao.createSession(appName: 'app', vmServiceUri: null, isolateId: null, projectPath: null);
       expect(a, isNot(b));
     });
 
     test('an ended row does not block a fresh open row for the same URI', () {
-      final a = dao.createSession(
-          appName: 'app', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
+      final a = dao.createSession(appName: 'app', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
       dao.endSession(a);
-      final b = dao.createSession(
-          appName: 'app', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
+      final b = dao.createSession(appName: 'app', vmServiceUri: 'ws://y', isolateId: null, projectPath: null);
       expect(b, isNot(a));
     });
   });
@@ -80,19 +74,18 @@ void main() {
       addTearDown(() => CapturesDatabase.instance.close());
       final r2 = CapturesDatabase.instance.raw;
       final open = r2
-          .select("SELECT COUNT(*) AS n FROM sessions "
+          .select('SELECT COUNT(*) AS n FROM sessions '
               "WHERE vm_service_uri='ws://dup' AND ended_at IS NULL")
           .first['n'] as int;
       expect(open, 1, reason: 'only one open row survives per URI');
       final deduped = r2
-          .select("SELECT COUNT(*) AS n FROM sessions "
+          .select('SELECT COUNT(*) AS n FROM sessions '
               "WHERE vm_service_uri='ws://dup' AND note LIKE '%[deduped]%'")
           .first['n'] as int;
       expect(deduped, 3, reason: 'the other three are closed and tagged');
       // The unique index now rejects a second open row for the URI.
       expect(
-        () => r2.execute(
-            "INSERT INTO sessions(started_at, vm_service_uri) VALUES (1, 'ws://dup')"),
+        () => r2.execute("INSERT INTO sessions(started_at, vm_service_uri) VALUES (1, 'ws://dup')"),
         throwsA(anything),
       );
     });

@@ -9,8 +9,7 @@ import 'result.dart';
 
 final logsClearTool = Tool(
   name: 'logs_clear',
-  description:
-      'Empties the in-memory log ring buffer for the scoped session. Does '
+  description: 'Empties the in-memory log ring buffer for the scoped session. Does '
       'NOT touch the app or the DB (log_records stay queryable).',
   inputSchema: Schema.object(
     properties: {

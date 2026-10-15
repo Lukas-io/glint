@@ -5,7 +5,8 @@ import 'image_size.dart';
 import 'ocr.dart';
 
 /// Answers a system prompt glint's own action raised on a phone: reads the screen with OCR and taps [button] when [question] is up; the question it answered, or null.
-Future<String?> answerPhonePrompt(DeviceHid hid, String udid, {required RegExp question, required String button}) async {
+Future<String?> answerPhonePrompt(DeviceHid hid, String udid,
+    {required RegExp question, required String button}) async {
   try {
     final path = '${Directory.systemTemp.path}/glint-prompt-$udid.png';
     await hid.call({'cmd': 'screenshot', 'path': path}, timeout: const Duration(seconds: 10));

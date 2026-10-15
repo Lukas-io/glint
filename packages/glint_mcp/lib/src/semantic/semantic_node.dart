@@ -56,11 +56,9 @@ sealed class SemanticNode {
   Map<String, Object?> toJson() => {
         'role': role.name,
         if (glintId != null) 'glintId': glintId,
-        if (affordances.isNotEmpty)
-          'affordances': affordances.map((a) => a.name).toList(),
+        if (affordances.isNotEmpty) 'affordances': affordances.map((a) => a.name).toList(),
         ..._extraJson(),
-        if (children.isNotEmpty)
-          'children': children.map((c) => c.toJson()).toList(),
+        if (children.isNotEmpty) 'children': children.map((c) => c.toJson()).toList(),
       };
 
   Map<String, Object?> _extraJson();
@@ -190,16 +188,14 @@ class SemanticInput extends SemanticNode {
     if (raw != null && raw.startsWith(obscuredValuePrefix)) {
       obscured = true;
       currentValue = null;
-      valueLength =
-          int.tryParse(raw.substring(obscuredValuePrefix.length)) ?? 0;
+      valueLength = int.tryParse(raw.substring(obscuredValuePrefix.length)) ?? 0;
       return;
     }
     currentValue = raw;
   }
 
   /// True when the field holds any text, obscured or not.
-  bool get hasValue =>
-      (currentValue?.isNotEmpty ?? false) || (valueLength ?? 0) > 0;
+  bool get hasValue => (currentValue?.isNotEmpty ?? false) || (valueLength ?? 0) > 0;
 
   /// Current validation error (InputDecoration.errorText), populated by
   /// [InputEnricher]; null when the field is valid or shows no error.

@@ -10,32 +10,24 @@ void main() {
       };
 
   test('bytes present -> stored', () {
-    expect(bodyStatusFor(row: row(), which: 'response', hasBytes: true),
-        {'bodyStatus': 'stored'});
+    expect(bodyStatusFor(row: row(), which: 'response', hasBytes: true), {'bodyStatus': 'stored'});
   });
 
   test('size 0 -> empty (server sent nothing)', () {
-    expect(bodyStatusFor(row: row(size: 0), which: 'response', hasBytes: false),
-        {'bodyStatus': 'empty'});
+    expect(bodyStatusFor(row: row(size: 0), which: 'response', hasBytes: false), {'bodyStatus': 'empty'});
   });
 
   test('backfill ran, nothing stored -> empty', () {
-    expect(
-        bodyStatusFor(
-            row: row(size: -1, fetched: 1), which: 'response', hasBytes: false),
-        {'bodyStatus': 'empty'});
+    expect(bodyStatusFor(row: row(size: -1, fetched: 1), which: 'response', hasBytes: false), {'bodyStatus': 'empty'});
   });
 
   test('not fetched, no attempts -> pending', () {
     expect(
-        bodyStatusFor(
-            row: row(size: -1, attempts: 0), which: 'response', hasBytes: false),
-        {'bodyStatus': 'pending'});
+        bodyStatusFor(row: row(size: -1, attempts: 0), which: 'response', hasBytes: false), {'bodyStatus': 'pending'});
   });
 
   test('not fetched, attempts made -> unavailable (lost upstream)', () {
-    final s = bodyStatusFor(
-        row: row(size: -1, attempts: 3), which: 'response', hasBytes: false);
+    final s = bodyStatusFor(row: row(size: -1, attempts: 3), which: 'response', hasBytes: false);
     expect(s['bodyStatus'], 'unavailable');
     expect(s['fetchAttempts'], 3);
     expect(s['reason'], contains('evicted'));

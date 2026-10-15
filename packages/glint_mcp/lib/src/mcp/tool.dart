@@ -50,8 +50,7 @@ abstract class GlintTool {
   Tool get definition;
 
   /// [definition] plus the shared `app` routing arg — what the server registers.
-  Tool get registeredDefinition =>
-      routesByApp ? withAppArg(definition) : definition;
+  Tool get registeredDefinition => routesByApp ? withAppArg(definition) : definition;
 
   /// Tools that give `app` their own meaning (attach) opt out of routing.
   bool get routesByApp => true;
@@ -59,12 +58,11 @@ abstract class GlintTool {
   /// Adds the optional `app` property every routed tool accepts.
   static Tool withAppArg(Tool tool) {
     final raw = tool as Map<String, Object?>;
-    final schema = Map<String, Object?>.from(
-        raw['inputSchema'] as Map<String, Object?>? ?? const {});
-    final props = Map<String, Object?>.from(
-        (schema['properties'] as Map?)?.cast<String, Object?>() ?? const {});
+    final schema = Map<String, Object?>.from(raw['inputSchema'] as Map<String, Object?>? ?? const {});
+    final props = Map<String, Object?>.from((schema['properties'] as Map?)?.cast<String, Object?>() ?? const {});
     props['app'] = Schema.string(
-      description: 'Target app when several are attached (device id, name, package or simulator). Default: the active one.',
+      description:
+          'Target app when several are attached (device id, name, package or simulator). Default: the active one.',
     );
     return Tool.fromMap({
       ...raw,
@@ -73,8 +71,7 @@ abstract class GlintTool {
   }
 
   /// Coerces numeric and true/false strings in typed top-level fields in place, then checks top-level fields against [tool]'s schema (nested shapes are the tool's own to explain); null when valid.
-  static StructuredResponse? checkArguments(
-      Tool tool, CallToolRequest request) {
+  static StructuredResponse? checkArguments(Tool tool, CallToolRequest request) {
     final args = request.arguments;
     final props = tool.inputSchema.properties ?? const {};
     if (args != null) {
@@ -102,23 +99,18 @@ abstract class GlintTool {
         errorKind: GlintErrorKind.invalidArgument,
         nextSteps: [
           for (final k in unknown)
-            if (closestArgName(k, props.keys) case final near?)
-              'use $near instead of $k',
+            if (closestArgName(k, props.keys) case final near?) 'use $near instead of $k',
           'accepted fields: ${props.keys.join(", ")}',
         ],
       );
     }
-    final errors = tool.inputSchema
-        .validate(args ?? const {})
-        .where((e) => e.path.length <= 1)
-        .toList();
+    final errors = tool.inputSchema.validate(args ?? const {}).where((e) => e.path.length <= 1).toList();
     if (errors.isEmpty) return null;
     return StructuredResponse.error(
       summary: '${tool.name}: invalid arguments',
       errorKind: GlintErrorKind.invalidArgument,
       detail: errors
-          .map((e) =>
-              '${e.path.isEmpty ? 'arguments' : e.path.join('.')}: ${e.details ?? e.error.name}')
+          .map((e) => '${e.path.isEmpty ? 'arguments' : e.path.join('.')}: ${e.details ?? e.error.name}')
           .join('\n'),
       nextSteps: [
         'fix the arguments named in detail; accepted fields: '
@@ -172,8 +164,7 @@ abstract class GlintTool {
       return invalid.toCallResult();
     }
     StructuredResponse response;
-    final target =
-        routesByApp ? (request.arguments?['app'] as String?) : null;
+    final target = routesByApp ? (request.arguments?['app'] as String?) : null;
     var app = session.active;
     if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {
@@ -185,8 +176,7 @@ abstract class GlintTool {
           response = unknownAppResponse(session, target, matches);
         } else {
           app = matches.single;
-          response = await session.withApp(
-              matches.single, () async => await handle(session, request));
+          response = await session.withApp(matches.single, () async => await handle(session, request));
         }
       }
     } on SessionNotAttachedError catch (e) {
@@ -203,8 +193,7 @@ abstract class GlintTool {
               nextSteps: pooled.isEmpty
                   ? const ['call `attach` (no args) to discover and connect the running app']
                   : [
-                      for (final a in pooled)
-                        'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
+                      for (final a in pooled) 'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
                     ],
             );
     } on RuntimeConnectionLostError catch (e) {
@@ -235,8 +224,7 @@ abstract class GlintTool {
   }
 
   /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.
-  Future<StructuredResponse> _unresponsiveResponse(
-      GlintSession session, RuntimeUnresponsiveError e) async {
+  Future<StructuredResponse> _unresponsiveResponse(GlintSession session, RuntimeUnresponsiveError e) async {
     bool? locked;
     try {
       locked = await session.backend.lockState();
@@ -264,8 +252,7 @@ abstract class GlintTool {
   }
 
   /// The session is attached, but in device mode: say what the tool is missing and what works without a Flutter tree.
-  static StructuredResponse flutterModeRequiredResponse(
-      String tool, AppSession app, SessionNotAttachedError cause) {
+  static StructuredResponse flutterModeRequiredResponse(String tool, AppSession app, SessionNotAttachedError cause) {
     return StructuredResponse.error(
       summary: '`$tool` needs a Flutter app; this session is in device mode '
           'on ${app.deviceName ?? app.id}',
@@ -291,7 +278,8 @@ abstract class GlintTool {
       errorKind: GlintErrorKind.connectionLost,
       detail: crash == null
           ? e.toString()
-          : [crash.reason, ...crash.frames.map((f) => '  at $f'), if (crash.source != null) 'report: ${crash.source}'].join('\n'),
+          : [crash.reason, ...crash.frames.map((f) => '  at $f'), if (crash.source != null) 'report: ${crash.source}']
+              .join('\n'),
       nextSteps: [
         if (crash != null) 'this is a crash in the app, worth reporting to the user with the frames above',
         'relaunch the app, then `attach` again',
@@ -340,16 +328,12 @@ abstract class GlintTool {
   Future<StructuredResponse> _checkDeviceGone(
       GlintSession session, AppSession? app, StructuredResponse response) async {
     if (!response.isError || app == null) return response;
-    final kind = enumByName(
-        GlintErrorKind.values, response.data?['errorKind'] as String?);
+    final kind = enumByName(GlintErrorKind.values, response.data?['errorKind'] as String?);
     if (kind == null || !_deviceSensitive.contains(kind)) return response;
-    final adb = app.device is AndroidDevice
-        ? (app.device as AndroidDevice).adbPath
-        : 'adb';
+    final adb = app.device is AndroidDevice ? (app.device as AndroidDevice).adbPath : 'adb';
     final bool present;
     try {
-      present = await DeviceDiscovery(adbPath: adb)
-          .isDevicePresent(app.id, app.platform);
+      present = await DeviceDiscovery(adbPath: adb).isDevicePresent(app.id, app.platform);
     } on Object {
       return response;
     }
@@ -359,8 +343,7 @@ abstract class GlintTool {
   }
 
   /// The device behind [app] is gone (a closed simulator or emulator, or an unplugged phone): name it, and say how back.
-  static StructuredResponse deviceGoneResponse(
-      GlintSession session, AppSession app) {
+  static StructuredResponse deviceGoneResponse(GlintSession session, AppSession app) {
     final what = app.platform == DevicePlatform.ios ? 'simulator' : 'emulator';
     final remaining = session.apps;
     if (app.platform == DevicePlatform.android && !app.id.startsWith('emulator-')) {
@@ -428,8 +411,7 @@ abstract class GlintTool {
       return;
     }
     final kindName = response.data?['errorKind'] as String?;
-    final errorKind =
-        enumByName(GlintErrorKind.values, kindName) ?? GlintErrorKind.internal;
+    final errorKind = enumByName(GlintErrorKind.values, kindName) ?? GlintErrorKind.internal;
     session.actionLog.record(FailureEntry(
       sequence: seq,
       timestamp: start,
@@ -451,8 +433,7 @@ abstract class GlintTool {
   }
 
   /// `app:` named none or several attached apps: list what is attached.
-  static StructuredResponse unknownAppResponse(
-      GlintSession session, String target, List<AppSession> matches) {
+  static StructuredResponse unknownAppResponse(GlintSession session, String target, List<AppSession> matches) {
     final pooled = session.apps;
     return StructuredResponse.error(
       summary: matches.isEmpty
@@ -464,8 +445,7 @@ abstract class GlintTool {
           : 'attached: ${pooled.map((a) => "${a.label} on ${a.deviceName ?? a.id}").join(", ")}',
       nextSteps: [
         if (pooled.isEmpty) 'call `attach` first',
-        for (final a in (matches.isEmpty ? pooled : matches))
-          'app:"${a.deviceName ?? a.id}" or app:"${a.label}"',
+        for (final a in (matches.isEmpty ? pooled : matches)) 'app:"${a.deviceName ?? a.id}" or app:"${a.label}"',
         'or `attach` (no args) to discover a running app that is not attached yet',
       ],
     );

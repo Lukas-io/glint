@@ -18,8 +18,7 @@ import 'body_fetch.dart';
 
 final networkGetTool = Tool(
   name: 'network_get',
-  description:
-      'Full detail for ONE captured request: headers, timing, and decoded '
+  description: 'Full detail for ONE captured request: headers, timing, and decoded '
       'bodies (truncated to bodyTruncateBytes, default 4 KB; truncation is '
       'flagged). Use after network_list / network_search gives you an id.',
   inputSchema: Schema.object(
@@ -28,39 +27,33 @@ final networkGetTool = Tool(
         description: 'Request id from network_list / network_search.',
       ),
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to merge '
+        description: 'Restrict to one isolate (id from network_status). Omit to merge '
             'all isolates.',
       ),
       'includeBodies': Schema.bool(
         description: 'Include request/response bodies. Default true.',
       ),
       'bodyTruncateBytes': Schema.int(
-        description:
-            'Max bytes per body (default 4096, cap 262144; 0 = cap). Truncated '
+        description: 'Max bytes per body (default 4096, cap 262144; 0 = cap). Truncated '
             'bodies set truncated:true; fetch more with network_body.',
       ),
       'headerTruncateBytes': Schema.int(
-        description:
-            'Max chars per header VALUE before each long value becomes a '
+        description: 'Max chars per header VALUE before each long value becomes a '
             '{value,truncated,totalLength} object (default 256, max 4096).',
       ),
       'includeEvents': Schema.bool(
-        description:
-            'Include the request lifecycle events array (HttpProfileRequest.events). '
+        description: 'Include the request lifecycle events array (HttpProfileRequest.events). '
             'Default false — events are rarely useful and add bulk.',
       ),
       'redact': Schema.bool(
-        description:
-            'Redact auth-like headers (authorization, cookie, x-api-key, + '
+        description: 'Redact auth-like headers (authorization, cookie, x-api-key, + '
             'the redacted_headers list). Default TRUE — the agent transcript '
             'is not a safe place for live tokens. Pass false to debug auth.',
       ),
@@ -89,14 +82,12 @@ FutureOr<CallToolResult> networkGet(CallToolRequest request) async {
   final args = request.arguments ?? const <String, Object?>{};
   final id = args['id'] as String?;
   if (id == null || id.isEmpty) {
-    return errorResult('Missing required arg `id`.',
-        kind: ErrorKind.badArgument,
-        extra: const {
-          'nextSteps': [
-            'network_list — list captured requests and copy an id',
-            'network_search query:"..." — find a request by body/url content',
-          ],
-        });
+    return errorResult('Missing required arg `id`.', kind: ErrorKind.badArgument, extra: const {
+      'nextSteps': [
+        'network_list — list captured requests and copy an id',
+        'network_search query:"..." — find a request by body/url content',
+      ],
+    });
   }
   final (scope, scopeErr) = resolveScope(args);
   if (scopeErr != null) return scopeErr;
@@ -106,8 +97,7 @@ FutureOr<CallToolResult> networkGet(CallToolRequest request) async {
   final includeEvents = (args['includeEvents'] as bool?) ?? false;
   // D5: redact by default; opt out to debug auth flows.
   final redact = (args['redact'] as bool?) ?? true;
-  final redactNames =
-      redact ? CapturesDao().redactedHeaderSet() : const <String>{};
+  final redactNames = redact ? CapturesDao().redactedHeaderSet() : const <String>{};
   final truncateRaw = args['bodyTruncateBytes'] as int?;
   final maxBytes = (truncateRaw == null)
       ? 4096
@@ -137,9 +127,8 @@ FutureOr<CallToolResult> networkGet(CallToolRequest request) async {
     final row = CapturesDao().getHttpRequest(scope.sessionId, id);
     resolvedIsolateId = row?['isolate_id'] as String?;
   }
-  final candidateIsolates = resolvedIsolateId != null
-      ? [resolvedIsolateId]
-      : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
+  final candidateIsolates =
+      resolvedIsolateId != null ? [resolvedIsolateId] : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
   if (candidateIsolates.isEmpty) {
     return errorResult(
       'No HTTP-profiling isolates known for this session.',
@@ -175,8 +164,7 @@ FutureOr<CallToolResult> networkGet(CallToolRequest request) async {
         headerTruncateBytes: headerTruncateBytes,
         caps: caps,
         redactNames: redactNames,
-        degradedFrom:
-            'Live fetch failed (${lastError ?? "no isolate had id $id"}); '
+        degradedFrom: 'Live fetch failed (${lastError ?? "no isolate had id $id"}); '
             'returned the persisted DB copy instead.',
       );
     }
@@ -233,16 +221,10 @@ CallToolResult _buildLiveResponse({
   required CapabilityConfig caps,
   Set<String> redactNames = const {},
 }) {
-  final reqCt = (r.request?.hasError ?? false)
-      ? null
-      : firstHeader(r.request?.headers, 'content-type');
+  final reqCt = (r.request?.hasError ?? false) ? null : firstHeader(r.request?.headers, 'content-type');
   final respCt = firstHeader(r.response?.headers, 'content-type');
-  final reqBody = includeBodies
-      ? readableBodyJson(r.requestBody, reqCt, maxBytes: maxBytes)
-      : null;
-  final respBody = includeBodies
-      ? readableBodyJson(r.responseBody, respCt, maxBytes: maxBytes)
-      : null;
+  final reqBody = includeBodies ? readableBodyJson(r.requestBody, reqCt, maxBytes: maxBytes) : null;
+  final respBody = includeBodies ? readableBodyJson(r.responseBody, respCt, maxBytes: maxBytes) : null;
 
   // Classify body presence (#59) from the persisted row when available, so a
   // body lost upstream reads as `unavailable`, not the same `empty` a genuine
@@ -264,7 +246,8 @@ CallToolResult _buildLiveResponse({
       : {
           if (r.request!.hasError) 'error': r.request!.error,
           if (!r.request!.hasError) ...{
-            'headers': truncateHeaders(r.request!.headers, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
+            'headers':
+                truncateHeaders(r.request!.headers, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
             ...sizeFields(r.request!.contentLength),
             if ((r.request!.cookies ?? []).isNotEmpty) 'cookies': r.request!.cookies,
             ...liveBodyStatus('request', r.requestBody, r.request!.contentLength),
@@ -279,9 +262,9 @@ CallToolResult _buildLiveResponse({
             if (r.response!.statusCode != null) 'statusCode': r.response!.statusCode,
             if (r.response!.reasonPhrase != null) 'reasonPhrase': r.response!.reasonPhrase,
             // D7/F22: the redirect chain the request followed.
-            if (r.response!.redirects.isNotEmpty)
-              'redirects': r.response!.redirects,
-            'headers': truncateHeaders(r.response!.headers, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
+            if (r.response!.redirects.isNotEmpty) 'redirects': r.response!.redirects,
+            'headers':
+                truncateHeaders(r.response!.headers, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
             ...sizeFields(r.response!.contentLength),
             if (r.response!.compressionState != null) 'compressionState': r.response!.compressionState,
             ...liveBodyStatus('response', r.responseBody, r.response!.contentLength),
@@ -356,15 +339,13 @@ FutureOr<CallToolResult> _historyGet({
     final dao = CapturesDao();
     final row = dao.getHttpRequest(sid, id);
     if (row == null) {
-      return errorResult('Request `$id` not found in session $sid.',
-          kind: ErrorKind.notFound,
-          extra: {
-            'sessionId': sid,
-            'nextSteps': const [
-              'network_list — list valid request ids in this session',
-              'session_list — confirm the session id is correct',
-            ],
-          });
+      return errorResult('Request `$id` not found in session $sid.', kind: ErrorKind.notFound, extra: {
+        'sessionId': sid,
+        'nextSteps': const [
+          'network_list — list valid request ids in this session',
+          'session_list — confirm the session id is correct',
+        ],
+      });
     }
     final reqHeaders = _parseHeaders(row['request_headers_json']);
     final respHeaders = _parseHeaders(row['response_headers_json']);
@@ -384,8 +365,7 @@ FutureOr<CallToolResult> _historyGet({
       if (reqHeaders != null)
         'headers': truncateHeaders(reqHeaders, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
       ...sizeFields(row['request_size'] as int?),
-      ...bodyStatusFor(
-          row: row, which: 'request', hasBytes: reqBlob != null && reqBlob.isNotEmpty),
+      ...bodyStatusFor(row: row, which: 'request', hasBytes: reqBlob != null && reqBlob.isNotEmpty),
       if (reqBody != null) 'body': reqBody,
     };
     // D7/F22: surface the persisted redirect chain.
@@ -397,8 +377,7 @@ FutureOr<CallToolResult> _historyGet({
       if (respHeaders != null)
         'headers': truncateHeaders(respHeaders, maxValueBytes: headerTruncateBytes, redactNames: redactNames),
       ...sizeFields(row['response_size'] as int?),
-      ...bodyStatusFor(
-          row: row, which: 'response', hasBytes: respBlob != null && respBlob.isNotEmpty),
+      ...bodyStatusFor(row: row, which: 'response', hasBytes: respBlob != null && respBlob.isNotEmpty),
       if (respBody != null) 'body': respBody,
     };
 
@@ -420,8 +399,8 @@ FutureOr<CallToolResult> _historyGet({
       final why = bodyState.canGenerateTraffic
           ? 'not persisted yet (writer may still be backfilling)'
           : bodyState.capturedElsewhere
-          ? 'not persisted yet (another server process captures this session and may still be backfilling)'
-          : 'was never captured before the session ${bodyState.isEnded ? "ended" : "was interrupted"}';
+              ? 'not persisted yet (another server process captures this session and may still be backfilling)'
+              : 'was never captured before the session ${bodyState.isEnded ? "ended" : "was interrupted"}';
       if (reqBlob == null && includeBodies) {
         warnings.add('Request body $why.');
       }
@@ -467,16 +446,14 @@ FutureOr<CallToolResult> _historyGet({
       ),
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('history query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': sid,
-          'id': id,
-          'nextSteps': const [
-            'Verify the session still exists via session_list',
-            'session_close to return to live mode',
-          ],
-        });
+    return errorResult('history query failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': sid,
+      'id': id,
+      'nextSteps': const [
+        'Verify the session still exists via session_list',
+        'session_close to return to live mode',
+      ],
+    });
   }
 }
 
@@ -528,8 +505,10 @@ List<String> _nextStepsFor({
   if (caps.isEnabled(Category.http)) {
     if (respTrunc) {
       final total = responseBody!['totalSize'];
-      steps.add('network_body_outline id:"$id" — structure of the full body (keys/types/sizes, no values) so you drill the right branch');
-      steps.add('network_body id:"$id" which:response offset:$respOffset length:16384 — the raw body (totalSize $total)');
+      steps.add(
+          'network_body_outline id:"$id" — structure of the full body (keys/types/sizes, no values) so you drill the right branch');
+      steps.add(
+          'network_body id:"$id" which:response offset:$respOffset length:16384 — the raw body (totalSize $total)');
     } else if (reqTrunc) {
       final total = requestBody!['totalSize'];
       steps.add('network_body id:"$id" which:request offset:$reqOffset length:16384 — the raw body (totalSize $total)');

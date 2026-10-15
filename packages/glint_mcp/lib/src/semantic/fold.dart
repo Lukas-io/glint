@@ -53,8 +53,7 @@ class FoldRun {
 
 /// The run starting at [start] when at least [threshold] consecutive siblings
 /// share a signature; null otherwise.
-FoldRun? detectFoldRun(List<SemanticNode> children, int start,
-    {int threshold = 4}) {
+FoldRun? detectFoldRun(List<SemanticNode> children, int start, {int threshold = 4}) {
   if (start >= children.length) return null;
   final sig = structuralSignature(children[start]);
   var end = start + 1;

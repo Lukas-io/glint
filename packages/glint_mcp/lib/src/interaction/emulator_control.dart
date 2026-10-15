@@ -52,7 +52,8 @@ class EmulatorEndpoint {
 
   static Map<String, String> parseIni(String text) => {
         for (final line in text.split('\n'))
-          if (line.contains('=')) line.substring(0, line.indexOf('=')).trim(): line.substring(line.indexOf('=') + 1).trim(),
+          if (line.contains('='))
+            line.substring(0, line.indexOf('=')).trim(): line.substring(line.indexOf('=') + 1).trim(),
       };
 }
 
@@ -143,12 +144,14 @@ class EmulatorControl {
         _method('setEnvironment'),
         [
           for (final e in entries.entries)
-            ..._lengthDelimited(1, [..._lengthDelimited(1, utf8.encode(e.key)), ..._lengthDelimited(2, utf8.encode(e.value))]),
+            ..._lengthDelimited(
+                1, [..._lengthDelimited(1, utf8.encode(e.key)), ..._lengthDelimited(2, utf8.encode(e.value))]),
         ],
         options: _options,
       );
 
-  static List<int> _lengthDelimited(int field, List<int> bytes) => [(field << 3) | 2, ..._varint(bytes.length), ...bytes];
+  static List<int> _lengthDelimited(int field, List<int> bytes) =>
+      [(field << 3) | 2, ..._varint(bytes.length), ...bytes];
 
   /// Sets the emulator's GPS fix from an encoded `GpsState` message.
   Future<void> setGps(List<int> gpsState) => _client.$createUnaryCall(_method('setGps'), gpsState, options: _options);

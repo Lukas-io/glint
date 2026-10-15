@@ -10,17 +10,21 @@ void main() {
   group('argInt', () {
     test('reads ints, whole doubles and numeric strings', () {
       final args = <String, Object?>{'a': 15000, 'b': 15000.0, 'c': '15000', 'd': ' 7 '};
-      expect([for (final k in ['a', 'b', 'c', 'd']) argInt(args, k)],
-          [15000, 15000, 15000, 7]);
+      expect([
+        for (final k in ['a', 'b', 'c', 'd']) argInt(args, k)
+      ], [
+        15000,
+        15000,
+        15000,
+        7
+      ]);
     });
 
     test('absent is null; a fraction or text is an ArgTypeError naming the key', () {
       expect(argInt(const {}, 'x'), isNull);
       expect(() => argInt({'x': 1.5}, 'x'), throwsA(isA<ArgTypeError>()));
-      expect(
-          () => argInt({'x': 'soon'}, 'x'),
-          throwsA(isA<ArgTypeError>().having(
-              (e) => e.toString(), 'text', 'x must be a whole number, got "soon"')));
+      expect(() => argInt({'x': 'soon'}, 'x'),
+          throwsA(isA<ArgTypeError>().having((e) => e.toString(), 'text', 'x must be a whole number, got "soon"')));
     });
   });
 
@@ -55,8 +59,7 @@ void main() {
         required: ['s'],
       ),
     );
-    CallToolRequest req(Map<String, Object?> a) =>
-        CallToolRequest(name: 't', arguments: {...a});
+    CallToolRequest req(Map<String, Object?> a) => CallToolRequest(name: 't', arguments: {...a});
 
     test('numeric and bool strings are coerced in place', () {
       final r = req({'n': '300', 'on': 'true', 's': 'x'});
@@ -97,8 +100,7 @@ void main() {
     );
 
     test('are refused with the likely intended name', () {
-      final r = GlintTool.checkArguments(tool,
-          CallToolRequest(name: 'scroll_to_find', arguments: {'glintID': 'x'}));
+      final r = GlintTool.checkArguments(tool, CallToolRequest(name: 'scroll_to_find', arguments: {'glintID': 'x'}));
       expect(r?.summary, 'scroll_to_find: unknown argument glintID');
       expect(r?.nextSteps.first, 'use targetGlintId instead of glintID');
     });

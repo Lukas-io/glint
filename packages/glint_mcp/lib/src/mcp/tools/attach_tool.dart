@@ -37,22 +37,19 @@ class AttachTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'app': Schema.string(
-              description:
-                  'App to attach or switch to: display name, package, bundle '
+              description: 'App to attach or switch to: display name, package, bundle '
                   'id, or the simulator name it runs on. Matches running apps '
                   'and already-attached ones.',
             ),
             'vmUri': Schema.string(
-              description:
-                  'VM service URI, e.g. ws://127.0.0.1:1234/abc=/ws. Omit to '
+              description: 'VM service URI, e.g. ws://127.0.0.1:1234/abc=/ws. Omit to '
                   'auto-discover the running app.',
             ),
             'platform': Schema.string(
               description: 'ios | android. Omit to derive from the VM.',
             ),
             'mode': Schema.string(
-              description:
-                  'flutter | device | auto (default). device = drive the sim '
+              description: 'flutter | device | auto (default). device = drive the sim '
                   'with no Flutter app.',
             ),
             'device': Schema.string(
@@ -67,13 +64,11 @@ class AttachTool extends GlintTool {
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
             ),
             'iosBackend': Schema.string(
-              description:
-                  'bridge (default) | xctest. xctest drives the simulator through '
+              description: 'bridge (default) | xctest. xctest drives the simulator through '
                   "glint's XCUITest runner, built once per Xcode. iOS, Flutter mode.",
             ),
             'input': Schema.string(
-              description:
-                  'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
+              description: 'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
                   'touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. '
                   'Default auto on iOS (simulator and phone), device on Android. Replies say which in data.input.',
             ),
@@ -82,7 +77,8 @@ class AttachTool extends GlintTool {
                   "auto (default) | dtuhid | indigo: the simulator's real-touch transport; auto picks dtuhid where Xcode ships it.",
             ),
             'signingTeam': Schema.string(
-              description: 'Apple team id to sign a physical-iPhone build with, when attach launch: should not choose. iOS phones only.',
+              description:
+                  'Apple team id to sign a physical-iPhone build with, when attach launch: should not choose. iOS phones only.',
             ),
             'androidInput': Schema.string(
               description: "auto (default) | server | adb. server = glint's resident input server. Android only.",
@@ -94,27 +90,23 @@ class AttachTool extends GlintTool {
               description: 'Include the first get_scene render. Default false.',
             ),
             'dryRun': Schema.bool(
-              description:
-                  'List attachable apps + devices without attaching. '
+              description: 'List attachable apps + devices without attaching. '
                   'Default false.',
             ),
             'awaitSettle': Schema.bool(
-              description:
-                  'Wait until the UI settles before returning. Default false.',
+              description: 'Wait until the UI settles before returning. Default false.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     var args = request.arguments ?? const <String, Object?>{};
 
     // Validate an explicitly-passed platform before any I/O.
     final platformArg = args['platform'] as String?;
-    if (platformArg != null &&
-        !const {'ios', 'android'}.contains(platformArg)) {
+    if (platformArg != null && !const {'ios', 'android'}.contains(platformArg)) {
       return StructuredResponse.error(
         summary: 'unknown platform: $platformArg',
         errorKind: GlintErrorKind.invalidArgument,
@@ -123,8 +115,7 @@ class AttachTool extends GlintTool {
     }
 
     final mode = args['mode'] as String?;
-    if (mode != null &&
-        !const {'flutter', 'device', 'auto'}.contains(mode)) {
+    if (mode != null && !const {'flutter', 'device', 'auto'}.contains(mode)) {
       return StructuredResponse.error(
         summary: 'unknown mode: $mode',
         errorKind: GlintErrorKind.invalidArgument,
@@ -216,7 +207,10 @@ class AttachTool extends GlintTool {
               summary: 'could not boot $avdArg: ${e.summary}',
               errorKind: GlintErrorKind.backendToolError,
               detail: e.detail,
-              nextSteps: const ['`attach dryRun:true` lists what is running', 'check the AVD starts from Android Studio\'s device manager'],
+              nextSteps: const [
+                '`attach dryRun:true` lists what is running',
+                'check the AVD starts from Android Studio\'s device manager'
+              ],
             );
           }
           avdLead = 'booted $avdArg as $serial';
@@ -228,13 +222,19 @@ class AttachTool extends GlintTool {
       }
     }
     final deviceArg = args['device'] as String?;
-    if (avdLead != null && launchPath == null && vmUriArg == null && mode != 'flutter' && session.findApp(deviceArg!) == null) {
+    if (avdLead != null &&
+        launchPath == null &&
+        vmUriArg == null &&
+        mode != 'flutter' &&
+        session.findApp(deviceArg!) == null) {
       final apps = scan.vmUris.isEmpty ? const <RunningApp>[] : await discovery.describeRunningApps(scan);
       if (!apps.any((a) => a.deviceId == deviceArg)) {
         final r = await _attachDeviceMode(session, scan, args, 'android', adbPath, onProgress);
-        return r.isError ? r : _lead(r, avdLead, [
-          '`attach launch:"<project folder or app id>" device:"$deviceArg"` starts your app on it',
-        ]);
+        return r.isError
+            ? r
+            : _lead(r, avdLead, [
+                '`attach launch:"<project folder or app id>" device:"$deviceArg"` starts your app on it',
+              ]);
       }
     }
     final appArg = (args['app'] as String?)?.trim();
@@ -253,9 +253,15 @@ class AttachTool extends GlintTool {
           session.activate(pooled);
           return _switched(session, pooled, returnScene: returnScene);
         }
-        rebuild = (deviceId: pooled.device.id, label: pooled.deviceMode ? pooled.device.id : pooled.label, from: change.from, to: change.to);
+        rebuild = (
+          deviceId: pooled.device.id,
+          label: pooled.deviceMode ? pooled.device.id : pooled.label,
+          from: change.from,
+          to: change.to
+        );
         if (pooled.deviceMode) {
-          final r = await _attachDeviceMode(session, scan, {...args, 'device': pooled.device.id}, platformArg, adbPath, onProgress);
+          final r = await _attachDeviceMode(
+              session, scan, {...args, 'device': pooled.device.id}, platformArg, adbPath, onProgress);
           return r.isError ? r : _lead(r, _reattached(rebuild, session.device), const []);
         }
       }
@@ -273,8 +279,7 @@ class AttachTool extends GlintTool {
     String? launchedDeviceId;
     String? openedAppId;
     if (launchPath != null && looksLikeAppId(launchPath)) {
-      final r = await _openInstalled(
-          session, scan, launchPath, deviceArg, platformArg, adbResolved, onProgress);
+      final r = await _openInstalled(session, scan, launchPath, deviceArg, platformArg, adbResolved, onProgress);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
       launchedDeviceId = r.deviceId;
@@ -310,9 +315,7 @@ class AttachTool extends GlintTool {
             prefix: 'no app running on $deviceArg and no launchable history '
                 'for it');
       }
-      final platform = _platformFromName(rec!.platform) ??
-          _platformFromArg(platformArg) ??
-          DevicePlatform.ios;
+      final platform = _platformFromName(rec!.platform) ?? _platformFromArg(platformArg) ?? DevicePlatform.ios;
       final r = await _launchProject(session,
           projectDir: rec.projectDir!,
           deviceId: deviceArg,
@@ -350,8 +353,7 @@ class AttachTool extends GlintTool {
     try {
       // ── 3. Read the VM once: platform + Dart version ──────────────────────
       final vm = await probe.rawService.getVM();
-      final platform =
-          _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
+      final platform = _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
       if (platform == DevicePlatform.android && adbResolved == null) {
         return _adbMissing();
       }
@@ -405,7 +407,7 @@ class AttachTool extends GlintTool {
         if (candidates.length > 1) {
           return _selection(
             'multiple booted ${platform.name} devices and the app could not be '
-                'correlated — re-call attach with one device',
+            'correlated — re-call attach with one device',
             scan,
           );
         }
@@ -441,11 +443,8 @@ class AttachTool extends GlintTool {
           // coordinate tap silently lands in the wrong place (glintId gestures
           // are unaffected: the resolver already yields physical px).
           final baseMs = session.config.attachProbeTimeoutMs;
-          final timeoutMs = launchedDeviceId != null && baseMs < 30000
-              ? 30000
-              : baseMs;
-          final probed =
-              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final timeoutMs = launchedDeviceId != null && baseMs < 30000 ? 30000 : baseMs;
+          final probed = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
           final vp = probed.viewport;
           if (vp == null) {
             warnings.add(
@@ -480,7 +479,8 @@ class AttachTool extends GlintTool {
             );
           }
           final route = requestedRoute ?? (iosInput == 'dtuhid' ? InputRoute.device : InputRoute.auto);
-          device = IosDevice(udid: deviceId, logicalWidth: vp.w, logicalHeight: vp.h, devicePixelRatio: vp.dpr, route: route);
+          device = IosDevice(
+              udid: deviceId, logicalWidth: vp.w, logicalHeight: vp.h, devicePixelRatio: vp.dpr, route: route);
           if (route != InputRoute.app) {
             final missing = await _deviceHidMissing(onProgress);
             if (missing != null) {
@@ -489,23 +489,21 @@ class AttachTool extends GlintTool {
             }
           }
         case DevicePlatform.ios:
-          toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
-              onPhase: (phase) => onProgress?.call(0, phase));
+          toolchain =
+              await checkIosToolchain(args['iosBridgePath'] as String?, onPhase: (phase) => onProgress?.call(0, phase));
           warnings.addAll(toolchain.warnings);
           iosTransport = await _iosTransport(toolchain, deviceId, iosInput, warnings);
           if (iosBackend == 'xctest') {
-            final started = await startXcTestRunner(deviceId, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
+            final started =
+                await startXcTestRunner(deviceId, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
             if (started.error != null) return started.error!;
             runner = started.runner;
           }
           // A freshly launched app's inspector lags the VM URI by a few seconds;
           // an already-running app probes on the first try so the ceiling is free.
           final baseMs = session.config.attachProbeTimeoutMs;
-          final timeoutMs = launchedDeviceId != null && baseMs < 30000
-              ? 30000
-              : baseMs;
-          final probed =
-              await _probeViewportWithRetry(probe, timeoutMs, onProgress);
+          final timeoutMs = launchedDeviceId != null && baseMs < 30000 ? 30000 : baseMs;
+          final probed = await _probeViewportWithRetry(probe, timeoutMs, onProgress);
           final vp = probed.viewport;
           if (vp == null) {
             return probeFailureResponse(
@@ -530,9 +528,9 @@ class AttachTool extends GlintTool {
       final input = describeSetup(device is IosDevice
           ? await readIosDeviceSetup(info?.osVersion)
           : platform == DevicePlatform.ios
-          ? await readIosSetup(deviceId, toolchain?.xcode.major,
-              transport: runner != null ? 'xctest' : iosTransport)
-          : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb'));
+              ? await readIosSetup(deviceId, toolchain?.xcode.major,
+                  transport: runner != null ? 'xctest' : iosTransport)
+              : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb'));
       warnings.addAll(input.warnings);
 
       // ── 7. Hand the resolved target to the session ────────────────────────
@@ -544,9 +542,7 @@ class AttachTool extends GlintTool {
       final caps = session.backend.capabilities;
       final ui = await session.uiState();
       final lifecycle = await session.lifecycleState();
-      final simStatus = platform == DevicePlatform.ios
-          ? await const SimControl().status(deviceId)
-          : null;
+      final simStatus = platform == DevicePlatform.ios ? await const SimControl().status(deviceId) : null;
       if (lifecycle != null && lifecycle != 'resumed') {
         warnings.add(
           'the app is $lifecycle: a native layer (permission dialog, sheet, '
@@ -570,11 +566,8 @@ class AttachTool extends GlintTool {
       // the project-correlated built app; fall back to a device scan only when
       // the project is unknown. Needed for kill_app's terminate.
       final package = _packageName(probe.rootLibraryUri);
-      final iosInfo = platform == DevicePlatform.ios &&
-              (link?.bundleId == null || link?.displayName == null)
-          ? (projectDir != null
-                  ? await discovery.appInfoForProject(projectDir)
-                  : null) ??
+      final iosInfo = platform == DevicePlatform.ios && (link?.bundleId == null || link?.displayName == null)
+          ? (projectDir != null ? await discovery.appInfoForProject(projectDir) : null) ??
               await discovery.appInfoForDevice(deviceId)
           : null;
       final androidPackage = platform == DevicePlatform.android && vm.pid != null
@@ -649,7 +642,8 @@ class AttachTool extends GlintTool {
 
       final others = session.apps.where((a) => a.id != deviceId).toList();
       return StructuredResponse(
-        summary: '${rebuilt ? '${_reattached(rebuild!, device)}; ' : ''}attached to ${deviceName ?? platform.name} ($deviceId)'
+        summary:
+            '${rebuilt ? '${_reattached(rebuild!, device)}; ' : ''}attached to ${deviceName ?? platform.name} ($deviceId)'
             '${appLabel != null ? " running $appLabel" : ""}'
             '${projectDir != null ? " from ${_tildePath(projectDir)}" : ""} '
             'at $vmUri'
@@ -677,8 +671,7 @@ class AttachTool extends GlintTool {
           if (app.isNotEmpty) 'app': app,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
-          if (dartVersion != null && dartVersion.isNotEmpty)
-            'dartVersion': dartVersion.split(' ').first,
+          if (dartVersion != null && dartVersion.isNotEmpty) 'dartVersion': dartVersion.split(' ').first,
           if (lifecycle != null) 'appState': lifecycle,
           'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
           if (device.abilities.gaps.isNotEmpty) 'abilities': {'missing': device.abilities.toJson()},
@@ -714,8 +707,7 @@ class AttachTool extends GlintTool {
       );
 
   /// Starts glint's resident server on [serial] unless [mode] is `adb`; on failure input stays on `adb shell input`, with a warning.
-  Future<AndroidServer?> _androidServer(
-      String serial, String adbPath, String mode, List<String> warnings) async {
+  Future<AndroidServer?> _androidServer(String serial, String adbPath, String mode, List<String> warnings) async {
     if (mode == 'adb') return null;
     var dex = locateAndroidServerDex();
     if (dex == null && Platform.environment[noBridgeDownloadEnv] != 'true') {
@@ -727,7 +719,8 @@ class AttachTool extends GlintTool {
         try {
           dex = await buildAndroidServerDex(dest, adbPath: adbPath);
         } on AndroidServerError catch (built) {
-          warnings.add('the glint Android server could not be downloaded ($e) or built from source (${built.message}); input uses adb shell input');
+          warnings.add(
+              'the glint Android server could not be downloaded ($e) or built from source (${built.message}); input uses adb shell input');
           return null;
         }
       }
@@ -757,8 +750,7 @@ class AttachTool extends GlintTool {
   }
 
   /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
-  Future<String> _iosTransport(IosToolchain toolchain, String udid,
-      String mode, List<String> warnings) async {
+  Future<String> _iosTransport(IosToolchain toolchain, String udid, String mode, List<String> warnings) async {
     if (toolchain.blocker != null) return mode == 'auto' ? 'indigo' : mode;
     final t = await readIosTransport(toolchain.bridge.path, udid, mode);
     if (t.fallback != null) {
@@ -785,8 +777,7 @@ class AttachTool extends GlintTool {
       );
 
   /// Reply for an instant switch to an already-attached app.
-  Future<StructuredResponse> _switched(GlintSession session, AppSession app,
-      {required bool returnScene}) async {
+  Future<StructuredResponse> _switched(GlintSession session, AppSession app, {required bool returnScene}) async {
     String? sceneText;
     if (returnScene && !app.deviceMode) {
       try {
@@ -822,17 +813,15 @@ class AttachTool extends GlintTool {
   }
 
   /// The VM took the connection but the app never answered: most often a locked simulator keeping it suspended.
-  Future<StructuredResponse> _unresponsiveApp(DiscoveryResult scan, Uri vmUri,
-      RuntimeUnresponsiveError e, String adbPath) async {
+  Future<StructuredResponse> _unresponsiveApp(
+      DiscoveryResult scan, Uri vmUri, RuntimeUnresponsiveError e, String adbPath) async {
     final locked = <BootedDevice>[
       for (final d in scan.devicesFor(DevicePlatform.ios))
         if (await const SimControl().isLocked(d.id) == true) d,
     ];
     final android = scan.devicesFor(DevicePlatform.android);
-    final front = android.length == 1
-        ? await DeviceDiscovery(adbPath: adbPath)
-            .foregroundPackage(android.single.id)
-        : null;
+    final front =
+        android.length == 1 ? await DeviceDiscovery(adbPath: adbPath).foregroundPackage(android.single.id) : null;
     return StructuredResponse.error(
       summary: locked.isNotEmpty
           ? '${locked.map((d) => d.name).join(", ")} is locked, so the app is suspended and cannot be attached'
@@ -907,7 +896,9 @@ class AttachTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'input:app needs a Flutter app, and device mode has none',
         errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: const ['attach to a running Flutter app for input:app, or drop input to drive the device with real touches'],
+        nextSteps: const [
+          'attach to a running Flutter app for input:app, or drop input to drive the device with real touches'
+        ],
       );
     }
     // Resolve the target device.
@@ -947,8 +938,7 @@ class AttachTool extends GlintTool {
       }
     } else {
       final platform = _platformFromArg(platformArg);
-      final candidates =
-          platform != null ? scan.devicesFor(platform) : scan.devices;
+      final candidates = platform != null ? scan.devicesFor(platform) : scan.devices;
       if (candidates.isEmpty) {
         return StructuredResponse.error(
           summary: 'no booted device to attach to',
@@ -966,8 +956,7 @@ class AttachTool extends GlintTool {
     }
 
     // Size the device from a screenshot — also the coordinate reference.
-    final shotPath =
-        '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
+    final shotPath = '${Directory.systemTemp.path}/glint-attach-${target.id}.png';
     final shot = await _probeScreenSize(target, adbPath, shotPath);
     final screen = (shot.width != null && shot.height != null)
         ? {'width': shot.width, 'height': shot.height, 'unit': 'screenshot-pixels'}
@@ -990,12 +979,15 @@ class AttachTool extends GlintTool {
             summary: 'could not capture the screen to size iPhone ${target.id}',
             errorKind: GlintErrorKind.backendToolError,
             detail: shot.error,
-            nextSteps: const ['unlock the iPhone and check `xcrun devicectl list devices` shows it connected, then retry'],
+            nextSteps: const [
+              'unlock the iPhone and check `xcrun devicectl list devices` shows it connected, then retry'
+            ],
           );
         }
         final (missing, transport) = await (_deviceHidMissing(onProgress), phoneTransport(target.id)).wait;
         if (transport == 'localNetwork') {
-          warnings.add('the iPhone is on Wi-Fi only: screenshots and `device op:status` work, but touches, keys and buttons need the cable');
+          warnings.add(
+              'the iPhone is on Wi-Fi only: screenshots and `device op:status` work, but touches, keys and buttons need the cable');
         }
         if (missing != null) {
           return StructuredResponse.error(
@@ -1013,8 +1005,8 @@ class AttachTool extends GlintTool {
           route: InputRoute.device,
         );
       case DevicePlatform.ios:
-        toolchain = await checkIosToolchain(args['iosBridgePath'] as String?,
-            onPhase: (phase) => onProgress?.call(0, phase));
+        toolchain =
+            await checkIosToolchain(args['iosBridgePath'] as String?, onPhase: (phase) => onProgress?.call(0, phase));
         warnings.addAll(toolchain.warnings);
         final iosTransport = await _iosTransport(toolchain, target.id,
             switch (args['iosInput']) { 'dtuhid' => 'dtuhid', 'indigo' => 'indigo', _ => 'auto' }, warnings);
@@ -1045,8 +1037,7 @@ class AttachTool extends GlintTool {
           adbPath: adbPath,
           screenWidth: shot.width?.toDouble(),
           screenHeight: shot.height?.toDouble(),
-          server: await _androidServer(
-              target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
+          server: await _androidServer(target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
         );
     }
 
@@ -1055,9 +1046,7 @@ class AttachTool extends GlintTool {
     deviceClaims.claim(target.id);
 
     final caps = session.backend.capabilities;
-    final simStatus = target.platform == DevicePlatform.ios
-        ? await const SimControl().status(target.id)
-        : null;
+    final simStatus = target.platform == DevicePlatform.ios ? await const SimControl().status(target.id) : null;
     bound.deviceName = simStatus?.name ?? target.name;
 
     return StructuredResponse(
@@ -1089,8 +1078,7 @@ class AttachTool extends GlintTool {
   /// Screenshot just to read the screen size. iOS goes through simctl (the
   /// IosSimulator can't be built before its size is known); Android through the
   /// adb backend.
-  Future<ScreenshotResult> _probeScreenSize(
-      BootedDevice target, String adbPath, String path) {
+  Future<ScreenshotResult> _probeScreenSize(BootedDevice target, String adbPath, String path) {
     if (target.platform == DevicePlatform.ios && target.physical) {
       return IosDevice(udid: target.id, logicalWidth: 1, logicalHeight: 1, devicePixelRatio: 1)
           .createBackend()
@@ -1098,9 +1086,7 @@ class AttachTool extends GlintTool {
     }
     return target.platform == DevicePlatform.ios
         ? const SimControl().screenshot(target.id, path)
-        : AndroidDevice(serial: target.id, adbPath: adbPath)
-            .createBackend()
-            .screenshot(path);
+        : AndroidDevice(serial: target.id, adbPath: adbPath).createBackend().screenshot(path);
   }
 
   /// Fetches the Device Hub helper when this install has none; the reason when it cannot, null when it is ready.
@@ -1118,8 +1104,7 @@ class AttachTool extends GlintTool {
   /// The app lifecycle from the probe runtime, or null when the eval fails; used to explain a failed probe.
   Future<String?> _safeProbeLifecycle(VmServiceRuntime probe) async {
     try {
-      final s = await probe
-          .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
+      final s = await probe.evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""');
       return (s == null || s.isEmpty) ? null : s;
     } on Object {
       return null;
@@ -1130,8 +1115,7 @@ class AttachTool extends GlintTool {
   /// [timeoutMs]. The implicit view is asked first (no node needed); a
   /// selected node is the fallback. On failure the last error is kept so the
   /// agent sees the real reason instead of a guess.
-  Future<({({double w, double h, double dpr})? viewport, Object? lastError})>
-      _probeViewportWithRetry(
+  Future<({({double w, double h, double dpr})? viewport, Object? lastError})> _probeViewportWithRetry(
     VmServiceRuntime probe,
     int timeoutMs,
     void Function(int, String?)? onProgress, {
@@ -1161,10 +1145,7 @@ class AttachTool extends GlintTool {
           final probeId = scene.firstAddressableId();
           if (probeId != null) {
             final vp = await resolver.resolveViewport(scene, probeId);
-            return (
-              viewport: (w: vp.w, h: vp.h, dpr: vp.dpr),
-              lastError: null
-            );
+            return (viewport: (w: vp.w, h: vp.h, dpr: vp.dpr), lastError: null);
           }
           lastError = 'tree read ok but no addressable node yet';
         } finally {
@@ -1200,7 +1181,10 @@ class AttachTool extends GlintTool {
     final running = {
       for (final serial in await avds.runningSerials()) await avds.avdOf(serial),
     };
-    return [for (final a in all) if (!running.contains(a)) a];
+    return [
+      for (final a in all)
+        if (!running.contains(a)) a
+    ];
   }
 
   String _dryRunSummary(DiscoveryResult scan, List<AttachRecord> history, List<String> idleAvds) {
@@ -1228,8 +1212,7 @@ class AttachTool extends GlintTool {
   }
 
   /// Boot [deviceId] (or pick a signing team for a phone), `flutter run` [projectDir] on it, track the process, and return its VM URI (or a ready error).
-  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error})>
-      _launchProject(
+  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error})> _launchProject(
     GlintSession session, {
     required String projectDir,
     required String deviceId,
@@ -1254,7 +1237,11 @@ class AttachTool extends GlintTool {
             'attach to the app it runs instead: attach device:"$deviceId"',
             'or stop that run first (kill_app if this session started it; otherwise ask whoever owns it)',
           ],
-        ).mergeData({'flutterRuns': [for (final r in busy) {'pid': r.pid, 'dir': r.dir}]}));
+        ).mergeData({
+          'flutterRuns': [
+            for (final r in busy) {'pid': r.pid, 'dir': r.dir}
+          ]
+        }));
       }
       onProgress?.call(0, 'choosing a signing team for $deviceId');
       try {
@@ -1305,7 +1292,8 @@ class AttachTool extends GlintTool {
       final detail = [e.message, if (e.logTail != null) '\n${e.logTail}'].join();
       if (e.signing) {
         return failed(StructuredResponse.error(
-          summary: 'Xcode could not sign $projectDir for the phone${signing == null ? '' : ' with team ${signing.team}'}',
+          summary:
+              'Xcode could not sign $projectDir for the phone${signing == null ? '' : ' with team ${signing.team}'}',
           errorKind: GlintErrorKind.signingFailed,
           detail: detail,
           nextSteps: [
@@ -1313,7 +1301,9 @@ class AttachTool extends GlintTool {
               'attach again with signingTeam:"<team>", one of ${signing.others.join(', ')}',
             'if another team owns the bundle id, give the app a bundle id of your own in Xcode (Runner > Signing & Capabilities)',
           ],
-        ).mergeData({'teams': [if (signing != null) signing.team, ...?signing?.others]}));
+        ).mergeData({
+          'teams': [if (signing != null) signing.team, ...?signing?.others]
+        }));
       }
       return failed(StructuredResponse.error(
         summary: 'failed to launch $projectDir',
@@ -1359,9 +1349,7 @@ class AttachTool extends GlintTool {
         .load()
         .where((r) => r.bundleId == appId && (deviceArg == null || r.deviceId == deviceArg))
         .firstOrNull;
-    final named = deviceArg == null
-        ? null
-        : scan.devices.where((d) => d.id == deviceArg).firstOrNull;
+    final named = deviceArg == null ? null : scan.devices.where((d) => d.id == deviceArg).firstOrNull;
     final platform = _platformFromArg(platformArg) ??
         named?.platform ??
         (deviceArg == null ? _platformFromName(remembered?.platform ?? '') : null) ??
@@ -1370,10 +1358,9 @@ class AttachTool extends GlintTool {
             : deviceArg != null || scan.devicesFor(DevicePlatform.ios).isNotEmpty
                 ? DevicePlatform.ios
                 : DevicePlatform.android);
-    final rememberedBooted = remembered != null &&
-        scan.devices.any((d) => d.id == remembered.deviceId && d.platform == platform);
-    final deviceId = deviceArg ??
-        (rememberedBooted ? remembered.deviceId : _firstBootedId(scan, platform));
+    final rememberedBooted =
+        remembered != null && scan.devices.any((d) => d.id == remembered.deviceId && d.platform == platform);
+    final deviceId = deviceArg ?? (rememberedBooted ? remembered.deviceId : _firstBootedId(scan, platform));
     if (deviceId == null) {
       return (
         vmUri: null,
@@ -1390,8 +1377,10 @@ class AttachTool extends GlintTool {
     }
 
     List<String> rebuild(String lead) => [
-          for (final r in session.attachHistory.load().where((r) =>
-                  r.bundleId == appId && r.projectDir != null && flutterAppProblem(r.projectDir!) == null).take(1))
+          for (final r in session.attachHistory
+              .load()
+              .where((r) => r.bundleId == appId && r.projectDir != null && flutterAppProblem(r.projectDir!) == null)
+              .take(1))
             '$lead: attach device:"$deviceId" launch:"${r.projectDir}"',
         ];
     ({Uri? vmUri, String? deviceId, StructuredResponse? error}) failed(
@@ -1417,7 +1406,8 @@ class AttachTool extends GlintTool {
         return failed(
           '$deviceId is a physical iOS device, which cannot reopen a debug build',
           GlintErrorKind.invalidArgument,
-          detail: 'a debug build on a physical iPhone only runs under a debugger, so it has no VM service after a plain open',
+          detail:
+              'a debug build on a physical iPhone only runs under a debugger, so it has no VM service after a plain open',
           nextSteps: [
             ...rebuild('run it under flutter run'),
             'or start it with flutter run from a shell, then call attach',
@@ -1427,8 +1417,7 @@ class AttachTool extends GlintTool {
       onProgress?.call(0, 'booting $deviceId');
       final bootErr = await const AppLauncher().ensureBooted(platform, deviceId);
       if (bootErr != null) {
-        return failed('could not boot device $deviceId', GlintErrorKind.backendToolError,
-            detail: bootErr);
+        return failed('could not boot device $deviceId', GlintErrorKind.backendToolError, detail: bootErr);
       }
     }
 
@@ -1436,16 +1425,18 @@ class AttachTool extends GlintTool {
       await launcher.requireClosed(platform: platform, deviceId: deviceId, appId: appId);
       final projectDir = session.attachHistory
           .load()
-          .where((r) =>
-              r.bundleId == appId && r.projectDir != null && flutterAppProblem(r.projectDir!) == null)
+          .where((r) => r.bundleId == appId && r.projectDir != null && flutterAppProblem(r.projectDir!) == null)
           .firstOrNull
           ?.projectDir;
       if (projectDir == null) {
         return failed(
           'glint does not know where $appId is built from',
           GlintErrorKind.invalidArgument,
-          detail: 'a reopened app has no expression compiler of its own, so glint pairs it with flutter attach in its project folder, which it learns the first time it attaches the app',
-          nextSteps: const ['run it once with attach launch:"<project folder>", after which launch:"<app id>" reopens it in seconds'],
+          detail:
+              'a reopened app has no expression compiler of its own, so glint pairs it with flutter attach in its project folder, which it learns the first time it attaches the app',
+          nextSteps: const [
+            'run it once with attach launch:"<project folder>", after which launch:"<app id>" reopens it in seconds'
+          ],
         );
       }
       final vmUri = await launcher.open(
@@ -1475,26 +1466,21 @@ class AttachTool extends GlintTool {
       );
     } on InstalledLaunchError catch (e) {
       return switch (e.failure) {
-        InstalledLaunchFailure.notInstalled => failed(
-            e.message, GlintErrorKind.targetNotFound,
-            nextSteps: [
-              'the id must match the installed app exactly (the iOS bundle id or the Android applicationId)',
-              ...rebuild('to build and install it'),
-            ]),
-        InstalledLaunchFailure.alreadyRunning => failed(
-            e.message, GlintErrorKind.invalidArgument,
+        InstalledLaunchFailure.notInstalled => failed(e.message, GlintErrorKind.targetNotFound, nextSteps: [
+            'the id must match the installed app exactly (the iOS bundle id or the Android applicationId)',
+            ...rebuild('to build and install it'),
+          ]),
+        InstalledLaunchFailure.alreadyRunning => failed(e.message, GlintErrorKind.invalidArgument,
             nextSteps: ['it is open already, so attach to it: attach device:"$deviceId"']),
-        InstalledLaunchFailure.toolFailed => failed(
-            e.message, GlintErrorKind.backendToolError,
+        InstalledLaunchFailure.toolFailed => failed(e.message, GlintErrorKind.backendToolError,
             detail: e.detail,
             nextSteps: ['check the device is booted and reachable, then retry', ...rebuild('or rebuild it')]),
-        InstalledLaunchFailure.noVmService => failed(
-            e.message, GlintErrorKind.targetNeverReady,
-            detail: 'only a debug build starts a VM service; a profile or release build cannot be attached',
-            nextSteps: [
-              'if it crashed on start, read the device log, then retry',
-              ...rebuild('to run a debug build'),
-            ]),
+        InstalledLaunchFailure.noVmService => failed(e.message, GlintErrorKind.targetNeverReady,
+              detail: 'only a debug build starts a VM service; a profile or release build cannot be attached',
+              nextSteps: [
+                'if it crashed on start, read the device log, then retry',
+                ...rebuild('to run a debug build'),
+              ]),
       };
     }
   }
@@ -1530,9 +1516,7 @@ class AttachTool extends GlintTool {
         ),
       );
     }
-    final named = deviceArg == null
-        ? null
-        : scan.devices.where((d) => d.id == deviceArg).firstOrNull;
+    final named = deviceArg == null ? null : scan.devices.where((d) => d.id == deviceArg).firstOrNull;
     final platform = _platformFromArg(platformArg) ??
         named?.platform ??
         (deviceArg != null && deviceArg.startsWith('emulator-') ? DevicePlatform.android : DevicePlatform.ios);
@@ -1577,9 +1561,15 @@ class AttachTool extends GlintTool {
     final ios = args['iosBackend'] as String?;
     final now = _inputOf(device);
     if (device is IosSimulator && ios != null && !app.deviceMode && ios != now) return (from: now!, to: ios);
-    final legacy = switch (args['iosInput']) { 'flutter' => InputRoute.app, 'dtuhid' when device is IosDevice => InputRoute.device, _ => null };
+    final legacy = switch (args['iosInput']) {
+      'flutter' => InputRoute.app,
+      'dtuhid' when device is IosDevice => InputRoute.device,
+      _ => null
+    };
     final route = InputRoute.parse(args['input'] as String?) ?? legacy;
-    if (route != null && !app.deviceMode && route != device.route) return (from: 'input ${device.route.name}', to: 'input ${route.name}');
+    if (route != null && !app.deviceMode && route != device.route) {
+      return (from: 'input ${device.route.name}', to: 'input ${route.name}');
+    }
     final input = args['androidInput'] as String?;
     if (device is AndroidDevice && input != null && input != 'auto' && input != now) return (from: now!, to: input);
     return null;
@@ -1596,8 +1586,7 @@ class AttachTool extends GlintTool {
       );
 
   /// Builds a 15s-cadence progress sink from the request's progress token, or null.
-  void Function(int, String?)? _progressSink(
-      GlintSession session, CallToolRequest request) {
+  void Function(int, String?)? _progressSink(GlintSession session, CallToolRequest request) {
     final token = request.meta?.progressToken;
     final notifier = session.progressNotifier;
     if (token == null || notifier == null) return null;
@@ -1606,9 +1595,7 @@ class AttachTool extends GlintTool {
           progressToken: token,
           progress: elapsedSec,
           total: totalSec,
-          message: phase == null
-              ? 'launching… (${elapsedSec}s)'
-              : '$phase (${elapsedSec}s)',
+          message: phase == null ? 'launching… (${elapsedSec}s)' : '$phase (${elapsedSec}s)',
         ));
   }
 
@@ -1649,8 +1636,7 @@ class AttachTool extends GlintTool {
         for (final r in launchable.take(5))
           'attach device:"${r.deviceId}"  → ${r.label} · '
               '${r.deviceName ?? r.platform} · ${_ago(r.lastSeen)}',
-        for (final d in scan.devices)
-          'attach mode:"device" device:"${d.id}"  (${d.name}) — drive the sim, no app',
+        for (final d in scan.devices) 'attach mode:"device" device:"${d.id}"  (${d.name}) — drive the sim, no app',
       ],
       data: {
         'nothingRunning': true,
@@ -1667,11 +1653,7 @@ class AttachTool extends GlintTool {
 
   String? _basename(String? path) {
     if (path == null || path.isEmpty) return null;
-    final parts = path
-        .replaceAll('\\', '/')
-        .split('/')
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final parts = path.replaceAll('\\', '/').split('/').where((p) => p.isNotEmpty).toList();
     return parts.isEmpty ? null : parts.last;
   }
 
@@ -1705,9 +1687,7 @@ class AttachTool extends GlintTool {
     String? onDevice,
   }) {
     final pooled = session?.apps ?? const <AppSession>[];
-    final here = onDevice == null || running == null
-        ? running
-        : running.where((r) => r.deviceId == onDevice).toList();
+    final here = onDevice == null || running == null ? running : running.where((r) => r.deviceId == onDevice).toList();
     final elsewhere = onDevice == null || running == null
         ? const <RunningApp>[]
         : running.where((r) => r.deviceId != onDevice).toList();
@@ -1717,29 +1697,25 @@ class AttachTool extends GlintTool {
         ...leadSteps,
         if (here != null)
           for (final r in here)
-            r.label != null &&
-                    here.where((o) => o.label == r.label).length > 1
+            r.label != null && here.where((o) => o.label == r.label).length > 1
                 ? 'attach vmUri:"${r.vmUri}"  (${r.label} on ${r.deviceName ?? r.deviceId ?? "device unknown"})'
                 : r.label != null
-                ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
-                : r.deviceId != null
-                    ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
-                    : 'attach vmUri:"${r.vmUri}"  (device not correlated)',
+                    ? 'attach app:"${r.label}"  (${r.deviceName ?? r.deviceId ?? "device unknown"})'
+                    : r.deviceId != null
+                        ? 'attach device:"${r.deviceId}"  (${r.deviceName ?? r.platform?.name ?? ""}, app name unknown)'
+                        : 'attach vmUri:"${r.vmUri}"  (device not correlated)',
         if (elsewhere.isNotEmpty)
           'not on $onDevice, so only if you mean another device: '
               '${elsewhere.map((r) => '"${r.label ?? r.vmUri}" (${r.deviceName ?? r.deviceId ?? "device unknown"})').join(", ")}',
-        if (running == null) for (final u in d.vmUris) 'vmUri: "$u"',
+        if (running == null)
+          for (final u in d.vmUris) 'vmUri: "$u"',
         if (onDevice == null)
-          for (final dev in d.devices)
-            'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
-        for (final a in pooled)
-          'already attached: app:"${a.label}" on ${a.deviceName ?? a.id}',
+          for (final dev in d.devices) 'device: "${dev.id}"  (${dev.name}, ${dev.platform.name})',
+        for (final a in pooled) 'already attached: app:"${a.label}" on ${a.deviceName ?? a.id}',
       ],
       data: {
         'needsSelection': true,
-        'apps': running != null
-            ? [for (final r in running) r.toJson()]
-            : [for (final u in d.vmUris) u.toString()],
+        'apps': running != null ? [for (final r in running) r.toJson()] : [for (final u in d.vmUris) u.toString()],
         'devices': [for (final dev in d.devices) dev.toJson()],
         if (session != null) 'attached': session.appsJson(),
       },
@@ -1749,9 +1725,7 @@ class AttachTool extends GlintTool {
   /// `package:acme_pay/main.dart` → `acme_pay`. Null for non-package URIs.
   String? _packageName(String? rootLibUri) {
     final u = rootLibUri == null ? null : Uri.tryParse(rootLibUri);
-    return (u?.scheme == 'package' && u!.pathSegments.isNotEmpty)
-        ? u.pathSegments.first
-        : null;
+    return (u?.scheme == 'package' && u!.pathSegments.isNotEmpty) ? u.pathSegments.first : null;
   }
 
   DevicePlatform? _platformFromArg(String? arg) => switch (arg) {

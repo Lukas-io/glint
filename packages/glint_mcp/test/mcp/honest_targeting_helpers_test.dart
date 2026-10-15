@@ -3,9 +3,7 @@ import 'package:glint_mcp/src/mcp/envelope.dart';
 import 'package:glint_mcp/src/mcp/tools/scroll_tool.dart';
 import 'package:test/test.dart';
 
-SceneNode _n(String label,
-        {String? glintId, String? text, List<SceneNode> children = const []}) =>
-    SceneNode(
+SceneNode _n(String label, {String? glintId, String? text, List<SceneNode> children = const []}) => SceneNode(
       depth: 1,
       indexInParent: 0,
       description: label,
@@ -45,8 +43,7 @@ void main() {
 
     test('points a button label at the tappable ancestor', () {
       expect(idForLabel(root, 'Create account'), 'ink_well_in_decorated_box');
-      expect(labelHint(root, 'create account '),
-          contains('glintId:"ink_well_in_decorated_box"'));
+      expect(labelHint(root, 'create account '), contains('glintId:"ink_well_in_decorated_box"'));
     });
 
     test('plain text maps to the text node itself', () {
@@ -89,8 +86,7 @@ void main() {
     const screen = (x: 0.0, y: 0.0, w: 411.0, h: 600.0);
 
     test('narrows the screen to the scrollable', () {
-      expect(swipeRegion(screen, (x: 0.0, y: 102.0, w: 411.0, h: 706.0)),
-          (x: 0.0, y: 102.0, w: 411.0, h: 498.0));
+      expect(swipeRegion(screen, (x: 0.0, y: 102.0, w: 411.0, h: 706.0)), (x: 0.0, y: 102.0, w: 411.0, h: 498.0));
     });
 
     test('falls back to the screen when the overlap is too small to swipe in', () {

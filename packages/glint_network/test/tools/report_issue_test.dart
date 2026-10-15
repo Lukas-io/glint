@@ -24,8 +24,8 @@ void main() {
     final calls = <List<String>>[];
     setUp(calls.clear);
 
-    Future<Map<String, Object?>> report(Map<String, Object?> args,
-        Future<ProcessResult> Function(String, List<String>) run) async {
+    Future<Map<String, Object?>> report(
+        Map<String, Object?> args, Future<ProcessResult> Function(String, List<String>) run) async {
       final result = await reportIssue(CallToolRequest(name: 'report_issue', arguments: args), run: run);
       final text = result.content.whereType<TextContent>().map((c) => c.text).join();
       return jsonDecode(text) as Map<String, Object?>;

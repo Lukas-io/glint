@@ -34,8 +34,7 @@ typedef BodyFetch = ({
 });
 
 /// A body as the agent should read it: decrypted when body decryption is on and the body fits the scheme, else as captured; [flags] says which.
-({Uint8List bytes, String? mimeType, Map<String, Object?> flags}) bodyForReading(
-    Uint8List bytes, String? mimeType) {
+({Uint8List bytes, String? mimeType, Map<String, Object?> flags}) bodyForReading(Uint8List bytes, String? mimeType) {
   final scheme = BodyDecryptionConfig.active;
   if (scheme == null || bytes.isEmpty) {
     return (bytes: bytes, mimeType: mimeType, flags: const {});
@@ -58,12 +57,10 @@ typedef BodyFetch = ({
 }
 
 /// [decodeBody] of a body [bodyForReading] has decrypted, with its flags folded in.
-Map<String, Object?>? readableBodyJson(
-    Uint8List? bytes, String? mimeType, {required int maxBytes}) {
+Map<String, Object?>? readableBodyJson(Uint8List? bytes, String? mimeType, {required int maxBytes}) {
   if (bytes == null) return null;
   final readable = bodyForReading(bytes, mimeType);
-  final decoded =
-      decodeBody(readable.bytes, readable.mimeType, maxBytes: maxBytes)?.toJson();
+  final decoded = decodeBody(readable.bytes, readable.mimeType, maxBytes: maxBytes)?.toJson();
   if (decoded == null) return null;
   return {...decoded, ...readable.flags};
 }
@@ -121,15 +118,13 @@ Future<RawBodyFetch> _fetchRawBodyBytes(
         bytes: null,
         mimeType: null,
         source: source,
-        error: errorResult('Request `$id` not found in session $sid.',
-            kind: ErrorKind.notFound,
-            extra: {
-              'sessionId': sid,
-              'nextSteps': const [
-                'network_list — list valid request ids in this session',
-                'session_list — confirm the session id is correct',
-              ],
-            }),
+        error: errorResult('Request `$id` not found in session $sid.', kind: ErrorKind.notFound, extra: {
+          'sessionId': sid,
+          'nextSteps': const [
+            'network_list — list valid request ids in this session',
+            'session_list — confirm the session id is correct',
+          ],
+        }),
       );
     }
     mimeType = storedContentType(row, which);
@@ -143,9 +138,8 @@ Future<RawBodyFetch> _fetchRawBodyBytes(
     final dbRow = CapturesDao().getHttpRequest(scope.sessionId, id);
     resolvedIsolateId = dbRow?['isolate_id'] as String?;
   }
-  final candidateIsolates = resolvedIsolateId != null
-      ? [resolvedIsolateId]
-      : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
+  final candidateIsolates =
+      resolvedIsolateId != null ? [resolvedIsolateId] : [for (final iso in attached.vm.httpProfilingIsolates) iso.id];
   if (candidateIsolates.isEmpty) {
     return (
       bytes: null,
@@ -203,9 +197,7 @@ Future<RawBodyFetch> _fetchRawBodyBytes(
             : 'body fetch failed: ${lastError ?? "no isolate had id $id"}',
         // D3: a clean "no such id" answer from a healthy VM is not_found,
         // not unresponsive_vm.
-        kind: looksLikeVmIdMiss(lastError)
-            ? ErrorKind.notFound
-            : ErrorKind.unresponsiveVm,
+        kind: looksLikeVmIdMiss(lastError) ? ErrorKind.notFound : ErrorKind.unresponsiveVm,
         extra: {
           'id': id,
           'triedIsolates': candidateIsolates,
@@ -248,8 +240,7 @@ CallToolResult noBodyResult(
   final warnings = <String>[];
   if (bodyStatus == 'pending') {
     // A history view of a session some server process still captures into is not ended.
-    final ended = !scope.isLive &&
-        CapturesDao().getSession(scope.sessionId)?['ended_at'] != null;
+    final ended = !scope.isLive && CapturesDao().getSession(scope.sessionId)?['ended_at'] != null;
     warnings.add(
       !ended
           ? '$which body not captured yet — the writer backfills async. Retry '

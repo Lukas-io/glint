@@ -22,19 +22,15 @@ class ArgTypeError implements Exception {
 }
 
 /// [key] as an int: an int, a whole double or a numeric string; null when absent, [ArgTypeError] when unreadable.
-int? argInt(Map<String, Object?>? args, String key) =>
-    _arg(args, key, looseInt, 'a whole number');
+int? argInt(Map<String, Object?>? args, String key) => _arg(args, key, looseInt, 'a whole number');
 
 /// [key] as a number (num or numeric string); null when absent, [ArgTypeError] when unreadable.
-double? argNum(Map<String, Object?>? args, String key) =>
-    _arg(args, key, looseNum, 'a number');
+double? argNum(Map<String, Object?>? args, String key) => _arg(args, key, looseNum, 'a number');
 
 /// [key] as a bool (bool or "true"/"false"); null when absent, [ArgTypeError] when unreadable.
-bool? argBool(Map<String, Object?>? args, String key) =>
-    _arg(args, key, looseBool, 'true or false');
+bool? argBool(Map<String, Object?>? args, String key) => _arg(args, key, looseBool, 'true or false');
 
-T? _arg<T>(Map<String, Object?>? args, String key, T? Function(Object?) parse,
-    String expected) {
+T? _arg<T>(Map<String, Object?>? args, String key, T? Function(Object?) parse, String expected) {
   final raw = args?[key];
   if (raw == null) return null;
   return parse(raw) ?? (throw ArgTypeError(key, expected, raw));
@@ -67,13 +63,10 @@ TargetedArgs readTargetedArgs(Map<String, Object?> args, GlintConfig config) => 
 
 /// A from→to segment (x1,y1 → x2,y2), or null when any is absent — the
 /// coordinate branch of swipe / drag.
-({double x1, double y1, double x2, double y2})? readSegment(
-    Map<String, Object?> args) {
+({double x1, double y1, double x2, double y2})? readSegment(Map<String, Object?> args) {
   final x1 = argNum(args, 'x1')?.toDouble();
   final y1 = argNum(args, 'y1')?.toDouble();
   final x2 = argNum(args, 'x2')?.toDouble();
   final y2 = argNum(args, 'y2')?.toDouble();
-  return (x1 != null && y1 != null && x2 != null && y2 != null)
-      ? (x1: x1, y1: y1, x2: x2, y2: y2)
-      : null;
+  return (x1 != null && y1 != null && x2 != null && y2 != null) ? (x1: x1, y1: y1, x2: x2, y2: y2) : null;
 }

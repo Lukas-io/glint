@@ -29,8 +29,7 @@ class HardwareButtonTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'button': Schema.string(
-              description:
-                  'Button name. One of: ${HardwareButton.values.map((b) => b.name).join(', ')}.',
+              description: 'Button name. One of: ${HardwareButton.values.map((b) => b.name).join(', ')}.',
             ),
           },
           required: ['button'],
@@ -38,8 +37,7 @@ class HardwareButtonTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final name = args['button']! as String;
 
@@ -48,9 +46,7 @@ class HardwareButtonTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'unknown hardware button: $name',
         errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: [
-          'use one of: ${HardwareButton.values.map((b) => b.name).join(', ')}'
-        ],
+        nextSteps: ['use one of: ${HardwareButton.values.map((b) => b.name).join(', ')}'],
       );
     }
 
@@ -64,11 +60,7 @@ class HardwareButtonTool extends GlintTool {
         summary: locked == null
             ? 'pressed ${button.name}'
             : 'pressed ${button.name}, device ${locked ? 'locked' : 'unlocked'}',
-        data: {
-          'ok': true,
-          'mode': 'device',
-          if (locked != null) 'locked': locked
-        },
+        data: {'ok': true, 'mode': 'device', if (locked != null) 'locked': locked},
         warnings: [
           if (button == HardwareButton.unlock && locked == true) _stillLocked,
         ],
@@ -79,16 +71,11 @@ class HardwareButtonTool extends GlintTool {
     if (button == HardwareButton.back) return _pressBack(session);
     final failed = await _press(session, button);
     if (failed != null) return failed;
-    return _withOutcome(
-        session,
-        button,
-        StructuredResponse(
-            summary: 'press ${button.name}', data: const {'ok': true}));
+    return _withOutcome(session, button, StructuredResponse(summary: 'press ${button.name}', data: const {'ok': true}));
   }
 
   /// Presses [button] on the backend; the error envelope, or null when it went through.
-  Future<StructuredResponse?> _press(
-      GlintSession session, HardwareButton button) async {
+  Future<StructuredResponse?> _press(GlintSession session, HardwareButton button) async {
     try {
       await session.backend.pressHardwareButton(button);
       return null;
@@ -117,8 +104,7 @@ class HardwareButtonTool extends GlintTool {
     const button = HardwareButton.back;
     final pre = await snapshotPreAction(session);
     // Android back closes the keyboard first; the iOS edge swipe pops the route regardless.
-    final keyboardUp = session.device.platform == DevicePlatform.android &&
-        await _keyboardVisible(session);
+    final keyboardUp = session.device.platform == DevicePlatform.android && await _keyboardVisible(session);
     final scene = await session.reader.readSummary();
     try {
       final result = await session.interactor.run(
@@ -153,9 +139,7 @@ class HardwareButtonTool extends GlintTool {
 
   Future<bool> _keyboardVisible(GlintSession session) async {
     try {
-      return (await session.uiState().timeout(const Duration(seconds: 2)))
-              .keyboardBottomPx >
-          0;
+      return (await session.uiState().timeout(const Duration(seconds: 2))).keyboardBottomPx > 0;
     } on Object {
       return false;
     }
@@ -174,8 +158,8 @@ class HardwareButtonTool extends GlintTool {
   }
 
   /// Adds what the press did (lifecycle, lock state) and the matching warnings and next steps.
-  Future<StructuredResponse> _withOutcome(GlintSession session,
-      HardwareButton button, StructuredResponse response) async {
+  Future<StructuredResponse> _withOutcome(
+      GlintSession session, HardwareButton button, StructuredResponse response) async {
     // The "what happened" for a hardware button is a lifecycle change, not
     // a scene diff. Read it best-effort (home may background the app and
     // make the eval fail — that itself signals it took).
@@ -183,17 +167,14 @@ class HardwareButtonTool extends GlintTool {
     final locked = await _lockStateFor(session, button);
     final stuck = switch (button) {
       HardwareButton.home => lifecycle == 'resumed',
-      HardwareButton.lock =>
-        locked == false || (locked == null && lifecycle == 'resumed'),
+      HardwareButton.lock => locked == false || (locked == null && lifecycle == 'resumed'),
       _ => false,
     };
     final stillLocked = button == HardwareButton.unlock && locked == true;
-    final backMissed =
-        button == HardwareButton.back && response.data?['changed'] == false;
+    final backMissed = button == HardwareButton.back && response.data?['changed'] == false;
     final summary = StringBuffer(response.summary);
     if (lifecycle != null) summary.write(', app is $lifecycle');
-    if (locked != null)
-      summary.write(', device ${locked ? 'locked' : 'unlocked'}');
+    if (locked != null) summary.write(', device ${locked ? 'locked' : 'unlocked'}');
     return response.copyWith(
       summary: summary.toString(),
       data: {
@@ -232,20 +213,20 @@ class HardwareButtonTool extends GlintTool {
   }
 
   /// A back gesture is a route change or nothing: read `changed` like a tap does, and give the gesture one more try when the first missed.
-  Future<StructuredResponse> _backOutcome(GlintSession session, Scene scene,
-      StructuredResponse response, SceneSnapshot? pre) async {
+  Future<StructuredResponse> _backOutcome(
+      GlintSession session, Scene scene, StructuredResponse response, SceneSnapshot? pre) async {
     var post = await readPostActionState(session, pre, includeSceneText: false);
     if (post != null && post.changed == false) {
-      final again = StructuredResponse.fromActionResult(await session.interactor
-          .run(scene, PressHardwareButton(HardwareButton.back)));
+      final again = StructuredResponse.fromActionResult(
+          await session.interactor.run(scene, PressHardwareButton(HardwareButton.back)));
       if (again.isError) return again;
       post = await readPostActionState(session, pre, includeSceneText: false);
     }
     if (post != null && post.changed == false && session.device.platform == DevicePlatform.ios) {
       final bar = _appBarBack(scene);
       if (bar != null) {
-        final tapped = StructuredResponse.fromActionResult(
-            await session.interactor.run(scene, Tap(SymbolicTarget(bar))));
+        final tapped =
+            StructuredResponse.fromActionResult(await session.interactor.run(scene, Tap(SymbolicTarget(bar))));
         if (!tapped.isError) {
           post = await readPostActionState(session, pre, includeSceneText: false);
           response = response.copyWith(
@@ -262,17 +243,17 @@ class HardwareButtonTool extends GlintTool {
   static String? _appBarBack(Scene scene) {
     const labels = {'BackButton', 'CupertinoNavigationBarBackButton', 'CloseButton'};
     for (final n in scene.root.walk()) {
-      if (!n.isOffstage && n.glintId != null && labels.contains(n.baseLabel) && !scene.isInOverlay(n.glintId!)) return n.glintId;
+      if (!n.isOffstage && n.glintId != null && labels.contains(n.baseLabel) && !scene.isInOverlay(n.glintId!)) {
+        return n.glintId;
+      }
     }
     return null;
   }
 
-  static const _stillLocked =
-      'the device still reports itself locked after the unlock sequence';
+  static const _stillLocked = 'the device still reports itself locked after the unlock sequence';
 
   /// SpringBoard's lock state after a lock / unlock press; null for other buttons or when the backend cannot tell.
-  Future<bool?> _lockStateFor(
-      GlintSession session, HardwareButton button) async {
+  Future<bool?> _lockStateFor(GlintSession session, HardwareButton button) async {
     if (button != HardwareButton.lock && button != HardwareButton.unlock) {
       return null;
     }
@@ -287,15 +268,13 @@ class HardwareButtonTool extends GlintTool {
   /// change away from (or back to) resumed, so the reply reports the outcome
   /// rather than the state a few ms after the press. A read that gets no
   /// answer within a second means the OS suspended the app.
-  Future<String?> _settledLifecycle(
-      GlintSession session, HardwareButton button) async {
+  Future<String?> _settledLifecycle(GlintSession session, HardwareButton button) async {
     final wantsResumed = button == HardwareButton.unlock;
     final expectsChange = button != HardwareButton.back;
     String? last;
     for (var i = 0; i < (expectsChange ? 6 : 1); i++) {
       try {
-        last =
-            await session.lifecycleState().timeout(const Duration(seconds: 1));
+        last = await session.lifecycleState().timeout(const Duration(seconds: 1));
       } on TimeoutException {
         return wantsResumed ? last : 'suspended';
       } on Object {

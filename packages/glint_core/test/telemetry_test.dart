@@ -13,8 +13,7 @@ void main() {
     });
 
     test('DO_NOT_TRACK wins over an opt-in', () {
-      expect(
-          switches.sharingOffReason(const {'GLINT_NETWORK_TELEMETRY': 'on', 'DO_NOT_TRACK': '1'}),
+      expect(switches.sharingOffReason(const {'GLINT_NETWORK_TELEMETRY': 'on', 'DO_NOT_TRACK': '1'}),
           'DO_NOT_TRACK is set');
     });
 

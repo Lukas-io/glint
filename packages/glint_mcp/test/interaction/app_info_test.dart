@@ -14,15 +14,11 @@ void _writeBuiltApp(
   String? displayName,
   String? bundleName,
 }) {
-  final appDir =
-      Directory('$projectDir/build/ios/$variant/Runner.app')
-        ..createSync(recursive: true);
+  final appDir = Directory('$projectDir/build/ios/$variant/Runner.app')..createSync(recursive: true);
   final entries = <String>[
     '<key>CFBundleIdentifier</key><string>$bundleId</string>',
-    if (displayName != null)
-      '<key>CFBundleDisplayName</key><string>$displayName</string>',
-    if (bundleName != null)
-      '<key>CFBundleName</key><string>$bundleName</string>',
+    if (displayName != null) '<key>CFBundleDisplayName</key><string>$displayName</string>',
+    if (bundleName != null) '<key>CFBundleName</key><string>$bundleName</string>',
   ];
   File('${appDir.path}/Info.plist').writeAsStringSync(
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -41,8 +37,7 @@ void main() {
 
   group('appInfoForProject', () {
     test('reads bundle id + display name from the built sim app', () async {
-      _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.example.eats', displayName: 'Example Eats');
+      _writeBuiltApp(tmp.path, 'iphonesimulator', bundleId: 'com.example.eats', displayName: 'Example Eats');
       final info = await discovery.appInfoForProject(tmp.path);
       expect(info, isNotNull);
       expect(info!.$1, 'com.example.eats');
@@ -50,17 +45,14 @@ void main() {
     });
 
     test('falls back to CFBundleName when no display name', () async {
-      _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.app.x', bundleName: 'X App');
+      _writeBuiltApp(tmp.path, 'iphonesimulator', bundleId: 'com.app.x', bundleName: 'X App');
       final info = await discovery.appInfoForProject(tmp.path);
       expect(info!.$2, 'X App');
     });
 
     test('prefers the simulator build over the device build', () async {
-      _writeBuiltApp(tmp.path, 'iphoneos',
-          bundleId: 'com.device.build', displayName: 'Device');
-      _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.sim.build', displayName: 'Sim');
+      _writeBuiltApp(tmp.path, 'iphoneos', bundleId: 'com.device.build', displayName: 'Device');
+      _writeBuiltApp(tmp.path, 'iphonesimulator', bundleId: 'com.sim.build', displayName: 'Sim');
       final info = await discovery.appInfoForProject(tmp.path);
       expect(info!.$1, 'com.sim.build');
     });
@@ -72,14 +64,10 @@ void main() {
     test('two projects yield their OWN identities (no cross-talk)', () async {
       final other = Directory.systemTemp.createTempSync('glint_appinfo2_');
       addTearDown(() => other.deleteSync(recursive: true));
-      _writeBuiltApp(tmp.path, 'iphonesimulator',
-          bundleId: 'com.example.eats', displayName: 'Example Eats');
-      _writeBuiltApp(other.path, 'iphonesimulator',
-          bundleId: 'com.gskinner.flutter.wonders', displayName: 'Wonderous');
-      expect((await discovery.appInfoForProject(tmp.path))!.$1,
-          'com.example.eats');
-      expect((await discovery.appInfoForProject(other.path))!.$1,
-          'com.gskinner.flutter.wonders');
+      _writeBuiltApp(tmp.path, 'iphonesimulator', bundleId: 'com.example.eats', displayName: 'Example Eats');
+      _writeBuiltApp(other.path, 'iphonesimulator', bundleId: 'com.gskinner.flutter.wonders', displayName: 'Wonderous');
+      expect((await discovery.appInfoForProject(tmp.path))!.$1, 'com.example.eats');
+      expect((await discovery.appInfoForProject(other.path))!.$1, 'com.gskinner.flutter.wonders');
     });
   });
 }

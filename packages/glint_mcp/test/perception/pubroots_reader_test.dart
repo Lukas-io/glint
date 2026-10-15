@@ -29,8 +29,7 @@ class _StubRuntime implements FlutterRuntime {
   }
 
   @override
-  Future<void> setPubRootDirectories(List<String> dirs) async =>
-      pubRootCalls.add(dirs);
+  Future<void> setPubRootDirectories(List<String> dirs) async => pubRootCalls.add(dirs);
 
   @override
   Future<void> disposeInspectorGroup(String groupName) async {}
@@ -62,13 +61,11 @@ class _StubRuntime implements FlutterRuntime {
   }) async =>
       {};
   @override
-  Future<void> setInspectorSelection(
-      {required String inspectorId, required String groupName}) async {}
+  Future<void> setInspectorSelection({required String inspectorId, required String groupName}) async {}
   @override
   Future<InstanceRef> evaluate(String expression) => throw UnimplementedError();
   @override
-  Future<String?> evaluateString(String expression,
-          {bool rethrowErrors = false}) async => null;
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async => null;
   @override
   VmService get rawService => throw UnimplementedError();
   @override

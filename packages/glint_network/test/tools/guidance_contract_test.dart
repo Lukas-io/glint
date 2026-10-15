@@ -55,8 +55,7 @@ void main() {
   });
 
   int endedSession() {
-    final id = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://e', isolateId: null, projectPath: null);
+    final id = dao.createSession(appName: 'a', vmServiceUri: 'ws://e', isolateId: null, projectPath: null);
     dao.endSession(id);
     return id;
   }
@@ -65,41 +64,29 @@ void main() {
     test('ended session never says "Drive the app"', () async {
       final id = endedSession();
       for (final res in [
-        await networkSummarize(CallToolRequest(
-            name: 'network_summarize',
-            arguments: {'sessionId': id, 'sinceMs': 0})),
-        await networkReport(CallToolRequest(
-            name: 'network_report', arguments: {'sessionId': id})),
-        await alertsDrain(CallToolRequest(
-            name: 'alerts_drain', arguments: {'sessionId': id})),
+        await networkSummarize(CallToolRequest(name: 'network_summarize', arguments: {'sessionId': id, 'sinceMs': 0})),
+        await networkReport(CallToolRequest(name: 'network_report', arguments: {'sessionId': id})),
+        await alertsDrain(CallToolRequest(name: 'alerts_drain', arguments: {'sessionId': id})),
       ]) {
         final text = res.structuredContent.toString();
-        expect(text, isNot(contains('Drive the app')),
-            reason: 'ended session got a drive-the-app hint: $text');
-        expect(text.contains('complete'), isTrue,
-            reason: 'ended session should route to its complete capture');
+        expect(text, isNot(contains('Drive the app')), reason: 'ended session got a drive-the-app hint: $text');
+        expect(text.contains('complete'), isTrue, reason: 'ended session should route to its complete capture');
       }
     });
 
     test('live attached session still says "Drive the app"', () async {
-      final id = dao.createSession(
-          appName: 'a', vmServiceUri: 'ws://live1', isolateId: null,
-          projectPath: null);
+      final id = dao.createSession(appName: 'a', vmServiceUri: 'ws://live1', isolateId: null, projectPath: null);
       SessionRegistry.instance.register(fakeSession(id, 'ws://live1'));
-      final res = await networkSummarize(CallToolRequest(
-          name: 'network_summarize',
-          arguments: {'sessionId': id, 'sinceMs': 0}));
+      final res = await networkSummarize(
+          CallToolRequest(name: 'network_summarize', arguments: {'sessionId': id, 'sinceMs': 0}));
       expect(res.structuredContent.toString(), contains('Drive the app'));
     });
 
     test('interrupted (no clean end) is called interrupted, not live', () {
-      final id = dao.createSession(
-          appName: 'a', vmServiceUri: 'ws://i', isolateId: null,
-          projectPath: null);
+      final id = dao.createSession(appName: 'a', vmServiceUri: 'ws://i', isolateId: null, projectPath: null);
       final state = SessionStateView.of(id);
       expect(state.isInterrupted, isTrue);
-      expect(
-          sessionStatusLabel(isAttached: false, endedAtMs: null), 'interrupted');
+      expect(sessionStatusLabel(isAttached: false, endedAtMs: null), 'interrupted');
     });
   });
 
@@ -111,8 +98,7 @@ void main() {
         'path, status_code, start_us, response_size) VALUES (?,?,?,?,?,?,?,?,?)',
         [id, 'r1', 'GET', 'https://x/a', 'x', '/a', 200, 1000, 55],
       );
-      final res = await networkGet(CallToolRequest(
-          name: 'network_get', arguments: {'sessionId': id, 'id': 'r1'}));
+      final res = await networkGet(CallToolRequest(name: 'network_get', arguments: {'sessionId': id, 'id': 'r1'}));
       final text = res.structuredContent.toString();
       expect(text, isNot(contains('backfilling')));
       expect(text, contains('never captured'));
@@ -121,11 +107,8 @@ void main() {
 
   group('session_open tri-state (F11)', () {
     test('interrupted session is not "still live"', () async {
-      final id = dao.createSession(
-          appName: 'a', vmServiceUri: 'ws://z', isolateId: null,
-          projectPath: null);
-      final res = await sessionOpen(CallToolRequest(
-          name: 'session_open', arguments: {'id': id}));
+      final id = dao.createSession(appName: 'a', vmServiceUri: 'ws://z', isolateId: null, projectPath: null);
+      final res = await sessionOpen(CallToolRequest(name: 'session_open', arguments: {'id': id}));
       final summary = res.structuredContent!['summary'].toString();
       expect(summary, isNot(contains('still live')));
       expect(summary, contains('interrupted'));
@@ -135,9 +118,7 @@ void main() {
   group('scope shadowing (D2/F4)', () {
     test('view over live sessions carries a note, promoted to a warning', () {
       final ended = endedSession();
-      final liveId = dao.createSession(
-          appName: 'a', vmServiceUri: 'ws://live2', isolateId: null,
-          projectPath: null);
+      final liveId = dao.createSession(appName: 'a', vmServiceUri: 'ws://live2', isolateId: null, projectPath: null);
       SessionRegistry.instance.register(fakeSession(liveId, 'ws://live2'));
       Session.instance.viewedSessionId = ended;
 
@@ -147,8 +128,7 @@ void main() {
       expect(scope.note, contains('HISTORY'));
 
       final res = jsonResult({'summary': 'x'}, scopeNote: scope.note);
-      expect((res.structuredContent!['warnings'] as List).join(),
-          contains('HISTORY'));
+      expect((res.structuredContent!['warnings'] as List).join(), contains('HISTORY'));
     });
 
     test('agent-initiated attach closes the stale view and says so', () {
@@ -163,23 +143,18 @@ void main() {
 
   group('alerts_config schema unification (F13)', () {
     test('rule count, toggles, and schema cover all 7 rules', () async {
-      final res = await alertsConfig(
-          CallToolRequest(name: 'alerts_config', arguments: const {}));
+      final res = await alertsConfig(CallToolRequest(name: 'alerts_config', arguments: const {}));
       final sc = res.structuredContent!;
       expect(sc['summary'].toString(), contains('7/7'));
-      final rules =
-          ((sc['config'] as Map)['rules'] as Map).keys.cast<String>();
+      final rules = ((sc['config'] as Map)['rules'] as Map).keys.cast<String>();
       expect(rules, contains('http_anomaly'));
 
-      final toggled = await alertsConfig(CallToolRequest(
-          name: 'alerts_config',
-          arguments: {
-            'set': {
-              'rules': {'http_anomaly': false}
-            }
-          }));
-      final after =
-          ((toggled.structuredContent!['config'] as Map)['rules'] as Map);
+      final toggled = await alertsConfig(CallToolRequest(name: 'alerts_config', arguments: {
+        'set': {
+          'rules': {'http_anomaly': false}
+        }
+      }));
+      final after = ((toggled.structuredContent!['config'] as Map)['rules'] as Map);
       expect(after['http_anomaly'], isFalse);
       // Restore for other tests (per-process singleton).
       await alertsConfig(CallToolRequest(name: 'alerts_config', arguments: {

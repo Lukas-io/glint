@@ -8,8 +8,7 @@ import 'package:vm_service/vm_service.dart';
 
 final _long = 'x' * 600;
 
-InstanceRef _str(String id, String preview, {bool truncated = false, int? length}) =>
-    InstanceRef(
+InstanceRef _str(String id, String preview, {bool truncated = false, int? length}) => InstanceRef(
       id: id,
       kind: InstanceKind.kString,
       identityHashCode: 0,
@@ -29,8 +28,7 @@ InstanceRef _obj(String id, String className) => InstanceRef(
 /// Serves the full text of `long`, toString() of `err`, and a slow refetch for `slow`.
 class _Service implements VmService {
   @override
-  Future<Obj> getObject(String isolateId, String objectId,
-      {int? offset, int? count, String? idZoneId}) async {
+  Future<Obj> getObject(String isolateId, String objectId, {int? offset, int? count, String? idZoneId}) async {
     if (objectId == 'slow') await Future<void>.delayed(const Duration(milliseconds: 50));
     return Instance(
       id: objectId,
@@ -42,11 +40,11 @@ class _Service implements VmService {
   }
 
   @override
-  Future<Response> invoke(String isolateId, String targetId, String selector,
-          List<String> argumentIds,
+  Future<Response> invoke(String isolateId, String targetId, String selector, List<String> argumentIds,
           {bool? disableBreakpoints, String? idZoneId}) async =>
       targetId == 'gone'
-          ? throw SentinelException.parse('invoke', {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'})
+          ? throw SentinelException.parse(
+              'invoke', {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'})
           : _str('s', 'Bad state: boom');
 
   @override
@@ -103,12 +101,10 @@ void main() {
     final buffer = AppLogBuffer();
     await buffer.subscribe(rt);
     rt.logs.add(_log(_str('slow', 'first…', truncated: true, length: 10)));
-    rt.logs.add(_log(_str('long', 'x' * 128, truncated: true, length: 600),
-        error: _obj('err', 'StateError')));
+    rt.logs.add(_log(_str('long', 'x' * 128, truncated: true, length: 600), error: _obj('err', 'StateError')));
     await Future<void>.delayed(const Duration(milliseconds: 150));
     final entries = buffer.query(limit: 10).toList();
-    expect(entries.map((e) => e.content.split('\n').first),
-        ['first-full', _long]);
+    expect(entries.map((e) => e.content.split('\n').first), ['first-full', _long]);
     expect(entries.last.content, endsWith('error: Bad state: boom'));
   });
 }

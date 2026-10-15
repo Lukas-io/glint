@@ -90,7 +90,17 @@ void main() {
 
     test('maxDepth collapses deep branches', () {
       final deep = {
-        'a': {'b': {'c': {'d': {'e': {'f': {'g': 1}}}}}},
+        'a': {
+          'b': {
+            'c': {
+              'd': {
+                'e': {
+                  'f': {'g': 1}
+                }
+              }
+            }
+          }
+        },
       };
       final s = jsonSkeleton(deep, maxDepth: 2);
       // somewhere down the chain a node is collapsed with truncated:maxDepth

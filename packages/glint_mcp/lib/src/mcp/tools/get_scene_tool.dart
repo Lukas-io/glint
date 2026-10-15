@@ -26,13 +26,11 @@ class GetSceneTool extends GlintTool {
               description: 'text (default). Leave unset.',
             ),
             'glintId': Schema.string(
-              description:
-                  'Only this node and its descendants. Use to drill into one '
+              description: 'Only this node and its descendants. Use to drill into one '
                   'container or list instead of re-reading the whole screen.',
             ),
             'depth': Schema.int(
-              description:
-                  'With glintId: levels below it to include (0 = the node '
+              description: 'With glintId: levels below it to include (0 = the node '
                   'only). Default: all, up to the renderer\'s cap.',
             ),
           },
@@ -40,8 +38,7 @@ class GetSceneTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
     final glintId = args['glintId'] as String?;
@@ -78,8 +75,7 @@ class GetSceneTool extends GlintTool {
     }
 
     try {
-      return await _readFlutterScene(session, format,
-          glintId: glintId, depth: depth);
+      return await _readFlutterScene(session, format, glintId: glintId, depth: depth);
     } on InspectorReadError catch (e) {
       if (looksLikeConnectionLoss(e)) throw RuntimeConnectionLostError(e.message);
       // A null widget tree usually means no frame to inspect — the app is
@@ -152,10 +148,8 @@ class GetSceneTool extends GlintTool {
       final String rendered;
       if (subtree != null) {
         rendered = format == 'json'
-            ? const JsonSceneRenderer().encode(const JsonSceneRenderer()
-                .nodeMap(subtree, fold: false, maxDepth: depth))
-            : const PlainTextSceneRenderer()
-                .renderSubtree(subtree, maxDepth: depth);
+            ? const JsonSceneRenderer().encode(const JsonSceneRenderer().nodeMap(subtree, fold: false, maxDepth: depth))
+            : const PlainTextSceneRenderer().renderSubtree(subtree, maxDepth: depth);
       } else if (format == 'json') {
         const jr = JsonSceneRenderer();
         var map = jr.toMap(semantic);
@@ -203,11 +197,8 @@ class GetSceneTool extends GlintTool {
       final state = const StateObserver().observe(semantic);
       final lifecycle = await session.lifecycleState();
       final ui = await session.uiState();
-      final route =
-          semantic.routeStack.isEmpty ? null : semantic.routeStack.first;
-      final overlay = semantic.overlayLayers.isEmpty
-          ? null
-          : semantic.overlayLayers.first.kind;
+      final route = semantic.routeStack.isEmpty ? null : semantic.routeStack.first;
+      final overlay = semantic.overlayLayers.isEmpty ? null : semantic.overlayLayers.first.kind;
       final trailer = [
         'state: ${state.name}',
         if (lifecycle != null && lifecycle != 'resumed') 'lifecycle: $lifecycle',
@@ -215,10 +206,8 @@ class GetSceneTool extends GlintTool {
         if (overlay != null) 'overlay: $overlay',
         if (ui.focusedType != null) 'focused: ${ui.focusedType}',
         if (ui.keyboardBottomPx > 0) 'keyboard: visible',
-        if (ui.orientation != null && ui.orientation != 'portrait')
-          'orientation: ${ui.orientation}',
-        if (ui.brightness != null && ui.brightness != 'light')
-          'brightness: ${ui.brightness}',
+        if (ui.orientation != null && ui.orientation != 'portrait') 'orientation: ${ui.orientation}',
+        if (ui.brightness != null && ui.brightness != 'light') 'brightness: ${ui.brightness}',
         if (subtree != null) 'subtree: $glintId',
         ...trailerBits,
       ].join(' · ');
@@ -230,14 +219,11 @@ class GetSceneTool extends GlintTool {
           data: {
             'format': format,
             'state': state.name,
-            if (lifecycle != null && lifecycle != 'resumed')
-              'lifecycle': lifecycle,
+            if (lifecycle != null && lifecycle != 'resumed') 'lifecycle': lifecycle,
             if (ui.focusedType != null) 'focusedType': ui.focusedType,
             if (ui.keyboardBottomPx > 0) 'keyboardVisible': true,
-            if (ui.orientation != null && ui.orientation != 'portrait')
-              'orientation': ui.orientation,
-            if (ui.brightness != null && ui.brightness != 'light')
-              'brightness': ui.brightness,
+            if (ui.orientation != null && ui.orientation != 'portrait') 'orientation': ui.orientation,
+            if (ui.brightness != null && ui.brightness != 'light') 'brightness': ui.brightness,
             if (route != null) 'route': route.toJson(),
             if (overlay != null) ...{'hasOverlay': true, 'overlayKind': overlay},
             if (subtree != null) 'subtree': glintId,
@@ -262,8 +248,7 @@ class GetSceneTool extends GlintTool {
   /// A folded run of more than ten rows whose last row is laid out far below
   /// the viewport means the list builds everything up front. Reported once per
   /// screen, as advice for whoever owns the app.
-  Future<List<String>> _eagerListFindings(GlintSession session,
-      SemanticScene semantic, List<FoldedRun> runs) async {
+  Future<List<String>> _eagerListFindings(GlintSession session, SemanticScene semantic, List<FoldedRun> runs) async {
     if (!session.config.devHints) return const [];
     final app = session.active;
     final signature = semantic.sourceScene.contentSignature();
@@ -302,8 +287,7 @@ class GetSceneTool extends GlintTool {
     }
   }
 
-  Future<StructuredResponse> _handleNativeMode(
-      GlintSession session, String format) async {
+  Future<StructuredResponse> _handleNativeMode(GlintSession session, String format) async {
     final nativeReader = session.nativeReader;
     if (nativeReader == null) {
       return StructuredResponse.error(
@@ -362,8 +346,10 @@ class GetSceneTool extends GlintTool {
           'tap its button with tap x,y in logical points (see the image line above for the scale)',
         if (overlay && surface == null) 'or wait: some sheets dismiss on their own, then get_scene again',
         if (locked == true) 'hardware_button unlock, then get_scene',
-        if (!overlay && locked != true && surface == null) '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
-        if (!overlay && locked != true && surface == null) 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+        if (!overlay && locked != true && surface == null)
+          '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
+        if (!overlay && locked != true && surface == null)
+          'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
       ],
       data: {
         'format': format,

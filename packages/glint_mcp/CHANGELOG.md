@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- An example (`example/example.md`), the package's own analysis options and `dart format` across the package, so it scores fully on pub.dev. The remaining lint notes are fixed; there is no change in behaviour.
+
 ### Added
 
 - glint installs from pub.dev: `dart pub global activate glint_mcp`, then point your agent at the `glint` command. Each release tag now publishes to pub.dev after the GitHub Release.

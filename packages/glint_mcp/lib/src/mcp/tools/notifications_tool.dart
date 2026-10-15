@@ -26,11 +26,13 @@ class NotificationsTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'list (default) | tap | action | clear | send | answer'),
-            'choice': Schema.string(description: 'answer: allow | deny, for the system prompt asking to allow notifications.'),
+            'choice': Schema.string(
+                description: 'answer: allow | deny, for the system prompt asking to allow notifications.'),
             'text': Schema.string(description: 'tap/action/clear: the notification whose title or body contains this.'),
             'index': Schema.int(description: 'tap/action/clear: its number in list (1 = newest).'),
             'action': Schema.string(description: 'action: the button label, e.g. Reply, Answer, Mark as read.'),
-            'all': Schema.bool(description: 'list: every app\'s notifications, not only the attached app\'s. Default false.'),
+            'all': Schema.bool(
+                description: 'list: every app\'s notifications, not only the attached app\'s. Default false.'),
             'title': Schema.string(description: 'send: alert title.'),
             'body': Schema.string(description: 'send: alert body.'),
             'category': Schema.string(description: 'send: aps.category, which picks the app\'s action buttons.'),
@@ -55,16 +57,23 @@ class NotificationsTool extends GlintTool {
           ? StructuredResponse.error(
               summary: 'Android has no simulated push: a notification only comes from the app or its push server',
               errorKind: GlintErrorKind.unsupportedBackendAction,
-              nextSteps: const ['trigger the app\'s own notification (the step that posts it, then background the app), then notifications op:list'],
+              nextSteps: const [
+                'trigger the app\'s own notification (the step that posts it, then background the app), then notifications op:list'
+              ],
             )
           : _android(session, dev, op, args),
-      IosSimulator() => op == 'send' ? _send(dev.udid, app.bundleId, args, inFront: app.lastLifecycle == 'resumed' || app.lastLifecycle == 'inactive') : _ios(session, dev, op, args, request),
+      IosSimulator() => op == 'send'
+          ? _send(dev.udid, app.bundleId, args,
+              inFront: app.lastLifecycle == 'resumed' || app.lastLifecycle == 'inactive')
+          : _ios(session, dev, op, args, request),
       _ => StructuredResponse.refuse(dev, Ability.notifications) ??
-          StructuredResponse.error(summary: 'notifications are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice),
+          StructuredResponse.error(
+              summary: 'notifications are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice),
     };
   }
 
-  Future<StructuredResponse> _android(GlintSession session, AndroidDevice dev, String op, Map<String, Object?> args) async {
+  Future<StructuredResponse> _android(
+      GlintSession session, AndroidDevice dev, String op, Map<String, Object?> args) async {
     final package = session.active!.bundleId ?? session.active!.package;
     final all = await _posted(dev);
     if (all == null) {
@@ -74,7 +83,10 @@ class NotificationsTool extends GlintTool {
         nextSteps: const ['check the device with adb devices, then retry'],
       );
     }
-    final mine = [for (final n in all) if (package == null || n.package == package) n];
+    final mine = [
+      for (final n in all)
+        if (package == null || n.package == package) n
+    ];
     if (op == 'answer') return _answerAndroid(session, dev, args);
     if (op == 'list') {
       final shown = (argBool(args, 'all') ?? false) ? all : mine;
@@ -85,7 +97,9 @@ class NotificationsTool extends GlintTool {
                 '${shown.length} notification(s)${shown == all ? '' : ' from $package'}, newest first:',
                 for (final (i, n) in shown.indexed) '${i + 1}. ${shown == all ? '[${n.package}] ' : ''}${n.line}',
               ].join('\n'),
-        data: {'notifications': [for (final n in shown) n.toJson()]},
+        data: {
+          'notifications': [for (final n in shown) n.toJson()]
+        },
         nextSteps: [if (shown.isNotEmpty) 'notifications op:tap index:1 opens the newest'],
       );
     }
@@ -98,12 +112,16 @@ class NotificationsTool extends GlintTool {
     final target = pick.target!;
     if (op == 'action') {
       final label = args['action'] as String?;
-      if (label == null) return _bad('op:action needs action:"<button label>"', 'its buttons: ${target.actions.join(', ')}');
+      if (label == null) {
+        return _bad('op:action needs action:"<button label>"', 'its buttons: ${target.actions.join(', ')}');
+      }
       if (!target.actions.any((a) => a.toLowerCase() == label.toLowerCase())) {
         return StructuredResponse.error(
           summary: '"${target.line}" has no "$label" button',
           errorKind: GlintErrorKind.targetNotFound,
-          nextSteps: [target.actions.isEmpty ? 'it has no buttons; op:tap opens it' : 'its buttons: ${target.actions.join(', ')}'],
+          nextSteps: [
+            target.actions.isEmpty ? 'it has no buttons; op:tap opens it' : 'its buttons: ${target.actions.join(', ')}'
+          ],
         );
       }
     }
@@ -142,7 +160,8 @@ class NotificationsTool extends GlintTool {
     }
   }
 
-  ({PostedNotification? target, StructuredResponse? error}) _pick(List<PostedNotification> mine, Map<String, Object?> args) {
+  ({PostedNotification? target, StructuredResponse? error}) _pick(
+      List<PostedNotification> mine, Map<String, Object?> args) {
     final index = argInt(args, 'index');
     final text = (args['text'] as String?)?.toLowerCase();
     if (mine.isEmpty) {
@@ -156,11 +175,23 @@ class NotificationsTool extends GlintTool {
       );
     }
     if (index != null) {
-      if (index < 1 || index > mine.length) return (target: null, error: _bad('index must be 1-${mine.length}', 'notifications op:list numbers them'));
+      if (index < 1 || index > mine.length) {
+        return (target: null, error: _bad('index must be 1-${mine.length}', 'notifications op:list numbers them'));
+      }
       return (target: mine[index - 1], error: null);
     }
-    if (text == null) return (target: mine.length == 1 ? mine.single : null, error: mine.length == 1 ? null : _bad('${mine.length} notifications: pick one with text or index', 'notifications op:list numbers them'));
-    final hits = [for (final n in mine) if ('${n.title ?? ''}\n${n.text ?? ''}'.toLowerCase().contains(text)) n];
+    if (text == null) {
+      return (
+        target: mine.length == 1 ? mine.single : null,
+        error: mine.length == 1
+            ? null
+            : _bad('${mine.length} notifications: pick one with text or index', 'notifications op:list numbers them')
+      );
+    }
+    final hits = [
+      for (final n in mine)
+        if ('${n.title ?? ''}\n${n.text ?? ''}'.toLowerCase().contains(text)) n
+    ];
     if (hits.length == 1) return (target: hits.single, error: null);
     return (
       target: null,
@@ -201,14 +232,16 @@ class NotificationsTool extends GlintTool {
   }
 
   StructuredResponse _noWindows(AndroidDevice dev) => StructuredResponse.error(
-        summary: 'the screen of ${dev.serial} could not be read: glint\'s device server is not running and uiautomator dump failed',
+        summary:
+            'the screen of ${dev.serial} could not be read: glint\'s device server is not running and uiautomator dump failed',
         errorKind: GlintErrorKind.backendToolError,
         detail: 'another automation tool may hold the accessibility connection',
         nextSteps: const ['stop other automation tools on the device, then attach again'],
       );
 
   /// Opens the shade and finds [target]'s row, expanding it when [wantAction] is folded away.
-  Future<({ShadeRow? row, StructuredResponse? error})> _shadeRow(GlintSession session, AndroidDevice dev, PostedNotification target,
+  Future<({ShadeRow? row, StructuredResponse? error})> _shadeRow(
+      GlintSession session, AndroidDevice dev, PostedNotification target,
       {String? wantAction}) async {
     await _adb(dev, ['shell', 'cmd', 'statusbar', 'expand-notifications']);
     ShadeRow? row;
@@ -220,7 +253,9 @@ class NotificationsTool extends GlintTool {
         return (row: null, error: _noWindows(dev));
       }
       final shade = parseShade(windows);
-      row = _smallest(shade.rows.where((r) => r.title == target.title && (target.text == null || (r.text ?? '').startsWith(target.text!.split('\n').first)))) ??
+      row = _smallest(shade.rows.where((r) =>
+              r.title == target.title &&
+              (target.text == null || (r.text ?? '').startsWith(target.text!.split('\n').first)))) ??
           _smallest(shade.rows.where((r) => r.title == target.title));
       if (row == null) continue;
       final want = wantAction?.toLowerCase();
@@ -257,11 +292,18 @@ class NotificationsTool extends GlintTool {
       final posted = await _posted(dev) ?? const [];
       if (!posted.any((n) => n.package == package && n.title == r.title)) continue;
       await session.backend.swipe(
-          physicalX1: r.center.x, physicalY1: r.center.y, physicalX2: r.bounds[2] * 2, physicalY2: r.center.y, durationMs: 250);
+          physicalX1: r.center.x,
+          physicalY1: r.center.y,
+          physicalX2: r.bounds[2] * 2,
+          physicalY2: r.center.y,
+          durationMs: 250);
       await Future<void>.delayed(const Duration(milliseconds: 400));
     }
     await _adb(dev, ['shell', 'cmd', 'statusbar', 'collapse']);
-    final left = [for (final n in await _posted(dev) ?? const <PostedNotification>[]) if (n.package == package && !n.ongoing) n];
+    final left = [
+      for (final n in await _posted(dev) ?? const <PostedNotification>[])
+        if (n.package == package && !n.ongoing) n
+    ];
     return left.isEmpty
         ? StructuredResponse(summary: 'cleared $count notification(s) from $package', data: {'cleared': count})
         : StructuredResponse.error(
@@ -295,7 +337,8 @@ class NotificationsTool extends GlintTool {
       );
     }
     await session.settleDetector.awaitSettle(ceilingMs: 2000, quietFramesNeeded: 2, checkLoadingAffordances: false);
-    final route = await session.withScene((s) async => s.routeStack.isEmpty ? null : s.routeStack.first.name, detail: SceneDetail.structural);
+    final route = await session.withScene((s) async => s.routeStack.isEmpty ? null : s.routeStack.first.name,
+        detail: SceneDetail.structural);
     return StructuredResponse(
       summary: '$did; ${session.active!.label} is in front${route == null ? '' : ' at $route'}',
       data: {'lifecycle': lifecycle, if (route != null) 'route': route},
@@ -306,17 +349,24 @@ class NotificationsTool extends GlintTool {
   Future<List<PostedNotification>?> _posted(AndroidDevice dev) async {
     final r = await _adb(dev, ['shell', 'dumpsys', 'notification', '--noredact']);
     if (r.exitCode != 0) return null;
-    return [for (final n in parseNotificationDump('${r.stdout}')) if (n.title != null || n.text != null) n];
+    return [
+      for (final n in parseNotificationDump('${r.stdout}'))
+        if (n.title != null || n.text != null) n
+    ];
   }
 
-  Future<ProcessResult> _adb(AndroidDevice dev, List<String> args) => Process.run(dev.adbPath, ['-s', dev.serial, ...args]);
+  Future<ProcessResult> _adb(AndroidDevice dev, List<String> args) =>
+      Process.run(dev.adbPath, ['-s', dev.serial, ...args]);
 
-  Future<StructuredResponse> _send(String udid, String? bundleId, Map<String, Object?> args, {required bool inFront}) async {
+  Future<StructuredResponse> _send(String udid, String? bundleId, Map<String, Object?> args,
+      {required bool inFront}) async {
     if (bundleId == null) return _bad('the attached app\'s bundle id is unknown', 'attach again');
     final raw = args['payload'];
     final title = args['title'] as String?;
     final body = args['body'] as String?;
-    if (raw == null && title == null && body == null) return _bad('op:send needs title and/or body, or payload', 'notifications op:send title:"Amara" body:"Got it"');
+    if (raw == null && title == null && body == null) {
+      return _bad('op:send needs title and/or body, or payload', 'notifications op:send title:"Amara" body:"Got it"');
+    }
     final payload = raw is Map
         ? raw.cast<String, Object?>()
         : {
@@ -328,7 +378,8 @@ class NotificationsTool extends GlintTool {
             },
           };
     if (payload['aps'] is! Map) return _bad('payload needs an aps object', 'see Apple\'s APNs payload keys');
-    final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')..writeAsStringSync(jsonEncode(payload));
+    final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')
+      ..writeAsStringSync(jsonEncode(payload));
     final r = await Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
     if (r.exitCode == 0) (_sentPushes[udid] ??= []).add(payload);
     if (r.exitCode != 0) {
@@ -347,7 +398,9 @@ class NotificationsTool extends GlintTool {
             ? 'the app was in front a moment ago, so iOS hands the push to the app rather than showing a banner; to test the banner, hardware_button home, wait a second, then send'
             : 'it shows as a banner for about 5 s, and only if the app was allowed to send notifications',
       ],
-      nextSteps: [inFront ? 'get_scene to see how the app handled it' : 'notifications op:tap now opens it from the banner'],
+      nextSteps: [
+        inFront ? 'get_scene to see how the app handled it' : 'notifications op:tap now opens it from the banner'
+      ],
     );
   }
 
@@ -390,17 +443,21 @@ class NotificationsTool extends GlintTool {
       }
       await touch('/swipe', {'x1': w * 0.3, 'y1': 3, 'x2': w * 0.3, 'y2': h * 0.7}, 1200);
     }
+
     Future<void> closeCenter() => touch('/swipe', {'x1': w / 2, 'y1': h - 6, 'x2': w / 2, 'y2': h * 0.25});
     Future<void> tapAt(({double x, double y}) p) => touch('/tap', {'x': p.x, 'y': p.y});
 
     if (op == 'answer') {
       final choice = args['choice'] as String?;
-      if (choice != 'allow' && choice != 'deny') return _bad('op:answer needs choice: allow | deny', 'notifications op:answer choice:allow');
+      if (choice != 'allow' && choice != 'deny') {
+        return _bad('op:answer needs choice: allow | deny', 'notifications op:answer choice:allow');
+      }
       final t = await tree();
       final alert = springboardAlert(t);
       if (alert == null || !alert.contains('Notifications')) {
         return StructuredResponse.error(
-          summary: alert == null ? 'no system prompt is showing' : 'the prompt showing is not about notifications: "$alert"',
+          summary:
+              alert == null ? 'no system prompt is showing' : 'the prompt showing is not about notifications: "$alert"',
           errorKind: GlintErrorKind.targetNotFound,
           nextSteps: const ['the app asks when it first requests permission; trigger that step first'],
         );
@@ -408,24 +465,35 @@ class NotificationsTool extends GlintTool {
       final want = choice == 'allow' ? 'allow' : 'don’t allow';
       final button = springboardButtons(t).where((b) => b.label.toLowerCase().replaceAll("'", '’') == want).firstOrNull;
       if (button == null) {
-        return StructuredResponse.error(summary: 'the prompt has no "$want" button', errorKind: GlintErrorKind.targetNotFound,
-            detail: springboardButtons(t).map((b) => b.label).join(', '), nextSteps: const ['device op:screenshot to see the prompt']);
+        return StructuredResponse.error(
+            summary: 'the prompt has no "$want" button',
+            errorKind: GlintErrorKind.targetNotFound,
+            detail: springboardButtons(t).map((b) => b.label).join(', '),
+            nextSteps: const ['device op:screenshot to see the prompt']);
       }
       await tapAt((x: button.frame[0] + button.frame[2] / 2, y: button.frame[1] + button.frame[3] / 2));
       final still = springboardAlert(await tree());
       return still == alert
-          ? StructuredResponse.error(summary: 'the prompt is still showing after tapping ${button.label}', errorKind: GlintErrorKind.backendToolError, nextSteps: const ['retry once; if it stays, ask the user to tap it'])
+          ? StructuredResponse.error(
+              summary: 'the prompt is still showing after tapping ${button.label}',
+              errorKind: GlintErrorKind.backendToolError,
+              nextSteps: const ['retry once; if it stays, ask the user to tap it'])
           : StructuredResponse(summary: 'answered "$alert": ${button.label}', data: {'choice': choice});
     }
 
     final name = (session.active!.displayName ?? '').toLowerCase();
     final everyApp = argBool(args, 'all') ?? false;
     bool ours(ShownNotification n) => everyApp || name.isEmpty || n.app.toLowerCase() == name;
-    final banners = [for (final n in parseSpringboardNotifications(await tree())) if (ours(n)) n];
+    final banners = [
+      for (final n in parseSpringboardNotifications(await tree()))
+        if (ours(n)) n
+    ];
 
     if (op == 'tap' || op == 'action') {
       final action = args['action'] as String?;
-      if (op == 'action' && action == null) return _bad('op:action needs action:"<button label>"', 'e.g. action:"Reply"');
+      if (op == 'action' && action == null) {
+        return _bad('op:action needs action:"<button label>"', 'e.g. action:"Reply"');
+      }
       var banner = banners.isEmpty ? null : _pickShown(banners, args).target;
       var again = false;
       if (banner == null) {
@@ -441,10 +509,14 @@ class NotificationsTool extends GlintTool {
         if (payload == null) {
           await closeCenter();
           return StructuredResponse.error(
-            summary: '"${target.line}" is only in the Notification Center, and the simulator does not open an entry there',
+            summary:
+                '"${target.line}" is only in the Notification Center, and the simulator does not open an entry there',
             errorKind: GlintErrorKind.unsupportedBackendAction,
-            detail: 'a tap, the Open action and an unlock all leave the app suspended while the cover sheet is up; glint can replay only pushes it sent itself, and it did not send this one',
-            nextSteps: const ['trigger the notification again, then op:tap or op:action while its banner shows (about 5 s)'],
+            detail:
+                'a tap, the Open action and an unlock all leave the app suspended while the cover sheet is up; glint can replay only pushes it sent itself, and it did not send this one',
+            nextSteps: const [
+              'trigger the notification again, then op:tap or op:action while its banner shows (about 5 s)'
+            ],
           );
         }
         onPhase('showing "${target.line}" again as a banner');
@@ -481,7 +553,9 @@ class NotificationsTool extends GlintTool {
                 '${shown.length} notification(s)${everyApp ? '' : ' from ${session.active!.label}'}, newest first:',
                 for (final (i, n) in shown.indexed) '${i + 1}. ${everyApp ? '[${n.app}] ' : ''}${n.line}',
               ].join('\n'),
-        data: {'notifications': [for (final n in shown) n.toJson()]},
+        data: {
+          'notifications': [for (final n in shown) n.toJson()]
+        },
         nextSteps: [if (shown.isNotEmpty) 'op:tap or op:action with text or index acts on one'],
       );
     }
@@ -505,18 +579,23 @@ class NotificationsTool extends GlintTool {
   /// The app's Notification Center cells, expanding its stack first so every notification is listed.
   Future<List<ShownNotification>> _centerCells(Future<Map<String, Object?>> Function() tree,
       Future<void> Function(({double x, double y})) tapAt, bool Function(ShownNotification) ours) async {
-    var cells = [for (final n in parseSpringboardNotifications(await tree())) if (ours(n)) n];
+    var cells = [
+      for (final n in parseSpringboardNotifications(await tree()))
+        if (ours(n)) n
+    ];
     final stack = cells.where((n) => n.grouped).firstOrNull;
     if (stack == null) return cells;
     await tapAt(stack.center);
     for (var i = 0; i < 3; i++) {
-      cells = [for (final n in parseSpringboardNotifications(await tree())) if (ours(n)) n];
+      cells = [
+        for (final n in parseSpringboardNotifications(await tree()))
+          if (ours(n)) n
+      ];
       if (!cells.any((n) => n.grouped)) break;
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     return cells;
   }
-
 
   /// Pushes glint sent, per simulator, so an entry only in the Notification Center can be shown again as a banner.
   static final _sentPushes = <String, List<Map<String, Object?>>>{};
@@ -532,7 +611,8 @@ class NotificationsTool extends GlintTool {
   }
 
   Future<ProcessResult> _push(String udid, String bundleId, Map<String, Object?> payload) {
-    final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')..writeAsStringSync(jsonEncode(payload));
+    final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')
+      ..writeAsStringSync(jsonEncode(payload));
     return Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
   }
 
@@ -540,7 +620,8 @@ class NotificationsTool extends GlintTool {
   Future<ShownNotification?> _awaitBanner(Future<Map<String, Object?>> Function() tree, String line) async {
     for (var i = 0; i < 10; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
-      final hit = parseSpringboardNotifications(await tree()).where((n) => n.line == line && n.frame[1] < 200).firstOrNull;
+      final hit =
+          parseSpringboardNotifications(await tree()).where((n) => n.line == line && n.frame[1] < 200).firstOrNull;
       if (hit != null) return hit;
     }
     return null;
@@ -567,35 +648,56 @@ class NotificationsTool extends GlintTool {
     try {
       before = await screenText('before') ?? const [];
     } on OcrError catch (e) {
-      return StructuredResponse.error(summary: e.message, errorKind: GlintErrorKind.unsupportedToolchain, detail: e.detail,
-          nextSteps: const ['install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper']);
+      return StructuredResponse.error(
+          summary: e.message,
+          errorKind: GlintErrorKind.unsupportedToolchain,
+          detail: e.detail,
+          nextSteps: const [
+            'install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper'
+          ]);
     }
-    await touch('/swipe', {'x1': banner.center.x, 'y1': banner.center.y, 'x2': banner.center.x, 'y2': banner.center.y + 300}, 1000);
-    final expanded = parseSpringboardNotifications(await tree()).where((n) => n.line == banner.line).firstOrNull ?? banner;
+    await touch('/swipe',
+        {'x1': banner.center.x, 'y1': banner.center.y, 'x2': banner.center.x, 'y2': banner.center.y + 300}, 1000);
+    final expanded =
+        parseSpringboardNotifications(await tree()).where((n) => n.line == banner.line).firstOrNull ?? banner;
     final menuTop = expanded.frame[1] + expanded.frame[3];
     final shot = '${Directory.systemTemp.path}/glint-notification-${DateTime.now().millisecondsSinceEpoch}.png';
     final cap = await Process.run('xcrun', ['simctl', 'io', dev.udid, 'screenshot', shot]);
     final size = cap.exitCode == 0 ? pngSize(shot) : null;
-    if (size == null) return StructuredResponse.error(summary: 'could not screenshot the simulator', errorKind: GlintErrorKind.backendToolError, detail: '${cap.stderr}'.trim());
+    if (size == null) {
+      return StructuredResponse.error(
+          summary: 'could not screenshot the simulator',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '${cap.stderr}'.trim());
+    }
     final scale = size.$1 / dev.logicalWidth;
     final List<OcrLine> lines;
     try {
       lines = await readText(shot);
     } on OcrError catch (e) {
       await tapAt((x: dev.logicalWidth / 2, y: dev.logicalHeight * 0.92));
-      return StructuredResponse.error(summary: e.message, errorKind: GlintErrorKind.unsupportedToolchain, detail: e.detail,
-          nextSteps: const ['install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper']);
+      return StructuredResponse.error(
+          summary: e.message,
+          errorKind: GlintErrorKind.unsupportedToolchain,
+          detail: e.detail,
+          nextSteps: const [
+            'install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper'
+          ]);
     }
     bool background(OcrLine l) {
       final t = l.text.trim().toLowerCase();
       return before.any((b) {
         final o = b.text.trim().toLowerCase();
-        return (o.contains(t) || t.contains(o)) && (b.y - l.y).abs() < 40 * scale && ((b.x + b.w / 2) - (l.x + l.w / 2)).abs() < 60 * scale;
+        return (o.contains(t) || t.contains(o)) &&
+            (b.y - l.y).abs() < 40 * scale &&
+            ((b.x + b.w / 2) - (l.x + l.w / 2)).abs() < 60 * scale;
       });
     }
+
     final below = [
       for (final l in lines)
-        if (l.y / scale > menuTop - 4 && !background(l)) (text: l.text.trim(), x: (l.x + l.w / 2) / scale, y: (l.y + l.h / 2) / scale),
+        if (l.y / scale > menuTop - 4 && !background(l))
+          (text: l.text.trim(), x: (l.x + l.w / 2) / scale, y: (l.y + l.h / 2) / scale),
     ]..sort((a, b) => a.y.compareTo(b.y));
     final menu = <({String text, double x, double y})>[];
     for (final l in below) {
@@ -608,7 +710,9 @@ class NotificationsTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'the banner "${banner.line}" shows no "$action" button',
         errorKind: GlintErrorKind.targetNotFound,
-        detail: menu.isEmpty ? 'no text showed under the banner after pulling it down' : 'text under the banner: ${menu.map((m) => '"${m.text}"').join(', ')}',
+        detail: menu.isEmpty
+            ? 'no text showed under the banner after pulling it down'
+            : 'text under the banner: ${menu.map((m) => '"${m.text}"').join(', ')}',
         nextSteps: const ['pass one of those labels as action; the app sets them through the notification category'],
       );
     }
@@ -632,14 +736,20 @@ class NotificationsTool extends GlintTool {
         await touch('/tap', {'x': stack.center.x, 'y': stack.center.y});
         now = parseSpringboardNotifications(await tree());
       }
-      final live = [for (final n in now) if (n.line == cell.line && !n.grouped) n].firstOrNull;
+      final live = [
+        for (final n in now)
+          if (n.line == cell.line && !n.grouped) n
+      ].firstOrNull;
       if (live == null) continue;
       final f = live.frame;
       await touch('/swipe', {'x1': f[0] + f[2] - 20, 'y1': live.center.y, 'x2': f[0] + 40, 'y2': live.center.y});
       final after = await tree();
       if (!parseSpringboardNotifications(after).any((n) => n.line == cell.line)) continue;
-      final clear = springboardButtons(after).where((b) => b.label == 'Clear' && (b.frame[1] - f[1]).abs() < f[3]).firstOrNull;
-      if (clear != null) await touch('/tap', {'x': clear.frame[0] + clear.frame[2] / 2, 'y': clear.frame[1] + clear.frame[3] / 2});
+      final clear =
+          springboardButtons(after).where((b) => b.label == 'Clear' && (b.frame[1] - f[1]).abs() < f[3]).firstOrNull;
+      if (clear != null) {
+        await touch('/tap', {'x': clear.frame[0] + clear.frame[2] / 2, 'y': clear.frame[1] + clear.frame[3] / 2});
+      }
     }
     var remaining = parseSpringboardNotifications(await tree());
     final restack = remaining.where((n) => n.grouped).firstOrNull;
@@ -647,7 +757,10 @@ class NotificationsTool extends GlintTool {
       await touch('/tap', {'x': restack.center.x, 'y': restack.center.y});
       remaining = parseSpringboardNotifications(await tree());
     }
-    final left = [for (final c in cells) if (remaining.any((n) => n.line == c.line)) c];
+    final left = [
+      for (final c in cells)
+        if (remaining.any((n) => n.line == c.line)) c
+    ];
     await closeCenter();
     final cleared = cells.length - left.length;
     return left.isEmpty
@@ -660,20 +773,38 @@ class NotificationsTool extends GlintTool {
           );
   }
 
-  ({ShownNotification? target, StructuredResponse? error}) _pickShown(List<ShownNotification> shown, Map<String, Object?> args) {
+  ({ShownNotification? target, StructuredResponse? error}) _pickShown(
+      List<ShownNotification> shown, Map<String, Object?> args) {
     final index = argInt(args, 'index');
     final text = (args['text'] as String?)?.toLowerCase();
     if (shown.isEmpty) {
-      return (target: null, error: StructuredResponse.error(summary: 'no notifications from the app in banners or the Notification Center', errorKind: GlintErrorKind.targetNotFound, nextSteps: const ['notifications op:list all:true shows every app\'s']));
+      return (
+        target: null,
+        error: StructuredResponse.error(
+            summary: 'no notifications from the app in banners or the Notification Center',
+            errorKind: GlintErrorKind.targetNotFound,
+            nextSteps: const ['notifications op:list all:true shows every app\'s'])
+      );
     }
     if (index != null) {
-      if (index < 1 || index > shown.length) return (target: null, error: _bad('index must be 1-${shown.length}', 'notifications op:list numbers them'));
+      if (index < 1 || index > shown.length) {
+        return (target: null, error: _bad('index must be 1-${shown.length}', 'notifications op:list numbers them'));
+      }
       return (target: shown[index - 1], error: null);
     }
     if (text == null) {
-      return shown.length == 1 ? (target: shown.single, error: null) : (target: null, error: _bad('${shown.length} notifications: pick one with text or index', 'notifications op:list numbers them'));
+      return shown.length == 1
+          ? (target: shown.single, error: null)
+          : (
+              target: null,
+              error: _bad(
+                  '${shown.length} notifications: pick one with text or index', 'notifications op:list numbers them')
+            );
     }
-    final hits = [for (final n in shown) if (n.line.toLowerCase().contains(text)) n];
+    final hits = [
+      for (final n in shown)
+        if (n.line.toLowerCase().contains(text)) n
+    ];
     if (hits.length == 1) return (target: hits.single, error: null);
     return (
       target: null,
@@ -689,7 +820,9 @@ class NotificationsTool extends GlintTool {
   /// Taps Allow or Don't allow on Android's notification permission dialog.
   Future<StructuredResponse> _answerAndroid(GlintSession session, AndroidDevice dev, Map<String, Object?> args) async {
     final choice = args['choice'] as String?;
-    if (choice != 'allow' && choice != 'deny') return _bad('op:answer needs choice: allow | deny', 'notifications op:answer choice:allow');
+    if (choice != 'allow' && choice != 'deny') {
+      return _bad('op:answer needs choice: allow | deny', 'notifications op:answer choice:allow');
+    }
     final windows = await _windows(dev);
     if (windows == null) return _noWindows(dev);
     final want = choice == 'allow' ? 'allow' : 'don’t allow';
@@ -704,7 +837,8 @@ class NotificationsTool extends GlintTool {
       );
     }
     await session.backend.tap(physicalX: (b.bounds[0] + b.bounds[2]) ~/ 2, physicalY: (b.bounds[1] + b.bounds[3]) ~/ 2);
-    return StructuredResponse(summary: 'answered the notification permission dialog: ${b.label}', data: {'choice': choice});
+    return StructuredResponse(
+        summary: 'answered the notification permission dialog: ${b.label}', data: {'choice': choice});
   }
 
   StructuredResponse _bad(String summary, String next) =>

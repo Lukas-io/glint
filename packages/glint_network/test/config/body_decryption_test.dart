@@ -24,8 +24,7 @@ void main() {
   group('#105 AES-256-CTR bodies', () {
     test('infused IV at a hex offset, as the reporter\'s app writes it', () {
       final infused = '${_cipher.substring(0, 10)}$_iv${_cipher.substring(10)}';
-      final out = _config({'ivMode': 'infused', 'ivOffset': 10, 'ivLength': 32})
-          .decrypt(_bytes(infused));
+      final out = _config({'ivMode': 'infused', 'ivOffset': 10, 'ivLength': 32}).decrypt(_bytes(infused));
       expect(out.decrypted, isTrue);
       expect(utf8.decode(out.bytes), _plain);
     });
@@ -36,10 +35,9 @@ void main() {
     });
 
     test('base64 payloads split in decoded bytes', () {
-      final hex = '$_iv$_cipher';
+      const hex = '$_iv$_cipher';
       final bytes = [for (var i = 0; i < hex.length; i += 2) int.parse(hex.substring(i, i + 2), radix: 16)];
-      final out = _config({'encoding': 'base64', 'ivMode': 'prefix'})
-          .decrypt(_bytes(base64.encode(bytes)));
+      final out = _config({'encoding': 'base64', 'ivMode': 'prefix'}).decrypt(_bytes(base64.encode(bytes)));
       expect(utf8.decode(out.bytes), _plain);
     });
 

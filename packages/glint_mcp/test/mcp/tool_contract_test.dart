@@ -8,8 +8,7 @@ import 'package:test/test.dart';
 void main() {
   test('tool names and input schemas match the committed contract', () {
     final contract = {
-      for (final t in kDefaultGlintTools)
-        t.definition.name: jsonDecode(jsonEncode(t.definition.inputSchema)),
+      for (final t in kDefaultGlintTools) t.definition.name: jsonDecode(jsonEncode(t.definition.inputSchema)),
     };
     final encoded = '${const JsonEncoder.withIndent('  ').convert(contract)}\n';
     final golden = File('test/goldens/tool_contract.json');

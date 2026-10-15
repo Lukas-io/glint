@@ -71,7 +71,8 @@ class MediaProbe {
   bool get quarterTurn => rotation == 90 || rotation == 270;
 
   /// Width and height a viewer sees after the rotation tag is applied.
-  ({int w, int h})? get displayed => hasVideo ? (w: quarterTurn ? height! : width!, h: quarterTurn ? width! : height!) : null;
+  ({int w, int h})? get displayed =>
+      hasVideo ? (w: quarterTurn ? height! : width!, h: quarterTurn ? width! : height!) : null;
 
   /// A still image reads as a one-frame video to ffprobe (a JPEG is `mjpeg`, 0.04 s), so an image codec without audio counts as a photo too.
   String get kind => !hasVideo
@@ -123,8 +124,8 @@ int _clockwiseRotation(Map<String, Object?> stream) {
 
 /// Reads [path] with ffprobe; throws [MissingHostTool] or [MediaUnreadable].
 Future<MediaProbe> probeMedia(String path) async {
-  final run = await runHost(requireHostBinary('ffprobe'),
-      ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', path],
+  final run = await runHost(
+      requireHostBinary('ffprobe'), ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', path],
       timeout: const Duration(seconds: 60));
   if (!run.ok) throw MediaUnreadable(run.errTail());
   final json = jsonDecode(run.text) as Map<String, Object?>;
@@ -168,7 +169,19 @@ double? _firstNumber(String text, RegExp pattern) {
 /// Measures the loudness of the audio track with ffmpeg's ebur128 and volumedetect filters; null when it cannot be read.
 Future<Loudness?> measureLoudness(String path) async {
   final run = await runHost(
-      requireHostBinary('ffmpeg'), ['-hide_banner', '-nostats', '-i', path, '-vn', '-af', 'ebur128=peak=true:framelog=quiet,volumedetect', '-f', 'null', '-'],
+      requireHostBinary('ffmpeg'),
+      [
+        '-hide_banner',
+        '-nostats',
+        '-i',
+        path,
+        '-vn',
+        '-af',
+        'ebur128=peak=true:framelog=quiet,volumedetect',
+        '-f',
+        'null',
+        '-'
+      ],
       timeout: const Duration(minutes: 3));
   if (!run.ok) return null;
   final log = run.err;
@@ -214,7 +227,8 @@ class CardVerdict {
     final from = '${originalWidth}x$originalHeight';
     final to = '${currentWidth}x$currentHeight';
     if (currentWidth == originalWidth && currentHeight == originalHeight) return 'full size $from';
-    final sameAspect = (currentWidth * originalHeight - currentHeight * originalWidth).abs() <= originalHeight + originalWidth;
+    final sameAspect =
+        (currentWidth * originalHeight - currentHeight * originalWidth).abs() <= originalHeight + originalWidth;
     if (!sameAspect) return 'resized $from to $to (aspect changed)';
     return '${currentWidth < originalWidth ? 'downscaled' : 'upscaled'} $from to $to';
   }
@@ -248,8 +262,22 @@ class CardVerdict {
 }
 
 Future<HostRun> _decodeStrips(String ffmpeg, String path, String graph) async {
-  List<String> args(List<String> pace) =>
-      ['-v', 'error', '-i', path, '-filter_complex', graph, '-map', '[v]', ...pace, '-pix_fmt', 'gray', '-f', 'rawvideo', '-'];
+  List<String> args(List<String> pace) => [
+        '-v',
+        'error',
+        '-i',
+        path,
+        '-filter_complex',
+        graph,
+        '-map',
+        '[v]',
+        ...pace,
+        '-pix_fmt',
+        'gray',
+        '-f',
+        'rawvideo',
+        '-'
+      ];
   final first = await runHost(ffmpeg, args(['-fps_mode', 'passthrough']), timeout: const Duration(minutes: 10));
   if (first.ok || !first.err.contains('fps_mode')) return first;
   return runHost(ffmpeg, args(['-vsync', '0']), timeout: const Duration(minutes: 10));
@@ -273,15 +301,29 @@ String _stripGraph(CardTransform t) {
 Future<List<double>?> _frameTimes(String path) async {
   final run = await runHost(
       requireHostBinary('ffprobe'),
-      ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'frame=best_effort_timestamp_time', '-of', 'csv=p=0', path],
+      [
+        '-v',
+        'error',
+        '-select_streams',
+        'v:0',
+        '-show_entries',
+        'frame=best_effort_timestamp_time',
+        '-of',
+        'csv=p=0',
+        path
+      ],
       timeout: const Duration(minutes: 3));
   if (!run.ok) return null;
-  return [for (final l in run.text.split('\n')) if (double.tryParse(l.trim().split(',').first) case final t?) t];
+  return [
+    for (final l in run.text.split('\n'))
+      if (double.tryParse(l.trim().split(',').first) case final t?) t
+  ];
 }
 
 /// The beep times of the audio track, on the container timeline, or null when it cannot be decoded.
 Future<List<double>?> _beepTimes(String path, MediaProbe probe) async {
-  final run = await runHost(requireHostBinary('ffmpeg'), ['-v', 'error', '-i', path, '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', '-'],
+  final run = await runHost(
+      requireHostBinary('ffmpeg'), ['-v', 'error', '-i', path, '-vn', '-ac', '1', '-ar', '16000', '-f', 's16le', '-'],
       timeout: const Duration(minutes: 3));
   if (!run.ok) return null;
   final bytes = Uint8List.fromList(run.out);
@@ -294,7 +336,22 @@ Future<CardVerdict?> decodeTestCard(String path, MediaProbe probe, {PhaseReporte
   if (!probe.hasVideo) return null;
   final ffmpeg = requireHostBinary('ffmpeg');
   final corner = await runHost(
-      ffmpeg, ['-v', 'error', '-i', path, '-frames:v', '1', '-vf', 'scale=100:100:flags=area', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-'],
+      ffmpeg,
+      [
+        '-v',
+        'error',
+        '-i',
+        path,
+        '-frames:v',
+        '1',
+        '-vf',
+        'scale=100:100:flags=area',
+        '-pix_fmt',
+        'rgb24',
+        '-f',
+        'rawvideo',
+        '-'
+      ],
       timeout: const Duration(minutes: 1));
   if (!corner.ok || corner.out.length < 30000) return null;
   List<int> pixel(int x, int y) => corner.out.sublist((y * 100 + x) * 3, (y * 100 + x) * 3 + 3);
@@ -313,7 +370,9 @@ Future<CardVerdict?> decodeTestCard(String path, MediaProbe probe, {PhaseReporte
     final times = await step('measuring audio offset', () => _frameTimes(path));
     final beeps = await step('listening for beeps', () => _beepTimes(path, probe));
     if (times != null && beeps != null) {
-      final aligned = times.length == readings.flash.length ? times : [for (var i = 0; i < readings.flash.length; i++) i / readings.fps];
+      final aligned = times.length == readings.flash.length
+          ? times
+          : [for (var i = 0; i < readings.flash.length; i++) i / readings.fps];
       offset = audioOffsetMs(flashStarts(readings.flash, aligned), beeps);
     }
   }
@@ -338,8 +397,21 @@ Future<CardVerdict?> decodeTestCard(String path, MediaProbe probe, {PhaseReporte
 Future<String?> letterboxCrop(String path, MediaProbe probe) async {
   final shown = probe.displayed;
   if (!probe.hasVideo || shown == null) return null;
-  final run = await runHost(requireHostBinary('ffmpeg'),
-      ['-v', 'info', '-i', path, '-frames:v', '2', '-vf', 'cropdetect=limit=24:round=2:reset=0:skip=0', '-f', 'null', '-'],
+  final run = await runHost(
+      requireHostBinary('ffmpeg'),
+      [
+        '-v',
+        'info',
+        '-i',
+        path,
+        '-frames:v',
+        '2',
+        '-vf',
+        'cropdetect=limit=24:round=2:reset=0:skip=0',
+        '-f',
+        'null',
+        '-'
+      ],
       timeout: const Duration(minutes: 1));
   final m = RegExp(r'crop=(\d+):(\d+):(\d+):(\d+)').allMatches(run.err).lastOrNull;
   if (m == null) return null;
@@ -350,12 +422,22 @@ Future<String?> letterboxCrop(String path, MediaProbe probe) async {
 
 /// [path] cropped to [crop] in a lossless copy for decoding.
 Future<String?> cropCopy(String path, String crop, {required bool photo}) async {
-  final out = '${Directory.systemTemp.path}/glint-crop-${DateTime.now().microsecondsSinceEpoch}.${photo ? 'png' : 'mkv'}';
-  final run = await runHost(requireHostBinary('ffmpeg'), [
-    '-y', '-v', 'error', '-i', path, '-vf', 'crop=$crop',
-    if (photo) ...['-frames:v', '1'] else ...['-c:v', 'ffv1', '-c:a', 'copy'],
-    out,
-  ], timeout: const Duration(minutes: 3));
+  final out =
+      '${Directory.systemTemp.path}/glint-crop-${DateTime.now().microsecondsSinceEpoch}.${photo ? 'png' : 'mkv'}';
+  final run = await runHost(
+      requireHostBinary('ffmpeg'),
+      [
+        '-y',
+        '-v',
+        'error',
+        '-i',
+        path,
+        '-vf',
+        'crop=$crop',
+        if (photo) ...['-frames:v', '1'] else ...['-c:v', 'ffv1', '-c:a', 'copy'],
+        out,
+      ],
+      timeout: const Duration(minutes: 3));
   return run.ok && File(out).existsSync() ? out : null;
 }
 
@@ -382,9 +464,18 @@ Future<bool> extractFrame(String path, FrameAt at, String out, {bool still = fal
   final file = File(out);
   if (file.existsSync()) file.deleteSync();
   final args = [
-    '-y', '-hide_banner', '-loglevel', 'error',
+    '-y',
+    '-hide_banner',
+    '-loglevel',
+    'error',
     if (!still) ...(at.end ? ['-sseof', '-0.25'] : ['-ss', '${at.seconds}']),
-    '-i', path, '-an', if (at.end) ...['-update', '1'], '-frames:v', at.end ? '1000' : '1', out,
+    '-i',
+    path,
+    '-an',
+    if (at.end) ...['-update', '1'],
+    '-frames:v',
+    at.end ? '1000' : '1',
+    out,
   ];
   final run = await runHost(requireHostBinary('ffmpeg'), args, timeout: const Duration(minutes: 1));
   return run.ok && file.existsSync() && file.lengthSync() > 0;

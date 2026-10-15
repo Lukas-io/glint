@@ -68,7 +68,12 @@ void main() {
       await b.typeText('hello');
       await b.pressKey(KeyName.backspace, count: 2, modifiers: const {KeyModifier.shift});
       expect(calls[0].$3, {'text': 'hello', 'app': 'com.example.app'});
-      expect(calls[1].$3, {'key': 'backspace', 'count': 2, 'mods': ['shift'], 'app': 'com.example.app'});
+      expect(calls[1].$3, {
+        'key': 'backspace',
+        'count': 2,
+        'mods': ['shift'],
+        'app': 'com.example.app'
+      });
     });
 
     test('a runner failure surfaces as a backend tool error with its reason', () async {

@@ -69,14 +69,14 @@ class VmServiceRuntime implements FlutterRuntime {
     ]) {
       try {
         await _vm.service.streamListen(stream).timeout(VmClient.readTimeout);
-      } on Object {}
+      } on Object catch (_) {}
     }
     // Wire disconnect signal: fires once when the WebSocket closes.
-    _vm.service.onDone.then((_) {
+    unawaited(_vm.service.onDone.then((_) {
       if (!_disconnectController.isClosed) {
         _disconnectController.add(null);
       }
-    }, onError: (_) {});
+    }, onError: (_) {}));
   }
 
   @override
@@ -136,12 +136,11 @@ class VmServiceRuntime implements FlutterRuntime {
   }
 
   /// Calls service extension [method] in the Flutter isolate; null when the isolate has not registered it.
-  Future<Map<String, Object?>?> callExtensionOrNull(String method, Map<String, String> args, {Duration? timeout}) async {
+  Future<Map<String, Object?>?> callExtensionOrNull(String method, Map<String, String> args,
+      {Duration? timeout}) async {
     try {
-      final resp = await _guard(
-          () => _vm.service.callServiceExtension(method, isolateId: flutterIsolateId, args: args),
-          op: method,
-          timeout: timeout);
+      final resp = await _guard(() => _vm.service.callServiceExtension(method, isolateId: flutterIsolateId, args: args),
+          op: method, timeout: timeout);
       return resp.json?.cast<String, Object?>();
     } on RPCError catch (e) {
       if (e.code == -32601 || e.message.contains('not found')) return null;
@@ -162,15 +161,15 @@ class VmServiceRuntime implements FlutterRuntime {
     bool fullDetails = false,
   }) async {
     final resp = await _guard(() => _vm.service.callServiceExtension(
-      'ext.flutter.inspector.getRootWidgetTree',
-      isolateId: flutterIsolateId,
-      args: InspectorParams.rootWidgetTree(
-        groupName: groupName,
-        isSummaryTree: isSummaryTree,
-        withPreviews: withPreviews,
-        fullDetails: fullDetails,
-      ),
-    ));
+          'ext.flutter.inspector.getRootWidgetTree',
+          isolateId: flutterIsolateId,
+          args: InspectorParams.rootWidgetTree(
+            groupName: groupName,
+            isSummaryTree: isSummaryTree,
+            withPreviews: withPreviews,
+            fullDetails: fullDetails,
+          ),
+        ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
       throw RuntimeEvalError(
@@ -188,14 +187,14 @@ class VmServiceRuntime implements FlutterRuntime {
     int subtreeDepth = 5,
   }) async {
     final resp = await _guard(() => _vm.service.callServiceExtension(
-      'ext.flutter.inspector.getDetailsSubtree',
-      isolateId: flutterIsolateId,
-      args: InspectorParams.detailsSubtree(
-        inspectorId: inspectorId,
-        groupName: groupName,
-        subtreeDepth: subtreeDepth,
-      ),
-    ));
+          'ext.flutter.inspector.getDetailsSubtree',
+          isolateId: flutterIsolateId,
+          args: InspectorParams.detailsSubtree(
+            inspectorId: inspectorId,
+            groupName: groupName,
+            subtreeDepth: subtreeDepth,
+          ),
+        ));
     final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
     if (result == null) {
       throw RuntimeEvalError(
@@ -215,8 +214,7 @@ class VmServiceRuntime implements FlutterRuntime {
       () => _vm.service.callServiceExtension(
         'ext.flutter.inspector.setSelectionById',
         isolateId: flutterIsolateId,
-        args: InspectorParams.selectionById(
-            inspectorId: inspectorId, groupName: groupName),
+        args: InspectorParams.selectionById(inspectorId: inspectorId, groupName: groupName),
       ),
       op: 'setSelectionById',
     );
@@ -245,10 +243,7 @@ class VmServiceRuntime implements FlutterRuntime {
     final root = rootLibraryUri;
     if (root == null) return null;
     try {
-      final resolved =
-          await _vm.service
-              .lookupResolvedPackageUris(flutterIsolateId, [root])
-              .timeout(callTimeout);
+      final resolved = await _vm.service.lookupResolvedPackageUris(flutterIsolateId, [root]).timeout(callTimeout);
       final uris = resolved.uris;
       if (uris == null || uris.isEmpty) return null;
       return appRootFromMainScript(uris.first);
@@ -311,11 +306,7 @@ class VmServiceRuntime implements FlutterRuntime {
     try {
       raw = await _guard(
         () async => _vm.service.evaluate(
-            flutterIsolateId,
-            _evalLibIsolateId == flutterIsolateId
-                ? library
-                : await _evalLibrary(),
-            expression),
+            flutterIsolateId, _evalLibIsolateId == flutterIsolateId ? library : await _evalLibrary(), expression),
         op: 'evaluate',
       );
     } on RPCError catch (e) {
@@ -334,8 +325,7 @@ class VmServiceRuntime implements FlutterRuntime {
   }
 
   @override
-  Future<InstanceRef> evaluateIn(String expression,
-      {String? librarySuffix, Map<String, String>? scope}) async {
+  Future<InstanceRef> evaluateIn(String expression, {String? librarySuffix, Map<String, String>? scope}) async {
     final String library;
     if (librarySuffix == null) {
       library = await _evalLibrary();
@@ -351,8 +341,7 @@ class VmServiceRuntime implements FlutterRuntime {
     final Object raw;
     try {
       raw = await _guard(
-        () => _vm.service
-            .evaluate(flutterIsolateId, library, expression, scope: scope),
+        () => _vm.service.evaluate(flutterIsolateId, library, expression, scope: scope),
         op: 'evaluate',
       );
     } on RPCError catch (e) {
@@ -362,8 +351,7 @@ class VmServiceRuntime implements FlutterRuntime {
     if (raw is ErrorRef) {
       throw RuntimeEvalError(expression, raw.message ?? 'ErrorRef');
     }
-    throw RuntimeEvalError(
-        expression, 'unexpected eval return ${raw.runtimeType}');
+    throw RuntimeEvalError(expression, 'unexpected eval return ${raw.runtimeType}');
   }
 
   @override
@@ -373,8 +361,7 @@ class VmServiceRuntime implements FlutterRuntime {
     required String groupName,
   }) async {
     try {
-      await setInspectorSelection(
-          inspectorId: inspectorId, groupName: groupName);
+      await setInspectorSelection(inspectorId: inspectorId, groupName: groupName);
       return await evaluateString(expression);
     } on Object {
       return null;
@@ -382,8 +369,7 @@ class VmServiceRuntime implements FlutterRuntime {
   }
 
   @override
-  Future<String?> evaluateString(String expression,
-      {bool rethrowErrors = false}) async {
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async {
     final InstanceRef raw;
     try {
       raw = await evaluate(expression);
@@ -434,10 +420,7 @@ List<String> evalLibraryCandidates({
   final rootUri = rootLib?.uri;
   if (rootUri != null && rootUri.startsWith('package:')) {
     final prefix = rootUri.substring(0, rootUri.indexOf('/') + 1);
-    ordered.addAll(byUri.entries
-        .where((e) => e.key.startsWith(prefix))
-        .map((e) => e.value)
-        .take(20));
+    ordered.addAll(byUri.entries.where((e) => e.key.startsWith(prefix)).map((e) => e.value).take(20));
   }
   return ordered.toSet().toList();
 }

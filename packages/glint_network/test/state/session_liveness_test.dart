@@ -15,9 +15,7 @@ void main() {
   late Directory dir;
   final registry = SessionRegistry.instance;
 
-  AttachedSession fake(int id, String uri,
-          {String? app, String? project, int activity = 0}) =>
-      AttachedSession(
+  AttachedSession fake(int id, String uri, {String? app, String? project, int activity = 0}) => AttachedSession(
         id: id,
         appName: app ?? 'Flutter - Device: iPhone 17 - Package: app$id',
         vmServiceUri: uri,
@@ -47,8 +45,7 @@ void main() {
 
   test('markDead frees the slot, ends the row, and is remembered', () {
     final dao = CapturesDao();
-    final sid = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://a', isolateId: null, projectPath: '/p');
+    final sid = dao.createSession(appName: 'a', vmServiceUri: 'ws://a', isolateId: null, projectPath: '/p');
     registry.register(fake(sid, 'ws://a'));
     expect(registry.liveCount, 1);
     registry.markDead(registry.attachedById(sid)!, 'test');

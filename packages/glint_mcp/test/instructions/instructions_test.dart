@@ -29,8 +29,7 @@ void main() {
         '## Examples',
       ];
       for (final h in requiredSections) {
-        expect(kGlintInstructions, contains(h),
-            reason: '$h missing from kGlintInstructions');
+        expect(kGlintInstructions, contains(h), reason: '$h missing from kGlintInstructions');
       }
     });
 
@@ -44,8 +43,7 @@ void main() {
       final recovery = kGlintInstructions.substring(start, end);
 
       for (final kind in GlintErrorKind.values) {
-        expect(recovery, contains('`${kind.name}`'),
-            reason: 'GlintErrorKind.${kind.name} missing from Recovery');
+        expect(recovery, contains('`${kind.name}`'), reason: 'GlintErrorKind.${kind.name} missing from Recovery');
       }
     });
 
@@ -61,8 +59,7 @@ void main() {
       // caused the 12-minute thrash in Run 1. Must be present verbatim.
       const forbidden = ['flutter driver', 'simctl', 'AppleScript'];
       for (final f in forbidden) {
-        expect(kGlintInstructions, contains(f),
-            reason: '"$f" anti-pattern missing from instructions');
+        expect(kGlintInstructions, contains(f), reason: '"$f" anti-pattern missing from instructions');
       }
     });
 

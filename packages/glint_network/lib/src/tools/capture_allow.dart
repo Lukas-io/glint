@@ -9,8 +9,7 @@ import 'result.dart';
 
 final captureAllowTool = Tool(
   name: 'capture_allow',
-  description:
-      'Manage the capture ALLOWLIST (the opposite of ignored_hosts). When it '
+  description: 'Manage the capture ALLOWLIST (the opposite of ignored_hosts). When it '
       'has any entry, ONLY requests matching a host or host/path glob are '
       'captured and everything else is dropped at capture time — for focused '
       'debugging ("just /stock/*"). Mid-session equivalent of the '
@@ -21,8 +20,7 @@ final captureAllowTool = Tool(
     properties: {
       'action': Schema.string(description: '"list" (default) | "add" | "remove".'),
       'pattern': Schema.string(
-        description:
-            'Host or host/path glob (required for add/remove). No scheme, no '
+        description: 'Host or host/path glob (required for add/remove). No scheme, no '
             'port. Examples: "api.example.com", "api.example.com/stock/*".',
       ),
       'reason': Schema.string(description: 'Optional reason shown in list output.'),
@@ -67,11 +65,9 @@ FutureOr<CallToolResult> captureAllow(CallToolRequest request) async {
         });
       case 'add':
         if (pattern == null || pattern.isEmpty) {
-          return errorResult('`pattern` is required for action=add.',
-              kind: ErrorKind.badArgument,
-              extra: const {
-                'nextSteps': ['Retry with pattern:"<host or host/path glob>"'],
-              });
+          return errorResult('`pattern` is required for action=add.', kind: ErrorKind.badArgument, extra: const {
+            'nextSteps': ['Retry with pattern:"<host or host/path glob>"'],
+          });
         }
         final isNew = dao.addCaptureAllow(pattern, reason: reason);
         SessionRegistry.instance.refreshCaptureFilters();
@@ -92,11 +88,9 @@ FutureOr<CallToolResult> captureAllow(CallToolRequest request) async {
         });
       case 'remove':
         if (pattern == null || pattern.isEmpty) {
-          return errorResult('`pattern` is required for action=remove.',
-              kind: ErrorKind.badArgument,
-              extra: const {
-                'nextSteps': ['capture_allow action:"list" — find the pattern to remove'],
-              });
+          return errorResult('`pattern` is required for action=remove.', kind: ErrorKind.badArgument, extra: const {
+            'nextSteps': ['capture_allow action:"list" — find the pattern to remove'],
+          });
         }
         final removed = dao.removeCaptureAllow(pattern);
         SessionRegistry.instance.refreshCaptureFilters();
@@ -112,17 +106,13 @@ FutureOr<CallToolResult> captureAllow(CallToolRequest request) async {
           ],
         });
       default:
-        return errorResult('`action` must be list, add, or remove.',
-            kind: ErrorKind.badArgument,
-            extra: const {
-              'nextSteps': ['Retry with action:"list" to inspect current entries'],
-            });
+        return errorResult('`action` must be list, add, or remove.', kind: ErrorKind.badArgument, extra: const {
+          'nextSteps': ['Retry with action:"list" to inspect current entries'],
+        });
     }
   } catch (e) {
-    return errorResult('capture_allow failed: $e',
-        kind: ErrorKind.internal,
-        extra: const {
-          'nextSteps': ['capture_allow action:"list" — confirm current state'],
-        });
+    return errorResult('capture_allow failed: $e', kind: ErrorKind.internal, extra: const {
+      'nextSteps': ['capture_allow action:"list" — confirm current state'],
+    });
   }
 }

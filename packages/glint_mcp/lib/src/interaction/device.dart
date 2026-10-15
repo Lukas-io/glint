@@ -79,9 +79,7 @@ class AndroidDevice extends DeviceTarget {
 
   @override
   ({double w, double h})? get screenSize =>
-      (screenWidth != null && screenHeight != null)
-          ? (w: screenWidth!, h: screenHeight!)
-          : null;
+      (screenWidth != null && screenHeight != null) ? (w: screenWidth!, h: screenHeight!) : null;
 
   @override
   InteractionBackend createBackend() =>

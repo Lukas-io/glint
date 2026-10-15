@@ -16,8 +16,7 @@ const int _kPairsHardMax = 100;
 
 final networkCorrelateTool = Tool(
   name: 'network_correlate',
-  description:
-      'Find correlated HTTP requests across sessions (the typed version of '
+  description: 'Find correlated HTTP requests across sessions (the typed version of '
       'network_query for the "webhook originator + receiver" pattern: one app '
       'sends a request carrying a shared id, another receives it). Requires '
       'explicit sessionIds (cross-session is intentional) and a pattern '
@@ -25,30 +24,26 @@ final networkCorrelateTool = Tool(
   inputSchema: Schema.object(
     properties: {
       'sessionIds': Schema.list(
-        description:
-            'REQUIRED. Session ids to correlate across (from network_status '
+        description: 'REQUIRED. Session ids to correlate across (from network_status '
             'or session_list). Cap 8.',
         items: Schema.int(),
       ),
       'pattern': Schema.string(
-        description:
-            'REQUIRED. Substring to match (a correlation id, shared URL '
+        description: 'REQUIRED. Substring to match (a correlation id, shared URL '
             'fragment, error string).',
       ),
       'which': Schema.string(
         description: 'Match "url" | "request" | "response" | "any" (default).',
       ),
       'timeWindowMs': Schema.int(
-        description:
-            'Only return pairs whose start times are within this many ms of '
+        description: 'Only return pairs whose start times are within this many ms of '
             'each other (try 1000-5000). Omit for all pairs.',
       ),
       'limit': Schema.int(
         description: 'Max pairs (default 20, cap 100), tightest first.',
       ),
       'perSessionLimit': Schema.int(
-        description:
-            'Max raw matches per session before pairing (default 100, cap 500).',
+        description: 'Max raw matches per session before pairing (default 100, cap 500).',
       ),
     },
     required: ['sessionIds', 'pattern'],
@@ -109,10 +104,10 @@ FutureOr<CallToolResult> networkCorrelate(CallToolRequest request) async {
     return errorResult('Missing or empty `pattern` — must be a non-empty string.',
         kind: ErrorKind.badArgument,
         extra: const {
-      'nextSteps': [
-        'Retry with pattern:"<correlation id or substring>"',
-      ],
-    });
+          'nextSteps': [
+            'Retry with pattern:"<correlation id or substring>"',
+          ],
+        });
   }
 
   final whichArg = (args['which'] as String?) ?? 'any';
@@ -310,8 +305,7 @@ FutureOr<CallToolResult> networkCorrelate(CallToolRequest request) async {
           'sessionId': sid,
           if (perSessionAppName[sid] != null) 'appName': perSessionAppName[sid],
           'matchesTotal': perSessionMatches[sid]!.length,
-          'matchesShown':
-              perSessionMatches[sid]!.length.clamp(0, displayCap),
+          'matchesShown': perSessionMatches[sid]!.length.clamp(0, displayCap),
           'matches': [
             for (final m in perSessionMatches[sid]!.take(displayCap))
               {

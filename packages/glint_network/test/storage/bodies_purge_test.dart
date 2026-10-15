@@ -31,11 +31,9 @@ void main() {
     dir = Directory.systemTemp.createTempSync('bodies_purge_test_');
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
-    old = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://old', isolateId: null, projectPath: null);
+    old = dao.createSession(appName: 'a', vmServiceUri: 'ws://old', isolateId: null, projectPath: null);
     dao.endSession(old);
-    recent = dao.createSession(
-        appName: 'a', vmServiceUri: 'ws://new', isolateId: null, projectPath: null);
+    recent = dao.createSession(appName: 'a', vmServiceUri: 'ws://new', isolateId: null, projectPath: null);
     dao.endSession(recent);
     PlaintextIndex.instance.clear();
   });
@@ -59,21 +57,19 @@ void main() {
       [sid, vmId, 'response', bytes, bytes.length],
     );
     if (index) {
-      dao.indexForSearch(
-          sessionId: sid, vmId: vmId, url: 'http://api.test/$vmId', responseText: body);
+      dao.indexForSearch(sessionId: sid, vmId: vmId, url: 'http://api.test/$vmId', responseText: body);
     }
   }
 
-  int bodies(int sid) => CapturesDatabase.instance.raw
-      .select('SELECT COUNT(*) AS n FROM http_bodies WHERE session_id=?', [sid])
-      .first['n'] as int;
+  int bodies(int sid) =>
+      CapturesDatabase.instance.raw.select('SELECT COUNT(*) AS n FROM http_bodies WHERE session_id=?', [sid]).first['n']
+          as int;
 
   int fetched(int sid) => CapturesDatabase.instance.raw
-      .select('SELECT SUM(bodies_fetched) AS n FROM http_requests WHERE session_id=?', [sid])
-      .first['n'] as int;
+      .select('SELECT SUM(bodies_fetched) AS n FROM http_requests WHERE session_id=?', [sid]).first['n'] as int;
 
-  Future<Map<String, Object?>> call(FutureOr<CallToolResult> Function(CallToolRequest) tool,
-          String name, Map<String, Object?> args) async =>
+  Future<Map<String, Object?>> call(
+          FutureOr<CallToolResult> Function(CallToolRequest) tool, String name, Map<String, Object?> args) async =>
       (await tool(CallToolRequest(name: name, arguments: args))).structuredContent!;
 
   test('olderThanMs matches requests of the same session only', () async {
@@ -110,8 +106,7 @@ void main() {
 
   group('with body decryption on', () {
     setUp(() {
-      BodyDecryptionConfig.active =
-          BodyDecryption.parse({'key': _key, 'ivMode': 'prefix'}).config;
+      BodyDecryptionConfig.active = BodyDecryption.parse({'key': _key, 'ivMode': 'prefix'}).config;
     });
 
     Future<List<Object?>> search(int sid) async =>

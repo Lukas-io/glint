@@ -20,8 +20,7 @@ class AlertDetector {
   void forHttpRequest(int sessionId, HttpProfileRequest r) {
     final id = r.id;
     final status = r.response?.statusCode;
-    final hasError =
-        (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
+    final hasError = (r.request?.hasError ?? false) || (r.response?.hasError ?? false);
 
     // D7/F21: a successful WebSocket upgrade (101) leaves dart:io's error
     // flag set ("Socket has been detached") because the socket was adopted
@@ -112,8 +111,7 @@ class AlertDetector {
   }) {
     if (message.isEmpty) return;
 
-    if (_rules.flutterErrorEnabled &&
-        AlertRules.flutterErrorPatterns.any((p) => p.hasMatch(message))) {
+    if (_rules.flutterErrorEnabled && AlertRules.flutterErrorPatterns.any((p) => p.hasMatch(message))) {
       final title = _firstLine(message);
       _dao.insertAlert(
         sessionId: sessionId,
@@ -129,8 +127,7 @@ class AlertDetector {
       return;
     }
 
-    if (_rules.logKeywordEnabled &&
-        AlertRules.logKeywordRegex.hasMatch(message)) {
+    if (_rules.logKeywordEnabled && AlertRules.logKeywordRegex.hasMatch(message)) {
       final severe = (level ?? 0) >= 1200;
       final title = _firstLine(message);
       _dao.insertAlert(

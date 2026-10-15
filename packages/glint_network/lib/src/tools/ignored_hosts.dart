@@ -10,8 +10,7 @@ import 'result.dart';
 
 final ignoredHostsTool = Tool(
   name: 'ignored_hosts',
-  description:
-      'Manage the capture skiplist (a denylist): the writer drops requests that '
+  description: 'Manage the capture skiplist (a denylist): the writer drops requests that '
       'match an entry (analytics, crash reporters, noisy telemetry). An entry '
       'with no "/" matches a whole host; an entry with "/" is a host/path glob '
       '(e.g. dev.example.com/socket.io/*) so you can silence one noisy path '
@@ -23,8 +22,7 @@ final ignoredHostsTool = Tool(
     properties: {
       'action': Schema.string(description: '"list" (default) | "add" | "remove".'),
       'host': Schema.string(
-        description:
-            'Host or host/path glob (required for add/remove). No scheme, no '
+        description: 'Host or host/path glob (required for add/remove). No scheme, no '
             'port. Examples: "analytics.example.com", "dev.example.com/socket.io/*".',
       ),
       'reason': Schema.string(description: 'Optional reason shown in list output.'),
@@ -43,9 +41,7 @@ FutureOr<CallToolResult> ignoredHosts(CallToolRequest request) async {
     switch (action) {
       case 'list':
         final rows = dao.listIgnoredHosts();
-        final allowlist = CaptureFilter.build(const {},
-                allowEntries: dao.captureAllowSet())
-            .allowPatterns;
+        final allowlist = CaptureFilter.build(const {}, allowEntries: dao.captureAllowSet()).allowPatterns;
         return jsonResult({
           'action': 'list',
           'summary': rows.isEmpty

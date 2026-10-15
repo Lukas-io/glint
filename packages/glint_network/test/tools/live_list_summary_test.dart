@@ -26,8 +26,7 @@ void main() {
     expect(out, isNot(contains('since:0')));
   });
 
-  test('empty incremental read does NOT claim no traffic, points at since:0',
-      () {
+  test('empty incremental read does NOT claim no traffic, points at since:0', () {
     final out = s(cursorAdvanced: true, incremental: true);
     expect(out, isNot(contains('captured yet')));
     expect(out, contains('No NEW HTTP'));
@@ -35,8 +34,7 @@ void main() {
     expect(out, contains('incremental'));
   });
 
-  test('empty explicit-since read points at since:0 without "your last call"',
-      () {
+  test('empty explicit-since read points at since:0 without "your last call"', () {
     final out = s(cursorAdvanced: true, incremental: false);
     expect(out, contains('since:0'));
     expect(out, isNot(contains('your last call')));
@@ -49,9 +47,7 @@ void main() {
   });
 
   test('results: incremental flag annotates "new since your last call"', () {
-    expect(s(matched: 3, incremental: true),
-        contains('new since your last call'));
-    expect(s(matched: 3, incremental: false),
-        isNot(contains('new since your last call')));
+    expect(s(matched: 3, incremental: true), contains('new since your last call'));
+    expect(s(matched: 3, incremental: false), isNot(contains('new since your last call')));
   });
 }

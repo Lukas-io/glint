@@ -12,21 +12,18 @@ import 'result.dart';
 
 final sessionListTool = Tool(
   name: 'session_list',
-  description:
-      'Lists past capture sessions (newest-first) with per-session '
+  description: 'Lists past capture sessions (newest-first) with per-session '
       'HTTP/socket/log counts. Scope to one app with appNameContains (the DTD '
       'identity); projectPath is just the cwd at attach and several apps can '
       'share it.',
   inputSchema: Schema.object(
     properties: {
       'appNameContains': Schema.string(
-        description:
-            'Case-insensitive substring on the app name (DTD identity). The '
+        description: 'Case-insensitive substring on the app name (DTD identity). The '
             'reliable way to scope to one app.',
       ),
       'projectPath': Schema.string(
-        description:
-            'Exact cwd at attach. NOT app identity (apps from one dir share '
+        description: 'Exact cwd at attach. NOT app identity (apps from one dir share '
             'it); prefer appNameContains.',
       ),
       'sinceMs': Schema.int(
@@ -56,9 +53,8 @@ FutureOr<CallToolResult> sessionList(CallToolRequest request) async {
     );
     final live = Session.instance.liveSessionId;
     final viewed = Session.instance.viewedSessionId;
-    final elsewhere = rows.any((r) => r['ended_at'] == null)
-        ? CapturesDao().sessionsCapturedElsewhere()
-        : const <int>{};
+    final elsewhere =
+        rows.any((r) => r['ended_at'] == null) ? CapturesDao().sessionsCapturedElsewhere() : const <int>{};
     bool capturedElsewhere(Map<String, Object?> r) =>
         r['ended_at'] == null &&
         SessionRegistry.instance.attachedById(r['id'] as int) == null &&
@@ -70,13 +66,13 @@ FutureOr<CallToolResult> sessionList(CallToolRequest request) async {
           'startedMs': r['started_at'],
           if (r['ended_at'] != null) 'endedMs': r['ended_at'],
           'isLive': r['id'] == live && r['ended_at'] == null,
-      // F11 tri-state: distinguish crashed/never-detached captures from
-      // genuinely running ones.
-      'status': sessionStatusLabel(
-        isAttached: SessionRegistry.instance.attachedById(r['id'] as int) != null,
-        endedAtMs: r['ended_at'],
-        capturedElsewhere: capturedElsewhere(r),
-      ),
+          // F11 tri-state: distinguish crashed/never-detached captures from
+          // genuinely running ones.
+          'status': sessionStatusLabel(
+            isAttached: SessionRegistry.instance.attachedById(r['id'] as int) != null,
+            endedAtMs: r['ended_at'],
+            capturedElsewhere: capturedElsewhere(r),
+          ),
           if (capturedElsewhere(r)) 'capturedElsewhere': true,
           if (r['app_name'] != null) 'appName': r['app_name'],
           if (r['project_path'] != null) 'projectPath': r['project_path'],
@@ -84,8 +80,7 @@ FutureOr<CallToolResult> sessionList(CallToolRequest request) async {
           'counts': {
             'http': r['http_count'],
             'sockets': r['socket_count'],
-            if ((r['websocket_count'] as int? ?? 0) > 0)
-              'websockets': r['websocket_count'],
+            if ((r['websocket_count'] as int? ?? 0) > 0) 'websockets': r['websocket_count'],
             'logs': r['log_count'],
           },
         },

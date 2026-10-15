@@ -58,23 +58,19 @@ void main() {
       final pending = dao.pendingBodyFetches(sid, staleBeforeUs: 1000000);
       expect(pending, hasLength(1));
       expect(pending.single.vmId, 'a');
-      expect(pending.single.isComplete, isFalse,
-          reason: 'no end_us → response not complete');
+      expect(pending.single.isComplete, isFalse, reason: 'no end_us → response not complete');
     });
 
     test('response-incomplete and recent request is NOT eligible yet', () {
       insertReq('a', startUs: 2000000, endUs: null); // newer than staleBefore
       final pending = dao.pendingBodyFetches(sid, staleBeforeUs: 1000000);
-      expect(pending, isEmpty,
-          reason: 'within the grace window; give the profiler time');
+      expect(pending, isEmpty, reason: 'within the grace window; give the profiler time');
     });
 
     test('incomplete request past the attempt cap is dropped', () {
       insertReq('a', startUs: 500000, endUs: null, attempts: 3);
-      final pending =
-          dao.pendingBodyFetches(sid, staleBeforeUs: 1000000, maxAttempts: 3);
-      expect(pending, isEmpty,
-          reason: 'attempts >= maxAttempts stops re-polling body-less rows');
+      final pending = dao.pendingBodyFetches(sid, staleBeforeUs: 1000000, maxAttempts: 3);
+      expect(pending, isEmpty, reason: 'attempts >= maxAttempts stops re-polling body-less rows');
     });
 
     test('staleBeforeUs null restores legacy complete-only behaviour', () {

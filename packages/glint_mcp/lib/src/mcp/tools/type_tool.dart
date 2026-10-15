@@ -28,33 +28,26 @@ class TypeTool extends GlintTool {
                   'drops characters.',
             ),
             'clear': Schema.bool(
-              description:
-                  'Empty the focused field before typing (select-all + '
+              description: 'Empty the focused field before typing (select-all + '
                   'backspace, then a per-char backspace fallback). Default false.',
             ),
             'focus': Schema.string(
-              description:
-                  'Optional glintId of an input to tap before typing.',
+              description: 'Optional glintId of an input to tap before typing.',
             ),
             'awaitReady': Schema.bool(
-              description:
-                  'With focus: wait until that field is hittable. Default false.',
+              description: 'With focus: wait until that field is hittable. Default false.',
             ),
             'readyTimeoutMs': Schema.int(
-              description:
-                  'Ceiling for awaitReady. Default 5000.',
+              description: 'Ceiling for awaitReady. Default 5000.',
             ),
             'returnScene': Schema.bool(
-              description:
-                  'Settle, then report changed and changeCategory. Default true.',
+              description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
-              description:
-                  'Include geometry (painted, hittable, physicalCenter). Default false.',
+              description: 'Include geometry (painted, hittable, physicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
-              description:
-                  'Also return the new scene text as postScene. Default false.',
+              description: 'Also return the new scene text as postScene. Default false.',
             ),
           },
           required: ['text'],
@@ -62,8 +55,7 @@ class TypeTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;
     final focus = args['focus'] as String?;
@@ -131,15 +123,14 @@ class TypeTool extends GlintTool {
       }
 
       final before = await _fieldInfo(session);
-      var result = await session.interactor
-          .run(scene, TypeText(text, keyDelayMs: keyDelayMs));
+      var result = await session.interactor.run(scene, TypeText(text, keyDelayMs: keyDelayMs));
       var retyped = false;
       if (result.ok) {
         final first = await _check(session, before, text);
         if (first.problem != null && first.retryable) {
           await _clearField(session, scene);
-          result = await session.interactor.run(
-              scene, TypeText(text, keyDelayMs: max(keyDelayMs ?? 0, _retypeDelayMs)));
+          result =
+              await session.interactor.run(scene, TypeText(text, keyDelayMs: max(keyDelayMs ?? 0, _retypeDelayMs)));
           retyped = true;
           final second = await _check(session, before, text);
           warnings.add(second.problem == null
@@ -154,22 +145,18 @@ class TypeTool extends GlintTool {
           warnings.add('${first.problem}. Retype with clear:true and keyDelayMs:$_retypeDelayMs');
         }
       }
-      var response =
-          StructuredResponse.fromActionResult(result, detail: t.detail)
-              .addWarnings(warnings);
+      var response = StructuredResponse.fromActionResult(result, detail: t.detail).addWarnings(warnings);
       if (retyped) response = response.mergeData(const {'retyped': true});
       if (cleared != null) {
         response = response.mergeData(cleared.data);
         if (cleared.summaryPrefix != null) {
-          response =
-              response.copyWith(summary: '${cleared.summaryPrefix}${response.summary}');
+          response = response.copyWith(summary: '${cleared.summaryPrefix}${response.summary}');
         }
       }
       if (focusArming != null) response = withArmedMetadata(response, focusArming);
 
       if (t.returnScene && !response.isError) {
-        final post = await readPostActionState(session, pre,
-            includeSceneText: t.fetchScene);
+        final post = await readPostActionState(session, pre, includeSceneText: t.fetchScene);
         if (post != null) {
           // A successful type always changes the field's value → contentChanged.
           // 'nothing' with no `focus` means the text landed nowhere — call it
@@ -209,7 +196,8 @@ class TypeTool extends GlintTool {
       String core(String v) => v.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
       if (core(after.text).contains(core(typed))) return (problem: null, retryable: false, got: got);
       return (
-        problem: 'the field does not hold what was typed (${typed.length} chars typed, the field has $got): keys were dropped',
+        problem:
+            'the field does not hold what was typed (${typed.length} chars typed, the field has $got): keys were dropped',
         retryable: false,
         got: got,
       );
@@ -230,8 +218,7 @@ class TypeTool extends GlintTool {
 
   /// Device mode has no widget tree: focus cannot be resolved and there is no change signal, but the keys still land wherever the OS has focused. clear does a blind select-all + backspace first.
   Future<StructuredResponse> _typeInDeviceMode(
-      GlintSession session, String text, String? focus, bool clear,
-      int? keyDelayMs) async {
+      GlintSession session, String text, String? focus, bool clear, int? keyDelayMs) async {
     if (focus != null) {
       return StructuredResponse.error(
         summary: 'focus:$focus needs a Flutter app; this session is in device mode',
@@ -294,14 +281,12 @@ class TypeTool extends GlintTool {
     await session.interactor.run(scene, const ClearField());
     var after = await session.focusedFieldText();
     if (after != null && after.isNotEmpty) {
-      await session.interactor
-          .run(scene, PressKey(KeyName.backspace, count: after.length));
+      await session.interactor.run(scene, PressKey(KeyName.backspace, count: after.length));
       after = await session.focusedFieldText();
     }
     // Backspace stops at the cursor, which a tap leaves mid-text; forward delete takes the rest.
     if (after != null && after.isNotEmpty) {
-      await session.interactor
-          .run(scene, PressKey(KeyName.delete, count: after.length));
+      await session.interactor.run(scene, PressKey(KeyName.delete, count: after.length));
       after = await session.focusedFieldText();
     }
     final removed = before?.length ?? 0;
@@ -309,8 +294,7 @@ class TypeTool extends GlintTool {
     return _ClearOutcome(
       summaryPrefix: before == null ? null : 'cleared $removed chars, ',
       warnings: [
-        if (before == null)
-          'no focused text field found to clear; cleared blind',
+        if (before == null) 'no focused text field found to clear; cleared blind',
         if (remaining > 0) 'field still holds $remaining chars after clear',
       ],
       data: {
@@ -336,9 +320,7 @@ class TypeTool extends GlintTool {
           final inset = (await session.uiState()).keyboardBottomPx;
           if (inset > 0 && inset == lastInset) return true;
           // No soft keyboard at all (a hardware keyboard is attached): focus is enough.
-          if (inset == 0 &&
-              DateTime.now().difference(focusedAt) >
-                  const Duration(milliseconds: 600)) {
+          if (inset == 0 && DateTime.now().difference(focusedAt) > const Duration(milliseconds: 600)) {
             return true;
           }
           lastInset = inset;

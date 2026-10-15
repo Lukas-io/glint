@@ -8,8 +8,7 @@ import 'package:test/test.dart';
 
 import '../perception/fake_scene.dart';
 
-SceneNode _sn(String label, {List<SceneNode> children = const [], String? text}) =>
-    SceneNode(
+SceneNode _sn(String label, {List<SceneNode> children = const [], String? text}) => SceneNode(
       depth: 0,
       indexInParent: -1,
       description: label,
@@ -153,7 +152,8 @@ void main() {
       expect(j.containsKey('isBarriered'), isFalse);
     });
 
-    test('SemanticScene.toJson carries overlayLayers so json mode is not '
+    test(
+        'SemanticScene.toJson carries overlayLayers so json mode is not '
         'blind to dialogs', () {
       final scene = fakeSemanticScene(
         overlayLayers: [

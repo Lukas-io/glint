@@ -67,10 +67,7 @@ class NativeSceneReader extends NativeReader {
       createdByLocalProject: false,
     );
     root.glintId = '_native_root';
-    root.children = elements
-        .whereType<Map<String, Object?>>()
-        .map((e) => _parseElement(e, depth: 1))
-        .toList();
+    root.children = elements.whereType<Map<String, Object?>>().map((e) => _parseElement(e, depth: 1)).toList();
     return Scene.native(root: root);
   }
 
@@ -83,9 +80,7 @@ class NativeSceneReader extends NativeReader {
     final frame = e['frame'] as Map<String, Object?>?;
 
     // Stable glintId: prefer ident, fall back to role+label slug.
-    final baseId = ident.isNotEmpty
-        ? _slug(ident)
-        : _slug('${role}_$label'.toLowerCase().replaceAll(' ', '_'));
+    final baseId = ident.isNotEmpty ? _slug(ident) : _slug('${role}_$label'.toLowerCase().replaceAll(' ', '_'));
 
     final node = SceneNode(
       depth: depth,
@@ -112,10 +107,7 @@ class NativeSceneReader extends NativeReader {
 
     final kids = e['children'];
     if (kids is List) {
-      node.children = kids
-          .whereType<Map<String, Object?>>()
-          .map((c) => _parseElement(c, depth: depth + 1))
-          .toList();
+      node.children = kids.whereType<Map<String, Object?>>().map((c) => _parseElement(c, depth: depth + 1)).toList();
     }
     return node;
   }
@@ -141,9 +133,7 @@ class NativeSceneReader extends NativeReader {
       final label = node.textPreview ?? node.label;
       final marker = (node.isNativeEnabled ?? false) ? '*' : '-';
       final f = node.axFrame;
-      final at = f == null
-          ? ''
-          : ' @ ${(f.x + f.w / 2).round()},${(f.y + f.h / 2).round()}';
+      final at = f == null ? '' : ' @ ${(f.x + f.w / 2).round()},${(f.y + f.h / 2).round()}';
       buf
         ..write('  ' * depth)
         ..writeln('$marker native $id $label$at');

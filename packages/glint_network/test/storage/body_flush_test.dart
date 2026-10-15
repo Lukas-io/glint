@@ -29,8 +29,7 @@ class _StuckVm extends VmClient {
   @override
   Future<List<IsolateInfo>> discoverHttpProfilingIsolates() async => const [];
   @override
-  Future<HttpProfileRequest> getHttpProfileRequestForIsolate(
-      String isolateId, String requestId) {
+  Future<HttpProfileRequest> getHttpProfileRequestForIsolate(String isolateId, String requestId) {
     fetches++;
     if (!connected) throw StateError('VM service is not connected');
     return Completer<HttpProfileRequest>().future;
@@ -47,7 +46,10 @@ void main() {
     CapturesDatabase.open(dataDir: dir.path);
     dao = CapturesDao();
     sid = dao.createSession(
-      appName: 'app', vmServiceUri: 'ws://x', isolateId: null, projectPath: null,
+      appName: 'app',
+      vmServiceUri: 'ws://x',
+      isolateId: null,
+      projectPath: null,
     );
   });
   tearDown(() {
@@ -78,14 +80,12 @@ void main() {
   });
 
   group('noBodyResult wording (#96)', () {
-    Map<String, Object?> structured(CallToolResult r) =>
-        r.structuredContent!;
+    Map<String, Object?> structured(CallToolResult r) => r.structuredContent!;
 
     test('a live session is told to retry', () {
       insertReq('r1');
       final scope = Scope(sessionId: sid, appName: 'app', isLive: true);
-      final s = structured(
-          noBodyResult(scope, 'r1', 'response', 'live-db-fallback', null));
+      final s = structured(noBodyResult(scope, 'r1', 'response', 'live-db-fallback', null));
       final warnings = (s['warnings'] as List).cast<String>().join(' ');
       expect(warnings, contains('Retry'));
       expect(warnings, isNot(contains('unrecoverable')));
@@ -94,8 +94,7 @@ void main() {
     test('a history view of a session still open elsewhere is told to retry', () {
       insertReq('r1');
       final scope = Scope(sessionId: sid, appName: 'app', isLive: false);
-      final s = structured(
-          noBodyResult(scope, 'r1', 'response', 'history', null));
+      final s = structured(noBodyResult(scope, 'r1', 'response', 'history', null));
       final warnings = (s['warnings'] as List).cast<String>().join(' ');
       expect(warnings, contains('Retry'));
       expect(warnings, isNot(contains('unrecoverable')));
@@ -105,8 +104,7 @@ void main() {
       insertReq('r1');
       dao.endSession(sid);
       final scope = Scope(sessionId: sid, appName: 'app', isLive: false);
-      final s = structured(
-          noBodyResult(scope, 'r1', 'response', 'history', null));
+      final s = structured(noBodyResult(scope, 'r1', 'response', 'history', null));
       final warnings = (s['warnings'] as List).cast<String>().join(' ');
       expect(warnings, contains('unrecoverable'));
       expect(warnings, isNot(contains('Retry in')));

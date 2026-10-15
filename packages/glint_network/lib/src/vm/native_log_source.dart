@@ -48,9 +48,8 @@ class NativeLogSource {
           return false;
         }
         platform = 'ios';
-        final predicate = package == null
-            ? 'process == "Runner"'
-            : 'process == "Runner" OR processImagePath CONTAINS[c] "$package"';
+        final predicate =
+            package == null ? 'process == "Runner"' : 'process == "Runner" OR processImagePath CONTAINS[c] "$package"';
         cmd = ['xcrun', 'simctl', 'spawn', udid, 'log', 'stream', '--style', 'compact', '--predicate', predicate];
         detail = 'simctl log stream on $device ($udid), predicate: $predicate';
       } else {
@@ -100,10 +99,7 @@ class NativeLogSource {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen(handle, onDone: () => _proc = null);
-      _errSub = proc.stderr
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((l) {
+      _errSub = proc.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
         if (l.trim().isNotEmpty) detail = '$detail; stderr: ${l.trim()}';
       });
       unawaited(proc.exitCode.then((_) => _proc = null));
@@ -136,10 +132,8 @@ class NativeLogSource {
   /// `Device:` and `Package:` from a DTD app name.
   static ({String? device, String? package}) parseAppName(String? appName) {
     if (appName == null) return (device: null, package: null);
-    final device =
-        RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1)?.trim();
-    final package =
-        RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1)?.trim();
+    final device = RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1)?.trim();
+    final package = RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1)?.trim();
     return (device: device, package: package);
   }
 
@@ -202,8 +196,7 @@ class NativeLogSource {
       count++;
       only = parts[0];
       for (final p in parts.skip(2)) {
-        if (p.startsWith('model:') &&
-            p.substring(6).toLowerCase().replaceAll('_', ' ') == want) {
+        if (p.startsWith('model:') && p.substring(6).toLowerCase().replaceAll('_', ' ') == want) {
           return parts[0];
         }
       }
@@ -234,8 +227,7 @@ class NativeLogSource {
 
   /// `--style compact` line: `<date> <time> <type> <process>[pid:tid] [sub:cat] msg`.
   static ({int level, String logger, String message})? parseSimctlLine(String line) {
-    final m = RegExp(r'^\S+ \S+ (\S+) (\S+?)\[\d+:[0-9a-fA-F]+\] (?:\[([^\]]*)\] )?(.*)$')
-        .firstMatch(line);
+    final m = RegExp(r'^\S+ \S+ (\S+) (\S+?)\[\d+:[0-9a-fA-F]+\] (?:\[([^\]]*)\] )?(.*)$').firstMatch(line);
     if (m == null) return null;
     final type = m.group(1)!;
     final level = switch (type[0]) {

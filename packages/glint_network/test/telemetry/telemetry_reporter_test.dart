@@ -49,8 +49,7 @@ void main() {
         dataDir: '/tmp/test',
       );
       final frames = payload['stackHead'] as List<String>;
-      expect(frames.any((f) => f.contains('alice')), isFalse,
-          reason: 'redactor must strip usernames');
+      expect(frames.any((f) => f.contains('alice')), isFalse, reason: 'redactor must strip usernames');
       expect(frames.any((f) => f.contains('<project>/lib/main.dart')), isTrue);
       expect(frames.any((f) => f.contains('eats_mobile')), isFalse);
     });
@@ -66,8 +65,7 @@ void main() {
         stack: StackTrace.fromString('#0 a (package:f/b.dart:1:1)'),
         dataDir: '/tmp/m2',
       );
-      expect(p1['signature'], p2['signature'],
-          reason: 'signature depends only on errorClass + top-3 frames');
+      expect(p1['signature'], p2['signature'], reason: 'signature depends only on errorClass + top-3 frames');
     });
 
     test('signature differs when error class differs', () {
@@ -95,8 +93,7 @@ void main() {
         stack: StackTrace.fromString('#0 different (package:x/y.dart:9:9)'),
         dataDir: '/tmp/machine-A',
       );
-      expect(p1['machineHash'], p2['machineHash'],
-          reason: 'machineHash depends only on dataDir + salt');
+      expect(p1['machineHash'], p2['machineHash'], reason: 'machineHash depends only on dataDir + salt');
     });
 
     test('machineHash differs for different dataDirs', () {
@@ -129,8 +126,7 @@ void main() {
       for (final entry in payload.entries) {
         if (entry.key == 'machineHash') continue;
         final s = jsonEncodeSafe(entry.value);
-        expect(s.contains('lukasio'), isFalse,
-            reason: 'field "${entry.key}" leaked username');
+        expect(s.contains('lukasio'), isFalse, reason: 'field "${entry.key}" leaked username');
       }
     });
   });

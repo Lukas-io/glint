@@ -31,8 +31,7 @@ Future<void> main(List<String> argv) async {
     ..addOption('vm-uri', mandatory: true)
     ..addOption('platform', allowed: ['ios', 'android'], mandatory: true)
     ..addOption('device', mandatory: true)
-    ..addOption('ios-bridge',
-        defaultsTo: 'native/ios_sim_bridge/.build/debug/glint-iossim')
+    ..addOption('ios-bridge', defaultsTo: 'native/ios_sim_bridge/.build/debug/glint-iossim')
     ..addOption('adb-path', defaultsTo: 'adb');
   final opts = parser.parse(argv);
 
@@ -102,9 +101,7 @@ Future<void> main(List<String> argv) async {
     );
     info('result: ${r2.summary}  warnings=${r2.warnings.length}');
     await scene2.dispose();
-    if (r2.ok &&
-        r2.hittable == false &&
-        r2.warnings.any((w) => w.contains('not hittable'))) {
+    if (r2.ok && r2.hittable == false && r2.warnings.any((w) => w.contains('not hittable'))) {
       pass('result is ok=true, hittable=false, with the expected warning '
           '(default permissive mode)');
     } else {
@@ -116,8 +113,7 @@ Future<void> main(List<String> argv) async {
     // ── Gate 3: refuse-not-hittable changes the outcome of gate 2.
     section('Gate 3: --refuse-not-hittable on the same tap returns NotHittable error');
     final scene3 = await reader.readSummary();
-    final strict = Interactor(backend: backend, resolver: resolver)
-      ..refuseNotHittable = true;
+    final strict = Interactor(backend: backend, resolver: resolver)..refuseNotHittable = true;
     final r3 = await strict.run(
       scene3,
       const Tap(SymbolicTarget('elevated_button_in_absorb_pointer')),
@@ -152,9 +148,7 @@ Future<void> main(List<String> argv) async {
     await vm.disconnect();
   }
 
-  stdout.writeln(failed == 0
-      ? '\nP2 VERIFY: GREEN'
-      : '\nP2 VERIFY: RED ($failed failures)');
+  stdout.writeln(failed == 0 ? '\nP2 VERIFY: GREEN' : '\nP2 VERIFY: RED ($failed failures)');
   exit(failed == 0 ? 0 : 1);
 }
 

@@ -16,8 +16,7 @@ import 'package:glint_mcp/glint.dart';
 Future<void> main(List<String> argv) async {
   final parser = ArgParser()
     ..addOption('vm-uri', mandatory: true)
-    ..addOption('format',
-        allowed: ['text', 'json', 'both'], defaultsTo: 'text');
+    ..addOption('format', allowed: ['text', 'json', 'both'], defaultsTo: 'text');
   final opts = parser.parse(argv);
 
   final vm = VmServiceRuntime();
@@ -53,7 +52,6 @@ void _coverageLine(SemanticScene scene) {
   for (final n in scene.root.walk()) {
     counts.update(n.role, (v) => v + 1, ifAbsent: () => 1);
   }
-  final entries = counts.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
+  final entries = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   stdout.writeln(entries.map((e) => '${e.key.name}=${e.value}').join('  '));
 }

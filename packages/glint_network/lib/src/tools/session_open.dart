@@ -11,8 +11,7 @@ import 'result.dart';
 
 final sessionOpenTool = Tool(
   name: 'session_open',
-  description:
-      'Point the read tools (network_list/get/body, socket_list/get, '
+  description: 'Point the read tools (network_list/get/body, socket_list/get, '
       'logs_tail, network_search/diff) at a past session. Live capture keeps '
       'writing its own session; session_close reverts.',
   inputSchema: Schema.object(
@@ -53,8 +52,7 @@ FutureOr<CallToolResult> sessionOpen(CallToolRequest request) async {
     final startedMs = row['started_at'];
     final endedMs = row['ended_at'];
     final isEnded = endedMs != null;
-    final capturedElsewhere =
-        !isAttached && !isEnded && dao.otherAttachedProcesses(id) > 0;
+    final capturedElsewhere = !isAttached && !isEnded && dao.otherAttachedProcesses(id) > 0;
 
     // F11 tri-state: "still live" used to mean only ended_at IS NULL, so
     // crashed/never-detached sessions read as running apps.
@@ -63,14 +61,12 @@ FutureOr<CallToolResult> sessionOpen(CallToolRequest request) async {
       endedAtMs: endedMs,
       capturedElsewhere: capturedElsewhere,
     )) {
-      'live' when capturedElsewhere =>
-        'live, captured by another server process',
+      'live' when capturedElsewhere => 'live, captured by another server process',
       'live' => 'live — capture still running',
       'ended' => 'ended',
       _ => 'interrupted — no clean end recorded (killed process or pre-0.9.17)',
     };
-    final summary =
-        'Viewing session $id (${appName ?? "unnamed"}, $statusDesc) — read '
+    final summary = 'Viewing session $id (${appName ?? "unnamed"}, $statusDesc) — read '
         'tools now query its history (everything persisted so far).';
 
     final warnings = <String>[];

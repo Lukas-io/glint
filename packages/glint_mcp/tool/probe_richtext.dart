@@ -5,7 +5,6 @@
 //   dart run tool/probe_richtext.dart <vm-uri> "Sign in"
 
 import 'package:glint_mcp/glint.dart';
-import 'package:glint_mcp/perception.dart';
 
 Future<void> main(List<String> args) async {
   final vmUri = args[0];
@@ -44,8 +43,7 @@ Future<void> main(List<String> args) async {
   ];
   for (final e in exprs) {
     try {
-      await vm.setInspectorSelection(
-          inspectorId: target.inspectorId, groupName: scene.groupName);
+      await vm.setInspectorSelection(inspectorId: target.inspectorId, groupName: scene.groupName);
       final r = await vm.evaluateString(e);
       print('OK => $r');
     } on Object catch (err) {

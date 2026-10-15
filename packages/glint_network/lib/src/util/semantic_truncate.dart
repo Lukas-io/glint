@@ -106,8 +106,7 @@ Object? _walk(Object? node, _TruncState state) {
       state.truncated = true;
       final shown = node.sublist(0, state.arraySampleSize).map((e) => _walk(e, state)).toList();
       shown.add({
-        '_truncated':
-            '${node.length - state.arraySampleSize} more, ${state.arraySampleSize} of ${node.length} shown',
+        '_truncated': '${node.length - state.arraySampleSize} more, ${state.arraySampleSize} of ${node.length} shown',
       });
       return shown;
     }
@@ -156,9 +155,7 @@ SemanticTruncation truncateHtml(String input, {required int maxBytes}) {
   );
 }
 
-final RegExp _htmlScriptRegex =
-    RegExp(r'<script\b[^>]*>[\s\S]*?</script>', caseSensitive: false);
-final RegExp _htmlStyleRegex =
-    RegExp(r'<style\b[^>]*>[\s\S]*?</style>', caseSensitive: false);
+final RegExp _htmlScriptRegex = RegExp(r'<script\b[^>]*>[\s\S]*?</script>', caseSensitive: false);
+final RegExp _htmlStyleRegex = RegExp(r'<style\b[^>]*>[\s\S]*?</style>', caseSensitive: false);
 final RegExp _htmlCommentRegex = RegExp(r'<!--[\s\S]*?-->');
 final RegExp _htmlWhitespaceRegex = RegExp(r'\s+');

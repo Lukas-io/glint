@@ -11,15 +11,13 @@ import 'result.dart';
 
 final alertsDrainTool = Tool(
   name: 'alerts_drain',
-  description:
-      'Returns pending alerts (newest-first) AND marks them drained. The '
+  description: 'Returns pending alerts (newest-first) AND marks them drained. The '
       '"what is wrong?" first call. Scope auto-resolves to the sole attached '
       'session.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
@@ -140,8 +138,7 @@ Map<String, Object?> buildAlertsResponse({
   if (rows.isEmpty) {
     final emptyState = SessionStateView.of(scope.sessionId);
     if (!emptyState.canGenerateTraffic) {
-      nextSteps.add(
-          'Nothing pending — and this session\'s capture is complete, so no '
+      nextSteps.add('Nothing pending — and this session\'s capture is complete, so no '
           'new alerts will arrive.');
     } else if (action == 'drain') {
       nextSteps.add('Nothing to handle right now. Re-check with alerts_peek to avoid disturbing the queue.');

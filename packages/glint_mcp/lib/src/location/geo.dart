@@ -71,7 +71,11 @@ class GeoPath {
   /// The rest of the path from [meters] on: the point there, then every waypoint after it.
   List<LatLng> pointsFrom(double meters) {
     final m = meters.clamp(0, lengthMeters).toDouble();
-    return [at(m).at, for (var i = 0; i < points.length; i++) if (_cumulative[i] > m) points[i]];
+    return [
+      at(m).at,
+      for (var i = 0; i < points.length; i++)
+        if (_cumulative[i] > m) points[i]
+    ];
   }
 
   double metersAtWaypoint(int index) => _cumulative[index.clamp(0, _cumulative.length - 1)];
@@ -84,7 +88,8 @@ List<LatLng> parseGpx(String xml) => [
           if (_attr(m.group(1)!, 'lon') case final lng?) (lat: lat, lng: lng),
     ];
 
-double? _attr(String attrs, String name) => double.tryParse(RegExp('$name="([^"]+)"').firstMatch(attrs)?.group(1) ?? '');
+double? _attr(String attrs, String name) =>
+    double.tryParse(RegExp('$name="([^"]+)"').firstMatch(attrs)?.group(1) ?? '');
 
 /// Points from every `<coordinates>` block of a KML file (`lng,lat[,alt]` tuples).
 List<LatLng> parseKml(String xml) => [

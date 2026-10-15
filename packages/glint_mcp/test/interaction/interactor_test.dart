@@ -33,8 +33,7 @@ void main() {
     test('PressKey dispatches key, count and modifiers', () async {
       final b = _FakeBackend();
       final ix = Interactor(backend: b, resolver: _FakeResolver(_coord(x: 10, y: 10)));
-      final r = await ix.run(_FakeScene(),
-          const PressKey(KeyName.left, count: 3, modifiers: {KeyModifier.shift}));
+      final r = await ix.run(_FakeScene(), const PressKey(KeyName.left, count: 3, modifiers: {KeyModifier.shift}));
       expect(r.ok, isTrue);
       expect(b.keys.single.$1, KeyName.left);
       expect(b.keys.single.$2, 3);
@@ -83,8 +82,7 @@ void main() {
 
     test('long-press off-viewport refuses', () async {
       final i = build(_coord(x: -10, y: 100));
-      final r =
-          await i.run(_FakeScene(), const LongPress(SymbolicTarget('target')));
+      final r = await i.run(_FakeScene(), const LongPress(SymbolicTarget('target')));
       expect(r.errorKind, GlintErrorKind.offViewport);
       expect(backend.longPresses, isEmpty);
     });
@@ -117,8 +115,7 @@ void main() {
     });
 
     test('a real hit-test miss refuses by default and names the winner', () async {
-      final i = build(_coord(
-          x: 200, y: 400, hittable: false, hitTestReal: true, hitBy: 'ink_well "Continue"'));
+      final i = build(_coord(x: 200, y: 400, hittable: false, hitTestReal: true, hitBy: 'ink_well "Continue"'));
       final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
       expect(r.errorKind, GlintErrorKind.notHittable);
       expect(r.summary, contains('ink_well "Continue"'));
@@ -126,8 +123,7 @@ void main() {
     });
 
     test('refuseNotHittable:false taps through a real miss', () async {
-      final i = build(_coord(x: 200, y: 400, hittable: false, hitTestReal: true))
-        ..refuseNotHittable = false;
+      final i = build(_coord(x: 200, y: 400, hittable: false, hitTestReal: true))..refuseNotHittable = false;
       final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
       expect(r.ok, isTrue);
       expect(backend.taps, hasLength(1));
@@ -196,13 +192,11 @@ class _FakeBackend implements InteractionBackend {
   Future<void> typeText(String text, {int? keyDelayMs}) async {}
 
   @override
-  Future<void> tapSequence(List<({int x, int y})> points,
-          {required int intervalMs}) =>
+  Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) =>
       tapEachInTurn(this, points, intervalMs);
 
   @override
-  Future<void> pressKey(KeyName key,
-      {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
+  Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) async {
     keys.add((key, count, modifiers));
   }
 
@@ -224,7 +218,8 @@ class _FakeBackend implements InteractionBackend {
   Future<void> warm() async {}
 
   @override
-  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+  Future<void> pinch(
+          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
       throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
 
   @override
@@ -239,8 +234,7 @@ class _FakeBackend implements InteractionBackend {
       throw UnsupportedBackendAction('fake', 'no recording in tests');
 
   @override
-  Future<ScreenshotResult> screenshot(String path) async =>
-      const ScreenshotResult();
+  Future<ScreenshotResult> screenshot(String path) async => const ScreenshotResult();
 }
 
 class _FakeResolver implements CoordinateResolver {
@@ -251,13 +245,11 @@ class _FakeResolver implements CoordinateResolver {
   Future<ResolvedCoord> resolve(Scene scene, String glintId) async => coord;
 
   @override
-  Future<({double dpr, double w, double h})> resolveViewport(
-          Scene scene, String glintId) async =>
+  Future<({double dpr, double w, double h})> resolveViewport(Scene scene, String glintId) async =>
       (dpr: 3.0, w: 420.0, h: 912.0);
 
   @override
-  Future<({double dpr, double w, double h})> resolveViewportNodeFree() async =>
-      (dpr: 3.0, w: 420.0, h: 912.0);
+  Future<({double dpr, double w, double h})> resolveViewportNodeFree() async => (dpr: 3.0, w: 420.0, h: 912.0);
 }
 
 /// findByGlintId must return non-null so SymbolicTarget resolution proceeds.
@@ -273,5 +265,4 @@ class _FakeScene implements Scene {
 
   @override
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
-
 }

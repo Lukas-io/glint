@@ -91,7 +91,8 @@ class WaitForTool extends GlintTool {
               ? '$where still shows $what after ${timeoutMs ~/ 1000} s'
               : '$where did not show $what within ${timeoutMs ~/ 1000} s',
           errorKind: GlintErrorKind.targetNeverReady,
-          detail: visible.isEmpty ? 'the screen shows no text' : 'text on screen: ${visible.map((t) => '"$t"').join(', ')}',
+          detail:
+              visible.isEmpty ? 'the screen shows no text' : 'text on screen: ${visible.map((t) => '"$t"').join(', ')}',
           nextSteps: [
             'raise timeoutMs (max $_maxTimeoutMs) if the other side is slow',
             'get_scene app:"$where" to see what it shows instead',
@@ -110,6 +111,7 @@ class WaitForTool extends GlintTool {
     final token = request.meta?.progressToken;
     final notifier = session.progressNotifier;
     if (token == null || notifier == null) return null;
-    return (sec, phase) => notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
+    return (sec, phase) =>
+        notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
   }
 }

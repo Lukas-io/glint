@@ -2,9 +2,7 @@ import 'package:glint_mcp/src/perception/scene_node.dart';
 import 'package:glint_mcp/src/runtime/inspector_params.dart';
 import 'package:test/test.dart';
 
-SceneNode _n(String desc,
-        {bool local = false, List<SceneNode> children = const []}) =>
-    SceneNode(
+SceneNode _n(String desc, {bool local = false, List<SceneNode> children = const []}) => SceneNode(
       depth: 0,
       indexInParent: 0,
       description: desc,
@@ -35,27 +33,22 @@ void main() {
     test('detailsSubtree and selectionById use objectGroup + arg', () {
       expect(InspectorParams.detailsSubtree(inspectorId: 'x', groupName: 'g'),
           {'arg': 'x', 'objectGroup': 'g', 'subtreeDepth': '5'});
-      expect(InspectorParams.selectionById(inspectorId: 'x', groupName: 'g'),
-          {'arg': 'x', 'objectGroup': 'g'});
+      expect(InspectorParams.selectionById(inspectorId: 'x', groupName: 'g'), {'arg': 'x', 'objectGroup': 'g'});
     });
 
     test('pubRootDirectories are var-args arg0, arg1, …', () {
-      expect(InspectorParams.pubRootDirectories(['/a', '/b']),
-          {'arg0': '/a', 'arg1': '/b'});
+      expect(InspectorParams.pubRootDirectories(['/a', '/b']), {'arg0': '/a', 'arg1': '/b'});
       expect(InspectorParams.pubRootDirectories(const []), isEmpty);
     });
   });
 
   group('appRootFromMainScript', () {
     test('strips /lib/main.dart to the package root', () {
-      expect(appRootFromMainScript('file:///Users/x/app/lib/main.dart'),
-          '/Users/x/app');
+      expect(appRootFromMainScript('file:///Users/x/app/lib/main.dart'), '/Users/x/app');
     });
 
     test('handles a path under packages/flutter/', () {
-      expect(
-          appRootFromMainScript(
-              'file:///Users/x/packages/flutter/counter/lib/main.dart'),
+      expect(appRootFromMainScript('file:///Users/x/packages/flutter/counter/lib/main.dart'),
           '/Users/x/packages/flutter/counter');
     });
 

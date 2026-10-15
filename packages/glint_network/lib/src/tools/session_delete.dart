@@ -11,8 +11,7 @@ import 'result.dart';
 
 final sessionDeleteTool = Tool(
   name: 'session_delete',
-  description:
-      'Permanently deletes a session and all its data (requests, bodies, '
+  description: 'Permanently deletes a session and all its data (requests, bodies, '
       'sockets, logs, alerts, index). Cannot be undone; dry-run unless '
       'confirm:true. Refuses a session still capturing here or in another '
       'server process (detach first).',

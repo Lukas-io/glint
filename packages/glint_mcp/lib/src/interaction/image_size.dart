@@ -5,9 +5,7 @@ import 'dart:io';
   try {
     final bytes = File(path).readAsBytesSync();
     if (bytes.length < 24) return null;
-    int u32(int o) =>
-        (bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) |
-        bytes[o + 3];
+    int u32(int o) => (bytes[o] << 24) | (bytes[o + 1] << 16) | (bytes[o + 2] << 8) | bytes[o + 3];
     return (u32(16), u32(20));
   } on Object {
     return null;

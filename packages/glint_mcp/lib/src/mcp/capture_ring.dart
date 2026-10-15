@@ -80,10 +80,8 @@ class CaptureRing {
 
 /// What a non-resumed lifecycle means for the agent, in one line.
 String describeLifecycle(String? lifecycle) => switch (lifecycle) {
-      'inactive' =>
-        'something is over your app (alert, permission prompt, sheet, control center)',
-      'paused' || 'hidden' || 'detached' =>
-        'your app is in the background (home screen or another app)',
+      'inactive' => 'something is over your app (alert, permission prompt, sheet, control center)',
+      'paused' || 'hidden' || 'detached' => 'your app is in the background (home screen or another app)',
       _ => 'your app is not in the foreground',
     };
 

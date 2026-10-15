@@ -4,8 +4,7 @@ import 'package:vm_service/vm_service.dart';
 
 final _long = 'x' * 600;
 
-InstanceRef _str(String id, String preview, {bool cut = false, int? length}) =>
-    InstanceRef(
+InstanceRef _str(String id, String preview, {bool cut = false, int? length}) => InstanceRef(
       id: id,
       kind: InstanceKind.kString,
       identityHashCode: 0,
@@ -18,10 +17,10 @@ InstanceRef _str(String id, String preview, {bool cut = false, int? length}) =>
 /// Expands `long`, answers toString for `err`, and has collected everything else.
 class _Service implements VmService {
   @override
-  Future<Obj> getObject(String isolateId, String objectId,
-      {int? offset, int? count, String? idZoneId}) async {
+  Future<Obj> getObject(String isolateId, String objectId, {int? offset, int? count, String? idZoneId}) async {
     if (objectId != 'long') {
-      throw SentinelException.parse('getObject', {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'});
+      throw SentinelException.parse(
+          'getObject', {'type': 'Sentinel', 'kind': 'Collected', 'valueAsString': '<collected>'});
     }
     return Instance(
       id: objectId,
@@ -33,8 +32,7 @@ class _Service implements VmService {
   }
 
   @override
-  Future<Response> invoke(String isolateId, String targetId, String selector,
-          List<String> argumentIds,
+  Future<Response> invoke(String isolateId, String targetId, String selector, List<String> argumentIds,
           {bool? disableBreakpoints, String? idZoneId}) async =>
       _str('s', 'Bad state: boom');
 
@@ -62,7 +60,6 @@ void main() {
 
   test('when the VM cannot expand it, the preview says how much was cut', () async {
     final ref = _str('gone', 'y' * 128, cut: true, length: 900);
-    expect(await instanceText(service, 'iso', ref),
-        '${'y' * 128}… [cut by the VM at 128 of 900 chars]');
+    expect(await instanceText(service, 'iso', ref), '${'y' * 128}… [cut by the VM at 128 of 900 chars]');
   });
 }

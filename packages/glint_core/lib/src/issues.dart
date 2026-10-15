@@ -65,8 +65,7 @@ Future<GhFiling> fileWithGh({
   }
 }
 
-Future<ProcessResult> _ghIssueCreate(
-        CommandRunner run, String repo, String title, String body, List<String> labels) =>
+Future<ProcessResult> _ghIssueCreate(CommandRunner run, String repo, String title, String body, List<String> labels) =>
     run('gh', [
       'issue',
       'create',
@@ -131,8 +130,7 @@ String composeIssueDeepLink({
     'body': body,
     if (labels.isNotEmpty) 'labels': labels.join(','),
   };
-  final query = params.entries
-      .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-      .join('&');
+  final query =
+      params.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&');
   return 'https://github.com/$repo/issues/new?$query';
 }

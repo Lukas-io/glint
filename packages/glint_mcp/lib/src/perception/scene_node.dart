@@ -72,10 +72,7 @@ class SceneNode {
   List<SceneNode> children;
 
   /// Best single-word label: widgetRuntimeType when present, else description.
-  String get label =>
-      (widgetRuntimeType != null && widgetRuntimeType!.isNotEmpty)
-          ? widgetRuntimeType!
-          : description;
+  String get label => (widgetRuntimeType != null && widgetRuntimeType!.isNotEmpty) ? widgetRuntimeType! : description;
 
   /// [label] with any generic suffix stripped: `Radio<String>` → `Radio`.
   String get baseLabel {
@@ -104,10 +101,8 @@ class SceneNode {
         if (textPreview != null) 'textPreview': textPreview,
         if (createdByLocalProject) 'createdByLocalProject': true,
         if (stateful) 'stateful': true,
-        if (creationLocation != null)
-          'creationLocation': creationLocation!.toJson(),
-        if (children.isNotEmpty)
-          'children': children.map((c) => c.toJson()).toList(),
+        if (creationLocation != null) 'creationLocation': creationLocation!.toJson(),
+        if (children.isNotEmpty) 'children': children.map((c) => c.toJson()).toList(),
       };
 }
 

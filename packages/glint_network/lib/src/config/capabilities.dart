@@ -69,9 +69,7 @@ class CapabilityConfig {
       return CapabilityConfig._(set);
     }
 
-    final disabled = denylist != null && denylist.isNotEmpty
-        ? _parse(denylist)
-        : <Category>{};
+    final disabled = denylist != null && denylist.isNotEmpty ? _parse(denylist) : <Category>{};
     final on = Category.values.toSet()..removeAll(disabled);
     return CapabilityConfig._(on);
   }
@@ -118,12 +116,9 @@ String capabilityState({required bool enabled, required bool runtimeOk}) =>
 }) {
   final caps = CapabilityConfig.instance;
   final m = <String, String>{
-    'http': capabilityState(
-        enabled: caps.isEnabled(Category.http), runtimeOk: httpOk),
-    'socket': capabilityState(
-        enabled: caps.isEnabled(Category.sockets), runtimeOk: socketOk),
-    'logs': capabilityState(
-        enabled: caps.isEnabled(Category.logs), runtimeOk: logsOk),
+    'http': capabilityState(enabled: caps.isEnabled(Category.http), runtimeOk: httpOk),
+    'socket': capabilityState(enabled: caps.isEnabled(Category.sockets), runtimeOk: socketOk),
+    'logs': capabilityState(enabled: caps.isEnabled(Category.logs), runtimeOk: logsOk),
   };
   final degraded = [
     for (final e in m.entries)

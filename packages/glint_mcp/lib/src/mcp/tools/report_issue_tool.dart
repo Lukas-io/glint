@@ -20,8 +20,7 @@ class ReportIssueTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'report_issue',
-        description:
-            'File a glint bug / ux / feature note in the PUBLIC glint GitHub '
+        description: 'File a glint bug / ux / feature note in the PUBLIC glint GitHub '
             'repo. Only with the user\'s go-ahead: call with dryRun:true '
             'first, show the user the composed issue, and file only after '
             'they approve. includeContext:true (off by default) attaches the '
@@ -41,12 +40,10 @@ class ReportIssueTool extends GlintTool {
                   'Redacted before submission.',
             ),
             'includeContext': Schema.bool(
-              description:
-                  'Attach the recent action log (tools, targets, outcomes). Default false.',
+              description: 'Attach the recent action log (tools, targets, outcomes). Default false.',
             ),
             'dryRun': Schema.bool(
-              description:
-                  'Compose and return the redacted issue without filing. '
+              description: 'Compose and return the redacted issue without filing. '
                   'Use it to show the user exactly what would be posted.',
             ),
           },
@@ -55,8 +52,7 @@ class ReportIssueTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final type = args['type']! as String;
     final titleRaw = args['title']! as String;

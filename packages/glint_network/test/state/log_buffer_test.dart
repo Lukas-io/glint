@@ -65,8 +65,7 @@ void main() {
       expect(b.length, 50);
       final r = b.tail(limit: 100);
       expect(r.first.message, 'line59', reason: 'newest first');
-      expect(r.map((e) => e.message), isNot(contains('line0')),
-          reason: 'oldest rotated out');
+      expect(r.map((e) => e.message), isNot(contains('line0')), reason: 'oldest rotated out');
     });
   });
 

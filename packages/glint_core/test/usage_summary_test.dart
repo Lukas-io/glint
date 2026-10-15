@@ -20,9 +20,7 @@ void main() {
       };
 
   Map<String, Object?> toolNamed(Map<String, Object?> stats, String name) =>
-      (stats['tools'] as List)
-          .cast<Map<String, Object?>>()
-          .firstWhere((t) => t['tool'] == name);
+      (stats['tools'] as List).cast<Map<String, Object?>>().firstWhere((t) => t['tool'] == name);
 
   test('per-tool counts + outcome breakdown + rates', () {
     final rows = [
@@ -53,8 +51,7 @@ void main() {
       ev('t', 'b', 'ok'),
       ev('t', 'b', 'ok'),
     ];
-    final tools =
-        (summarizeUsage(rows)['tools'] as List).cast<Map<String, Object?>>();
+    final tools = (summarizeUsage(rows)['tools'] as List).cast<Map<String, Object?>>();
     expect(tools.first['tool'], 'b');
   });
 
@@ -67,8 +64,7 @@ void main() {
       ev('t2', 'network_status', 'ok'),
       ev('t2', 'alerts_drain', 'ok'),
     ];
-    final trans = (summarizeUsage(rows)['transitions'] as List)
-        .cast<Map<String, Object?>>();
+    final trans = (summarizeUsage(rows)['transitions'] as List).cast<Map<String, Object?>>();
     Map<String, Object?>? find(String from, String to) {
       for (final t in trans) {
         if (t['from'] == from && t['to'] == to) return t;
@@ -76,11 +72,9 @@ void main() {
       return null;
     }
 
-    expect(find('network_status', 'alerts_drain')!['count'], 2,
-        reason: 'happens in both turns');
+    expect(find('network_status', 'alerts_drain')!['count'], 2, reason: 'happens in both turns');
     expect(find('alerts_drain', 'network_search')!['count'], 1);
-    expect(find('network_search', 'network_status'), isNull,
-        reason: 'must not bridge across the turn boundary');
+    expect(find('network_search', 'network_status'), isNull, reason: 'must not bridge across the turn boundary');
   });
 
   test('errorKinds breakdown + degraded count per tool (Tier-1 datapoints)', () {
@@ -114,10 +108,8 @@ void main() {
       {'correlation_id': 't2', 'tool': 'network_get', 'outcome': 'error', 'error_kind': 'unresponsive_vm'},
       {'correlation_id': 't2', 'tool': 'network_get', 'outcome': 'error', 'error_kind': 'unresponsive_vm'},
     ];
-    final sc = (summarizeUsage(rows)['selfCorrection'] as List)
-        .cast<Map<String, Object?>>();
-    final entry = sc.firstWhere(
-        (e) => e['tool'] == 'network_get' && e['signal'] == 'unresponsive_vm');
+    final sc = (summarizeUsage(rows)['selfCorrection'] as List).cast<Map<String, Object?>>();
+    final entry = sc.firstWhere((e) => e['tool'] == 'network_get' && e['signal'] == 'unresponsive_vm');
     expect(entry['occurrences'], 2);
     expect(entry['recovered'], 1);
     expect(entry['recoveryRate'], closeTo(0.5, 0.001));
@@ -128,8 +120,7 @@ void main() {
       {'correlation_id': 't', 'tool': 'network_get', 'outcome': 'error', 'error_kind': 'not_found'},
       {'correlation_id': 't', 'tool': 'network_search', 'outcome': 'ok'},
     ];
-    final trans = (summarizeUsage(rows)['transitions'] as List)
-        .cast<Map<String, Object?>>();
+    final trans = (summarizeUsage(rows)['transitions'] as List).cast<Map<String, Object?>>();
     final t = trans.firstWhere((x) => x['from'] == 'network_get');
     expect(t['fromOutcome'], 'error');
     expect(t['to'], 'network_search');

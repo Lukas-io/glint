@@ -8,32 +8,26 @@ void main() {
     });
 
     test('package: URIs untouched (already safe)', () {
-      const input =
-          '#0 SceneReader.readSummary (package:glint_mcp/src/perception/scene_reader.dart:42)';
+      const input = '#0 SceneReader.readSummary (package:glint_mcp/src/perception/scene_reader.dart:42)';
       expect(redactPath(input), input);
     });
 
     test('a project path keeps only what follows lib/', () {
-      const input =
-          '/Users/lukasio/StudioProjects/some_client_app/lib/main.dart';
+      const input = '/Users/lukasio/StudioProjects/some_client_app/lib/main.dart';
       expect(redactPath(input, home: ''), '<project>/lib/main.dart');
     });
 
     test('Linux and root homes are covered', () {
-      expect(redactPath('/home/runner/work/app/app/test/x_test.dart', home: ''),
-          '<project>/test/x_test.dart');
+      expect(redactPath('/home/runner/work/app/app/test/x_test.dart', home: ''), '<project>/test/x_test.dart');
       expect(redactPath('/root/.pub-cache/x', home: ''), '<home>/.pub-cache/x');
     });
 
     test('an unusual home is redacted through the environment value', () {
-      expect(
-          redactPath('/var/builder/code/app/lib/a.dart', home: '/var/builder'),
-          '<project>/lib/a.dart');
+      expect(redactPath('/var/builder/code/app/lib/a.dart', home: '/var/builder'), '<project>/lib/a.dart');
     });
 
     test('a home path outside a project keeps its subpath', () {
-      expect(redactPath('/Users/lukasio/Documents/notes.txt', home: ''),
-          '<home>/Documents/notes.txt');
+      expect(redactPath('/Users/lukasio/Documents/notes.txt', home: ''), '<home>/Documents/notes.txt');
     });
 
     test('different usernames produce the same redaction', () {
@@ -61,8 +55,7 @@ void main() {
 
   group('redactSecrets', () {
     test('masks bearer tokens, JWTs, assignments and long hex keys', () {
-      const jwt =
-          'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+      const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
       final out = redactSecrets(
         'Authorization: Bearer abcdef1234567890 token=$jwt '
         'password: hunter2 api_key="sk_live_123456" '
@@ -90,8 +83,7 @@ void main() {
 
     test('caps at maxFrames', () {
       final lines = [
-        for (var i = 0; i < 20; i++)
-          '#$i frameAt$i (package:foo/bar.dart:$i:5)',
+        for (var i = 0; i < 20; i++) '#$i frameAt$i (package:foo/bar.dart:$i:5)',
       ].join('\n');
       final out = redactStackHead(StackTrace.fromString(lines), maxFrames: 5);
       expect(out, hasLength(5));

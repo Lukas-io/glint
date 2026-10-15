@@ -53,7 +53,9 @@ class FlutterInput {
   Future<FlutterInputMiss?> pinch(double cx, double cy, double from, double to, int ms) {
     final base = _nextPointer;
     _nextPointer += 2;
-    return _call({'op': 'pinch', 'cx': '$cx', 'cy': '$cy', 'from': '$from', 'to': '$to', 'ms': '$ms', 'pointer': '$base'}, extraMs: ms);
+    return _call(
+        {'op': 'pinch', 'cx': '$cx', 'cy': '$cy', 'from': '$from', 'to': '$to', 'ms': '$ms', 'pointer': '$base'},
+        extraMs: ms);
   }
 
   /// Selects all text in the focused Flutter field; null when delivered.

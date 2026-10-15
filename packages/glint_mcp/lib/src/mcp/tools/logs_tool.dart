@@ -14,8 +14,7 @@ class LogsTool extends GlintTool {
   @override
   Tool get definition => Tool(
         name: 'logs',
-        description:
-            'Query the agent action log. Returns the natural-language view by '
+        description: 'Query the agent action log. Returns the natural-language view by '
             'default; pass `format: json` for the structured entries.',
         inputSchema: ObjectSchema(
           properties: {
@@ -39,8 +38,7 @@ class LogsTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final format = (args['format'] as String?) ?? 'text';
     final limit = argInt(args, 'limit') ?? 50;
@@ -59,9 +57,7 @@ class LogsTool extends GlintTool {
         )
         .toList();
 
-    final summary = format == 'json'
-        ? _jsonView(entries)
-        : const LogRenderer().render(entries);
+    final summary = format == 'json' ? _jsonView(entries) : const LogRenderer().render(entries);
 
     return StructuredResponse(
       summary: summary,
@@ -69,8 +65,7 @@ class LogsTool extends GlintTool {
         'count': entries.length,
         'capacity': session.actionLog.capacity,
         'nextSequence': session.actionLog.nextSequence,
-        if (format == 'json')
-          'entries': entries.map((e) => e.toJson()).toList(),
+        if (format == 'json') 'entries': entries.map((e) => e.toJson()).toList(),
       },
     );
   }

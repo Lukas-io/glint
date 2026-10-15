@@ -69,9 +69,7 @@ class ToolEvent {
       correlationId: (r['correlation_id'] as String?) ?? '',
       tool: tool,
       outcome: outcome ?? ToolOutcome.ok,
-      argKeys: argKeysRaw is String && argKeysRaw.isNotEmpty
-          ? argKeysRaw.split(',')
-          : const [],
+      argKeys: argKeysRaw is String && argKeysRaw.isNotEmpty ? argKeysRaw.split(',') : const [],
       durationMs: (r['duration_ms'] as int?) ?? 0,
       resultBytes: (r['result_bytes'] as int?) ?? 0,
       errorKind: r['error_kind'] as String?,
@@ -108,8 +106,7 @@ class UsageRecorder implements UsageEventSource {
 
   /// True inside `dart test`: unit tests build real sessions, and their
   /// synthetic calls must never land in the user's usage store.
-  static bool underTestRunner() =>
-      io.Platform.script.path.contains('dart_test');
+  static bool underTestRunner() => io.Platform.script.path.contains('dart_test');
 
   final bool enabled;
   final int gapMs;
@@ -177,8 +174,7 @@ class UsageRecorder implements UsageEventSource {
 
   /// Sorted arg keys — never values.
   @override
-  List<Map<String, Object?>> eventsAfter(int afterId, {required int limit}) =>
-      eventsAfterId(afterId, limit: limit);
+  List<Map<String, Object?>> eventsAfter(int afterId, {required int limit}) => eventsAfterId(afterId, limit: limit);
 
   @override
   int get maxEventId => maxId;
@@ -196,7 +192,6 @@ class UsageRecorder implements UsageEventSource {
     _nextId = 1;
     _turns.reset();
   }
-
 }
 
 /// Append-only JSONL store at `<dataDir>/usage-events.jsonl`, one event per
@@ -223,8 +218,7 @@ class UsageEventStore {
     try {
       final file = io.File(path);
       if (!file.parent.existsSync()) file.parent.createSync(recursive: true);
-      file.writeAsStringSync('${jsonEncode(event.toRow())}\n',
-          mode: io.FileMode.append, flush: true);
+      file.writeAsStringSync('${jsonEncode(event.toRow())}\n', mode: io.FileMode.append, flush: true);
       lastId = event.id;
       _maybeRotate(file);
     } on Object {
@@ -279,9 +273,7 @@ class UsageEventStore {
   void _maybeRotate(io.File file) {
     if (file.lengthSync() < rotateBytes) return;
     final lines = file.readAsLinesSync().where((l) => l.isNotEmpty).toList();
-    final tail = lines.length > keepOnRotate
-        ? lines.sublist(lines.length - keepOnRotate)
-        : lines;
+    final tail = lines.length > keepOnRotate ? lines.sublist(lines.length - keepOnRotate) : lines;
     file.writeAsStringSync('${tail.join('\n')}\n', flush: true);
   }
 }

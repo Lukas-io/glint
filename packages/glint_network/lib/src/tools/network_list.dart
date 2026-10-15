@@ -19,30 +19,26 @@ import 'result.dart';
 
 final networkListTool = Tool(
   name: 'network_list',
-  description:
-      'Lists captured HTTP requests (newest-first, summaries only, no '
+  description: 'Lists captured HTTP requests (newest-first, summaries only, no '
       'bodies). Live reads are incremental: each call returns only what is '
       'new since the last; pass since:0 for everything. After session_open, '
       'reads history.',
   inputSchema: Schema.object(
     properties: {
       'sessionId': Schema.int(
-        description:
-            'Session to read from. Omit to auto-resolve (the sole attached '
+        description: 'Session to read from. Omit to auto-resolve (the sole attached '
             'session, or the one you opened).',
       ),
       'appNameContains': Schema.string(
         description: 'Pick the session by app-name substring instead of sessionId.',
       ),
       'since': Schema.int(
-        description:
-            'Microsecond cursor. Omit for incremental (new since last call); '
+        description: 'Microsecond cursor. Omit for incremental (new since last call); '
             '0 for everything this session captured (served from the DB, '
             'including live sessions). Pass a prior nextCursor to page.',
       ),
       'before': Schema.int(
-        description:
-            'History-mode cursor: only requests STARTED BEFORE this µs '
+        description: 'History-mode cursor: only requests STARTED BEFORE this µs '
             'timestamp (newest-first, so this pages OLDER — pass a prior '
             'nextCursor). Ignored on live incremental reads.',
       ),
@@ -60,16 +56,14 @@ final networkListTool = Tool(
         description: 'Max status code.',
       ),
       'isolateId': Schema.string(
-        description:
-            'Restrict to one isolate (id from network_status). Omit to merge '
+        description: 'Restrict to one isolate (id from network_status). Omit to merge '
             'all isolates.',
       ),
       'limit': Schema.int(
         description: 'Max requests (default 50, cap 200).',
       ),
       'maxTokens': Schema.int(
-        description:
-            'Token budget for this response; trims the requests array '
+        description: 'Token budget for this response; trims the requests array '
             'newest-first to fit and reports budget.dropped. Overrides the '
             'session_configure maxResponseTokens default.',
       ),
@@ -87,15 +81,10 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
   final sf = SessionFilters.instance;
   final sinceArg = args['since'] as int?;
   final beforeArg = args['before'] as int?;
-  final methods =
-      args.containsKey('method') ? readStringList(args['method']) : sf.method;
-  final hostContains = args.containsKey('hostContains')
-      ? args['hostContains'] as String?
-      : sf.hostContains;
-  final statusMin =
-      args.containsKey('statusMin') ? args['statusMin'] as int? : sf.statusMin;
-  final statusMax =
-      args.containsKey('statusMax') ? args['statusMax'] as int? : sf.statusMax;
+  final methods = args.containsKey('method') ? readStringList(args['method']) : sf.method;
+  final hostContains = args.containsKey('hostContains') ? args['hostContains'] as String? : sf.hostContains;
+  final statusMin = args.containsKey('statusMin') ? args['statusMin'] as int? : sf.statusMin;
+  final statusMax = args.containsKey('statusMax') ? args['statusMax'] as int? : sf.statusMax;
   final isolateFilter = args['isolateId'] as String?;
   final limit = clampLimit(args['limit'] as int?, fallback: 50, hardMax: 200);
   final maxTokens = args['maxTokens'] as int? ?? sf.maxResponseTokens;
@@ -127,9 +116,8 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
       ? attached.lastHttpCursor
       : (sinceArg <= 0 ? null : DateTime.fromMicrosecondsSinceEpoch(sinceArg));
 
-  final isolateIds = isolateFilter == null
-      ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id]
-      : [isolateFilter];
+  final isolateIds =
+      isolateFilter == null ? [for (final iso in attached.vm.httpProfilingIsolates) iso.id] : [isolateFilter];
 
   try {
     final fetched = <String, (HttpProfileRequest, String)>{};
@@ -137,9 +125,7 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
     DateTime? latestCursor;
     final cursors = attached.httpCursorByIsolate;
     for (final isoId in isolateIds) {
-      final isoCursor = sinceArg == null && cursors.containsKey(isoId)
-          ? cursors[isoId]
-          : cursor;
+      final isoCursor = sinceArg == null && cursors.containsKey(isoId) ? cursors[isoId] : cursor;
       try {
         final profile = await attached.vm.getHttpProfileForIsolate(
           isoId,
@@ -176,8 +162,7 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
     final carried = <(HttpProfileRequest, String)>[
       if (sinceArg == null)
         for (final e in unreturned.entries)
-          if (!fetched.containsKey(e.key) && isolateIds.contains(e.value.$2))
-            e.value,
+          if (!fetched.containsKey(e.key) && isolateIds.contains(e.value.$2)) e.value,
     ];
     final perIsolateRequests = [...fetched.values, ...carried]
       ..sort((a, b) => b.$1.startTime.compareTo(a.$1.startTime));
@@ -206,8 +191,7 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
     }
 
     final liveSid = scope.sessionId;
-    final activeFilters =
-        _activeFilters(methods, hostContains, statusMin, statusMax);
+    final activeFilters = _activeFilters(methods, hostContains, statusMin, statusMax);
     final cursorWasIncremental = sinceArg == null && cursor != null;
 
     final budget = maxTokens;
@@ -232,8 +216,7 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
     ].length;
     if (latestCursor != null) attached.lastHttpCursor = latestCursor;
 
-    final scopeLabel =
-        'session $liveSid (live${scope.appName != null ? ", ${scope.appName}" : ""})';
+    final scopeLabel = 'session $liveSid (live${scope.appName != null ? ", ${scope.appName}" : ""})';
     final summary = liveListSummary(
       matched: filtered.length,
       scannedTotal: scannedTotal,
@@ -317,12 +300,9 @@ FutureOr<CallToolResult> networkList(CallToolRequest request) async {
       'totalScanned': scannedTotal,
       if (remaining > 0) 'remaining': remaining,
       if (skippedErrors > 0 || failedIsolates.isNotEmpty) 'partial': true,
-      if (failedIsolates.isNotEmpty)
-        'failedIsolates': failedIsolates.keys.toList(),
-      if (budget != null && budget > 0)
-        'budget': {'maxTokens': budget, 'dropped': budgetDropped},
-      if (latestCursor != null)
-        'nextCursor': latestCursor.microsecondsSinceEpoch,
+      if (failedIsolates.isNotEmpty) 'failedIsolates': failedIsolates.keys.toList(),
+      if (budget != null && budget > 0) 'budget': {'maxTokens': budget, 'dropped': budgetDropped},
+      if (latestCursor != null) 'nextCursor': latestCursor.microsecondsSinceEpoch,
       if (warnings.isNotEmpty) 'warnings': warnings,
       'nextSteps': nextSteps,
       'requests': filtered,
@@ -399,10 +379,8 @@ CallToolResult _liveDbFallback(
   final mayHaveOlder = rows.length >= limit && minStart != null;
 
   final nextSteps = <String>[
-    if (out.isNotEmpty)
-      'network_get id:"${out.first['id']}" — full detail for the top match',
-    if (mayHaveOlder)
-      'network_list before:$minStart — page OLDER than this batch',
+    if (out.isNotEmpty) 'network_get id:"${out.first['id']}" — full detail for the top match',
+    if (mayHaveOlder) 'network_list before:$minStart — page OLDER than this batch',
     if (caps.isEnabled(Category.search))
       'network_search query:"..." — DB-backed full-text search (works when the live path is down)',
     'network_query sql:"SELECT * FROM http_requests WHERE session_id=$sid ORDER BY start_us DESC" — raw SELECT over captures.db',
@@ -473,8 +451,7 @@ FutureOr<CallToolResult> _historyList(
     final budgetDropped = budgetTrim.dropped;
     if (budgetDropped > 0) out.removeRange(budgetTrim.kept.length, out.length);
 
-    final activeFilters =
-        _activeFilters(methods, hostContains, statusMin, statusMax);
+    final activeFilters = _activeFilters(methods, hostContains, statusMin, statusMax);
     final summary = out.isEmpty
         ? 'No requests in session $sid match the given filters/cursor.'
         : '${out.length} request(s) from session $sid (history, newest-first).';
@@ -504,20 +481,17 @@ FutureOr<CallToolResult> _historyList(
       // The old hint ("since:<newest> — page beyond the newest") was a
       // guaranteed-empty dead end.
       if (mayHaveOlder) {
-        nextSteps.add(
-            'network_list before:$minStart — page OLDER than this batch');
+        nextSteps.add('network_list before:$minStart — page OLDER than this batch');
       }
       if (maxStart != null && (beforeArg != null || sinceArg != null)) {
-        nextSteps.add(
-            'network_list since:$maxStart — page NEWER than this batch');
+        nextSteps.add('network_list since:$maxStart — page NEWER than this batch');
       }
     } else {
       // Cursor-aware empty hints: blaming filters when a cursor bound
       // excluded everything misdiagnoses the situation.
       final state = SessionStateView.of(sid);
       if (beforeArg != null) {
-        nextSteps.add(
-            'Nothing older than before:$beforeArg — drop `before` to return to the newest page');
+        nextSteps.add('Nothing older than before:$beforeArg — drop `before` to return to the newest page');
       } else if (sinceArg != null && sinceArg > 0) {
         nextSteps.add(state.canGenerateTraffic
             ? 'Nothing newer than since:$sinceArg yet. Drive the app, then re-call'
@@ -542,23 +516,19 @@ FutureOr<CallToolResult> _historyList(
       // `before:` (newestInBatch retained for since-paging).
       'nextCursor': mayHaveOlder ? minStart : null,
       if (maxStart != null) 'newestInBatch': maxStart,
-      if (maxTokens != null && maxTokens > 0)
-        'budget': {'maxTokens': maxTokens, 'dropped': budgetDropped},
+      if (maxTokens != null && maxTokens > 0) 'budget': {'maxTokens': maxTokens, 'dropped': budgetDropped},
       if (warnings.isNotEmpty) 'warnings': warnings,
       'nextSteps': nextSteps,
       'requests': out,
     }, scopeSessionId: scope.sessionId, scopeNote: scope.note);
   } catch (e) {
-    return errorResult('history query failed: $e',
-        kind: ErrorKind.internal,
-        extra: {
-          'sessionId': sid,
-          'nextSteps': [
-            'Verify the session still exists via session_list',
-            if (Session.instance.viewedSessionId == sid)
-              'session_close if the viewed session was deleted',
-          ],
-        });
+    return errorResult('history query failed: $e', kind: ErrorKind.internal, extra: {
+      'sessionId': sid,
+      'nextSteps': [
+        'Verify the session still exists via session_list',
+        if (Session.instance.viewedSessionId == sid) 'session_close if the viewed session was deleted',
+      ],
+    });
   }
 }
 
@@ -580,16 +550,12 @@ Map<String, Object?> liveSummary(HttpProfileRequest r) {
     'path': r.uri.path,
     'startTimeMs': r.startTime.millisecondsSinceEpoch,
     if (end != null) 'endTimeMs': end.millisecondsSinceEpoch,
-    if (end != null)
-      'durationMs': end.difference(r.startTime).inMilliseconds,
+    if (end != null) 'durationMs': end.difference(r.startTime).inMilliseconds,
     'isComplete': r.isRequestComplete,
     if (r.response?.statusCode != null) 'statusCode': r.response!.statusCode,
     if (r.response?.reasonPhrase != null) 'reasonPhrase': r.response!.reasonPhrase,
-    if (!reqErr)
-      ...sizeFields(r.request?.contentLength,
-          key: 'requestContentLength', unknownKey: 'requestSizeKnown'),
-    ...sizeFields(r.response?.contentLength,
-        key: 'responseContentLength', unknownKey: 'responseSizeKnown'),
+    if (!reqErr) ...sizeFields(r.request?.contentLength, key: 'requestContentLength', unknownKey: 'requestSizeKnown'),
+    ...sizeFields(r.response?.contentLength, key: 'responseContentLength', unknownKey: 'responseSizeKnown'),
     if (ct != null) 'responseContentType': ct,
     if (reqErr || respErr) 'hasError': true,
     if (reqErr || respErr) 'error': r.request?.error ?? r.response?.error,
@@ -611,10 +577,8 @@ Map<String, Object?> _historySummary(Map<String, Object?> r) {
     if (dur != null) 'durationMs': dur ~/ 1000,
     if (r['status_code'] != null) 'statusCode': r['status_code'],
     if (r['reason_phrase'] != null) 'reasonPhrase': r['reason_phrase'],
-    ...sizeFields(r['request_size'] as int?,
-        key: 'requestContentLength', unknownKey: 'requestSizeKnown'),
-    ...sizeFields(r['response_size'] as int?,
-        key: 'responseContentLength', unknownKey: 'responseSizeKnown'),
+    ...sizeFields(r['request_size'] as int?, key: 'requestContentLength', unknownKey: 'requestSizeKnown'),
+    ...sizeFields(r['response_size'] as int?, key: 'responseContentLength', unknownKey: 'responseSizeKnown'),
     if (r['content_type'] != null) 'responseContentType': r['content_type'],
     if (r['isolate_id'] != null) 'isolateId': r['isolate_id'],
     if ((r['has_error'] as int? ?? 0) != 0) 'hasError': true,

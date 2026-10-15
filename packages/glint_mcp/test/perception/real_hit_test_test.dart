@@ -19,20 +19,17 @@ class _Runtime implements FlutterRuntime {
   final evalInCalls = <(String?, Map<String, String>?)>[];
 
   @override
-  Future<void> setInspectorSelection(
-      {required String inspectorId, required String groupName}) async {}
+  Future<void> setInspectorSelection({required String inspectorId, required String groupName}) async {}
 
   @override
-  Future<String?> evaluateString(String expression,
-      {bool rethrowErrors = false}) async {
+  Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async {
     if (expression == GeometryExpr.clip) return clip;
     return '{"gx":48,"gy":400,"bx":0,"by":0,"bw":48,"bh":48,"dpr":2.625,'
         '"vw":411,"vh":914,"op":1.0,"vis":true,"hit":true,"vid":0,"kb":0}';
   }
 
   @override
-  Future<InstanceRef> evaluateIn(String expression,
-      {String? librarySuffix, Map<String, String>? scope}) async {
+  Future<InstanceRef> evaluateIn(String expression, {String? librarySuffix, Map<String, String>? scope}) async {
     evalInCalls.add((librarySuffix, scope));
     if (expression == GeometryExpr.hitInputs) return _ref('pair');
     if (librarySuffix == GeometryExpr.gesturesLibrary) return _ref('path');
@@ -43,9 +40,7 @@ class _Runtime implements FlutterRuntime {
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
 }
 
-SceneNode _node(String label,
-        {String? glintId, String? text, List<SceneNode> children = const []}) =>
-    SceneNode(
+SceneNode _node(String label, {String? glintId, String? text, List<SceneNode> children = const []}) => SceneNode(
       depth: 1,
       indexInParent: 0,
       description: label,

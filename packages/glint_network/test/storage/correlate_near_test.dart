@@ -76,8 +76,7 @@ void main() {
     });
 
     test('httpRequestsNear filters to the window, nearest first', () {
-      final reqs =
-          dao.httpRequestsNear(sessionId: sid, anchorMs: anchor, windowMs: 1000);
+      final reqs = dao.httpRequestsNear(sessionId: sid, anchorMs: anchor, windowMs: 1000);
       final ids = reqs.map((r) => r['vm_id']).toList();
       expect(ids, isNot(contains('r-far')));
       // |−200| < |+300| → r-before first
@@ -85,8 +84,7 @@ void main() {
     });
 
     test('limit caps each side', () {
-      final logs = dao.logsNear(
-          sessionId: sid, anchorMs: anchor, windowMs: 10000, limit: 1);
+      final logs = dao.logsNear(sessionId: sid, anchorMs: anchor, windowMs: 10000, limit: 1);
       expect(logs, hasLength(1));
       expect(logs.first['message'], 'other-isolate', reason: 'nearest kept');
     });

@@ -27,13 +27,11 @@ class DeviceTool extends GlintTool {
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
-              description:
-                  'status (default) | appearance | openurl | screenshot | '
+              description: 'status (default) | appearance | openurl | screenshot | '
                   'privacy | biometric | network (physical iPhone: value list | off | <profile>)',
             ),
             'udid': Schema.string(
-              description:
-                  'Target simulator UDID. Defaults to the attached device.',
+              description: 'Target simulator UDID. Defaults to the attached device.',
             ),
             'inline': Schema.bool(
               description: 'op=screenshot: also return the image as image '
@@ -47,7 +45,8 @@ class DeviceTool extends GlintTool {
               description: 'screenshot: crop to this widget, with a little margin. Sent inline, small.',
             ),
             'region': ObjectSchema(
-              description: 'screenshot: crop to {top, bottom, left, right}, fractions 0-1 of the screen (missing sides default to the edges). Sent inline, small.',
+              description:
+                  'screenshot: crop to {top, bottom, left, right}, fractions 0-1 of the screen (missing sides default to the edges). Sent inline, small.',
               properties: {
                 'top': Schema.num(),
                 'bottom': Schema.num(),
@@ -57,7 +56,8 @@ class DeviceTool extends GlintTool {
             ),
             'apps': Schema.list(
               items: Schema.string(),
-              description: 'screenshot: several attached apps (name, package or device) in one image, side by side, left to right in this order.',
+              description:
+                  'screenshot: several attached apps (name, package or device) in one image, side by side, left to right in this order.',
             ),
             'afterMs': Schema.int(
               description: 'screenshot: wait this long first, 0-30000.',
@@ -66,8 +66,7 @@ class DeviceTool extends GlintTool {
               description: 'screenshot: first wait (up to 15 s) until the app (the first of apps) shows this text.',
             ),
             'latest': Schema.bool(
-              description:
-                  'screenshot only: return the newest background capture '
+              description: 'screenshot only: return the newest background capture '
                   '(taken when the app left the foreground) instead of taking '
                   'a new one. Default false.',
             ),
@@ -83,18 +82,19 @@ class DeviceTool extends GlintTool {
               description: 'biometric: face (default) | touch.',
             ),
             'service': Schema.string(
-              description: 'privacy: a simctl service: photos | microphone | location | location-always | contacts | notifications | … On Android also camera, phone, sms, screen-capture (the MediaProjection app op) and all.',
+              description:
+                  'privacy: a simctl service: photos | microphone | location | location-always | contacts | notifications | … On Android also camera, phone, sms, screen-capture (the MediaProjection app op) and all.',
             ),
             'bundleId': Schema.string(
-              description: 'privacy: target app bundle id or Android package (grant/revoke). Default on Android: the attached app.',
+              description:
+                  'privacy: target app bundle id or Android package (grant/revoke). Default on Android: the attached app.',
             ),
           },
         ),
       );
 
   @override
-  Future<StructuredResponse> handle(
-      GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'status';
     if (op == 'screenshot' && session.active != null && (args['udid'] == null || args['apps'] != null)) {
@@ -162,8 +162,7 @@ class DeviceTool extends GlintTool {
             errorKind: GlintErrorKind.targetNotFound,
           );
         }
-        final title = status.deviceType != null &&
-                status.deviceType != status.name
+        final title = status.deviceType != null && status.deviceType != status.name
             ? '${status.name} (${status.deviceType})'
             : status.name;
         return StructuredResponse(
@@ -209,9 +208,7 @@ class DeviceTool extends GlintTool {
             errorKind: GlintErrorKind.backendToolError,
           );
         }
-        final dims = shot.width != null && shot.height != null
-            ? ' (${shot.width}x${shot.height} px)'
-            : '';
+        final dims = shot.width != null && shot.height != null ? ' (${shot.width}x${shot.height} px)' : '';
         final sent = inline && shot.width != null && shot.height != null
             ? await prepareModelImage(shot.path!,
                 width: shot.width!,
@@ -231,7 +228,8 @@ class DeviceTool extends GlintTool {
             if (shot.width != null) 'width': shot.width,
             if (shot.height != null) 'height': shot.height,
             if (sent != null)
-              'coordinates': 'image is ${sent.width}x${sent.height}; tap x,y in screen pixels = image pixel × ${(shot.width! / sent.width).toStringAsFixed(3)}',
+              'coordinates':
+                  'image is ${sent.width}x${sent.height}; tap x,y in screen pixels = image pixel × ${(shot.width! / sent.width).toStringAsFixed(3)}',
           },
           imagePaths: [
             if (sent != null) sent.path else if (inline) shot.path!,
@@ -255,7 +253,9 @@ class DeviceTool extends GlintTool {
           return _bad('op=privacy $action requires bundleId');
         }
         final err = await sim.privacy(udid, action!, service, bundleId: bundleId);
-        return _result(err, 'privacy $action $service'
+        return _result(
+            err,
+            'privacy $action $service'
             '${bundleId != null ? " for $bundleId" : ""} on $udid');
 
       default:
@@ -276,16 +276,25 @@ class DeviceTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'device op:$op is iOS simulator only; on Android only op:privacy is here',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        nextSteps: const ['`media op:event` rotates and sends sensor, call and SMS events to an emulator', '`hardware_button` and `key` work on Android'],
+        nextSteps: const [
+          '`media op:event` rotates and sends sensor, call and SMS events to an emulator',
+          '`hardware_button` and `key` work on Android'
+        ],
       );
     }
     final action = args['action'] as String?;
     final service = args['service'] as String?;
-    if (!const {'grant', 'revoke', 'reset'}.contains(action)) return _bad('op=privacy requires action: grant | revoke | reset');
-    if (service == null || service.isEmpty) return _bad('op=privacy requires service (e.g. notifications, microphone, location, screen-capture)');
+    if (!const {'grant', 'revoke', 'reset'}.contains(action)) {
+      return _bad('op=privacy requires action: grant | revoke | reset');
+    }
+    if (service == null || service.isEmpty) {
+      return _bad('op=privacy requires service (e.g. notifications, microphone, location, screen-capture)');
+    }
     final attached = session.isAttached && session.device.id == serial ? session.device : null;
     final appId = (args['bundleId'] as String?) ?? (attached != null ? session.attachedBundleId : null);
-    if (appId == null || appId.isEmpty) return _bad('op=privacy needs bundleId: the Android package (or attach the app)');
+    if (appId == null || appId.isEmpty) {
+      return _bad('op=privacy needs bundleId: the Android package (or attach the app)');
+    }
     final device = MediaDevice(DevicePlatform.android, serial,
         adbPath: attached is AndroidDevice ? attached.adbPath : (resolveAdbPath(null) ?? 'adb'));
     try {
@@ -297,7 +306,8 @@ class DeviceTool extends GlintTool {
         data: {'device': serial, 'appId': appId, 'service': service, 'action': action, 'applied': done.applied},
       );
     } on PermissionUnsupported catch (e) {
-      return StructuredResponse.error(summary: e.reason, errorKind: GlintErrorKind.unsupportedBackendAction, nextSteps: e.nextSteps);
+      return StructuredResponse.error(
+          summary: e.reason, errorKind: GlintErrorKind.unsupportedBackendAction, nextSteps: e.nextSteps);
     } on PermissionRefused catch (e) {
       return StructuredResponse.error(
         summary: e.unknownApp
@@ -308,7 +318,8 @@ class DeviceTool extends GlintTool {
         errorKind: e.notDeclared || e.unknownApp ? GlintErrorKind.invalidArgument : GlintErrorKind.backendToolError,
         detail: e.detail,
         nextSteps: [
-          if (e.notDeclared) 'the app must declare the permission in its AndroidManifest.xml; Android ignores grants for undeclared ones',
+          if (e.notDeclared)
+            'the app must declare the permission in its AndroidManifest.xml; Android ignores grants for undeclared ones',
           if (e.unknownApp) 'pass bundleId:"<the installed package>"',
         ],
       );
@@ -332,7 +343,8 @@ class DeviceTool extends GlintTool {
         ...capture.toJson(),
         'captures': app.captures.length,
         if (sent != null) 'coordinates': sent.coordinates,
-        if (sent != null) 'sent': {'width': sent.image.width, 'height': sent.image.height, 'mimeType': sent.image.mimeType},
+        if (sent != null)
+          'sent': {'width': sent.image.width, 'height': sent.image.height, 'mimeType': sent.image.mimeType},
       },
       imagePaths: [if (sent != null) sent.image.path],
     );
@@ -358,8 +370,7 @@ class DeviceTool extends GlintTool {
         errorKind: GlintErrorKind.invalidArgument,
       );
 
-  Future<StructuredResponse> _biometric(
-      SimControl sim, String udid, Map<String, Object?> args) async {
+  Future<StructuredResponse> _biometric(SimControl sim, String udid, Map<String, Object?> args) async {
     final action = args['action'] as String?;
     final type = (args['type'] as String?) ?? 'face';
     if (type != 'face' && type != 'touch') {
@@ -375,14 +386,12 @@ class DeviceTool extends GlintTool {
           summary: '$udid biometrics ${enrol ? "enrolled" : "unenrolled"}',
           data: {'ok': true, 'biometricEnrolled': enrol},
           nextSteps: [
-            if (enrol)
-              'trigger the app\'s $label prompt, then device op:biometric action:match (or nomatch)',
+            if (enrol) 'trigger the app\'s $label prompt, then device op:biometric action:match (or nomatch)',
           ],
         );
       case 'match' || 'nomatch':
         final enrolled = await sim.biometricEnrolled(udid);
-        final err = await sim.biometricAttempt(udid,
-            match: action == 'match', touch: type == 'touch');
+        final err = await sim.biometricAttempt(udid, match: action == 'match', touch: type == 'touch');
         if (err != null) return _result(err, '');
         return StructuredResponse(
           summary: 'sent a ${action == 'match' ? "matching" : "non-matching"} '
@@ -420,7 +429,16 @@ class DeviceTool extends GlintTool {
           return StructuredResponse(
             summary: '${conditions.length} network conditions: ${conditions.map((c) => c['profile']).join(', ')}',
             nextSteps: const ['device op:network value:"<profile>" turns one on; value:"off" clears it'],
-            data: {'conditions': [for (final c in conditions) {'profile': c['profile'], 'group': c['group'], 'description': '${c['description']}'.split('\n').first.replaceFirst('Name: ', '')}]},
+            data: {
+              'conditions': [
+                for (final c in conditions)
+                  {
+                    'profile': c['profile'],
+                    'group': c['group'],
+                    'description': '${c['description']}'.split('\n').first.replaceFirst('Name: ', '')
+                  }
+              ]
+            },
           );
         case 'off':
           await hid.call(const {'cmd': 'networkOff'});
@@ -430,7 +448,9 @@ class DeviceTool extends GlintTool {
           final name = '${r['description']}'.split('\n').first.replaceFirst('Name: ', '');
           return StructuredResponse(
             summary: 'network condition $value on $udid: $name',
-            warnings: const ['it affects every app on the phone until device op:network value:"off", detach, or glint exits'],
+            warnings: const [
+              'it affects every app on the phone until device op:network value:"off", detach, or glint exits'
+            ],
             data: {'network': value, 'description': name},
           );
       }
