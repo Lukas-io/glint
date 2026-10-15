@@ -150,3 +150,6 @@ class CreationLocation {
         if (name != null) 'name': name,
       };
 }
+
+/// The widgets a screen is built on: Material's Scaffold and Cupertino's page and tab scaffolds.
+const Set<String> kPageScaffolds = {'Scaffold', 'CupertinoPageScaffold', 'CupertinoTabScaffold'};

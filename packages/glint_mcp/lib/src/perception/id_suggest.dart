@@ -52,7 +52,7 @@ String? idForLabel(SceneNode root, String wanted) {
   final active = _activePage(root);
   String? visit(SceneNode n, String? tappable, bool inPage) {
     if (n.isOffstage) return null;
-    if (!inPage && n.baseLabel == 'Scaffold') {
+    if (!inPage && kPageScaffolds.contains(n.baseLabel)) {
       if (!identical(n, active)) return null;
       inPage = true;
     }
@@ -72,7 +72,7 @@ SceneNode? _activePage(SceneNode root) {
   SceneNode? last;
   void visit(SceneNode n) {
     if (n.isOffstage) return;
-    if (n.baseLabel == 'Scaffold') {
+    if (kPageScaffolds.contains(n.baseLabel)) {
       last = n;
       return;
     }
