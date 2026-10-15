@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import 'wallet.dart';
+
 void main() => runApp(const RideApp());
 
 class RideApp extends StatelessWidget {
@@ -15,7 +17,31 @@ class RideApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         title: 'Ride Fixture',
         theme: ThemeData(colorSchemeSeed: Colors.indigo),
-        home: const RidePage(),
+        home: const _Tabs(),
+      );
+}
+
+class _Tabs extends StatefulWidget {
+  const _Tabs();
+
+  @override
+  State<_Tabs> createState() => _TabsState();
+}
+
+class _TabsState extends State<_Tabs> {
+  int _tab = 0;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: IndexedStack(index: _tab, children: const [RidePage(), WalletTab()]),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.local_taxi), label: 'Ride'),
+            NavigationDestination(icon: Icon(Icons.account_balance_wallet), label: 'Wallet'),
+          ],
+        ),
       );
 }
 
