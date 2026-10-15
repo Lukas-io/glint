@@ -95,12 +95,13 @@ class SceneReader {
   /// skip them. Candidates: Scaffolds (GoRouter shell branches sit under
   /// `Offstage`) and IndexedStack children, hidden through a visibility scope
   /// (a `Visibility` widget before Flutter 3.47, a private scope after), so
-  /// `Visibility.of` asks rather than looking for the widget.
+  /// `Visibility.of` asks rather than looking for the widget. A page covered by
+  /// another route is built with its tickers off, which `TickerMode.of` reads.
   /// Both wrappers are framework-created and filtered from the summary tree,
   /// so we probe ancestors per candidate rather than detect structurally.
   Future<void> _markOffstageSubtrees(SceneNode root, String groupName) async {
     final candidates = <SceneNode>{
-      ...root.walk().where((n) => n.baseLabel == 'Scaffold'),
+      ...root.walk().where((n) => kPageScaffolds.contains(n.baseLabel)),
       ...root
           .walk()
           .where((n) => n.baseLabel == 'IndexedStack')
@@ -115,7 +116,8 @@ class SceneReader {
           expression:
               '((WidgetInspectorService.instance.selection.currentElement!'
               '.findAncestorWidgetOfExactType<Offstage>()?.offstage ?? false)'
-              ' || !Visibility.of(WidgetInspectorService.instance.selection.currentElement!))'
+              ' || !Visibility.of(WidgetInspectorService.instance.selection.currentElement!)'
+              ' || !TickerMode.of(WidgetInspectorService.instance.selection.currentElement!))'
               '.toString()',
           inspectorId: candidate.inspectorId,
           groupName: groupName,
@@ -278,7 +280,7 @@ class SceneReader {
   }
 
   static bool _hasScaffoldDescendant(SceneNode n) =>
-      n.walk().any((d) => d.baseLabel == 'Scaffold');
+      n.walk().any((d) => kPageScaffolds.contains(d.baseLabel));
 
   /// Text-editing overlays — cursor drag handles + the copy/paste toolbar —
   /// ride in their own [OverlayEntry] whenever a field is focused. They are

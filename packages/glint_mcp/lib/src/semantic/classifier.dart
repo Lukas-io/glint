@@ -72,7 +72,7 @@ class PageClassifier extends WidgetClassifier {
   int get priority => 10;
 
   @override
-  bool matches(SceneNode node) => node.label == 'Scaffold';
+  bool matches(SceneNode node) => kPageScaffolds.contains(node.label);
 
   @override
   SemanticNode build(SceneNode node, List<SemanticNode> children) {

@@ -53,7 +53,8 @@ class Semanticizer {
   SemanticNode _classify(SceneNode node, bool imageCandidates) {
     // Offstage subtrees (hidden IndexedStack children, shell branches) must
     // not surface content — the user cannot see or touch them.
-    if (node.isOffstage) {
+    // A wrapper around nothing but hidden content (a covered route's page widget) is hidden too.
+    if (node.isOffstage || (node.children.isNotEmpty && node.children.every((c) => c.isOffstage))) {
       return SemanticUnknown(glintId: null, label: 'offstage', children: const []);
     }
     final children = node.children
