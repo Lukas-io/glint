@@ -180,6 +180,12 @@ class AdbBackend implements InteractionBackend {
   Future<bool?> lockState() async => null;
 
   @override
+  String? takeRoute() => null;
+
+  @override
+  Future<void> close() async {}
+
+  @override
   Future<void> pressHardwareButton(HardwareButton button) {
     final code = button.androidKeyCode;
     if (code == null) {

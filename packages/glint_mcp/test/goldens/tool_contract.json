@@ -36,7 +36,7 @@
       },
       "iosInput": {
         "type": "string",
-        "description": "auto (default) | dtuhid | indigo. How taps and keys reach the simulator; auto picks dtuhid where Xcode ships it. iOS only."
+        "description": "auto (default) | dtuhid | indigo | flutter. How taps and keys reach an iOS device. Simulator: auto picks dtuhid where Xcode ships it. Physical iPhone: auto delivers inside the Flutter app and uses real Device Hub touches for system surfaces, the keyboard and buttons; dtuhid = real touches only; flutter = in-app only."
       },
       "androidInput": {
         "type": "string",

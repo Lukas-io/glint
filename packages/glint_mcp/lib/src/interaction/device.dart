@@ -1,6 +1,7 @@
 import 'backend.dart';
 import 'android_server.dart';
 import 'backends/adb_backend.dart';
+import 'backends/flutter_input_backend.dart';
 import 'backends/ios_device_backend.dart';
 import 'backends/ios_sim_backend.dart';
 import 'backends/xctest_backend.dart';
@@ -71,18 +72,22 @@ class AndroidDevice extends DeviceTarget {
       AdbBackend(deviceSerial: serial, adbPath: adbPath, server: server);
 }
 
-/// A paired physical iPhone, read through the VM service and screenshotted with devicectl; glint cannot touch it yet.
+/// A paired physical iPhone: input inside the Flutter app where it can, real touches through Device Hub for everything else, screenshots through devicectl.
 class IosDevice extends DeviceTarget {
   const IosDevice({
     required this.udid,
     required this.logicalWidth,
     required this.logicalHeight,
     required this.devicePixelRatio,
+    this.route = InputRoute.auto,
   });
 
   final String udid;
   final double logicalWidth;
   final double logicalHeight;
+
+  /// Which input path gestures take; see [InputRoute].
+  final InputRoute route;
 
   @override
   final double devicePixelRatio;
@@ -97,7 +102,16 @@ class IosDevice extends DeviceTarget {
   ({double w, double h})? get screenSize => (w: logicalWidth, h: logicalHeight);
 
   @override
-  InteractionBackend createBackend() => IosDeviceBackend(udid: udid, devicePixelRatio: devicePixelRatio);
+  InteractionBackend createBackend() => FlutterInputBackend(
+        native: IosDeviceBackend(
+          udid: udid,
+          devicePixelRatio: devicePixelRatio,
+          pixelWidth: logicalWidth * devicePixelRatio,
+          pixelHeight: logicalHeight * devicePixelRatio,
+        ),
+        devicePixelRatio: devicePixelRatio,
+        route: route,
+      );
 }
 
 class IosSimulator extends DeviceTarget {

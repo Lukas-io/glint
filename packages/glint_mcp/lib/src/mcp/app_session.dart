@@ -179,6 +179,7 @@ class AppSession {
     final sem = Semanticizer();
 
     runtime = rt;
+    if (backend case final FlutterInputBackend routed) routed.runtime = rt;
     inspector = insp;
     reader = rd;
     resolver = res;
@@ -278,6 +279,7 @@ class AppSession {
       }
     }
     await _teardownRuntime();
+    await backend.close();
     captures.clear();
   }
 

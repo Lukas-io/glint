@@ -93,5 +93,11 @@ class XcTestBackend implements InteractionBackend {
   Future<bool?> lockState() => sim.lockState();
 
   @override
+  String? takeRoute() => null;
+
+  @override
+  Future<void> close() async {}
+
+  @override
   Future<ScreenshotResult> screenshot(String path) => sim.screenshot(path);
 }
