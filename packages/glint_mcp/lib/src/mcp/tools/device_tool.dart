@@ -86,7 +86,7 @@ class DeviceTool extends GlintTool {
       );
     }
 
-    if (_isAndroid(udid)) return _android(session, udid, op, args);
+    if (_isAndroid(session, udid)) return _android(session, udid, op, args);
 
     const sim = SimControl();
     switch (op) {
@@ -231,7 +231,12 @@ class DeviceTool extends GlintTool {
     }
   }
 
-  bool _isAndroid(String id) => !RegExp(r'^[0-9A-Fa-f-]{25,36}$').hasMatch(id);
+  /// An adb serial: the attached Android device, an emulator, a Wi-Fi `host:port`, or a USB serial (letters and digits, no dashes, unlike a UDID).
+  bool _isAndroid(GlintSession session, String id) =>
+      (session.isAttached && session.device is AndroidDevice && session.device.id == id) ||
+      RegExp(r'^emulator-\d+$').hasMatch(id) ||
+      RegExp(r'^[\w.-]+:\d+$').hasMatch(id) ||
+      RegExp(r'^[A-Za-z0-9]{8,}$').hasMatch(id);
 
   Future<StructuredResponse> _android(GlintSession session, String serial, String op, Map<String, Object?> args) async {
     if (op != 'privacy') {
