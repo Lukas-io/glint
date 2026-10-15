@@ -191,6 +191,8 @@ class GlintSession {
       _requireAttached(_active?.toggleEnricher, 'toggle enricher');
   SemanticsFlagEnricher get flagEnricher =>
       _requireAttached(_active?.flagEnricher, 'flag enricher');
+  TabLabelEnricher get tabEnricher =>
+      _requireAttached(_active?.tabEnricher, 'tab enricher');
   ImageEnricher get imageEnricher =>
       _requireAttached(_active?.imageEnricher, 'image enricher');
   MapEnricher get mapEnricher =>
@@ -315,6 +317,7 @@ class GlintSession {
       await inputEnricher.enrich(semantic);
       await toggleEnricher.enrich(semantic);
       await flagEnricher.enrich(semantic);
+      await tabEnricher.enrich(semantic);
       await imageEnricher.enrich(semantic);
     }
     if (detail == SceneDetail.full) {
