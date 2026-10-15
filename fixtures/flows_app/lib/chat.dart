@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show Dismissible, DismissDirection, Color
 import 'package:get/get.dart';
 
 import 'activity.dart';
+import 'notifications.dart';
 
 class Message {
   Message(this.text, {required this.mine});
@@ -28,9 +29,10 @@ class ChatController extends GetxController {
     messages.add(Message(quoted == null ? text : '↪ "${quoted.text}"\n$text', mine: true));
     replyingTo.value = null;
     typing.value = true;
-    _reply = Timer(const Duration(seconds: 2), () {
+    _reply = Timer(const Duration(seconds: 6), () {
       typing.value = false;
       messages.add(Message('Got it 👍', mine: false));
+      if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) notifyMessage('Got it 👍');
     });
     logActivity('Sent a chat message');
   }
@@ -56,7 +58,22 @@ class _ChatScreenState extends State<ChatScreen> {
   final _input = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    replyTo.addListener(_quote);
+    _quote();
+  }
+
+  void _quote() {
+    final quoted = replyTo.value;
+    if (quoted == null) return;
+    replyTo.value = null;
+    _c.replyingTo.value = _c.messages.lastWhere((m) => m.text == quoted, orElse: () => Message(quoted, mine: false));
+  }
+
+  @override
   void dispose() {
+    replyTo.removeListener(_quote);
     Get.delete<ChatController>();
     _input.dispose();
     super.dispose();

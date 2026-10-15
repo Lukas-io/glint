@@ -11,6 +11,7 @@ import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
+import '../xctest_start.dart';
 
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
@@ -457,7 +458,7 @@ class AttachTool extends GlintTool {
           warnings.addAll(toolchain.warnings);
           iosTransport = await _iosTransport(toolchain, deviceId, iosInput, warnings);
           if (iosBackend == 'xctest') {
-            final started = await _startRunner(deviceId, toolchain, onProgress);
+            final started = await startXcTestRunner(deviceId, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
             if (started.error != null) return started.error!;
             runner = started.runner;
           }
@@ -715,42 +716,6 @@ class AttachTool extends GlintTool {
       }
       return null;
     }
-  }
-
-  /// Builds (once per Xcode) and starts glint's XCUITest runner on [udid], reporting each slow phase.
-  Future<({XcTestRunner? runner, StructuredResponse? error})> _startRunner(
-      String udid, IosToolchain toolchain, void Function(int, String?)? onProgress) async {
-    final project = locateRunnerProject();
-    if (project == null) {
-      return (
-        runner: null,
-        error: StructuredResponse.error(
-          summary: 'the XCTest runner project is not part of this glint install',
-          errorKind: GlintErrorKind.unsupportedToolchain,
-          detail: 'looked for $kRunnerProject above the running script',
-          nextSteps: const ['attach again with iosBackend:bridge'],
-        ),
-      );
-    }
-    final home = Platform.environment['HOME'] ?? '.';
-    final runner = XcTestRunner(
-        udid: udid,
-        projectPath: project,
-        cacheDir: '$home/.glint/xctest/xcode-${toolchain.xcode.version ?? "unknown"}');
-    try {
-      await runner.ensureStarted(onPhase: (phase) => onProgress?.call(0, phase));
-    } on XcTestRunnerError catch (e) {
-      return (
-        runner: null,
-        error: StructuredResponse.error(
-          summary: e.message,
-          errorKind: GlintErrorKind.backendToolError,
-          detail: e.detail,
-          nextSteps: e.nextSteps,
-        ),
-      );
-    }
-    return (runner: runner, error: null);
   }
 
   /// Asks the bridge which input transport it opens for [udid], so later commands pin it; warns when it fell back or failed.
