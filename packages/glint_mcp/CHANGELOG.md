@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
 ### Added
 
 - `pinch`, a new tool: two fingers around a node (glintId or text) or x,y, spreading (`scale:2`) or closing (`scale:0.5`).
