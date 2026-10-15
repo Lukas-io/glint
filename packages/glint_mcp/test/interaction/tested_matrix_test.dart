@@ -54,7 +54,7 @@ void main() {
   group('describeSetup', () {
     test('partial setups warn with their issues; untested ones ask to report failures', () {
       final partial = describeSetup(_ios(27, 27, 27));
-      expect(partial.line, 'input: iOS 27.0, Xcode 27, macOS 27, indigo · partial');
+      expect(partial.line, 'setup: iOS 27.0, Xcode 27, macOS 27, indigo · partial');
       expect(partial.warnings.single, contains('known issues'));
       final untested = describeSetup(_ios(28, 28, 28));
       expect(untested.json['status'], 'untested');
