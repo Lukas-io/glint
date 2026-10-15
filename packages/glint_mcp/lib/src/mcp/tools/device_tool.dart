@@ -7,6 +7,7 @@ import '../../media/android_privacy.dart';
 import '../../media/gallery.dart' show MediaDevice;
 import '../../media/permissions.dart' show PermissionRefused, PermissionUnsupported;
 import '../envelope.dart';
+import '../screenshot.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -22,7 +23,7 @@ class DeviceTool extends GlintTool {
   Tool get definition => Tool(
         name: 'device',
         description:
-            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless), privacy, biometric; each argument names the ops it serves. On Android (udid: an adb serial) op:privacy sets runtime permissions and screen-capture consent. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed), unsupportedBackendAction.',
+            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless; crop with glintId or region, several apps side by side with apps), privacy, biometric; each argument names the ops it serves. On Android (udid: an adb serial) op:privacy sets runtime permissions and screen-capture consent. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed), unsupportedBackendAction.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
@@ -36,11 +37,33 @@ class DeviceTool extends GlintTool {
             ),
             'inline': Schema.bool(
               description: 'op=screenshot: also return the image as image '
-                  'content, so no separate read is needed. Default false.',
+                  'content, so no separate read is needed. Default false, true with glintId, region or apps.',
             ),
             'maxSize': Schema.int(
               description: 'op=screenshot inline: longest side in pixels of the '
-                  'image sent (0 = full size). Default: the screenshotMaxSize config (1024).',
+                  'image sent (0 = full size); with apps, each device\'s height. Default: 720 for crops and side by side, else the screenshotMaxSize config (1024).',
+            ),
+            'glintId': Schema.string(
+              description: 'screenshot: crop to this widget, with a little margin. Sent inline, small.',
+            ),
+            'region': ObjectSchema(
+              description: 'screenshot: crop to {top, bottom, left, right}, fractions 0-1 of the screen (missing sides default to the edges). Sent inline, small.',
+              properties: {
+                'top': Schema.num(),
+                'bottom': Schema.num(),
+                'left': Schema.num(),
+                'right': Schema.num(),
+              },
+            ),
+            'apps': Schema.list(
+              items: Schema.string(),
+              description: 'screenshot: several attached apps (name, package or device) in one image, side by side, left to right in this order.',
+            ),
+            'afterMs': Schema.int(
+              description: 'screenshot: wait this long first, 0-30000.',
+            ),
+            'waitFor': Schema.string(
+              description: 'screenshot: first wait (up to 15 s) until the app (the first of apps) shows this text.',
             ),
             'latest': Schema.bool(
               description:
@@ -74,6 +97,10 @@ class DeviceTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'status';
+    if (op == 'screenshot' && session.active != null && (args['udid'] == null || args['apps'] != null)) {
+      if (argBool(args, 'latest') ?? false) return _latest(session, args);
+      return attachedScreenshot(session, args, request);
+    }
 
     final udid = _resolveUdid(session, args['udid'] as String?);
     if (udid == null) {
@@ -136,37 +163,6 @@ class DeviceTool extends GlintTool {
 
       case 'screenshot':
         final inline = argBool(args, 'inline') ?? false;
-        final app = session.active;
-        if (app != null && (args['udid'] as String?) == null) {
-          final latest = argBool(args, 'latest') ?? false;
-          final capture = latest
-              ? (app.captures.newest ?? await app.captureNow('explicit'))
-              : await app.captureNow('explicit');
-          if (capture == null) {
-            return StructuredResponse.error(
-              summary: 'screenshot failed',
-              errorKind: GlintErrorKind.backendToolError,
-            );
-          }
-          final sent = inline
-              ? await session.modelImage(capture.path, maxSize: argInt(args, 'maxSize'))
-              : null;
-          return StructuredResponse(
-            summary: 'screenshot ${latest ? "(newest capture)" : "saved"}: '
-                '${capture.path} (${capture.describe()})',
-            nextSteps: [
-              if (!inline) 'read the image at ${capture.path} to see the screen',
-            ],
-            data: {
-              'ok': true,
-              ...capture.toJson(),
-              'captures': app.captures.length,
-              if (sent != null) 'coordinates': sent.coordinates,
-              if (sent != null) 'sent': {'width': sent.image.width, 'height': sent.image.height, 'mimeType': sent.image.mimeType},
-            },
-            imagePaths: [if (sent != null) sent.image.path],
-          );
-        }
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
             '${DateTime.now().millisecondsSinceEpoch}.png';
         final shot = await sim.screenshot(udid, path);
@@ -280,6 +276,29 @@ class DeviceTool extends GlintTool {
         ],
       );
     }
+  }
+
+  /// The newest background capture (taken when the app left the foreground), or a new one when there is none.
+  Future<StructuredResponse> _latest(GlintSession session, Map<String, Object?> args) async {
+    final app = session.active!;
+    final capture = app.captures.newest ?? await app.captureNow('explicit');
+    if (capture == null) {
+      return StructuredResponse.error(summary: 'screenshot failed', errorKind: GlintErrorKind.backendToolError);
+    }
+    final inline = argBool(args, 'inline') ?? false;
+    final sent = inline ? await session.modelImage(capture.path, maxSize: argInt(args, 'maxSize')) : null;
+    return StructuredResponse(
+      summary: 'screenshot (newest capture): ${capture.path} (${capture.describe()})',
+      nextSteps: [if (!inline) 'read the image at ${capture.path} to see the screen'],
+      data: {
+        'ok': true,
+        ...capture.toJson(),
+        'captures': app.captures.length,
+        if (sent != null) 'coordinates': sent.coordinates,
+        if (sent != null) 'sent': {'width': sent.image.width, 'height': sent.image.height, 'mimeType': sent.image.mimeType},
+      },
+      imagePaths: [if (sent != null) sent.image.path],
+    );
   }
 
   String? _resolveUdid(GlintSession session, String? arg) {
