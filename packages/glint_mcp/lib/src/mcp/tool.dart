@@ -22,6 +22,7 @@ import 'tools/hot_reload_tool.dart';
 import 'tools/kill_app_tool.dart';
 import 'tools/logs_tool.dart';
 import 'tools/long_press_tool.dart';
+import 'tools/pinch_tool.dart';
 import 'tools/location_tool.dart';
 import 'tools/map_tool.dart';
 import 'tools/media_tool.dart';
@@ -507,6 +508,7 @@ const List<GlintTool> kDefaultGlintTools = [
   ResolveTool(),
   TapTool(),
   LongPressTool(),
+  PinchTool(),
   SwipeTool(),
   DragTool(),
   ScrollTool(),

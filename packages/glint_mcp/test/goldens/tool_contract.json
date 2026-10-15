@@ -599,9 +599,49 @@
       }
     }
   },
+  "pinch": {
+    "type": "object",
+    "properties": {
+      "glintId": {
+        "type": "string",
+        "description": "Stable id from get_scene: pinch around its center."
+      },
+      "text": {
+        "type": "string",
+        "description": "Visible text of the target instead of glintId."
+      },
+      "x": {
+        "type": "number",
+        "description": "Center x in logical points (device mode: screenshot pixels), with y."
+      },
+      "y": {
+        "type": "number",
+        "description": "Center y, with x."
+      },
+      "scale": {
+        "type": "number",
+        "description": "How far apart the fingers end relative to where they start: 2 zooms in, 0.5 zooms out."
+      },
+      "durationMs": {
+        "type": "integer",
+        "description": "Gesture length in ms. Default 400."
+      },
+      "returnScene": {
+        "type": "boolean",
+        "description": "Settle, then report changed and changeCategory. Default true."
+      }
+    },
+    "required": [
+      "scale"
+    ]
+  },
   "swipe": {
     "type": "object",
     "properties": {
+      "edge": {
+        "type": "string",
+        "description": "A system gesture from a screen edge instead of a swipe: left (back), bottom (home), bottomHold (app switcher), topLeft (Notification Center), topRight (Control Center). Physical iPhone."
+      },
       "fromGlintId": {
         "type": "string",
         "description": "Start point — stable id from get_scene."

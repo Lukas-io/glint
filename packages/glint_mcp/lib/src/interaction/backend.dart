@@ -53,6 +53,14 @@ abstract class InteractionBackend {
   Future<ScreenRecording> startRecording(String path) async =>
       throw UnsupportedBackendAction(label, 'startRecording: this backend cannot record the display');
 
+  /// Two fingers around a physical point, spreading or closing until their span is [scale] times what it was.
+  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
+      throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
+
+  /// A system gesture from [edge] (back, home, app switcher, Control Center, Notification Center).
+  Future<void> edgeSwipe(ScreenEdge edge) async =>
+      throw UnsupportedBackendAction(label, 'edge swipe: not available on this backend');
+
   /// Whether the device shows its lock screen; null when the backend cannot tell.
   Future<bool?> lockState() async => null;
 

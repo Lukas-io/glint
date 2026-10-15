@@ -102,7 +102,7 @@ const _gotchas = '''
 const _toolSurface = '''
 ## Tool surface
 
-`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` · `key` · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` geometry · `device` screenshot/status · `app_logs` · `session` status · `report_issue`
+`attach` connect/switch · `get_scene` read (glintId: drill-down) · `tap` · `type` · `key` · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `pinch` · `drag` · `batch` sequence · `hardware_button` · `wait_for_settle` · `resolve` · `device` screenshot/status · `app_logs` · `session` · `report_issue`
 ''';
 
 const _examples = '''

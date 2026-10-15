@@ -137,6 +137,34 @@ class FlutterInputBackend extends InteractionBackend {
   @override
   Future<void> selectAll() => _deliver((f) => f.selectAll(), native.selectAll);
 
+  /// Pinch through the app when allowed, else real fingers; with no multi-touch on the device the app path still serves it.
+  @override
+  Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async {
+    final from = 120 * devicePixelRatio;
+    final viaApp = (FlutterInput f) =>
+        f.pinch(physicalX / devicePixelRatio, physicalY / devicePixelRatio, from / devicePixelRatio, from * scale / devicePixelRatio, durationMs);
+    if (route == InputRoute.device) {
+      try {
+        await native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs);
+        _last = (path: InputPath.device, reason: null, ms: durationMs);
+        return;
+      } on UnsupportedBackendAction {
+        if (runtime == null) rethrow;
+      }
+      final miss = await viaApp(FlutterInput(runtime!));
+      if (miss != null) throw BackendFailure(GlintErrorKind.unsupportedBackendAction, 'pinch: ${miss.reason}');
+      _last = (path: InputPath.app, reason: null, ms: durationMs);
+      return;
+    }
+    await _deliver(viaApp, () => native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs));
+  }
+
+  @override
+  Future<void> edgeSwipe(ScreenEdge edge) async {
+    await native.edgeSwipe(edge);
+    _last = (path: InputPath.device, reason: null, ms: 0);
+  }
+
   @override
   Future<void> pressHardwareButton(HardwareButton button) => native.pressHardwareButton(button);
 

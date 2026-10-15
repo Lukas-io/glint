@@ -81,8 +81,54 @@ class _MediaPageState extends State<MediaPage> {
               FilledButton(onPressed: _record, child: const Text('Record 3 s')),
               OutlinedButton(onPressed: _path == null ? null : _playRecording, child: const Text('Play recording')),
               OutlinedButton(onPressed: _playBeep, child: const Text('Play beep')),
+              const SizedBox(height: 16),
+              const _ZoomArea(),
             ],
           ),
         ),
+      );
+}
+
+/// A pinch target: the zoom it reads back is how glint checks a pinch landed.
+class _ZoomArea extends StatefulWidget {
+  const _ZoomArea();
+
+  @override
+  State<_ZoomArea> createState() => _ZoomAreaState();
+}
+
+class _ZoomAreaState extends State<_ZoomArea> {
+  final _zoom = TransformationController();
+
+  @override
+  void initState() {
+    super.initState();
+    _zoom.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _zoom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          Text('zoom ${_zoom.value.getMaxScaleOnAxis().toStringAsFixed(1)}x'),
+          SizedBox(
+            width: 240,
+            height: 160,
+            child: InteractiveViewer(
+              transformationController: _zoom,
+              minScale: 0.5,
+              maxScale: 4,
+              child: Semantics(
+                label: 'Zoom area',
+                child: Container(color: Colors.teal, alignment: Alignment.center, child: const Text('Pinch me')),
+              ),
+            ),
+          ),
+        ],
       );
 }

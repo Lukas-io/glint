@@ -5,7 +5,8 @@ use idevice::{
         OrientationServiceClient, RotationDirection,
         CallInfoBlob, DisplayServiceClient, HevcDepacketizer, ImageFormat, RtpPacket, ScreenCaptureServiceClient, build_screen_audio_offer, build_screen_video_offer,
         build_start_audio_parameters, build_start_video_parameters,
-        hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient},
+        hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, TouchscreenContact, UniversalHidServiceClient},
+        GENERAL_PASTEBOARD, PasteboardServiceClient,
     },
     core_device_proxy::CoreDeviceProxy,
     rsd::RsdHandshake,
@@ -150,6 +151,25 @@ impl Session {
         Ok(json!({"bytes": bytes.len(), "ms": started.elapsed().as_millis() as u64}))
     }
 
+    /// Types [text] by putting it on the general pasteboard and pressing cmd+V, then puts back what was there; for text the hardware keyboard has no keys for.
+    async fn paste(&mut self, request: &Value) -> Result<Value, SessionError> {
+        let text = request["text"].as_str().ok_or_else(|| err("badRequest", "text is required"))?;
+        self.ensure_live().await?;
+        let mut board = PasteboardServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no pasteboard service: {e:?}")))?;
+        let before = board.get(GENERAL_PASTEBOARD).await.ok().and_then(|s| s.text());
+        board.set_text(text, GENERAL_PASTEBOARD).await.map_err(|e| err("stream", format!("pasteboard set failed: {e:?}")))?;
+        let live = self.live.as_mut().expect("ensure_live");
+        press(&mut live.indigo, 0x19, &[keys::LEFT_GUI]).await?;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        let restored = match before {
+            Some(prev) => board.set_text(&prev, GENERAL_PASTEBOARD).await.is_ok(),
+            None => false,
+        };
+        Ok(json!({"pasted": text.chars().count(), "restored": restored}))
+    }
+
     /// Lists, turns on or turns off a network condition through Instruments, on a task that keeps its connection open while one is on.
     async fn network(&mut self, cmd: &str, request: &Value) -> Result<Value, SessionError> {
         if self.network.is_none() {
@@ -237,6 +257,9 @@ impl Session {
         if cmd == "recordStop" {
             return self.record_stop();
         }
+        if cmd == "paste" {
+            return self.paste(request).await;
+        }
         if cmd == "rotate" {
             let direction = if request["direction"] == "left" { RotationDirection::Left } else { RotationDirection::Right };
             let mut control = OrientationServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
@@ -261,6 +284,7 @@ impl Session {
         let result = match cmd {
             "touch" => touch(live, request).await,
             "taps" => taps(live, request).await,
+            "pinch" => pinch(live, request).await,
             "type" => type_text(live, request).await,
             "key" => key(live, request).await,
             "button" => button(live, request).await,
@@ -381,6 +405,29 @@ async fn touch(live: &mut Live, request: &Value) -> Result<(), SessionError> {
         live.touch.send_touchscreen(TOUCHSCREEN_STATE_CONTACT, x, y, None).await.map_err(input)?;
     }
     live.touch.send_touchscreen(TOUCHSCREEN_STATE_RELEASE, lx, ly, None).await.map_err(input)
+}
+
+/// Two fingers around `[cx, cy]` moving from `fromSpan` to `toSpan` apart (normalized units) over `ms`, then lifted.
+async fn pinch(live: &mut Live, request: &Value) -> Result<(), SessionError> {
+    let n = |k: &str| request[k].as_f64().ok_or_else(|| err("badRequest", format!("{k} is required")));
+    let (cx, cy, from, to) = (n("cx")?, n("cy")?, n("fromSpan")?, n("toSpan")?);
+    let ms = request["ms"].as_u64().unwrap_or(400).max(50);
+    let angle = request["angle"].as_f64().unwrap_or(0.0).to_radians();
+    let steps = (ms / 16).max(3);
+    let clamp = |v: f64| v.clamp(0.0, 65535.0).round() as u16;
+    let contacts = |span: f64, touching: bool| {
+        let (dx, dy) = (angle.cos() * span / 2.0, angle.sin() * span / 2.0);
+        [
+            TouchscreenContact { identity: 0, touching, x: clamp(cx - dx), y: clamp(cy - dy) },
+            TouchscreenContact { identity: 1, touching, x: clamp(cx + dx), y: clamp(cy + dy) },
+        ]
+    };
+    for i in 0..=steps {
+        let span = from + (to - from) * i as f64 / steps as f64;
+        live.touch.send_multitouch(&contacts(span, true), None).await.map_err(input)?;
+        tokio::time::sleep(Duration::from_millis(16)).await;
+    }
+    live.touch.send_multitouch(&contacts(to, false), None).await.map_err(input)
 }
 
 /// Taps each `[x, y]` in turn, `intervalMs` apart, in one command.

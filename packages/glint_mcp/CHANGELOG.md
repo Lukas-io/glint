@@ -6,6 +6,22 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `pinch`, a new tool: two fingers around a node (glintId or text) or x,y, spreading (`scale:2`) or closing (`scale:0.5`).
+  - It goes through glint's in-app agent with two pointers, or real multi-touch through Device Hub on a physical iPhone with `input:device`.
+  - Where the device has no multi-touch (the simulator, Android), it still pinches through the app and says so in `data.input`.
+  - `fixtures/media_app` gains a zoom area whose label reads back the zoom.
+- `swipe edge:` makes a system gesture from a screen edge on a physical iPhone:
+  - `left` (back);
+  - `bottom` (home);
+  - `bottomHold` (app switcher);
+  - `topLeft` (Notification Center);
+  - `topRight` (Control Center).
+
+  Top-edge drags register as system gestures from synthetic touches. Bottom-edge ones do not, so home and the switcher use Home presses.
+- `type` with text the hardware keyboard has no keys for (accents, emoji, other scripts) works on a phone's device path too. glint puts it on the pasteboard, presses ⌘V, and puts the previous pasteboard text back.
+
+  The Flutter path already typed any text. The helper speaks protocol 6, and the in-app agent is `glintAgent5`.
+
 - A physical iPhone can be acted on, not only read:
   - **`device op:openurl`** opens a URL or deep link on the phone (`devicectl … openURL`).
   - **`kill_app`** stops an app on the phone through `devicectl` (`terminate --kill` on the app's own process, extensions left alone). Before, it ran `simctl` and failed.
