@@ -585,6 +585,10 @@ class TabLabelEnricher implements SemanticEnricher {
   static const _labels = '(Element e) { final w = e.widget as dynamic; var l = <String>[]; int? sel; '
       "String text(Object? x) => x is String ? x : (x is Text ? (x.data ?? '') : ''); "
       'try { l = [for (final d in w.destinations) text(d.label)]; sel = w.selectedIndex as int?; } catch (_) {} '
+      'if (l.isEmpty) { try { l = [for (final t in w.tabs) (t.text as String?) ?? text(t.child)]; '
+      'Object? c; try { c = w.controller; } catch (_) {} '
+      "if (c == null) e.visitAncestorElements((a) { if (a.widget.runtimeType.toString() == '_TabControllerScope') { c = (a.widget as dynamic).controller; return false; } return true; }); "
+      'sel = (c as dynamic)?.index as int?; } catch (_) {} } '
       'if (l.isEmpty) { try { l = [for (final i in w.items) text(i.label)]; sel = w.currentIndex as int?; } catch (_) {} } '
       "return l.map((s) => s.replaceAll(';', ',')).join('\\u001f') + '\\u001e' + (sel?.toString() ?? ''); }";
 
@@ -619,6 +623,63 @@ class TabLabelEnricher implements SemanticEnricher {
         }
         if (selected != null) tab.selected = j == selected;
       }
+    }
+  }
+}
+
+/// Reads what each button and list tile would do: a tile with a tap handler becomes tappable, a button with none reads `[disabled]`, and an icon-only button takes its tooltip as its label. Capped at [maxNodes].
+class ButtonFactsEnricher implements SemanticEnricher {
+  ButtonFactsEnricher({required this.runtime, this.maxNodes = 80});
+
+  final FlutterRuntime runtime;
+  final int maxNodes;
+
+  static const _facts = '(Element e) { final w = e.widget as dynamic; bool? on; String? tip; '
+      'bool has(Object? Function() f) { try { return f() != null; } catch (_) { return false; } } '
+      'bool known(Object? Function() f) { try { f(); return true; } catch (_) { return false; } } '
+      'if (known(() => w.onPressed)) on = has(() => w.onPressed) || has(() => w.onLongPress); '
+      'else if (known(() => w.onTap)) on = has(() => w.onTap) || has(() => w.onLongPress) || has(() => w.onDoubleTap) '
+      '|| has(() => w.onPanStart) || has(() => w.onPanUpdate) || has(() => w.onVerticalDragUpdate) || has(() => w.onHorizontalDragUpdate) '
+      '|| has(() => w.onScaleUpdate) || has(() => w.onTapDown) || has(() => w.onTapUp); '
+      'try { tip = w.tooltip as String?; } catch (_) {} '
+      "return (on == null ? '' : on.toString()) + '|' + (tip ?? '').replaceAll(';', ',').replaceAll('|', '/'); }";
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final nodes = <(SemanticNode, String)>[];
+    for (final n in scene.allNodes()) {
+      final isTile = n is SemanticContainer && n.hint == 'tile';
+      if (n is! SemanticButton && !isTile) continue;
+      final id = n.glintId;
+      final source = id == null ? null : scene.sourceFor(id);
+      if (source == null || source.inspectorId.isEmpty) continue;
+      nodes.add((n, source.inspectorId));
+      if (nodes.length >= maxNodes) break;
+    }
+    if (nodes.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(batchOverElements([for (final n in nodes) n.$2], _facts));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != nodes.length) return;
+    for (final (i, part) in parts.indexed) {
+      final (node, _) = nodes[i];
+      final f = part.split('|');
+      final on = switch (f.first) { 'true' => true, 'false' => false, _ => null };
+      final tip = f.length > 1 && f[1].isNotEmpty ? f[1] : null;
+      if (node is SemanticContainer) {
+        if (on == true) node.affordances.add(Affordance.tappable);
+        continue;
+      }
+      final button = node as SemanticButton;
+      if (on == false && !button.isToggle) {
+        button.enabled = false;
+        button.affordances.remove(Affordance.tappable);
+      }
+      if (tip != null && (button.label == null || button.label!.isEmpty)) button.label = tip;
     }
   }
 }

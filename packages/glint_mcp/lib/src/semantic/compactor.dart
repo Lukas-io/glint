@@ -45,6 +45,10 @@ class SceneCompactor {
     if (node is SemanticUnknown && _plumbingLabels.contains(node.label)) {
       return true;
     }
+    // A button that only wraps another button (TextButton > InkWell > GestureDetector in a dialog) is one tap target.
+    if (node is SemanticButton && node.label == null && node.children.length == 1 && node.children.single is SemanticButton) {
+      return true;
+    }
     return false;
   }
 
@@ -66,6 +70,20 @@ class SceneCompactor {
     'Focus',
     'FocusScope',
     'MouseRegion',
+    'Obx',
+    'ObxValue',
+    'GetX',
+    'GetBuilder',
+    'BlocBuilder',
+    'BlocConsumer',
+    'BlocListener',
+    'BlocSelector',
+    'Consumer',
+    'Selector',
+    'ValueListenableBuilder',
+    'ListenableBuilder',
+    'StreamBuilder',
+    'FutureBuilder',
   };
 
   SemanticPage? _findPage(SemanticNode node) {
