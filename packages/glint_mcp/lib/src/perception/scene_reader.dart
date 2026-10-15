@@ -151,10 +151,14 @@ class SceneReader {
     }
 
     final extraction = _extractDialogEntries(fullRoot);
+    final grafted = _graftBarButtons(summaryRoot, fullRoot);
 
     if (extraction.contentRoots.isEmpty) {
-      await _inspector.disposeGroup(fullGroup);
-      return null;
+      if (grafted == 0) {
+        await _inspector.disposeGroup(fullGroup);
+        return null;
+      }
+      return _OverlayResult(contentRoots: const [], hasBarrier: false, groupName: fullGroup);
     }
 
     _detachInlineCopies(summaryRoot, extraction.nestedContent);
@@ -166,6 +170,35 @@ class SceneReader {
       hasBarrier: extraction.hasBarrier,
       groupName: fullGroup,
     );
+  }
+
+  static const _barLabels = {'AppBar', 'SliverAppBar', 'CupertinoNavigationBar', 'CupertinoSliverNavigationBar'};
+  static const _barButtons = {'BackButton', 'CloseButton', 'DrawerButton', 'EndDrawerButton', 'CupertinoNavigationBarBackButton'};
+
+  /// The back, close and drawer buttons an app bar builds for itself never reach the summary tree; each one in a visible bar is copied in as a leaf, matched by inspector id (shared by both reads while their groups live).
+  static int _graftBarButtons(SceneNode summaryRoot, SceneNode fullRoot) {
+    final bars = summaryRoot.walk().where((n) => !n.isOffstage && _barLabels.contains(n.baseLabel)).toList();
+    if (bars.isEmpty) return 0;
+    final fullById = {for (final n in fullRoot.walk()) if (n.inspectorId.isNotEmpty) n.inspectorId: n};
+    var grafted = 0;
+    for (final bar in bars) {
+      final full = fullById[bar.inspectorId];
+      if (full == null) continue;
+      final present = bar.walk().map((n) => n.inspectorId).toSet();
+      final buttons = full.walk().where((n) => _barButtons.contains(n.baseLabel) && !present.contains(n.inspectorId));
+      for (final b in buttons.toList().reversed) {
+        bar.children.insert(0, SceneNode(
+          depth: bar.depth + 1,
+          indexInParent: 0,
+          description: b.description,
+          type: b.type,
+          inspectorId: b.inspectorId,
+          widgetRuntimeType: b.widgetRuntimeType,
+        ));
+        grafted++;
+      }
+    }
+    return grafted;
   }
 
   /// Walk [fullRoot] to find the [Overlay] widget, then inspect each
