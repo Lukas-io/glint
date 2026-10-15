@@ -74,11 +74,11 @@ class _IdPass {
   }
 
   String _shortHash(SceneNode node) {
-    final seed = '${node.locationId ?? ''}:${_itemKeyedPath(node) ?? _indexPath(node).join(',')}';
+    final seed = '${node.locationId ?? ''}:${_itemKeyedPath(node) ?? _path(node).join(',')}';
     return _Hash.fnvBase32(seed, length: 4);
   }
 
-  /// Lazily built lists recycle slots, so under one the item's own text replaces its slot index; null when the node is not in such a list or the text does not tell items apart.
+  /// Lazily built lists recycle slots, so under one the item is keyed by its type when no sibling shares it, else by its own text; null when the node is not in such a list or neither tells items apart.
   String? _itemKeyedPath(SceneNode node) {
     SceneNode? item;
     SceneNode? list;
@@ -93,11 +93,18 @@ class _IdPass {
       cur = p;
     }
     if (item == null || list == null) return null;
-    final key = _firstText(item);
-    if (key == null) return null;
-    if (list.children.where((c) => _firstText(c) == key).length != 1) return null;
-    final above = _indexPath(list).join(',');
-    final inside = _indexPath(node).skip(_indexPath(item).length).join(',');
+    final type = item.baseLabel;
+    final String key;
+    if (list.children.where((c) => c.baseLabel == type).length == 1) {
+      key = '@$type';
+    } else {
+      final text = _firstText(item);
+      if (text == null) return null;
+      if (list.children.where((c) => _firstText(c) == text).length != 1) return null;
+      key = text;
+    }
+    final above = _path(list).join(',');
+    final inside = _path(node).skip(_path(item).length).join(',');
     return '$above|$key|$inside';
   }
 
@@ -120,12 +127,20 @@ class _IdPass {
     'ReorderableListView',
   };
 
-  List<int> _indexPath(SceneNode node) {
-    final path = <int>[];
+  /// Each step is the node's type and its rank among same-type siblings, so a sibling of another type appearing (an error text) leaves the path alone.
+  List<String> _path(SceneNode node) {
+    final path = <String>[];
     var cur = node;
     while (parentOf.containsKey(cur)) {
-      path.insert(0, cur.indexInParent);
-      cur = parentOf[cur]!;
+      final parent = parentOf[cur]!;
+      final type = cur.baseLabel;
+      var rank = 0;
+      for (final sibling in parent.children) {
+        if (identical(sibling, cur)) break;
+        if (sibling.baseLabel == type) rank++;
+      }
+      path.insert(0, '$type$rank');
+      cur = parent;
     }
     return path;
   }
