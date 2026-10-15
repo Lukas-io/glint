@@ -8,7 +8,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'wallet.dart';
 
-void main() => runApp(const RideApp());
+/// Start-up work before the first frame (SDK and Firebase init in a real app), which keeps a restarted app without Flutter's extensions for a moment.
+Future<void> main() async {
+  await Future<void>.delayed(const Duration(seconds: 2));
+  runApp(const RideApp());
+}
+
+/// The headless engine MainActivity starts on Android, standing in for a push or background-task handler.
+@pragma('vm:entry-point')
+void backgroundMain() => WidgetsFlutterBinding.ensureInitialized();
 
 class RideApp extends StatelessWidget {
   const RideApp({super.key});
