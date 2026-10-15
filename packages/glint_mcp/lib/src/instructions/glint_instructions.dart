@@ -46,7 +46,7 @@ const _workflow = '''
 1. `attach` once, no args — glint finds the app + device; never pass vmUri/iosBridgePath.
 2. `get_scene` to read the screen. A dialog shows first under `--- dialog ---`; the base screen follows under `--- screen (blocked by modal) ---`.
 3. Act with a `glintId`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static.
-4. Read `changed`; `get_scene` when you need the new layout; `get_scene glintId:<id>` drills into one container.
+4. Read `changed`; `get_scene` for the new layout; `get_scene glintId:<id>` drills into one container.
 5. Long lists fold: one row in full, then `… N more like it: "label" #hash`. Tap `<base>#hash`, or `get_scene glintId:<list>` for all.
 
 Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>"` on any tool targets one call.
@@ -81,12 +81,12 @@ const _recovery = '''
 - `deviceClaimed` — another agent's device; pass your own `device:`.
 - `notOwned`: not your app/device; `force:true` only if the user asked.
 - `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
-- `unknownApp` — `app:` matched none/several apps; pick from the list.
+- `unknownApp` — `app:` matched none/several; pick from the list.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial` — part landed (`data.delivered` of `data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` — follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `callInProgress` / `notOnThisDevice` / `signingFailed` — follow `detail` + `nextSteps`.
 - `invalidArgument` — fix the argument.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';

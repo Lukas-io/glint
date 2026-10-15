@@ -336,7 +336,7 @@ impl Session {
         display
             .start_media_stream(build_start_audio_parameters(&receiver, audio.local_port(), &sender, 50000, audio_offer, CLIENT_SUPPORTED_FEATURES, session_id))
             .await
-            .map_err(|e| err("deviceBusy", format!("the phone refused a screen session (another Device Hub may be viewing it): {e:?}")))?;
+            .map_err(refused_stream)?;
         let video_offer = build_screen_video_offer(&uuid::Uuid::new_v4().to_string().to_uppercase(), &call_info, uuid::Uuid::new_v4().as_u128() as u32)
             .map_err(|e| err("stream", format!("{e:?}")))?;
         display
@@ -376,6 +376,16 @@ impl Session {
         for d in live.drains {
             d.abort();
         }
+    }
+}
+
+/// Why the phone refused a screen session: a call in progress (CoreDevice 9022) or another viewer holding it.
+fn refused_stream(e: impl std::fmt::Debug) -> SessionError {
+    let detail = format!("{e:?}");
+    if detail.contains("9022") || detail.contains("call is currently in progress") {
+        err("callInProgress", format!("iOS refuses real touches while a phone or VoIP call is active: {detail}"))
+    } else {
+        err("deviceBusy", format!("the phone refused a screen session (another Device Hub may be viewing it): {detail}"))
     }
 }
 
