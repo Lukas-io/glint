@@ -260,12 +260,7 @@ class LocationTool extends GlintTool {
     final value = args['value'] as String?;
     if (!locationAccessValues.contains(value)) return _bad('permission needs value: ${locationAccessValues.join(' | ')}; got ${value ?? 'nothing'}');
     if (backend is IosDeviceLocation) {
-      return StructuredResponse.error(
-        summary: 'glint cannot set app permissions on a physical iPhone',
-        errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'devicectl has no privacy setting; only the person holding the phone can answer or change it in Settings',
-        nextSteps: const ['ask the user to answer the prompt, or change it in Settings > Privacy & Security > Location Services'],
-      );
+      return StructuredResponse.notOnThisDevice(Ability.locationPermission, iphoneAbilities.gaps[Ability.locationPermission]!);
     }
     final appId = (args['appId'] as String?) ?? app;
     if (appId == null) return _bad('no app to set location permission for', nextSteps: const ['attach the app, or pass appId:"<bundle id or package>"']);

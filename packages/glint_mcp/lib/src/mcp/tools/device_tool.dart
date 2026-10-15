@@ -113,6 +113,17 @@ class DeviceTool extends GlintTool {
       );
     }
 
+    if (isPhysicalIosUdid(udid)) {
+      final ability = switch (op) {
+        'status' => Ability.deviceStatus,
+        'appearance' => Ability.deviceAppearance,
+        'openurl' => Ability.deviceOpenUrl,
+        'privacy' => Ability.devicePrivacy,
+        'biometric' || 'enrol' || 'unenrol' || 'match' || 'nomatch' => Ability.deviceBiometric,
+        _ => null,
+      };
+      if (ability != null) return StructuredResponse.notOnThisDevice(ability, iphoneAbilities.gaps[ability]!);
+    }
     if (_isAndroid(session, udid)) return _android(session, udid, op, args);
 
     const sim = SimControl();

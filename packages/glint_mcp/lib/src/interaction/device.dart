@@ -1,3 +1,4 @@
+import 'abilities.dart';
 import 'backend.dart';
 import 'android_server.dart';
 import 'backends/adb_backend.dart';
@@ -27,6 +28,9 @@ sealed class DeviceTarget {
 
   /// Where this device's gestures go; see [InputRoute].
   InputRoute get route;
+
+  /// What this kind of device cannot do.
+  DeviceAbilities get abilities => DeviceAbilities.none;
 
   InteractionBackend createBackend();
 }
@@ -112,6 +116,9 @@ class IosDevice extends DeviceTarget {
 
   @override
   ({double w, double h})? get screenSize => (w: logicalWidth, h: logicalHeight);
+
+  @override
+  DeviceAbilities get abilities => iphoneAbilities;
 
   @override
   InteractionBackend createBackend() => _routed(

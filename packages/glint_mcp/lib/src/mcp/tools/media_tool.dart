@@ -178,6 +178,10 @@ class MediaTool extends GlintTool {
       ));
       return null;
     }
+    if (isPhysicalIosUdid(id)) {
+      failure.add(StructuredResponse.notOnThisDevice(Ability.media, iphoneAbilities.gaps[Ability.media]!));
+      return null;
+    }
     final device = MediaDevice(MediaDevice.platformOf(id), id, adbPath: adbPath);
     final gone = await _reachable(device);
     if (gone != null) {

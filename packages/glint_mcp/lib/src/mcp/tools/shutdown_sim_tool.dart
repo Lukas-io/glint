@@ -78,6 +78,9 @@ class ShutdownSimTool extends GlintTool {
         nextSteps: const ['pass device:"<udid/serial>" or all:true'],
       );
     }
+    if (isPhysicalIosUdid(deviceId)) {
+      return StructuredResponse.notOnThisDevice(Ability.shutdown, iphoneAbilities.gaps[Ability.shutdown]!);
+    }
     if (!force && !session.ownsDevice(deviceId)) return _notOwned([deviceId]);
     final platform = _platformOf(deviceId, scan, session);
     final isThisDevice = session.hasApp(deviceId);

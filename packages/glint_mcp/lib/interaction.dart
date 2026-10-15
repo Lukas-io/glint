@@ -3,6 +3,7 @@
 /// entry point.
 library;
 
+export 'src/interaction/abilities.dart';
 export 'src/interaction/action.dart';
 export 'src/interaction/android_server.dart';
 export 'src/interaction/attach_history.dart';

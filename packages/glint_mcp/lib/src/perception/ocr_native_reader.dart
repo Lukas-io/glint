@@ -25,6 +25,12 @@ class OcrNativeReader extends NativeReader {
       lastReadProblem = 'the screenshot for reading the native surface failed';
       return _sentinel();
     }
+    return readFrom(path);
+  }
+
+  /// Reads the surface from a screenshot already taken at [path].
+  Future<Scene> readFrom(String path) async {
+    lastReadProblem = null;
     final List<RecognisedLine> lines;
     try {
       lines = await recognize(path);

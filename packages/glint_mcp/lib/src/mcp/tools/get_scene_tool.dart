@@ -322,6 +322,7 @@ class GetSceneTool extends GlintTool {
     final surface = app?.nativeSurfaceName;
     final ocr = nativeReader is OcrNativeReader;
     final listed = (surface != null || ocr) && !isSentinel && nativeScene.root.children.isNotEmpty;
+    final read = isSentinel ? null : classifySurface(nativeScene, owner: surface);
     final sent = capture == null || listed ? null : await session.modelImage(capture.path);
     final readProblem = switch (nativeReader) {
       AndroidNativeReader() => nativeReader.lastReadProblem,
@@ -350,7 +351,7 @@ class GetSceneTool extends GlintTool {
       ],
       nextSteps: [
         if ((surface != null || ocr) && !isSentinel)
-          'tap an element above with tap x,y using its @ coordinates (logical points)',
+          'tap an element above by its text or glintId (tap text:"Allow"); x,y also works, in logical points',
         if (ocr && !isSentinel) 'these are the text lines read off the screen; a button is the line with its label',
         if (surface != null && nativeReader is AndroidNativeReader) 'hardware_button back closes it without choosing',
         if (surface != null && nativeReader is RunnerNativeReader)
@@ -369,6 +370,7 @@ class GetSceneTool extends GlintTool {
         'state': 'native',
         'nativeScene': true,
         'sceneMode': 'native',
+        if (read != null) 'surface': read.toJson(),
         if (lifecycle != null) 'lifecycle': lifecycle,
         'overlay': overlay,
         if (surface != null) 'nativeSurface': surface,
