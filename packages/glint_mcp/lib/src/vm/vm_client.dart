@@ -44,21 +44,22 @@ class VmClient {
       _reselectUntilFound(exclude: _flutterIsolate?.id)
           .whenComplete(() => _reselecting = null);
 
+  /// Waits for an isolate with a widget tree; a restarted app may take seconds of start-up work before its UI isolate builds one, while a background engine's isolate is already there.
   Future<void> _reselectUntilFound({String? exclude}) async {
     final deadline = DateTime.now().add(reselectTimeout);
     while (true) {
       try {
-        await _selectFlutterIsolate(exclude: exclude);
-        return;
+        final withTree = await _selectFlutterIsolate(exclude: exclude);
+        if (withTree || DateTime.now().isAfter(deadline)) return;
       } on StateError {
         if (_service == null || DateTime.now().isAfter(deadline)) rethrow;
-        await Future<void>.delayed(const Duration(milliseconds: 100));
       }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
     }
   }
 
-  /// Longest a hot restart may take to bring up a new Flutter isolate.
-  static const reselectTimeout = Duration(seconds: 5);
+  /// Longest a hot restart may take to bring up a new Flutter isolate with its widget tree.
+  static const reselectTimeout = Duration(seconds: 15);
 
   void _onIsolateEvent(Event e) {
     final id = e.isolate?.id;
@@ -68,26 +69,42 @@ class VmClient {
         id != current &&
         (e.extensionRPC ?? '').startsWith('ext.flutter.inspector.');
     if (replaced) unawaited(reselect().catchError((_) {}));
-    // A background engine (push or workmanager handler) registers the same extensions; only follow it once the UI isolate is gone.
-    if (newFlutter) unawaited(_reselectIfCurrentGone());
+    // A background engine (push or workmanager handler) registers the same extensions; only move when the current isolate is gone or has no widget tree.
+    if (newFlutter) unawaited(_reselectIfCurrentLacksTree());
   }
 
-  Future<void> _reselectIfCurrentGone() async {
+  Future<void> _reselectIfCurrentLacksTree() async {
     final current = _flutterIsolate?.id;
     if (current == null || _service == null) return;
     try {
       await service.getIsolate(current).timeout(const Duration(seconds: 2));
     } on SentinelException {
       await reselect().catchError((_) {});
+      return;
     } on Object {
-      // still there, or unreachable for now: keep it
+      return;
+    }
+    if (await _treeReady(current) != true) await reselect().catchError((_) {});
+  }
+
+  /// Whether [isolateId] has built its widget tree: the UI isolate has, a background engine's has not; null when it does not answer.
+  Future<bool?> _treeReady(String isolateId) async {
+    try {
+      final resp = await service
+          .callServiceExtension('ext.flutter.inspector.isWidgetTreeReady', isolateId: isolateId)
+          .timeout(const Duration(seconds: 2));
+      final result = resp.json?['result'];
+      return result is bool ? result : null;
+    } on Object {
+      return null;
     }
   }
 
   /// Longest one VM read may take during attach; a suspended app (device locked) never answers.
   static const readTimeout = Duration(seconds: 8);
 
-  Future<void> _selectFlutterIsolate({String? exclude}) async {
+  /// Picks the Flutter isolate, preferring one whose widget tree is built, then the one named main; true when the pick has a widget tree.
+  Future<bool> _selectFlutterIsolate({String? exclude}) async {
     final vm = await service.getVM().timeout(readTimeout);
     final candidates = <Isolate>[];
     for (final ref in vm.isolates ?? const <IsolateRef>[]) {
@@ -103,10 +120,13 @@ class VmClient {
       if (rpcs.any((e) => e.startsWith('ext.flutter.'))) candidates.add(iso);
     }
     if (candidates.isNotEmpty) {
-      // The UI isolate is named main; background engines get other names.
-      _flutterIsolate = candidates.firstWhere((i) => i.name == 'main',
-          orElse: () => candidates.first);
-      return;
+      final ready = <Isolate>[
+        for (final c in candidates)
+          if (await _treeReady(c.id!) == true) c,
+      ];
+      final pool = ready.isNotEmpty ? ready : candidates;
+      _flutterIsolate = pool.firstWhere((i) => i.name == 'main', orElse: () => pool.first);
+      return ready.isNotEmpty;
     }
     throw StateError(
       'No isolate exposes ext.flutter.* extensions. Is the target a Flutter '
