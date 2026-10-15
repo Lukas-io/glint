@@ -5,6 +5,8 @@ import '../backend.dart';
 import 'flutter_input_backend.dart';
 import '../device_hid.dart';
 import '../image_size.dart';
+import '../phone_status.dart';
+import '../result.dart';
 import '../screen_recording.dart';
 
 /// A paired physical iPhone driven like a hand would: real touches, keys and buttons through Xcode's Device Hub service, screenshots through `devicectl`.
@@ -34,7 +36,15 @@ class IosDeviceBackend extends InteractionBackend {
   BackendCapabilities get capabilities => const BackendCapabilities(
         keys: true,
         record: true,
-        hardwareButtons: {HardwareButton.home, HardwareButton.lock, HardwareButton.volumeUp, HardwareButton.volumeDown},
+        hardwareButtons: {
+          HardwareButton.home,
+          HardwareButton.lock,
+          HardwareButton.unlock,
+          HardwareButton.back,
+          HardwareButton.appSwitcher,
+          HardwareButton.volumeUp,
+          HardwareButton.volumeDown,
+        },
       );
 
   List<int> _point(int x, int y, int ms) => [
@@ -106,20 +116,36 @@ class IosDeviceBackend extends InteractionBackend {
   @override
   Future<void> selectAll() => _call({'cmd': 'key', 'key': 'a', 'modifiers': ['cmd']});
 
+  /// A real drag between two fractions of the screen, [ms] long; a back swipe from x = 0 registers, a drag from the bottom edge does not.
+  Future<void> _edgeDrag(double fx1, double fy1, double fx2, double fy2, {int ms = 300}) {
+    final steps = (ms / _frameMs).ceil();
+    return _touch([
+      for (var i = 0; i <= steps; i++)
+        _point(((fx1 + (fx2 - fx1) * i / steps) * pixelWidth).round(), ((fy1 + (fy2 - fy1) * i / steps) * pixelHeight).round(), ms * i ~/ steps),
+    ]);
+  }
+
   @override
-  Future<void> pressHardwareButton(HardwareButton button) => switch (button) {
-        HardwareButton.home ||
-        HardwareButton.lock ||
-        HardwareButton.volumeUp ||
-        HardwareButton.volumeDown =>
-          _call({'cmd': 'button', 'name': button.name}),
-        HardwareButton.unlock => throw UnsupportedBackendAction(label, 'unlock: a physical iPhone unlocks with its own Face ID or passcode',
-            nextSteps: const ['press hardware_button lock to wake the screen, then swipe up from the bottom edge']),
-        HardwareButton.back => throw UnsupportedBackendAction(label, 'back: iOS has no back button',
-            nextSteps: const ["tap the app's back button, or swipe right from the left edge"]),
-        HardwareButton.appSwitcher => throw UnsupportedBackendAction(label, 'appSwitcher: iOS has no switcher button',
-            nextSteps: const ['swipe up from the bottom edge to the middle and hold (swipe holdMs:600)']),
-      };
+  Future<void> pressHardwareButton(HardwareButton button) async {
+    switch (button) {
+      case HardwareButton.home || HardwareButton.lock || HardwareButton.volumeUp || HardwareButton.volumeDown:
+        await _call({'cmd': 'button', 'name': button.name});
+      case HardwareButton.back:
+        await _edgeDrag(0, 0.5, 0.62, 0.5);
+      case HardwareButton.appSwitcher:
+        await _call({'cmd': 'button', 'name': 'home'});
+        await _call({'cmd': 'button', 'name': 'home'});
+      case HardwareButton.unlock:
+        final status = await phoneStatus(udid);
+        if (status?['passcodeRequired'] == true) {
+          throw BackendFailure(GlintErrorKind.notOnThisDevice, 'the iPhone has a passcode, which only its owner can enter',
+              nextSteps: const ['ask the user to unlock the phone, then retry'], data: const {'ability': 'unlock'});
+        }
+        await _call({'cmd': 'button', 'name': 'lock'});
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        await _edgeDrag(0.5, 0.92, 0.5, 0.3, ms: 300);
+    }
+  }
 
   @override
   Future<ScreenRecording> startRecording(String path) async {

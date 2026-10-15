@@ -17,6 +17,8 @@ idevice = { git = "https://github.com/jkcoxson/idevice", rev = "3854a5df4a5a6dee
   "tunnel_tcp_stack",
   "display_stream",
   "springboardservices",
+  "dvt",
+  "condition_inducer",
 ] }
 tokio = { version = "1.43", features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "sync"] }
 serde_json = "1"

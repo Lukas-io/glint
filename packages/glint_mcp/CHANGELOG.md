@@ -6,6 +6,20 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- A physical iPhone can be acted on, not only read:
+  - **`device op:openurl`** opens a URL or deep link on the phone (`devicectl … openURL`).
+  - **`kill_app`** stops an app on the phone through `devicectl` (`terminate --kill` on the app's own process, extensions left alone). Before, it ran `simctl` and failed.
+  - **`device op:network`**, new, sets an Instruments network condition on the phone: `value:"list"` shows the 22 profiles (100% loss, Edge, 3G, LTE, high-latency DNS, …), a profile id turns it on, `off` clears it. It affects every app on the phone, which the reply says. glint's helper clears it on detach or exit, so it never outlives the session.
+  - **`hardware_button`**:
+    - `back` is a real swipe in from the left edge;
+    - `appSwitcher` is a double Home press;
+    - `unlock` wakes the phone and swipes up, and when a passcode is set refuses with `notOnThisDevice`, since only its owner can enter it.
+
+    A swipe from the bottom edge does not register as a system gesture from synthetic touches, which is why the switcher uses Home.
+  - **`sensors op:set orientation:`** turns the phone a quarter at a time through Device Hub's rotate, until it reports the orientation, and says so when rotation lock is on or the phone stays put. On the iPhone 15 Pro with iOS 27 the phone did not turn yet, so that is what it currently reports.
+
+  The helper speaks protocol 5.
+
 - More tools work on a physical iPhone:
   - **`record`** records the phone's screen. glint's Device Hub helper writes the display stream to a file on a fresh screen session, so it opens on a keyframe. glint wraps it as an `hvc1` mp4 without re-encoding, so frame extraction and QuickTime both read it.
   - **`device op:status`** reports the phone from `devicectl`: name, model, iOS and build, connection, Developer Mode, whether the developer image is mounted, and whether a passcode is set.

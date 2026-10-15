@@ -7,7 +7,7 @@ import 'bridge_download.dart';
 import 'result.dart';
 
 /// Must equal `PROTOCOL` in native/ios_device_hid/src/main.rs.
-const int expectedDeviceHidProtocol = 4;
+const int expectedDeviceHidProtocol = 5;
 
 /// The helper's release build relative to glint's package root.
 const String kDeviceHidBuild = 'native/ios_device_hid/target/release/glint-devicehid';

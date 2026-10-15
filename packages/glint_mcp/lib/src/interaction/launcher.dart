@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'device.dart';
+import 'phone_apps.dart';
 
 /// Raised when a launch can't complete; [logTail] holds the last `flutter run` lines.
 class LaunchError implements Exception {
@@ -159,6 +160,9 @@ class AppLauncher {
   Future<String?> terminateApp(
       DevicePlatform platform, String deviceId, String appId,
       {String adbPath = 'adb'}) async {
+    if (platform == DevicePlatform.ios && RegExp(r'^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16}$').hasMatch(deviceId)) {
+      return phoneTerminate(deviceId, appId);
+    }
     try {
       final r = platform == DevicePlatform.ios
           ? await Process.run('xcrun', ['simctl', 'terminate', deviceId, appId])

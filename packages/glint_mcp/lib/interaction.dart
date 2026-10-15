@@ -31,6 +31,7 @@ export 'src/interaction/ios_signing.dart';
 export 'src/interaction/ios_toolchain.dart';
 export 'src/interaction/launcher.dart';
 export 'src/interaction/native_crashes.dart';
+export 'src/interaction/phone_apps.dart';
 export 'src/interaction/phone_prompts.dart';
 export 'src/interaction/phone_status.dart';
 export 'src/interaction/result.dart';

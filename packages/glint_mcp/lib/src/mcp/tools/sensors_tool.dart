@@ -311,15 +311,46 @@ class _PhoneMotion extends _Motion {
     );
   }
 
-  @override
-  StructuredResponse? refuses(Map<String, Object?> step) => StructuredResponse.error(
-        summary: 'glint cannot turn a physical iPhone yet',
-        errorKind: GlintErrorKind.notOnThisDevice,
-        nextSteps: const ['turn the phone yourself, or test rotation on the simulator'],
-      ).mergeData({'ability': 'sensors'});
+  static const _turnable = {'portrait', 'portraitUpsideDown', 'landscapeLeft', 'landscapeRight'};
 
   @override
-  Future<StructuredResponse?> _apply(Map<String, Object?> step) async => refuses(step);
+  StructuredResponse? refuses(Map<String, Object?> step) => _turnable.contains(step['orientation'])
+      ? null
+      : StructuredResponse.error(
+          summary: 'a physical iPhone turns to portrait, portraitUpsideDown, landscapeLeft or landscapeRight only; it has no motion sensors glint can set',
+          errorKind: GlintErrorKind.notOnThisDevice,
+          nextSteps: const ['use an orientation step, or the Android emulator for acceleration and shake'],
+        ).mergeData({'ability': 'sensors'});
+
+  String _name(Object? raw) {
+    final s = '$raw';
+    return s.isEmpty ? s : s[0].toLowerCase() + s.substring(1);
+  }
+
+  /// Turns the phone a quarter at a time, the way Device Hub's rotate button does, until it reports [step]'s orientation.
+  @override
+  Future<StructuredResponse?> _apply(Map<String, Object?> step) async {
+    final want = step['orientation']! as String;
+    for (var turn = 0; turn < 4; turn++) {
+      final now = _name((await hid.call(const {'cmd': 'orientation'}))['interfaceOrientation']);
+      if (now == want) return null;
+      final r = await hid.call(const {'cmd': 'rotate', 'direction': 'right'});
+      if (r['locked'] == true) {
+        return StructuredResponse.error(
+          summary: 'the iPhone has rotation lock on, so it stays $now',
+          errorKind: GlintErrorKind.notOnThisDevice,
+          nextSteps: const ['turn rotation lock off in Control Center (swipe down from the top-right, tap the lock), then retry'],
+        ).mergeData({'ability': 'sensors'});
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return StructuredResponse.error(
+      summary: 'the iPhone did not turn to $want',
+      errorKind: GlintErrorKind.notOnThisDevice,
+      detail: 'the app in front may support fewer orientations; the interface stays as the app allows',
+      nextSteps: const ['read the orientations the app declares (UISupportedInterfaceOrientations), or try another app'],
+    ).mergeData({'ability': 'sensors'});
+  }
 }
 
 class _IosMotion extends _Motion {
