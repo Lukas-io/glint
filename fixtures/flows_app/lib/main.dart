@@ -5,11 +5,17 @@ import 'package:go_router/go_router.dart';
 import 'activity.dart';
 import 'chat.dart';
 import 'checkout.dart';
+import 'notifications.dart';
 import 'ride.dart';
 import 'send_money.dart';
 import 'verify_phone.dart';
 
-void main() => runApp(const ProviderScope(child: FlowsApp()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  openRoute = _router.go;
+  await initNotifications();
+  runApp(const ProviderScope(child: FlowsApp()));
+}
 
 final _router = GoRouter(
   routes: [

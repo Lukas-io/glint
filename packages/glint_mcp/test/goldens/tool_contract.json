@@ -867,6 +867,57 @@
       }
     }
   },
+  "notifications": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "list (default) | tap | action | clear | send | answer"
+      },
+      "choice": {
+        "type": "string",
+        "description": "answer: allow | deny, for the system prompt asking to allow notifications."
+      },
+      "text": {
+        "type": "string",
+        "description": "tap/action/clear: the notification whose title or body contains this."
+      },
+      "index": {
+        "type": "integer",
+        "description": "tap/action/clear: its number in list (1 = newest)."
+      },
+      "action": {
+        "type": "string",
+        "description": "action: the button label, e.g. Reply, Answer, Mark as read."
+      },
+      "all": {
+        "type": "boolean",
+        "description": "list: every app's notifications, not only the attached app's. Default false."
+      },
+      "title": {
+        "type": "string",
+        "description": "send: alert title."
+      },
+      "body": {
+        "type": "string",
+        "description": "send: alert body."
+      },
+      "category": {
+        "type": "string",
+        "description": "send: aps.category, which picks the app's action buttons."
+      },
+      "data": {
+        "type": "object",
+        "description": "send: custom keys merged into the payload beside aps.",
+        "properties": {}
+      },
+      "payload": {
+        "type": "object",
+        "description": "send: the whole APNs payload instead of title/body/category/data.",
+        "properties": {}
+      }
+    }
+  },
   "batch": {
     "type": "object",
     "properties": {

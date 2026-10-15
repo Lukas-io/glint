@@ -6,6 +6,16 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `notifications`, a new tool for the system notifications of the attached app (#168):
+  - `op:list` lists them, newest first and numbered: title, body and action buttons. `all:true` lists every app's.
+  - `op:tap` opens one and reports where the app landed (`flows_fixture is in front at /chat`). `op:action action:"Reply"` presses one of its buttons. `op:clear` removes one, or all of the app's.
+  - `op:send` posts a push payload on the iOS simulator through `simctl push` (title, body, category, data, or a whole payload). It warns when the app was still in front, since iOS then hands the push to the app instead of showing a banner.
+  - `op:answer choice:allow|deny` answers the system prompt asking to allow notifications.
+  - Pick one with `text` (title or body) or `index`.
+  - On Android, the list comes from `dumpsys notification`. tap, action and clear open the real shade, read it through glint's device server (or `uiautomator dump` when the server is not running), expand a row whose buttons are folded away, and touch it as a person does.
+  - On the iOS simulator, glint starts its XCTest runner (built on first use, with progress every 15 s). It reads banners and the Notification Center from SpringBoard, pushing a showing banner into the Notification Center and expanding the app's stack first. It taps a banner while it shows, and clears by swiping each entry away.
+  - Not possible on the simulator yet, and reported as `unsupportedBackendAction` with the reason: pressing a notification's buttons (SpringBoard hosts that menu outside the accessibility tree), and opening an entry that is only in the Notification Center (injected input leaves the app suspended while the cover sheet is up). Android has no simulated push, so `send` is iOS only.
+  - `fixtures/flows_app`'s chat posts Amara's reply as a notification with Reply and Mark as read when the app is in the background.
 - `device op:screenshot` shapes the image for a quick look (#167):
   - `glintId:` crops to that widget with 8 points of margin. `region:{top, bottom, left, right}` crops to fractions of the screen. A crop comes back inline, at most 720 pixels on its longest side, with a `coordinates` line that maps image pixels back to logical points for a tap.
   - `apps:[…]` captures several attached apps and returns one image with them side by side, each scaled to the same height, plus a left-to-right legend naming each app and device. It combines with `glintId` and `region`.
