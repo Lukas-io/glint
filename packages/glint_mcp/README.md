@@ -1,8 +1,15 @@
 # glint_mcp
 
-The glint MCP server. It lets an AI agent read a running Flutter app's screen and drive it on an iOS Simulator or Android emulator, with nothing added to the app.
+The glint MCP server. It lets an AI agent read a running Flutter app's screen and drive it on an iOS Simulator, an Android emulator or an iPhone, with nothing added to the app.
 
 Setup, the tool list and current limits are in the [repository README](https://github.com/Lukas-io/glint#readme). Changes are listed in [CHANGELOG.md](./CHANGELOG.md).
+
+## Install
+
+```bash
+dart pub global activate glint_mcp
+claude mcp add glint -- glint
+```
 
 ## Run it from a checkout
 

@@ -93,17 +93,20 @@ Full roadmap: [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §
 
 ## Install
 
-glint is not on pub.dev yet; install it from source.
+glint needs the Dart SDK, which comes with Flutter, and `~/.pub-cache/bin` on your `PATH`.
+
+```bash
+dart pub global activate glint_mcp
+
+# Add it to your agent, for example Claude Code:
+claude mcp add glint -- glint
+```
+
+To run it from a checkout instead:
 
 ```bash
 git clone https://github.com/Lukas-io/glint.git
 cd glint && dart pub get
-
-# iOS Simulator support (macOS with Xcode 26 or 27). Optional: without a local
-# build, glint downloads the release's prebuilt bridge on the first iOS attach.
-(cd packages/glint_mcp/native/ios_sim_bridge && swift build -c release)
-
-# Add it to your agent, for example Claude Code:
 claude mcp add glint -- dart run "$PWD/packages/glint_mcp/bin/glint.dart"
 ```
 

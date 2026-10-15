@@ -12,6 +12,8 @@ jobs:
     runs-on: macos-26
     permissions:
       contents: write
+    outputs:
+      package: ${{ steps.tag.outputs.package }}
     env:
       GLINT_NO_TELEMETRY: 'true'
       GLINT_NETWORK_NO_TELEMETRY: 'true'
@@ -83,3 +85,12 @@ jobs:
             --notes-file "$RUNNER_TEMP/release-notes.md" "${assets[@]}"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish:
+    needs: release
+    if: needs.release.outputs.package != 'glint_network'
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+    with:
+      working-directory: packages/${{ needs.release.outputs.package }}
