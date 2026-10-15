@@ -993,7 +993,10 @@ class AttachTool extends GlintTool {
             nextSteps: const ['unlock the iPhone and check `xcrun devicectl list devices` shows it connected, then retry'],
           );
         }
-        final missing = await _deviceHidMissing(onProgress);
+        final (missing, transport) = await (_deviceHidMissing(onProgress), phoneTransport(target.id)).wait;
+        if (transport == 'localNetwork') {
+          warnings.add('the iPhone is on Wi-Fi only: screenshots and `device op:status` work, but touches, keys and buttons need the cable');
+        }
         if (missing != null) {
           return StructuredResponse.error(
             summary: 'device input for iPhone ${target.id} is unavailable',
