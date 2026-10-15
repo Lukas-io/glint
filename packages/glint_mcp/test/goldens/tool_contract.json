@@ -918,6 +918,50 @@
       }
     }
   },
+  "sensors": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "read (default) | set | script"
+      },
+      "orientation": {
+        "type": "string",
+        "description": "set: portrait | portraitUpsideDown | landscapeLeft | landscapeRight | faceUp | faceDown."
+      },
+      "acceleration": {
+        "type": "array",
+        "description": "set (Android emulator): [x, y, z] in m/s², Android axes.",
+        "items": {
+          "type": "number"
+        }
+      },
+      "steps": {
+        "type": "array",
+        "description": "script: up to 30 of {orientation}, {acceleration:[x,y,z]}, {waitMs} (up to 10000) or {shake:true}.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "orientation": {
+              "type": "string"
+            },
+            "acceleration": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "waitMs": {
+              "type": "integer"
+            },
+            "shake": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  },
   "batch": {
     "type": "object",
     "properties": {

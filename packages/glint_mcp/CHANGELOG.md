@@ -6,6 +6,12 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `sensors`, a new tool for how the device is held (#162):
+  - `op:read` gives the device orientation (portrait, portraitUpsideDown, landscapeLeft, landscapeRight, faceUp, faceDown), the interface orientation and whether rotation is locked. On Android it also gives the newest accelerometer, gyroscope and magnetic field samples, from `dumpsys sensorservice` on a phone and from the emulator console on an emulator. The orientation is worked out from gravity, so "is the phone flat or is the stream rotated" has an answer.
+  - `op:set orientation:` drives it. The Android emulator gets it through its accelerometer, so the system's auto-rotate and the app's motion sensors both see it, and arbitrary `acceleration:[x,y,z]` works there too. The iOS simulator gets it through the XCTest runner (`XCUIDevice.orientation`), face up and down included. The reply reads the state back and warns when the screen in front did not rotate or rotation is locked.
+  - `op:script steps:[…]` runs a motion sequence of orientations, accelerations, waits and (Android emulator) shakes, with progress every 15 s. A step this device cannot take is refused before anything runs.
+  - Physical Android phones are read only. A physical iPhone is not supported.
+  - The XCTest runner speaks protocol 3 (a new `/orientation` route) and rebuilds once on first use.
 - `notifications`, a new tool for the system notifications of the attached app (#168):
   - `op:list` lists them, newest first and numbered: title, body and action buttons. `all:true` lists every app's.
   - `op:tap` opens one and reports where the app landed (`flows_fixture is in front at /chat`). `op:action action:"Reply"` presses one of its buttons. `op:clear` removes one, or all of the app's.
