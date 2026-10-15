@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-15
+
 ### Fixed
 
 - **Typing on a physical iPhone with `input:device`** froze the app when the text had characters the hardware keyboard cannot type (`café ✓`). iOS asks "would like to paste from dtpasteboardd" before an app reads text another process put on the pasteboard, and the prompt blocked the app. glint now taps "Allow Paste" itself (it caused the prompt), and puts the old pasteboard text back only after the app has read the new one. The helper speaks protocol 7.
