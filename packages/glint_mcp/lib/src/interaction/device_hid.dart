@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../version.dart';
 import 'bridge_download.dart';
+import 'result.dart';
 
 /// Must equal `PROTOCOL` in native/ios_device_hid/src/main.rs.
 const int expectedDeviceHidProtocol = 1;
@@ -17,35 +18,53 @@ const String deviceHidEnv = 'GLINT_DEVICE_HID';
 /// The release asset name of the universal macOS helper.
 const String deviceHidAssetName = 'glint-devicehid-macos';
 
-/// A failure of the Device Hub helper; [kind] is the helper's own (deviceNotFound, tunnel, developerImage, deviceBusy, unsupportedText, input, missing, ...).
-class DeviceHidError implements Exception {
-  DeviceHidError(this.kind, this.detail);
-  final String kind;
-  final String detail;
+/// Why the Device Hub helper failed, as the helper names it.
+enum DeviceHidFailure {
+  missing,
+  deviceNotFound,
+  usbmuxd,
+  tunnel,
+  developerImage,
+  deviceBusy,
+  unsupportedText,
+  stream,
+  input,
+  badRequest;
 
-  /// What the agent can do about this failure.
-  List<String> get nextSteps => switch (kind) {
-        'missing' => [
-            'build it with `cargo build --release` in packages/glint_mcp/$deviceHidBuildDir, or set $deviceHidEnv',
-          ],
-        'deviceNotFound' || 'usbmuxd' => const [
-            'connect the iPhone by cable (or the same Wi-Fi with "Connect via network" on), unlock it, then retry',
-          ],
-        'tunnel' => const [
-            'unlock the iPhone and confirm it trusts this Mac and has Developer Mode on, then retry',
-          ],
-        'developerImage' => const [
-            'run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry',
-          ],
-        'deviceBusy' => const ['close Device Hub (Xcode) or any other screen viewer of this phone, then retry'],
-        'unsupportedText' => const [
-            'only printable ASCII types through the hardware keyboard; for other text focus a Flutter field and use iosInput:auto',
-          ],
-        _ => const ['retry once; if it repeats, attach again'],
+  /// The failure the helper named [kind]; [input] when it names none glint knows.
+  static DeviceHidFailure parse(Object? kind) => values.where((f) => f.name == kind).firstOrNull ?? input;
+
+  /// The error kind an agent branches on.
+  GlintErrorKind get errorKind => switch (this) {
+        deviceNotFound || usbmuxd || tunnel => GlintErrorKind.deviceNotConnected,
+        developerImage => GlintErrorKind.developerImageMissing,
+        deviceBusy => GlintErrorKind.deviceBusy,
+        missing || unsupportedText => GlintErrorKind.unsupportedBackendAction,
+        stream || input || badRequest => GlintErrorKind.backendToolError,
       };
 
+  /// What the agent can do about it.
+  List<String> get nextSteps => switch (this) {
+        missing => const ['build it with `cargo build --release` in packages/glint_mcp/$deviceHidBuildDir, or set $deviceHidEnv'],
+        deviceNotFound || usbmuxd => const ['connect the iPhone by cable (or the same Wi-Fi with "Connect via network" on), unlock it, then retry'],
+        tunnel => const ['unlock the iPhone and confirm it trusts this Mac and has Developer Mode on, then retry'],
+        developerImage => const ['run any app on the phone from Xcode or `flutter run` once so the developer disk image mounts, then retry'],
+        deviceBusy => const ['close Device Hub (Xcode) or any other screen viewer of this phone, then retry'],
+        unsupportedText => const ['only printable ASCII types through the hardware keyboard; for other text focus a Flutter field and use input:auto'],
+        stream || input || badRequest => const ['retry once; if it repeats, attach again'],
+      };
+}
+
+/// A failure of the Device Hub helper.
+class DeviceHidError implements Exception {
+  DeviceHidError(this.failure, this.detail);
+  final DeviceHidFailure failure;
+  final String detail;
+
+  List<String> get nextSteps => failure.nextSteps;
+
   @override
-  String toString() => 'DeviceHidError($kind): $detail';
+  String toString() => 'DeviceHidError(${failure.name}): $detail';
 }
 
 const String deviceHidBuildDir = 'native/ios_device_hid';
@@ -74,7 +93,7 @@ class DeviceHid {
     try {
       process = await Process.start(binary, ['--udid', udid]);
     } on ProcessException catch (e) {
-      throw DeviceHidError('missing', 'cannot run $binary: ${e.message}');
+      throw DeviceHidError(DeviceHidFailure.missing, 'cannot run $binary: ${e.message}');
     }
     _stderr.clear();
     process.stderr.transform(utf8.decoder).listen(_stderr.write);
@@ -84,15 +103,15 @@ class DeviceHid {
         : null;
     if (first == null) {
       process.kill();
-      throw DeviceHidError('tunnel', 'the helper did not connect within 20 s${_why()}');
+      throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper did not connect within 20 s${_why()}');
     }
     if (first['ok'] == false) {
       process.kill();
-      throw DeviceHidError('${first['kind']}', '${first['error']}');
+      throw DeviceHidError(DeviceHidFailure.parse(first['kind']), '${first['error']}');
     }
     if (first['ready'] != expectedDeviceHidProtocol) {
       process.kill();
-      throw DeviceHidError('missing', 'the helper speaks protocol ${first['ready']}, glint expects $expectedDeviceHidProtocol; rebuild or re-download it');
+      throw DeviceHidError(DeviceHidFailure.missing, 'the helper speaks protocol ${first['ready']}, glint expects $expectedDeviceHidProtocol; rebuild or re-download it');
     }
     _process = process;
     _lines = lines;
@@ -128,20 +147,20 @@ class DeviceHid {
     await start();
     final process = _process;
     final lines = _lines;
-    if (process == null || lines == null) throw DeviceHidError('tunnel', 'the helper is not running${_why()}');
+    if (process == null || lines == null) throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper is not running${_why()}');
     try {
       process.stdin.writeln(jsonEncode(request));
       await process.stdin.flush();
-      if (!await lines.moveNext().timeout(timeout)) throw DeviceHidError('tunnel', 'the helper exited${_why()}');
+      if (!await lines.moveNext().timeout(timeout)) throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper exited${_why()}');
     } on DeviceHidError {
       await stop();
       rethrow;
     } on Object catch (e) {
       await stop();
-      throw DeviceHidError('tunnel', 'the helper stopped answering: $e');
+      throw DeviceHidError(DeviceHidFailure.tunnel, 'the helper stopped answering: $e');
     }
     final reply = _decode(lines.current) ?? const {'ok': false, 'kind': 'input', 'error': 'unreadable reply'};
-    if (reply['ok'] != true) throw DeviceHidError('${reply['kind']}', '${reply['error']}');
+    if (reply['ok'] != true) throw DeviceHidError(DeviceHidFailure.parse(reply['kind']), '${reply['error']}');
     return reply;
   }
 
@@ -191,13 +210,13 @@ Future<String> ensureDeviceHid({BytesFetcher? fetch}) async {
   final found = locateDeviceHid();
   if (found != null) return found;
   if (Platform.environment[noBridgeDownloadEnv] != null) {
-    throw DeviceHidError('missing', 'no glint-devicehid helper and $noBridgeDownloadEnv is set');
+    throw DeviceHidError(DeviceHidFailure.missing, 'no glint-devicehid helper and $noBridgeDownloadEnv is set');
   }
   final dest = cachedDeviceHidPath();
   try {
     await downloadReleaseAsset(deviceHidAssetName, dest, executable: true, fetch: fetch);
   } on BridgeDownloadError catch (e) {
-    throw DeviceHidError('missing', 'could not download glint-devicehid: ${e.message}');
+    throw DeviceHidError(DeviceHidFailure.missing, 'could not download glint-devicehid: ${e.message}');
   }
   return dest;
 }

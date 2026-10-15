@@ -96,6 +96,8 @@ class HardwareButtonTool extends GlintTool {
       rethrow;
     } on IosToolchainBlocked catch (e) {
       return StructuredResponse.toolchainBlocked(e);
+    } on BackendFailure catch (e) {
+      return StructuredResponse.backendError('hardware button ${button.name} failed', e);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: ${button.name} not supported',
@@ -248,7 +250,7 @@ class HardwareButtonTool extends GlintTool {
           post = await readPostActionState(session, pre, includeSceneText: false);
           response = response.copyWith(
             summary: 'the back swipe did nothing, so tapped the app bar\'s $bar',
-            data: {...?response.data, 'via': bar},
+            data: {...?response.data, 'fallbackTap': bar},
           );
         }
       }

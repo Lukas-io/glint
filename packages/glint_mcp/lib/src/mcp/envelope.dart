@@ -45,6 +45,17 @@ class StructuredResponse {
         nextSteps: e.nextSteps,
       );
 
+  /// A backend exception as a reply: a [BackendFailure] keeps its kind, data and next steps; anything unknown is a `backendToolError`.
+  factory StructuredResponse.backendError(String summary, Object e) => switch (e) {
+        IosToolchainBlocked() => StructuredResponse.toolchainBlocked(e),
+        BackendFailure() => StructuredResponse.error(
+            summary: summary, errorKind: e.kind, detail: e.detail, nextSteps: e.nextSteps)
+          .mergeData(e.data),
+        UnsupportedBackendAction() => StructuredResponse.error(
+            summary: summary, errorKind: GlintErrorKind.unsupportedBackendAction, detail: e.detail, nextSteps: e.nextSteps),
+        _ => StructuredResponse.error(summary: summary, errorKind: GlintErrorKind.backendToolError, detail: '$e'),
+      };
+
   /// Builds a response from an [ActionResult]. The envelope already carries
   /// `summary`/`warnings`/`nextSteps` at the top level, so those are dropped
   /// from `data` rather than duplicated. Geometry (painted, hittable,

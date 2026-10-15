@@ -34,9 +34,13 @@
         "type": "string",
         "description": "bridge (default) | xctest. xctest drives the simulator through glint's XCUITest runner, built once per Xcode. iOS, Flutter mode."
       },
+      "input": {
+        "type": "string",
+        "description": "auto | app | device: where gestures go. app = inside the Flutter app; device = real touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. Default auto on a physical iPhone, device elsewhere. Replies say which in data.input."
+      },
       "iosInput": {
         "type": "string",
-        "description": "auto (default) | dtuhid | indigo | flutter. How taps and keys reach an iOS device. Simulator: auto picks dtuhid where Xcode ships it. Physical iPhone: auto delivers inside the Flutter app and uses real Device Hub touches for system surfaces, the keyboard and buttons; dtuhid = real touches only; flutter = in-app only."
+        "description": "auto (default) | dtuhid | indigo: the simulator's real-touch transport; auto picks dtuhid where Xcode ships it."
       },
       "androidInput": {
         "type": "string",

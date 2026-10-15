@@ -1,5 +1,6 @@
 import '../action.dart';
 import '../backend.dart';
+import '../input_route.dart';
 import '../screen_recording.dart';
 import '../xctest_runner.dart';
 import 'ios_sim_backend.dart';
@@ -93,7 +94,7 @@ class XcTestBackend implements InteractionBackend {
   Future<bool?> lockState() => sim.lockState();
 
   @override
-  String? takeRoute() => null;
+  InputReport? takeInput() => null;
 
   @override
   Future<void> close() async {}

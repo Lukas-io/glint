@@ -4,6 +4,24 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- One input vocabulary on every device. `attach input:` picks where gestures go:
+  - `app`: inside the Flutter app;
+  - `device`: real touches, which reach system prompts, keyboards and other apps;
+  - `auto`: the app first, real touches for what it cannot take.
+
+  It works on the simulator and Android too, where the app path is faster: a tap delivered in 74 ms instead of about 1 s through dtuhid on the iPhone 17 simulator. The defaults stay as they were (`auto` on a physical iPhone, `device` elsewhere). `iosInput` is now only the simulator's real-touch transport, and `iosInput:flutter` still means `input:app`. Re-attaching with another `input` rebuilds the session.
+- Every action reply reports how it was delivered in `data.input`, as `{path: app|device, reason?, ms}`, and prints `· via app` or `· via device (systemSurface)`. This replaces the prose `via` string. `reason` is a closed set: systemSurface, keyboard, platformView, outside, noFocus, readOnly, unsupportedKey.
+- attach's tested-setup block moved from `data.input` to `data.setup`, and its line reads `input: auto · setup: iOS 27.0, … · verified`. The route is in `data.inputRoute`.
+- Failures an agent handles differently have their own `errorKind`:
+  - `deviceNotConnected`: the phone is unplugged, locked before trust, or out of Developer Mode;
+  - `developerImageMissing`;
+  - `deviceBusy`: another screen viewer holds the phone;
+  - `inputPartial`: `data.delivered` of `data.of` landed, and nothing was retried.
+
+  Before, all of these were `unsupportedBackendAction` with the reason in prose. The device-mode paths of `type`, `key`, `hardware_button` and raw x,y gestures keep these kinds and their next steps.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added

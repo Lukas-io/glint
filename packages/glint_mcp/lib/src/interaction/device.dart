@@ -5,6 +5,7 @@ import 'backends/flutter_input_backend.dart';
 import 'backends/ios_device_backend.dart';
 import 'backends/ios_sim_backend.dart';
 import 'backends/xctest_backend.dart';
+import 'input_route.dart';
 import 'ios_toolchain.dart';
 import 'xctest_runner.dart';
 
@@ -24,8 +25,15 @@ sealed class DeviceTarget {
   /// Screen size for device-mode center anchoring, or null if unknown.
   ({double w, double h})? get screenSize;
 
+  /// Where this device's gestures go; see [InputRoute].
+  InputRoute get route;
+
   InteractionBackend createBackend();
 }
+
+/// [native] behind the router, so every action reports how it was delivered and `app`/`auto` reach inside Flutter.
+InteractionBackend _routed(InteractionBackend native, double devicePixelRatio, InputRoute route) =>
+    FlutterInputBackend(native: native, devicePixelRatio: devicePixelRatio, route: route);
 
 enum DevicePlatform { android, ios }
 
@@ -37,7 +45,11 @@ class AndroidDevice extends DeviceTarget {
     this.screenHeight,
     this.devicePixelRatio = 1.0,
     this.server,
+    this.route = InputRoute.device,
   });
+
+  @override
+  final InputRoute route;
 
   /// glint's resident server on this device, when attach could start it.
   final AndroidServer? server;
@@ -69,7 +81,7 @@ class AndroidDevice extends DeviceTarget {
 
   @override
   InteractionBackend createBackend() =>
-      AdbBackend(deviceSerial: serial, adbPath: adbPath, server: server);
+      _routed(AdbBackend(deviceSerial: serial, adbPath: adbPath, server: server), devicePixelRatio, route);
 }
 
 /// A paired physical iPhone: input inside the Flutter app where it can, real touches through Device Hub for everything else, screenshots through devicectl.
@@ -86,7 +98,7 @@ class IosDevice extends DeviceTarget {
   final double logicalWidth;
   final double logicalHeight;
 
-  /// Which input path gestures take; see [InputRoute].
+  @override
   final InputRoute route;
 
   @override
@@ -102,15 +114,15 @@ class IosDevice extends DeviceTarget {
   ({double w, double h})? get screenSize => (w: logicalWidth, h: logicalHeight);
 
   @override
-  InteractionBackend createBackend() => FlutterInputBackend(
-        native: IosDeviceBackend(
+  InteractionBackend createBackend() => _routed(
+        IosDeviceBackend(
           udid: udid,
           devicePixelRatio: devicePixelRatio,
           pixelWidth: logicalWidth * devicePixelRatio,
           pixelHeight: logicalHeight * devicePixelRatio,
         ),
-        devicePixelRatio: devicePixelRatio,
-        route: route,
+        devicePixelRatio,
+        route,
       );
 }
 
@@ -124,7 +136,11 @@ class IosSimulator extends DeviceTarget {
     this.toolchain,
     this.hidMode = 'auto',
     this.runner,
+    this.route = InputRoute.device,
   });
+
+  @override
+  final InputRoute route;
 
   final String udid;
 
@@ -167,6 +183,6 @@ class IosSimulator extends DeviceTarget {
       hidMode: hidMode,
     );
     final r = runner;
-    return r == null ? sim : XcTestBackend(runner: r, sim: sim);
+    return _routed(r == null ? sim : XcTestBackend(runner: r, sim: sim), devicePixelRatio, route);
   }
 }

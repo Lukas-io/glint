@@ -3,6 +3,7 @@ import 'dart:io';
 import '../action.dart';
 import '../android_server.dart';
 import '../backend.dart';
+import '../input_route.dart';
 import '../image_size.dart';
 import '../key_codes.dart';
 import '../screen_recording.dart';
@@ -180,7 +181,7 @@ class AdbBackend implements InteractionBackend {
   Future<bool?> lockState() async => null;
 
   @override
-  String? takeRoute() => null;
+  InputReport? takeInput() => null;
 
   @override
   Future<void> close() async {}
