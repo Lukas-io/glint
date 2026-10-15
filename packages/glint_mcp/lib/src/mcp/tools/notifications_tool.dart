@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../interaction/image_size.dart';
 import '../../notifications/android_notifications.dart';
 import '../../notifications/ios_notifications.dart';
 import '../envelope.dart';
@@ -21,7 +22,7 @@ class NotificationsTool extends GlintTool {
   Tool get definition => Tool(
         name: 'notifications',
         description:
-            'System notifications of the attached app. op: list (default; newest first, numbered), tap (opens it, then reports where the app landed), action (presses one of its buttons, e.g. Reply), clear (one by text/index, or all of the app\'s), send (a push payload), answer (allow or deny the system prompt asking to allow notifications). Pick one with text (matches title or body) or index from list. Android: everything but send, through the real shade. iOS simulator (glint starts its XCTest runner, building it on first use with progress): send through simctl, list banners and the Notification Center, tap a banner while it shows, clear, answer; action and tapping an entry only in the Notification Center are not possible there yet. errorKind: targetNotFound (no such notification or button), invalidArgument, unsupportedBackendAction, backendToolError.',
+            'System notifications of the attached app. op: list (default; newest first, numbered), tap (opens it, then reports where the app landed), action (presses one of its buttons, e.g. Reply), clear (one by text/index, or all of the app\'s), send (a push payload), answer (allow or deny the system prompt asking to allow notifications). Pick one with text (matches title or body) or index from list. Android: everything but send, through the real shade. iOS simulator (glint starts its XCTest runner, building it on first use with progress): send through simctl, list, clear, answer, tap and action on a banner (buttons found with macOS OCR); an entry only in the Notification Center is shown again as a banner when glint sent it. errorKind: targetNotFound (no such notification or button), invalidArgument, unsupportedBackendAction, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'list (default) | tap | action | clear | send | answer'),
@@ -331,6 +332,7 @@ class NotificationsTool extends GlintTool {
     if (payload['aps'] is! Map) return _bad('payload needs an aps object', 'see Apple\'s APNs payload keys');
     final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')..writeAsStringSync(jsonEncode(payload));
     final r = await Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
+    if (r.exitCode == 0) (_sentPushes[udid] ??= []).add(payload);
     if (r.exitCode != 0) {
       return StructuredResponse.error(
         summary: 'simctl push failed',
@@ -423,34 +425,49 @@ class NotificationsTool extends GlintTool {
     bool ours(ShownNotification n) => everyApp || name.isEmpty || n.app.toLowerCase() == name;
     final banners = [for (final n in parseSpringboardNotifications(await tree())) if (ours(n)) n];
 
-    if (op == 'action') {
-      return StructuredResponse.error(
-        summary: 'notification buttons cannot be pressed on the iOS simulator yet',
-        errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'pulling a banner down shows its buttons, but SpringBoard hosts that menu outside the accessibility tree glint reads, so their labels and places are unknown',
-        nextSteps: const ['op:tap opens the app from the banner', 'or ask the user to press the button; Android supports op:action'],
-      );
-    }
-    if (op == 'tap') {
-      final onBanner = banners.isEmpty ? null : _pickShown(banners, args).target;
-      if (onBanner != null) {
-        await tapAt(onBanner.center);
-        return _landed(session, 'tapped the banner "${onBanner.line}"');
+    if (op == 'tap' || op == 'action') {
+      final action = args['action'] as String?;
+      if (op == 'action' && action == null) return _bad('op:action needs action:"<button label>"', 'e.g. action:"Reply"');
+      var banner = banners.isEmpty ? null : _pickShown(banners, args).target;
+      var again = false;
+      if (banner == null) {
+        await openCenter();
+        final listed = await _centerCells(tree, tapAt, ours);
+        final inCenter = _pickShown(listed, args);
+        if (inCenter.target == null) {
+          await closeCenter();
+          return inCenter.error!;
+        }
+        final target = inCenter.target!;
+        final payload = _sentPayload(dev.udid, target);
+        if (payload == null) {
+          await closeCenter();
+          return StructuredResponse.error(
+            summary: '"${target.line}" is only in the Notification Center, and the simulator does not open an entry there',
+            errorKind: GlintErrorKind.unsupportedBackendAction,
+            detail: 'a tap, the Open action and an unlock all leave the app suspended while the cover sheet is up; glint can replay only pushes it sent itself, and it did not send this one',
+            nextSteps: const ['trigger the notification again, then op:tap or op:action while its banner shows (about 5 s)'],
+          );
+        }
+        onPhase('showing "${target.line}" again as a banner');
+        await _clearIos([target], tree, touch, closeCenter, everyApp: true, name: name);
+        await _push(dev.udid, session.active!.bundleId!, payload);
+        banner = await _awaitBanner(tree, target.line);
+        again = true;
+        if (banner == null) {
+          return StructuredResponse.error(
+            summary: 'the replayed push for "${target.line}" never showed as a banner',
+            errorKind: GlintErrorKind.backendToolError,
+            nextSteps: const ['check the app is in the background (hardware_button home), then retry'],
+          );
+        }
       }
-      await openCenter();
-      final listed = await _centerCells(tree, tapAt, ours);
-      final inCenter = _pickShown(listed, args);
-      await closeCenter();
-      if (inCenter.target == null) return inCenter.error!;
-      return StructuredResponse.error(
-        summary: '"${inCenter.target!.line}" is only in the Notification Center, and the simulator does not open an entry there from injected input',
-        errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'a tap, the Open swipe action and a Face ID match all leave the app suspended while the cover sheet is up; a banner opens normally',
-        nextSteps: const [
-          'act on the banner instead: trigger the notification again (or op:send it), then op:tap while it shows (about 5 s)',
-          'or ask the user to tap it in the Notification Center',
-        ],
-      );
+      final note = again ? ' (sent again: the simulator opens banners, not Notification Center entries)' : '';
+      if (action == null) {
+        await tapAt(banner.center);
+        return _landed(session, 'tapped the banner "${banner.line}"$note');
+      }
+      return _bannerAction(session, dev, banner, action, note, tree, touch, tapAt);
     }
 
     await openCenter();
@@ -467,7 +484,7 @@ class NotificationsTool extends GlintTool {
                 for (final (i, n) in shown.indexed) '${i + 1}. ${everyApp ? '[${n.app}] ' : ''}${n.line}',
               ].join('\n'),
         data: {'notifications': [for (final n in shown) n.toJson()]},
-        nextSteps: [if (shown.isNotEmpty) 'op:clear removes them; an entry only here cannot be opened on the simulator'],
+        nextSteps: [if (shown.isNotEmpty) 'op:tap or op:action with text or index acts on one'],
       );
     }
 
@@ -500,6 +517,105 @@ class NotificationsTool extends GlintTool {
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
     return cells;
+  }
+
+
+  /// Pushes glint sent, per simulator, so an entry only in the Notification Center can be shown again as a banner.
+  static final _sentPushes = <String, List<Map<String, Object?>>>{};
+
+  Map<String, Object?>? _sentPayload(String udid, ShownNotification n) {
+    for (final p in (_sentPushes[udid] ?? const <Map<String, Object?>>[]).reversed) {
+      final alert = ((p['aps'] as Map?)?['alert']);
+      final title = alert is Map ? alert['title'] as String? : null;
+      final body = alert is Map ? alert['body'] as String? : alert as String?;
+      if (title == n.title && body == n.body) return p;
+    }
+    return null;
+  }
+
+  Future<ProcessResult> _push(String udid, String bundleId, Map<String, Object?> payload) {
+    final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')..writeAsStringSync(jsonEncode(payload));
+    return Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
+  }
+
+  /// The banner showing [line], polled for up to 4 s.
+  Future<ShownNotification?> _awaitBanner(Future<Map<String, Object?>> Function() tree, String line) async {
+    for (var i = 0; i < 10; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final hit = parseSpringboardNotifications(await tree()).where((n) => n.line == line && n.frame[1] < 200).firstOrNull;
+      if (hit != null) return hit;
+    }
+    return null;
+  }
+
+  /// Pulls the banner down to show its buttons, finds [action] on a screenshot with macOS Vision (the menu is outside the accessibility tree), and taps it.
+  Future<StructuredResponse> _bannerAction(
+    GlintSession session,
+    IosSimulator dev,
+    ShownNotification banner,
+    String action,
+    String note,
+    Future<Map<String, Object?>> Function() tree,
+    Future<void> Function(String, Map<String, Object?>, [int]) touch,
+    Future<void> Function(({double x, double y})) tapAt,
+  ) async {
+    Future<List<OcrLine>?> screenText(String tag) async {
+      final shot = '${Directory.systemTemp.path}/glint-notification-$tag-${DateTime.now().millisecondsSinceEpoch}.png';
+      final cap = await Process.run('xcrun', ['simctl', 'io', dev.udid, 'screenshot', shot]);
+      return cap.exitCode == 0 ? await readText(shot) : null;
+    }
+
+    final List<OcrLine> before;
+    try {
+      before = await screenText('before') ?? const [];
+    } on OcrError catch (e) {
+      return StructuredResponse.error(summary: e.message, errorKind: GlintErrorKind.unsupportedToolchain, detail: e.detail,
+          nextSteps: const ['install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper']);
+    }
+    await touch('/swipe', {'x1': banner.center.x, 'y1': banner.center.y, 'x2': banner.center.x, 'y2': banner.center.y + 300}, 1000);
+    final expanded = parseSpringboardNotifications(await tree()).where((n) => n.line == banner.line).firstOrNull ?? banner;
+    final menuTop = expanded.frame[1] + expanded.frame[3];
+    final shot = '${Directory.systemTemp.path}/glint-notification-${DateTime.now().millisecondsSinceEpoch}.png';
+    final cap = await Process.run('xcrun', ['simctl', 'io', dev.udid, 'screenshot', shot]);
+    final size = cap.exitCode == 0 ? pngSize(shot) : null;
+    if (size == null) return StructuredResponse.error(summary: 'could not screenshot the simulator', errorKind: GlintErrorKind.backendToolError, detail: '${cap.stderr}'.trim());
+    final scale = size.$1 / dev.logicalWidth;
+    final List<OcrLine> lines;
+    try {
+      lines = await readText(shot);
+    } on OcrError catch (e) {
+      await tapAt((x: dev.logicalWidth / 2, y: dev.logicalHeight * 0.92));
+      return StructuredResponse.error(summary: e.message, errorKind: GlintErrorKind.unsupportedToolchain, detail: e.detail,
+          nextSteps: const ['install the Xcode command line tools (xcode-select --install) so glint can build its OCR helper']);
+    }
+    bool background(OcrLine l) {
+      final t = l.text.trim().toLowerCase();
+      return before.any((b) {
+        final o = b.text.trim().toLowerCase();
+        return (o.contains(t) || t.contains(o)) && (b.y - l.y).abs() < 40 * scale && ((b.x + b.w / 2) - (l.x + l.w / 2)).abs() < 60 * scale;
+      });
+    }
+    final below = [
+      for (final l in lines)
+        if (l.y / scale > menuTop - 4 && !background(l)) (text: l.text.trim(), x: (l.x + l.w / 2) / scale, y: (l.y + l.h / 2) / scale),
+    ]..sort((a, b) => a.y.compareTo(b.y));
+    final menu = <({String text, double x, double y})>[];
+    for (final l in below) {
+      if (menu.isNotEmpty && l.y - menu.last.y > 60) break;
+      menu.add(l);
+    }
+    final hit = menu.where((m) => m.text.toLowerCase() == action.toLowerCase()).firstOrNull;
+    if (hit == null) {
+      await tapAt((x: dev.logicalWidth / 2, y: dev.logicalHeight * 0.92));
+      return StructuredResponse.error(
+        summary: 'the banner "${banner.line}" shows no "$action" button',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: menu.isEmpty ? 'no text showed under the banner after pulling it down' : 'text under the banner: ${menu.map((m) => '"${m.text}"').join(', ')}',
+        nextSteps: const ['pass one of those labels as action; the app sets them through the notification category'],
+      );
+    }
+    await tapAt((x: hit.x, y: hit.y));
+    return _landed(session, 'pressed "${hit.text}" on the banner "${banner.line}"$note');
   }
 
   /// Clears [cells] one by one, swiping each away (and pressing Clear when the swipe only reveals it); counts what the Notification Center no longer shows.

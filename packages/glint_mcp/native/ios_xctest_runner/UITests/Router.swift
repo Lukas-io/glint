@@ -1,7 +1,7 @@
 import XCTest
 
 /// Bumped whenever a route's arguments or reply change; glint checks it before driving the runner.
-let runnerProtocol = 3
+let runnerProtocol = 4
 
 private let springboardId = "com.apple.springboard"
 
@@ -59,6 +59,18 @@ final class Router {
                 }
                 XCUIDevice.shared.press(button)
                 return .ok(["done": "button"])
+            case ("POST", "/tapElement"):
+                guard let label = body["label"] as? String else {
+                    return .error(400, "invalidArgument", "tapElement needs label")
+                }
+                let query = app(body["app"] as? String).descendants(matching: .any)
+                    .matching(NSPredicate(format: "label == %@ OR identifier == %@", label, label))
+                let index = (body["index"] as? NSNumber)?.intValue ?? 0
+                guard query.count > index else {
+                    return .error(404, "notFound", "no element labelled \(label)")
+                }
+                query.element(boundBy: index).tap()
+                return .ok(["done": "tapElement"])
             case ("GET", "/orientation"):
                 return .ok(["orientation": Self.orientationName(XCUIDevice.shared.orientation)])
             case ("POST", "/orientation"):
