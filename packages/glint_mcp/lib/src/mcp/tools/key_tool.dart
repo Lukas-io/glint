@@ -6,6 +6,7 @@ import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
+import 'hardware_button_tool.dart';
 
 /// The editing keys and a change signal follow a press, so an agent can clear a
 /// field, submit a form, or move the caret without a printable character.
@@ -25,7 +26,7 @@ class KeyTool extends GlintTool {
         name: 'key',
         description:
             'Press a non-printing key: backspace, delete, enter, tab, escape, '
-            'space, up, down, left, right. count repeats it (1-50); modifiers '
+            'space, up, down, left, right, or back (the system back, as hardware_button back). count repeats it (1-50); modifiers '
             'holds cmd / shift / ctrl / alt around it. Sends to the focused '
             'field, so focus one first (type focus:<id> or tap it). Returns '
             'changed / changeCategory like type. To empty a field use '
@@ -36,7 +37,7 @@ class KeyTool extends GlintTool {
           properties: {
             'key': Schema.string(
               description:
-                  'One of: ${KeyName.values.map((k) => k.name).join(', ')}.',
+                  'One of: ${KeyName.values.map((k) => k.name).join(', ')}, back.',
             ),
             'count': Schema.int(description: 'Times to press it (1-50). Default 1.'),
             'modifiers': Schema.list(
@@ -57,12 +58,20 @@ class KeyTool extends GlintTool {
       GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
 
+    if (args['key'] == 'back') {
+      return const HardwareButtonTool().handle(
+          session, CallToolRequest(name: 'hardware_button', arguments: {'button': 'back'}));
+    }
     final key = enumByName(KeyName.values, args['key'] as String?);
     if (key == null) {
       return StructuredResponse.error(
         summary: 'unknown key: ${args['key']}',
         errorKind: GlintErrorKind.invalidArgument,
-        nextSteps: ['use one of: ${KeyName.values.map((k) => k.name).join(', ')}'],
+        nextSteps: [
+          'use one of: ${KeyName.values.map((k) => k.name).join(', ')}, back',
+          if (enumByName(HardwareButton.values, args['key'] as String?) != null)
+            'hardware_button button:${args['key']} presses the device button',
+        ],
       );
     }
     final count = argInt(args, 'count') ?? 1;

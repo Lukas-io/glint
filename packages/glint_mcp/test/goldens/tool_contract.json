@@ -439,15 +439,20 @@
       "glintId": {
         "type": "string",
         "description": "Stable id from `get_scene`."
+      },
+      "text": {
+        "type": "string",
+        "description": "Visible text of the target instead of glintId, matched as tap does."
       }
-    },
-    "required": [
-      "glintId"
-    ]
+    }
   },
   "tap": {
     "type": "object",
     "properties": {
+      "text": {
+        "type": "string",
+        "description": "Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates."
+      },
       "glintId": {
         "type": "string",
         "description": "Stable id from `get_scene`, e.g. floating_action_button"
@@ -511,6 +516,10 @@
   "long_press": {
     "type": "object",
     "properties": {
+      "text": {
+        "type": "string",
+        "description": "Visible text of the target instead of glintId: a button label or text, exact match first, then contains. Dialogs are searched first. Several matches fail with the candidates."
+      },
       "glintId": {
         "type": "string",
         "description": "Stable id from get_scene."
@@ -693,6 +702,10 @@
       "amountFraction": {
         "type": "number",
         "description": "Scroll size per step. Default 0.6."
+      },
+      "tap": {
+        "type": "boolean",
+        "description": "Tap it once found (its nearest tappable ancestor when the match is text) and return the tap result. Default false."
       }
     }
   },
@@ -745,7 +758,7 @@
     "properties": {
       "key": {
         "type": "string",
-        "description": "One of: backspace, delete, enter, tab, escape, space, up, down, left, right."
+        "description": "One of: backspace, delete, enter, tab, escape, space, up, down, left, right, back."
       },
       "count": {
         "type": "integer",

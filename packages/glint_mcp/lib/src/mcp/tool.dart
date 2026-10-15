@@ -86,6 +86,7 @@ abstract class GlintTool {
         if (coerced != null) args[key] = coerced;
       }
     }
+    if (args != null) aliasTargetArg(args, props.keys);
     final unknown = [
       for (final k in args?.keys ?? const <String>[])
         if (!props.containsKey(k)) k,
@@ -120,6 +121,17 @@ abstract class GlintTool {
             '${props.keys.join(", ")}',
       ],
     );
+  }
+
+  /// Tools whose target argument has its own name (`focus`, `targetGlintId`) also take `glintId`, renamed here before validation.
+  static void aliasTargetArg(Map<String, Object?> args, Iterable<String> accepted) {
+    if (!args.containsKey('glintId') || accepted.contains('glintId')) return;
+    for (final name in const ['focus', 'targetGlintId']) {
+      if (accepted.contains(name) && !args.containsKey(name)) {
+        args[name] = args.remove('glintId');
+        return;
+      }
+    }
   }
 
   /// The accepted argument name an unknown [name] most likely meant: containment first (glintId → targetGlintId), then a small edit distance.
