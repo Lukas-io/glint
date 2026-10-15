@@ -1,7 +1,7 @@
 import XCTest
 
 /// Bumped whenever a route's arguments or reply change; glint checks it before driving the runner.
-let runnerProtocol = 2
+let runnerProtocol = 3
 
 private let springboardId = "com.apple.springboard"
 
@@ -59,6 +59,14 @@ final class Router {
                 }
                 XCUIDevice.shared.press(button)
                 return .ok(["done": "button"])
+            case ("GET", "/orientation"):
+                return .ok(["orientation": Self.orientationName(XCUIDevice.shared.orientation)])
+            case ("POST", "/orientation"):
+                guard let name = body["orientation"] as? String, let value = Self.orientations[name] else {
+                    return .error(400, "invalidArgument", "orientation must be one of \(Self.orientations.keys.sorted())")
+                }
+                XCUIDevice.shared.orientation = value
+                return .ok(["orientation": Self.orientationName(XCUIDevice.shared.orientation)])
             case ("POST", "/shutdown"):
                 return .ok(["done": "shutdown"])
             default:
@@ -85,6 +93,16 @@ final class Router {
     ]
 
     private static let buttons: [String: XCUIDevice.Button] = ["home": .home]
+
+    private static let orientations: [String: UIDeviceOrientation] = [
+        "portrait": .portrait, "portraitUpsideDown": .portraitUpsideDown,
+        "landscapeLeft": .landscapeLeft, "landscapeRight": .landscapeRight,
+        "faceUp": .faceUp, "faceDown": .faceDown,
+    ]
+
+    private static func orientationName(_ o: UIDeviceOrientation) -> String {
+        orientations.first { $0.value == o }?.key ?? "unknown"
+    }
 
     private func app(_ bundleId: String?) -> XCUIApplication {
         let id = bundleId ?? springboardId

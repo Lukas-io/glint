@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import 'envelope.dart';
+import 'session.dart';
 
 /// Builds (once per Xcode) and starts glint's XCUITest runner on [udid], reusing one already answering; the error says why it could not.
 Future<({XcTestRunner? runner, StructuredResponse? error})> startXcTestRunner(String udid, IosToolchain toolchain,
@@ -35,4 +39,33 @@ Future<({XcTestRunner? runner, StructuredResponse? error})> startXcTestRunner(St
     );
   }
   return (runner: runner, error: null);
+}
+
+final _runners = <String, XcTestRunner>{};
+
+/// The simulator's XCTest runner for a tool call: the attached backend's, one started earlier, or a new one (built on first use, with progress every 15 s).
+Future<({XcTestRunner? runner, StructuredResponse? error})> xcTestRunnerFor(
+    GlintSession session, IosSimulator dev, CallToolRequest request) async {
+  final own = dev.runner;
+  if (own != null && await own.ping() == expectedRunnerProtocol) return (runner: own, error: null);
+  final cached = _runners[dev.udid];
+  if (cached != null && await cached.ping() == expectedRunnerProtocol) return (runner: cached, error: null);
+  final token = request.meta?.progressToken;
+  final notifier = session.progressNotifier;
+  var phase = 'checking the iOS toolchain';
+  final started = DateTime.now();
+  final ticker = token == null || notifier == null
+      ? null
+      : Timer.periodic(const Duration(seconds: 15), (_) {
+          final sec = DateTime.now().difference(started).inSeconds;
+          notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
+        });
+  try {
+    final toolchain = await checkIosToolchain(null, onPhase: (p) => phase = p);
+    final r = await startXcTestRunner(dev.udid, toolchain, onPhase: (p) => phase = p);
+    if (r.runner != null) _runners[dev.udid] = r.runner!;
+    return r;
+  } finally {
+    ticker?.cancel();
+  }
 }

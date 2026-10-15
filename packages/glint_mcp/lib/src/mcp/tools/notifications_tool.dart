@@ -351,38 +351,9 @@ class NotificationsTool extends GlintTool {
     );
   }
 
-  static final _runners = <String, XcTestRunner>{};
-
-  /// The simulator's XCTest runner: the attached backend's, one started earlier, or a new one (built on first use, with progress every 15 s).
-  Future<({XcTestRunner? runner, StructuredResponse? error})> _runnerFor(
-      IosSimulator dev, GlintSession session, CallToolRequest request) async {
-    final own = dev.runner;
-    if (own != null) return (runner: own, error: null);
-    final cached = _runners[dev.udid];
-    if (cached != null && await cached.ping() == expectedRunnerProtocol) return (runner: cached, error: null);
-    final token = request.meta?.progressToken;
-    final notifier = session.progressNotifier;
-    var phase = 'checking the iOS toolchain';
-    final started = DateTime.now();
-    final ticker = token == null || notifier == null
-        ? null
-        : Timer.periodic(const Duration(seconds: 15), (_) {
-            final sec = DateTime.now().difference(started).inSeconds;
-            notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
-          });
-    try {
-      final toolchain = await checkIosToolchain(null, onPhase: (p) => phase = p);
-      final r = await startXcTestRunner(dev.udid, toolchain, onPhase: (p) => phase = p);
-      if (r.runner != null) _runners[dev.udid] = r.runner!;
-      return r;
-    } finally {
-      ticker?.cancel();
-    }
-  }
-
   Future<StructuredResponse> _ios(
       GlintSession session, IosSimulator dev, String op, Map<String, Object?> args, CallToolRequest request) async {
-    final got = await _runnerFor(dev, session, request);
+    final got = await xcTestRunnerFor(session, dev, request);
     if (got.error != null) return got.error!;
     final runner = got.runner!;
     final token = request.meta?.progressToken;

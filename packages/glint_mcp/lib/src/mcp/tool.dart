@@ -26,6 +26,7 @@ import 'tools/location_tool.dart';
 import 'tools/map_tool.dart';
 import 'tools/media_tool.dart';
 import 'tools/notifications_tool.dart';
+import 'tools/sensors_tool.dart';
 import 'tools/report_issue_tool.dart';
 import 'tools/resolve_tool.dart';
 import 'tools/scroll_to_find_tool.dart';
@@ -515,6 +516,7 @@ const List<GlintTool> kDefaultGlintTools = [
   WaitForSettleTool(),
   WaitForTool(),
   NotificationsTool(),
+  SensorsTool(),
   BatchTool(),
   RecordTool(),
   LogsTool(),
