@@ -4,6 +4,32 @@ import 'device_hid.dart';
 import 'image_size.dart';
 import 'ocr.dart';
 
+/// Answers a system prompt glint's own action raised on a phone: reads the screen with OCR and taps [button] when [question] is up; the question it answered, or null.
+Future<String?> answerPhonePrompt(DeviceHid hid, String udid, {required RegExp question, required String button}) async {
+  try {
+    final path = '${Directory.systemTemp.path}/glint-prompt-$udid.png';
+    await hid.call({'cmd': 'screenshot', 'path': path}, timeout: const Duration(seconds: 10));
+    final size = pngSize(path);
+    if (size == null) return null;
+    final lines = await readText(path);
+    final asked = lines.where((l) => question.hasMatch(l.text)).firstOrNull;
+    final target = lines.where((l) => l.text.trim().toLowerCase() == button.toLowerCase()).firstOrNull;
+    if (asked == null || target == null) return null;
+    final x = ((target.x + target.w / 2) / size.$1 * 65535).round();
+    final y = ((target.y + target.h / 2) / size.$2 * 65535).round();
+    await hid.call({
+      'cmd': 'touch',
+      'points': [
+        [x, y, 0],
+        [x, y, 50],
+      ],
+    });
+    return asked.text.trim();
+  } on Object {
+    return null;
+  }
+}
+
 /// Watches a phone while a debug build launches and answers the local network prompt it raises, without which the VM service cannot be found.
 class LocalNetworkPromptWatcher {
   LocalNetworkPromptWatcher(this.udid) : _hid = DeviceHid(udid: udid);
@@ -22,27 +48,15 @@ class LocalNetworkPromptWatcher {
   Future<void> check() async {
     if (answered != null || DateTime.now().isBefore(_next)) return;
     _next = DateTime.now().add(_every);
-    try {
-      final path = '${Directory.systemTemp.path}/glint-launch-$udid.png';
-      await _hid.call({'cmd': 'screenshot', 'path': path}, timeout: const Duration(seconds: 10));
-      final size = pngSize(path);
-      if (size == null) return;
-      final lines = await readText(path);
-      final question = lines.where((l) => _question.hasMatch(l.text)).firstOrNull;
-      final allow = lines.where((l) => l.text.trim().toLowerCase() == 'allow').firstOrNull;
-      if (question == null || allow == null) return;
-      final x = ((allow.x + allow.w / 2) / size.$1 * 65535).round();
-      final y = ((allow.y + allow.h / 2) / size.$2 * 65535).round();
-      await _hid.call({
-        'cmd': 'touch',
-        'points': [
-          [x, y, 0],
-          [x, y, 50],
-        ],
-      });
-      answered = question.text.trim();
-    } on Object {
-      // the next poll looks again; the launch reports its own timeout
+    answered = await answerPhonePrompt(_hid, udid, question: _question, button: 'Allow');
+  }
+
+  /// Keeps looking for a while after launch: Flutter can find the VM service before iOS shows the prompt.
+  Future<void> afterLaunch({Duration within = const Duration(seconds: 8)}) async {
+    final until = DateTime.now().add(within);
+    while (answered == null && DateTime.now().isBefore(until)) {
+      answered = await answerPhonePrompt(_hid, udid, question: _question, button: 'Allow');
+      if (answered == null) await Future<void>.delayed(const Duration(milliseconds: 1500));
     }
   }
 

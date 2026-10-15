@@ -126,7 +126,7 @@ class DeviceTool extends GlintTool {
         summary: '${status['name']} · ${status['model']} · ${status['os']} (${status['build']}) · '
             '${status['connection']}, tunnel ${status['tunnel']} · developer mode ${status['developerMode']}'
             '${status['developerImage'] == true ? '' : ' · developer image not mounted'}'
-            '${status['passcodeRequired'] == true ? ' · passcode set' : ''}',
+            '${status['passcodeRequired'] == true ? ' · locked, needs its passcode' : ''}',
         data: {'udid': udid, ...status},
       );
     }

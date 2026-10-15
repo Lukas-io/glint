@@ -151,7 +151,7 @@ impl Session {
         Ok(json!({"bytes": bytes.len(), "ms": started.elapsed().as_millis() as u64}))
     }
 
-    /// Types [text] by putting it on the general pasteboard and pressing cmd+V, then puts back what was there; for text the hardware keyboard has no keys for.
+    /// Puts [text] on the general pasteboard and presses cmd+V; returns what the pasteboard held, for the caller to put back once the app has read it (iOS may first ask to allow the paste).
     async fn paste(&mut self, request: &Value) -> Result<Value, SessionError> {
         let text = request["text"].as_str().ok_or_else(|| err("badRequest", "text is required"))?;
         self.ensure_live().await?;
@@ -162,12 +162,17 @@ impl Session {
         board.set_text(text, GENERAL_PASTEBOARD).await.map_err(|e| err("stream", format!("pasteboard set failed: {e:?}")))?;
         let live = self.live.as_mut().expect("ensure_live");
         press(&mut live.indigo, 0x19, &[keys::LEFT_GUI]).await?;
-        tokio::time::sleep(Duration::from_millis(250)).await;
-        let restored = match before {
-            Some(prev) => board.set_text(&prev, GENERAL_PASTEBOARD).await.is_ok(),
-            None => false,
-        };
-        Ok(json!({"pasted": text.chars().count(), "restored": restored}))
+        Ok(json!({"pasted": text.chars().count(), "previous": before}))
+    }
+
+    /// Puts [text] back on the general pasteboard.
+    async fn pasteboard_set(&mut self, request: &Value) -> Result<Value, SessionError> {
+        let text = request["text"].as_str().ok_or_else(|| err("badRequest", "text is required"))?;
+        let mut board = PasteboardServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+            .await
+            .map_err(|e| err("developerImage", format!("no pasteboard service: {e:?}")))?;
+        board.set_text(text, GENERAL_PASTEBOARD).await.map_err(|e| err("stream", format!("pasteboard set failed: {e:?}")))?;
+        Ok(json!({"set": true}))
     }
 
     /// Lists, turns on or turns off a network condition through Instruments, on a task that keeps its connection open while one is on.
@@ -259,6 +264,9 @@ impl Session {
         }
         if cmd == "paste" {
             return self.paste(request).await;
+        }
+        if cmd == "pasteboardSet" {
+            return self.pasteboard_set(request).await;
         }
         if cmd == "rotate" {
             let direction = if request["direction"] == "left" { RotationDirection::Left } else { RotationDirection::Right };

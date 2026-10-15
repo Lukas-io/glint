@@ -5,6 +5,7 @@ import '../backend.dart';
 import 'flutter_input_backend.dart';
 import '../device_hid.dart';
 import '../image_size.dart';
+import '../phone_prompts.dart';
 import '../phone_status.dart';
 import '../result.dart';
 import '../screen_recording.dart';
@@ -97,7 +98,29 @@ class IosDeviceBackend extends InteractionBackend {
   @override
   Future<void> typeText(String text, {int? keyDelayMs}) => text.codeUnits.every((c) => c >= 0x20 && c < 0x7f || c == 0x0a || c == 0x09)
       ? _call({'cmd': 'type', 'text': text, if (keyDelayMs != null) 'keyDelayMs': keyDelayMs}, extraMs: text.length * ((keyDelayMs ?? 12) + 20))
-      : _call({'cmd': 'paste', 'text': text});
+      : _paste(text);
+
+  /// Pastes [text], allows the paste prompt iOS shows for text from another process, then puts the old pasteboard back.
+  Future<void> _paste(String text) async {
+    final Map<String, Object?> r;
+    try {
+      r = await hid.call({'cmd': 'paste', 'text': text});
+    } on DeviceHidError catch (e) {
+      throw BackendFailure(e.failure.errorKind, 'type on the iPhone failed: ${e.detail}', nextSteps: e.nextSteps);
+    }
+    for (var i = 0; i < 3; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      if (await answerPhonePrompt(hid, udid, question: RegExp('would like to paste', caseSensitive: false), button: 'Allow Paste') != null) break;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (r['previous'] case final String previous) {
+      try {
+        await hid.call({'cmd': 'pasteboardSet', 'text': previous});
+      } on DeviceHidError {
+        // the typed text stays on the pasteboard; nothing else is lost
+      }
+    }
+  }
 
   @override
   Future<void> pinch({required int physicalX, required int physicalY, required double scale, int durationMs = 400}) {
