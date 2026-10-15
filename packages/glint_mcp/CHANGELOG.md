@@ -6,6 +6,11 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- `device op:screenshot` shapes the image for a quick look (#167):
+  - `glintId:` crops to that widget with 8 points of margin. `region:{top, bottom, left, right}` crops to fractions of the screen. A crop comes back inline, at most 720 pixels on its longest side, with a `coordinates` line that maps image pixels back to logical points for a tap.
+  - `apps:[…]` captures several attached apps and returns one image with them side by side, each scaled to the same height, plus a left-to-right legend naming each app and device. It combines with `glintId` and `region`.
+  - `afterMs` waits before capturing, and `waitFor:"<text>"` first waits (up to 15 s) until the app, or the first of `apps`, shows that text.
+  - Screenshots of an attached Android app now work. `device op:screenshot` used to refuse Android outright.
 - Multi-device scenarios in one call (#165):
   - A `batch` step may name its own `app:`, so one batch drives several attached devices. Before, a step's `app:` was dropped without a word and the step ran on the active app, so a tap meant for the second phone landed on the first. An `app:` that matches no attached app (or several) stops the batch with `unknownApp`. Each step line names its app (`3. [emulator-5556] wait_for …`).
   - `wait_for`, a new tool: wait until an app shows a text (matched as `tap text:` matches, app bar titles included) or a `glintId`, or with `gone:true` until it disappears. With `app:` it watches another attached app, so in a batch one device waits for what another caused. `timeoutMs` defaults to 15 s (max 120 s). It reports progress every 15 s and, on a timeout, fails with `targetNeverReady` and the text the app shows instead. It also runs as a `batch` step, and batch passes its progress token to its steps.
