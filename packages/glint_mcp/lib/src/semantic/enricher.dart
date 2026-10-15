@@ -103,25 +103,34 @@ class OverlayEnricher implements SemanticEnricher {
   }
 }
 
-/// Reads the topmost ModalRoute's name + isFirst flag. Uses shallow probe nodes
-/// (above ShellRoute inner navigators) so the outer GoRouter path is returned,
-/// not a nested route's null name.
+/// Reads the topmost ModalRoute's name + isFirst flag, or under a Router (go_router and other declarative routers) the router's location. Probes the innermost page first, then the outer one, so a nested route's null name does not win.
 class NavigationEnricher implements SemanticEnricher {
   NavigationEnricher({required this.runtime});
 
   final FlutterRuntime runtime;
 
-  static const _routeExpr =
-      '(ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.settings.name ?? "")'
-      ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.isFirst.toString() ?? "true")'
-      ' + "|" + (ModalRoute.of(WidgetInspectorService.instance.selection.currentElement!)?.runtimeType.toString() ?? "")';
+  /// `name|isFirst|routeType|pageBacked|routerLocation`; the location comes from `restoreRouteInformation`, which every Router parser implements.
+  static const _routeExpr = '((Element e) { final m = ModalRoute.of(e); String loc = ""; '
+      'try { final r = Router.maybeOf<Object?>(e); final c = (r?.routerDelegate as dynamic)?.currentConfiguration; '
+      'if (r != null && c != null) loc = r.routeInformationParser?.restoreRouteInformation(c)?.uri.toString() ?? ""; } catch (_) {} '
+      'return (m?.settings.name ?? "") + "|" + (m?.isFirst.toString() ?? "true") + "|" + (m?.runtimeType.toString() ?? "") '
+      '+ "|" + (m?.settings is Page).toString() + "|" + loc; })(WidgetInspectorService.instance.selection.currentElement!)';
 
   @override
   Future<void> enrich(SemanticScene scene) async {
     // Probe only within the ACTIVE page — a covered sibling route would
     // answer with its own (wrong) name. No name beats a wrong name.
-    final pageId = scene.root.glintId;
-    final pageSource = pageId != null ? scene.sourceFor(pageId) : null;
+    final pages = [
+      ...scene.root.walk().whereType<SemanticPage>().where((p) => p != scene.root).toList().reversed,
+      scene.root,
+    ];
+    for (final page in pages) {
+      final pageSource = page.glintId != null ? scene.sourceFor(page.glintId!) : null;
+      if (await _probe(scene, pageSource)) return;
+    }
+  }
+
+  Future<bool> _probe(SemanticScene scene, SceneNode? pageSource) async {
     for (final source
         in scene.sourceScene.addressableCandidates(within: pageSource)) {
       final result = await runtime.evaluateWithSelection(
@@ -131,13 +140,24 @@ class NavigationEnricher implements SemanticEnricher {
       );
       if (result == null) continue;
       final parts = result.split('|');
-      if (parts.length < 3 || parts[0].isEmpty) continue;
+      if (parts.length < 5) continue;
+      final name = _name(parts[0], parts[2], pageBacked: parts[3] == 'true', location: parts[4]);
+      if (name == null) continue;
       final isDialog = parts[2].contains('Dialog');
       scene.routeStack = [
-        RouteFrame(name: parts[0], isModal: parts[1] == 'false' || isDialog),
+        RouteFrame(name: name, isModal: parts[1] == 'false' || isDialog),
       ];
-      return;
+      return true;
     }
+    return false;
+  }
+
+  /// The router's location wins; a route pushed above it without a page (Navigator.push) is named after it, so the push still reads as a route change.
+  static String? _name(String routeName, String routeType, {required bool pageBacked, required String location}) {
+    if (location.isEmpty) return routeName.isEmpty ? null : routeName;
+    if (pageBacked || routeType.isEmpty) return location;
+    final pushed = routeName.isNotEmpty ? routeName : routeType.split('<').first;
+    return '$location > $pushed';
   }
 }
 
