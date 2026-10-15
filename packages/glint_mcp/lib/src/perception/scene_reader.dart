@@ -155,6 +155,7 @@ class SceneReader {
       return null;
     }
 
+    _detachInlineCopies(summaryRoot, extraction.nestedContent);
     // Append dialog nodes to summary root so findByGlintId reaches them.
     summaryRoot.children.addAll(extraction.contentRoots);
 
@@ -190,32 +191,76 @@ class SceneReader {
     if (overlay == null) {
       return const _DialogExtraction(contentRoots: [], hasBarrier: false);
     }
-
-    // Flutter 3.x introduced _Theater as an intermediate child of Overlay
-    // that groups the overlay entries. Walk into it when present so we reach
-    // the actual _OverlayEntryWidget children.
-    final entriesParent =
-        (overlay.children.firstOrNull?.label == '_Theater')
-            ? overlay.children.first
-            : overlay;
-
     final contentRoots = <SceneNode>[];
+    final nestedContent = <SceneNode>[];
     var hasBarrier = false;
-    final entries = entriesParent.children.where(_isEntryWidget).toList();
-    final topPage = entries.lastIndexWhere(_hasScaffoldDescendant);
 
-    for (final (i, entry) in entries.indexed) {
-      if (_hasScaffoldDescendant(entry)) continue; // base route
-      if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
-      if (_isBarrierOnlyEntry(entry)) {
-        if (i > topPage) hasBarrier = true;
-        continue;
+    /// A route page's entry can hold a nested Navigator (a shell route, a tab with its own stack) whose Overlay carries sheets and dialogs opened from its pages.
+    void readOverlay(SceneNode overlay, {required bool nested}) {
+      // Flutter 3.x introduced _Theater as an intermediate child of Overlay
+      // that groups the overlay entries. Walk into it when present so we reach
+      // the actual _OverlayEntryWidget children.
+      final entriesParent =
+          (overlay.children.firstOrNull?.label == '_Theater')
+              ? overlay.children.first
+              : overlay;
+      final entries = entriesParent.children.where(_isEntryWidget).toList();
+      final topPage = entries.lastIndexWhere(_hasScaffoldDescendant);
+
+      for (final (i, entry) in entries.indexed) {
+        if (_hasScaffoldDescendant(entry)) {
+          for (final inner in _innerOverlays(entry)) {
+            readOverlay(inner, nested: true);
+          }
+          continue; // base route
+        }
+        if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
+        if (_isBarrierOnlyEntry(entry)) {
+          if (i > topPage) hasBarrier = true;
+          continue;
+        }
+        if (_isEmptyEntry(entry)) continue;
+        contentRoots.add(entry);
+        if (nested) nestedContent.add(entry);
       }
-      if (_isEmptyEntry(entry)) continue;
-      contentRoots.add(entry);
     }
 
-    return _DialogExtraction(contentRoots: contentRoots, hasBarrier: hasBarrier);
+    readOverlay(overlay, nested: false);
+    return _DialogExtraction(contentRoots: contentRoots, hasBarrier: hasBarrier, nestedContent: nestedContent);
+  }
+
+  /// The outermost Overlays below [node], not counting [node] itself.
+  static List<SceneNode> _innerOverlays(SceneNode node) {
+    final found = <SceneNode>[];
+    void visit(SceneNode n) {
+      for (final c in n.children) {
+        if (c.label == 'Overlay') {
+          found.add(c);
+        } else {
+          visit(c);
+        }
+      }
+    }
+
+    visit(node);
+    return found;
+  }
+
+  /// A nested navigator's sheet also sits inline in the summary tree, inside the page it covers; removes that copy so it is read once, as an overlay, and the page reads as blocked. The inspector gives neither tree creation locations, so the copy is the topmost node holding exactly the sheet's distinct texts (the full tree repeats each one on its RichText).
+  static void _detachInlineCopies(SceneNode summaryRoot, List<SceneNode> nestedContent) {
+    String texts(SceneNode n) => ({for (final d in n.walk()) if ((d.textPreview ?? '').isNotEmpty) d.textPreview!}.toList()..sort()).join('\u0000');
+    final wanted = [for (final entry in nestedContent) texts(entry)]..removeWhere((t) => t.isEmpty);
+    if (wanted.isEmpty) return;
+    void visit(SceneNode n) {
+      if (n.children.any((c) => wanted.contains(texts(c)))) {
+        n.children = [for (final c in n.children) if (!wanted.contains(texts(c))) c];
+      }
+      for (final c in n.children) {
+        visit(c);
+      }
+    }
+
+    visit(summaryRoot);
   }
 
   static SceneNode? _findNode(SceneNode node, String label) {
@@ -306,9 +351,13 @@ class _DialogExtraction {
   const _DialogExtraction({
     required this.contentRoots,
     required this.hasBarrier,
+    this.nestedContent = const [],
   });
   final List<SceneNode> contentRoots;
   final bool hasBarrier;
+
+  /// The entries of [contentRoots] that came from a nested navigator's Overlay.
+  final List<SceneNode> nestedContent;
 }
 
 /// One inspector group + its SceneNode tree. Dispose releases the VM-side id table.
