@@ -2,6 +2,7 @@ use crate::keys;
 use idevice::{
     IdeviceService, ReadWrite, RsdService,
     core_device::{
+        OrientationServiceClient, RotationDirection,
         CallInfoBlob, DisplayServiceClient, HevcDepacketizer, ImageFormat, RtpPacket, ScreenCaptureServiceClient, build_screen_audio_offer, build_screen_video_offer,
         build_start_audio_parameters, build_start_video_parameters,
         hid::{ButtonState, IndigoHidClient, TOUCHSCREEN_STATE_CONTACT, TOUCHSCREEN_STATE_RELEASE, UniversalHidServiceClient},
@@ -9,6 +10,7 @@ use idevice::{
     core_device_proxy::CoreDeviceProxy,
     rsd::RsdHandshake,
     tcp::handle::AdapterHandle,
+    dvt::{condition_inducer::ConditionInducerClient, remote_server::RemoteServerClient},
     provider::UsbmuxdProvider,
     springboardservices::SpringBoardServicesClient,
     usbmuxd::{UsbmuxdAddr, UsbmuxdConnection},
@@ -17,7 +19,15 @@ use serde_json::{Value, json};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
+
+/// A request to the task that holds the network condition connection open.
+enum NetCmd {
+    List(oneshot::Sender<Result<Value, String>>),
+    On(String, oneshot::Sender<Result<Value, String>>),
+    Off(oneshot::Sender<Result<Value, String>>),
+}
 
 /// What Device Hub sends as the controller's own feature mask; the device's larger mask yields an invalid video config.
 const CLIENT_SUPPORTED_FEATURES: u64 = 140;
@@ -76,6 +86,7 @@ pub struct Session {
     live: Option<Live>,
     capture: Option<ScreenCaptureServiceClient<Box<dyn ReadWrite>>>,
     recorder: Arc<Mutex<Option<Recorder>>>,
+    network: Option<mpsc::Sender<NetCmd>>,
 }
 
 impl Session {
@@ -104,7 +115,7 @@ impl Session {
         let handshake = RsdHandshake::new(stream)
             .await
             .map_err(|e| err("tunnel", format!("service directory handshake failed: {e:?}")))?;
-        Ok(Self { provider, adapter, handshake, live: None, capture: None, recorder: Arc::new(Mutex::new(None)) })
+        Ok(Self { provider, adapter, handshake, live: None, capture: None, recorder: Arc::new(Mutex::new(None)), network: None })
     }
 
     pub async fn stream_status(&mut self) -> Result<String, SessionError> {
@@ -137,6 +148,40 @@ impl Session {
         };
         std::fs::write(path, &bytes).map_err(|e| err("badRequest", format!("cannot write {path}: {e}")))?;
         Ok(json!({"bytes": bytes.len(), "ms": started.elapsed().as_millis() as u64}))
+    }
+
+    /// Lists, turns on or turns off a network condition through Instruments, on a task that keeps its connection open while one is on.
+    async fn network(&mut self, cmd: &str, request: &Value) -> Result<Value, SessionError> {
+        if self.network.is_none() {
+            let client = RemoteServerClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+                .await
+                .map_err(|e| err("developerImage", format!("no Instruments service: {e:?}")))?;
+            let (tx, rx) = mpsc::channel::<NetCmd>(4);
+            tokio::spawn(network_task(client, rx));
+            self.network = Some(tx);
+        }
+        let (reply, answer) = oneshot::channel();
+        let message = match cmd {
+            "networkList" => NetCmd::List(reply),
+            "networkOn" => NetCmd::On(request["profile"].as_str().unwrap_or_default().to_string(), reply),
+            _ => NetCmd::Off(reply),
+        };
+        let tx = self.network.as_ref().expect("network");
+        if tx.send(message).await.is_err() {
+            self.network = None;
+            return Err(err("stream", "the network condition connection closed"));
+        }
+        answer.await.map_err(|_| err("stream", "no answer from the network task"))?.map_err(|e| err("badRequest", e))
+    }
+
+    /// Turns any network condition off, so it never outlives glint.
+    pub async fn network_off(&mut self) {
+        if let Some(tx) = self.network.take() {
+            let (reply, answer) = oneshot::channel();
+            if tx.send(NetCmd::Off(reply)).await.is_ok() {
+                let _ = answer.await;
+            }
+        }
     }
 
     /// Whether a recording is running, so the idle timer leaves the stream alone.
@@ -191,6 +236,17 @@ impl Session {
         }
         if cmd == "recordStop" {
             return self.record_stop();
+        }
+        if cmd == "rotate" {
+            let direction = if request["direction"] == "left" { RotationDirection::Left } else { RotationDirection::Right };
+            let mut control = OrientationServiceClient::connect_rsd(&mut self.adapter, &mut self.handshake)
+                .await
+                .map_err(|e| err("developerImage", format!("no device control service: {e:?}")))?;
+            let state = control.rotate(direction).await.map_err(|e| err("stream", format!("rotate failed: {e:?}")))?;
+            return Ok(json!({"orientation": format!("{:?}", state.orientation), "locked": state.locked}));
+        }
+        if cmd == "networkList" || cmd == "networkOn" || cmd == "networkOff" {
+            return self.network(cmd, request).await;
         }
         if cmd == "orientation" {
             let mut sb = SpringBoardServicesClient::connect(&self.provider)
@@ -394,4 +450,51 @@ async fn button(live: &mut Live, request: &Value) -> Result<(), SessionError> {
     live.indigo.send_button(page, usage, ButtonState::Down).await.map_err(input)?;
     tokio::time::sleep(Duration::from_millis(hold)).await;
     live.indigo.send_button(page, usage, ButtonState::Up).await.map_err(input)
+}
+
+/// Owns the Instruments connection; a condition stays on only while it is open.
+async fn network_task(mut client: RemoteServerClient<Box<dyn ReadWrite>>, mut rx: mpsc::Receiver<NetCmd>) {
+    let mut inducer = match ConditionInducerClient::new(&mut client).await {
+        Ok(c) => c,
+        Err(e) => {
+            while let Some(cmd) = rx.recv().await {
+                let reply = match cmd {
+                    NetCmd::List(r) | NetCmd::On(_, r) | NetCmd::Off(r) => r,
+                };
+                let _ = reply.send(Err(format!("no condition inducer: {e:?}")));
+            }
+            return;
+        }
+    };
+    while let Some(cmd) = rx.recv().await {
+        match cmd {
+            NetCmd::List(reply) => {
+                let r = inducer.available_conditions().await.map(|groups| {
+                    json!(groups
+                        .iter()
+                        .flat_map(|g| g.profiles.iter().map(move |p| json!({"group": g.identifier, "profile": p.identifier, "description": p.description})))
+                        .collect::<Vec<_>>())
+                });
+                let _ = reply.send(r.map(|v| json!({"conditions": v})).map_err(|e| format!("{e:?}")));
+            }
+            NetCmd::On(profile, reply) => {
+                let r = match inducer.available_conditions().await {
+                    Ok(groups) => match groups.iter().find_map(|g| g.profiles.iter().find(|p| p.identifier == profile).map(|p| (g.identifier.clone(), p.description.clone()))) {
+                        Some((group, description)) => inducer
+                            .enable_condition(&group, &profile)
+                            .await
+                            .map(|_| json!({"profile": profile, "description": description}))
+                            .map_err(|e| format!("{e:?}")),
+                        None => Err(format!("no condition profile {profile:?}; networkList shows them")),
+                    },
+                    Err(e) => Err(format!("{e:?}")),
+                };
+                let _ = reply.send(r);
+            }
+            NetCmd::Off(reply) => {
+                let _ = reply.send(inducer.disable_condition().await.map(|_| json!({"off": true})).map_err(|e| format!("{e:?}")));
+            }
+        }
+    }
+    let _ = inducer.disable_condition().await;
 }

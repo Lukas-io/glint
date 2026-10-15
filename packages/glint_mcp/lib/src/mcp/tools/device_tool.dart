@@ -29,7 +29,7 @@ class DeviceTool extends GlintTool {
             'op': Schema.string(
               description:
                   'status (default) | appearance | openurl | screenshot | '
-                  'privacy | biometric',
+                  'privacy | biometric | network (physical iPhone: value list | off | <profile>)',
             ),
             'udid': Schema.string(
               description:
@@ -129,6 +129,15 @@ class DeviceTool extends GlintTool {
             '${status['passcodeRequired'] == true ? ' · passcode set' : ''}',
         data: {'udid': udid, ...status},
       );
+    }
+    if (isPhysicalIosUdid(udid) && op == 'network') {
+      return _phoneNetwork(session, udid, (args['value'] as String?) ?? 'list');
+    }
+    if (isPhysicalIosUdid(udid) && op == 'openurl') {
+      final url = args['value'] as String?;
+      if (url == null || url.isEmpty) return _bad('op=openurl requires value: <url/deeplink>');
+      final err = await phoneOpenUrl(udid, url);
+      return _result(err, 'opened $url on $udid');
     }
     if (isPhysicalIosUdid(udid)) {
       final ability = switch (op) {
@@ -390,6 +399,48 @@ class DeviceTool extends GlintTool {
         );
       default:
         return _bad('op=biometric requires action: enrol | unenrol | match | nomatch');
+    }
+  }
+
+  /// Lists, sets or clears a network condition on a phone through the Device Hub helper; it stays on until `off`, detach, or glint exits.
+  Future<StructuredResponse> _phoneNetwork(GlintSession session, String udid, String value) async {
+    final hid = session.isAttached && session.device.id == udid ? phoneHid(session.backend) : null;
+    if (hid == null) {
+      return StructuredResponse.error(
+        summary: 'network conditions need the iPhone attached',
+        errorKind: GlintErrorKind.sessionNotAttached,
+        nextSteps: ['attach device:"$udid" (device mode works), then retry'],
+      );
+    }
+    try {
+      switch (value) {
+        case 'list':
+          final r = await hid.call(const {'cmd': 'networkList'});
+          final conditions = (r['conditions'] as List? ?? const []).cast<Map>();
+          return StructuredResponse(
+            summary: '${conditions.length} network conditions: ${conditions.map((c) => c['profile']).join(', ')}',
+            nextSteps: const ['device op:network value:"<profile>" turns one on; value:"off" clears it'],
+            data: {'conditions': [for (final c in conditions) {'profile': c['profile'], 'group': c['group'], 'description': '${c['description']}'.split('\n').first.replaceFirst('Name: ', '')}]},
+          );
+        case 'off':
+          await hid.call(const {'cmd': 'networkOff'});
+          return StructuredResponse(summary: 'network condition cleared on $udid', data: const {'network': 'off'});
+        default:
+          final r = await hid.call({'cmd': 'networkOn', 'profile': value});
+          final name = '${r['description']}'.split('\n').first.replaceFirst('Name: ', '');
+          return StructuredResponse(
+            summary: 'network condition $value on $udid: $name',
+            warnings: const ['it affects every app on the phone until device op:network value:"off", detach, or glint exits'],
+            data: {'network': value, 'description': name},
+          );
+      }
+    } on DeviceHidError catch (e) {
+      return StructuredResponse.error(
+        summary: 'network condition $value failed on $udid',
+        errorKind: e.failure == DeviceHidFailure.badRequest ? GlintErrorKind.invalidArgument : e.failure.errorKind,
+        detail: e.detail,
+        nextSteps: value == 'list' ? e.nextSteps : const ['device op:network value:"list" shows the profiles'],
+      );
     }
   }
 }

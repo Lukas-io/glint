@@ -73,7 +73,7 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "status (default) | appearance | openurl | screenshot | privacy | biometric"
+        "description": "status (default) | appearance | openurl | screenshot | privacy | biometric | network (physical iPhone: value list | off | <profile>)"
       },
       "udid": {
         "type": "string",
