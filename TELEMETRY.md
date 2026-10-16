@@ -30,5 +30,10 @@ Every summary is written to the hash-chained `~/.glint/telemetry-audit.log` befo
 | `DO_NOT_TRACK=1` | Never share, even with `GLINT_TELEMETRY=on`. |
 | `GLINT_NO_TELEMETRY=true` | Never share and stop local recording. |
 | `GLINT_NO_USAGE=true` | Same as above for usage stats. |
+| `GLINT_NO_UPDATE_CHECK=true` | Don't ask pub.dev for glint's latest version. |
 
 An agent cannot turn sharing on: the switches are environment variables only.
+
+## Update check
+
+Once a day at startup, glint asks pub.dev for the latest `glint_mcp` version (`GET https://pub.dev/api/packages/glint_mcp`) and caches the answer in `~/.glint/update-check.json`. The request carries nothing about you or your apps. When a newer version is out, `attach` says so once per session so the agent can tell you. `GLINT_NO_UPDATE_CHECK=true` turns the check off.

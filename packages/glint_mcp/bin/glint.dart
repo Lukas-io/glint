@@ -41,6 +41,7 @@ Future<void> main(List<String> args) async {
   // Daily-gated, fire-and-forget. Runs the rollup ship for events
   // accumulated by the previous instance(s). Never throws.
   unawaited(server.session.usageReporter.maybeAutoShip());
+  unawaited(refreshUpdateCheck());
 
   // Exit paths. `await server.done; return;` is NOT enough on its own:
   // with a session attached, the VM-service WebSocket (and any `flutter
