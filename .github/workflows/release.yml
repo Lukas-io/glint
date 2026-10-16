@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ['*-v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,6 +28,7 @@ jobs:
       - name: Check the tag matches the code
         id: tag
         run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "run this workflow on a release tag, not $GITHUB_REF_TYPE $GITHUB_REF_NAME"; exit 1; }
           package="${GITHUB_REF_NAME%-v*}"
           version="${GITHUB_REF_NAME##*-v}"
           [ -d "packages/$package" ] || { echo "no package named $package"; exit 1; }
