@@ -42,6 +42,9 @@ class GlintSession {
   }
 
   final GlintConfig config;
+
+  /// Whether attach already told the agent a newer glint is out, so it says so once per session.
+  bool updateNoticeShown = false;
   final ActionLog actionLog;
   final SessionManager sessions;
 

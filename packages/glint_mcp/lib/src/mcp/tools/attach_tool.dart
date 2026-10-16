@@ -13,6 +13,7 @@ import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
 import '../xctest_start.dart';
+import '../update_notice.dart';
 
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
@@ -102,6 +103,15 @@ class AttachTool extends GlintTool {
 
   @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
+    final response = await _attach(session, request);
+    if (response.isError || session.updateNoticeShown) return response;
+    final notice = updateNotice();
+    if (notice == null) return response;
+    session.updateNoticeShown = true;
+    return response.addWarnings([notice]);
+  }
+
+  Future<StructuredResponse> _attach(GlintSession session, CallToolRequest request) async {
     var args = request.arguments ?? const <String, Object?>{};
 
     // Validate an explicitly-passed platform before any I/O.

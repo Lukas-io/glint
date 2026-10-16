@@ -4,6 +4,10 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- `latestPubVersion`, `cachedPubVersion` and `isNewerVersion`: a package's latest version on pub.dev, asked at most once a day and cached, for the packages' update notices.
+
 ## [0.1.2] - 2026-10-15
 
 ### Changed

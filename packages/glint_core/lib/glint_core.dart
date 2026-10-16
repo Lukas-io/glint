@@ -6,5 +6,6 @@ export 'src/issues.dart';
 export 'src/redaction.dart';
 export 'src/telemetry.dart';
 export 'src/text.dart';
+export 'src/updates.dart';
 export 'src/usage.dart';
 export 'src/vm.dart';
