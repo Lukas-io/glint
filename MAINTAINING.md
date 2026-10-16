@@ -65,15 +65,15 @@ The `Device check` workflow drives `fixtures/counter_app` on a real Android emul
 Each package has its own version, changelog and tags. Versions follow semver with Dart's pre-1.0 rule: until 1.0, a minor bump may break things and a patch bump never does. A package's public API is its tool names, arguments, `errorKind` values and reply shape.
 
 1. On an up-to-date `main`, run `dart run tool/release.dart prepare <package> <x.y.z>`. It bumps the package's version files, moves its Unreleased entries under a dated heading, and commits on `release/<package>-v<x.y.z>`. Open a PR from that branch and merge it once green.
-2. Back on `main`, run `dart run tool/release.dart tag <package>`. It creates and pushes the tag `<package>-v<x.y.z>`.
+2. When the merge commit's CI run on `main` passes, the `Tag release` workflow tags it `<package>-v<x.y.z>` and starts the `Release` workflow on that tag. `dart run tool/release.dart tag <package>` does the same by hand, for example when the workflow is off.
 3. The `Release` workflow checks the tag against the package's `pubspec.yaml`, runs the package's tests, and publishes a GitHub Release with that version's changelog section as notes. A `glint_mcp` release also attaches the universal `glint-iossim-macos` bridge, the `glint-devicehid-macos` helper and `glint-android-server.dex`, each with its sha256.
-4. When the release succeeds, its `publish` job publishes the package to pub.dev from the same tag. pub.dev accepts it because the package's admin page allows publishing from this repository's GitHub Actions for tags `<package>-v{{version}}`.
+4. When the release succeeds, its `publish` job publishes the package to pub.dev from the same tag. pub.dev accepts it because the package's admin page allows publishing from this repository's GitHub Actions for tags `<package>-v{{version}}`, from push events (a tag pushed by hand) and workflow_dispatch events (the `Tag release` workflow starts the release that way, since a tag pushed with the workflow's own token starts no workflow).
 
 A package's first version on pub.dev has to be published by hand: `dart pub publish` in its directory, `glint_core` before the packages that depend on it. Then enable automated publishing on its pub.dev admin page.
 
 The release tool refuses to release a package that depends on `glint_core` while `glint_core` has unreleased changes. Release `glint_core` first, then raise the constraint in the dependent package.
 
-Tag only a commit whose own CI run on `main` is green.
+Only a commit whose own CI run on `main` is green gets tagged; the `Tag release` workflow waits for that run, and a hand tag should too.
 
 ## Shared code
 
