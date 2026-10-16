@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "glint": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/glint-run",
+      "args": ["glint_mcp", "glint"]
+    },
+    "glint-network": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/glint-run",
+      "args": ["glint_network", "glint_network"]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "glint",
+  "description": "glint for Claude Code: drive and debug running Flutter apps.",
+  "owner": {
+    "name": "Lukas-io",
+    "url": "https://github.com/Lukas-io"
+  },
+  "plugins": [
+    {
+      "name": "glint",
+      "source": "./plugin",
+      "description": "Two MCP servers for running Flutter apps: glint drives the app like a user and reports what changed; glint network reads its HTTP, WebSocket and logs.",
+      "category": "development",
+      "tags": ["flutter", "dart", "mcp", "testing"]
+    }
+  ]
+}

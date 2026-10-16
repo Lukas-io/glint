@@ -1,0 +1,18 @@
+#!/bin/sh
+set -u
+package="$1"
+command="$2"
+shift 2
+exe="${PUB_CACHE:-$HOME/.pub-cache}/bin/$command"
+if [ ! -x "$exe" ]; then
+  if ! command -v dart >/dev/null 2>&1; then
+    echo "glint: Dart is not on PATH. Install Flutter or Dart (https://dart.dev/get-dart), then run /mcp to reconnect." >&2
+    exit 127
+  fi
+  echo "glint: installing $package from pub.dev (first start only)" >&2
+  if ! dart pub global activate "$package" </dev/null >&2; then
+    echo "glint: could not install $package. Run 'dart pub global activate $package' yourself, then run /mcp to reconnect." >&2
+    exit 1
+  fi
+fi
+exec "$exe" "$@"

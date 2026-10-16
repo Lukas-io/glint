@@ -1,0 +1,22 @@
+{
+  "name": "glint",
+  "displayName": "glint",
+  "version": "0.1.0",
+  "description": "Drive and debug running Flutter apps. glint reads the screen and acts like a user on simulators, emulators and iPhones; glint network reads the app's HTTP, WebSocket and log traffic.",
+  "author": {
+    "name": "Lukas-io",
+    "url": "https://github.com/Lukas-io"
+  },
+  "homepage": "https://github.com/Lukas-io/glint",
+  "repository": "https://github.com/Lukas-io/glint",
+  "license": "Apache-2.0",
+  "keywords": [
+    "flutter",
+    "dart",
+    "mcp",
+    "testing",
+    "automation",
+    "network",
+    "debugging"
+  ]
+}
