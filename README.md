@@ -93,12 +93,23 @@ Full roadmap: [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §
 
 ## Install
 
-glint needs the Dart SDK, which comes with Flutter, and `~/.pub-cache/bin` on your `PATH`.
+glint needs the Dart SDK, which comes with Flutter.
+
+**Claude Code plugin.** One plugin brings both servers, glint and glint network:
+
+```
+/plugin marketplace add Lukas-io/glint
+/plugin install glint@glint
+```
+
+The first start installs the servers from pub.dev (about 20 seconds); run `/mcp` to reconnect if it times out. Details are in [plugin/README.md](plugin/README.md).
+
+**Any MCP host.** Install from pub.dev, with `~/.pub-cache/bin` on your `PATH`, and add the `glint` command:
 
 ```bash
 dart pub global activate glint_mcp
 
-# Add it to your agent, for example Claude Code:
+# For example, Claude Code:
 claude mcp add glint -- glint
 ```
 
