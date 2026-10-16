@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- **A tap that starts a network request reported `nothing changed`.** The response landed after the screen settled, so the change came too late to count. An agent reading `changed: false` would tap again, which on a submit or payment button sends the request twice. When an action looks unchanged, glint now waits up to 1.5 s for the app to rebuild (a response's `setState`, a timer), settles again and re-reads. A late change reports as `contentChanged 900 ms later`, with `lateMs` in the data. A tap that really changes nothing now takes up to 1.5 s longer to say so. The in-app agent is now `ext.flutter.glintAgent6`.
+
 ## [0.4.2] - 2026-10-15
 
 ### Changed

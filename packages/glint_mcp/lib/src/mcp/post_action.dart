@@ -198,7 +198,25 @@ class PostActionState {
     this.nativeSurface,
     this.surface,
     this.note,
+    this.lateMs,
   });
+
+  /// How long after the action settled the screen changed, when it changed late (a network response, a timer).
+  final int? lateMs;
+
+  /// This state, marked as having changed [ms] after the action settled.
+  PostActionState changedLate(int ms) => PostActionState(
+        changed: changed,
+        changeCategory: changeCategory,
+        state: state,
+        sceneText: sceneText,
+        scrolledPx: scrolledPx,
+        screenshot: screenshot,
+        nativeSurface: nativeSurface,
+        surface: surface,
+        note: note,
+        lateMs: ms,
+      );
 
   /// The native surface over the app, read as data, when it could be read.
   final NativeSurface? surface;
@@ -235,6 +253,7 @@ class PostActionState {
         if (nativeSurface != null) 'nativeSurface': nativeSurface,
         if (surface != null) 'surface': surface!.toJson(),
         if (sceneText != null) 'postScene': sceneText,
+        if (lateMs != null) 'lateMs': lateMs,
       };
 }
 
@@ -350,9 +369,36 @@ Future<PostActionState?> readPostActionState(
       await Future<void>.delayed(const Duration(milliseconds: 600));
       state = await readOnce();
     }
+    if (state.changeCategory == 'nothing' && pre != null) state = await _awaitLateChange(session, state, readOnce);
     return state;
   } on Object {
     return null;
+  }
+}
+
+/// How long an action that changed nothing waits for a late rebuild, such as a network response's setState.
+const Duration _lateChangeWindow = Duration(milliseconds: 1500);
+
+/// [state], or a re-read when the app rebuilds within [_lateChangeWindow] and the screen did change.
+Future<PostActionState> _awaitLateChange(
+    GlintSession session, PostActionState state, Future<PostActionState> Function() readOnce) async {
+  final agent = AppAgent.of(session.runtime);
+  if (agent == null) return state;
+  try {
+    final reply = await agent.call(
+      {'op': 'awaitBuild', 'ms': '${_lateChangeWindow.inMilliseconds}'},
+      timeout: _lateChangeWindow + const Duration(seconds: 2),
+    );
+    if (reply['built'] != true) return state;
+    await session.settleDetector.awaitSettle(
+      ceilingMs: session.config.postActionSettleMs,
+      quietFramesNeeded: session.config.settleQuietFrames,
+      checkLoadingAffordances: false,
+    );
+    final late = await readOnce();
+    return late.changeCategory == 'nothing' ? state : late.changedLate((reply['ms'] as num).toInt());
+  } on Object {
+    return state;
   }
 }
 

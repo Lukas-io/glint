@@ -4,7 +4,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent5';
+const String kAgentExtension = 'ext.flutter.glintAgent6';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -197,6 +197,15 @@ const String _source = r'''
       }
       return {'status': 'ok'};
     }
+    if (op == 'awaitBuild') {
+      final windowMs = int.parse(p['ms'] ?? '1500');
+      final start = DateTime.now().millisecondsSinceEpoch;
+      while (DateTime.now().millisecondsSinceEpoch - start < windowMs) {
+        if (lastBuild > start) return {'built': true, 'ms': lastBuild - start};
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+      return {'built': false, 'ms': windowMs};
+    }
     final miss = editable();
     if (miss != null) return {'status': miss};
     if (op == 'type') {
@@ -230,7 +239,7 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent5', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent6', callback: handle);
   } catch (e) {
     return 'present';
   }
