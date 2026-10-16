@@ -146,7 +146,10 @@ class StructuredResponse {
     final buf = StringBuffer(summary);
     final changed = data?['changed'];
     if (!isError && changed is bool) {
-      buf.write(changed ? ' · ${data?['changeCategory'] ?? 'changed'}' : ' · nothing changed');
+      final late = data?['lateMs'];
+      buf.write(changed
+          ? ' · ${data?['changeCategory'] ?? 'changed'}${late is int ? ' $late ms later' : ''}'
+          : ' · nothing changed');
     }
     final surface = data?['surface'];
     if (surface is Map<String, Object?>) {
