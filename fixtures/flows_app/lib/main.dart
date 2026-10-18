@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'activity.dart';
 import 'add_bank.dart';
+import 'call.dart';
 import 'chat.dart';
 import 'checkout.dart';
 import 'notifications.dart';
@@ -38,6 +39,7 @@ final _router = GoRouter(
               GoRoute(path: 'chat', builder: (_, _) => const ChatScreen()),
               GoRoute(path: 'checkout', builder: (_, _) => const CheckoutScreen()),
               GoRoute(path: 'bank', builder: (_, _) => const AddBankScreen()),
+              GoRoute(path: 'call', builder: (_, _) => const CallScreen()),
             ],
           ),
         ]),
@@ -86,6 +88,7 @@ class _FlowList extends StatelessWidget {
     ('Chat', 'GetX · Cupertino · action sheet', Icons.chat_bubble_outline, '/chat'),
     ('Checkout', 'setState · slivers · Navigator 1', Icons.shopping_bag_outlined, '/checkout'),
     ('Add bank account', 'Form · validators · custom button', Icons.account_balance_outlined, '/bank'),
+    ('Call', 'design-system buttons · fading controls', Icons.call_outlined, '/call'),
   ];
 
   @override

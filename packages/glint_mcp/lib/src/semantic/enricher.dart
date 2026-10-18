@@ -685,3 +685,69 @@ class ButtonFactsEnricher implements SemanticEnricher {
     }
   }
 }
+
+/// Reads inside widgets whose build is outside the app (a design-system package): one that takes taps becomes a button labelled by its painted text, one that only paints text becomes text. Capped at [maxNodes].
+class OpaqueWidgetEnricher implements SemanticEnricher {
+  OpaqueWidgetEnricher({required this.runtime, this.maxNodes = 40});
+
+  final FlutterRuntime runtime;
+  final int maxNodes;
+
+  static const _handlers =
+      "const {'InkWell', 'InkResponse', 'GestureDetector', 'TextButton', 'ElevatedButton', 'FilledButton', "
+      "'OutlinedButton', 'IconButton', 'CupertinoButton', 'RawMaterialButton', 'MaterialButton', 'FloatingActionButton'}";
+
+  static const _inside = '(Element e) { '
+      'bool has(Object? Function() f) { try { return f() != null; } catch (_) { return false; } } '
+      'final root = e.widget as dynamic; '
+      'final self = has(() => root.onPressed) || has(() => root.onTap); '
+      'var taps = 0; var seen = 0; final texts = <String>[]; '
+      'void visit(Element c) { if (seen++ > 400) return; final w = c.widget as dynamic; final n = c.widget.runtimeType.toString(); '
+      "if (n == 'RichText') { final s = (w.text.toPlainText() as String).replaceAll('\\uFFFC', '').trim(); "
+      'if (s.isNotEmpty && texts.length < 4) texts.add(s); return; } '
+      'if ($_handlers.contains(n) && (has(() => w.onTap) || has(() => w.onPressed) || has(() => w.onLongPress))) taps++; '
+      'c.visitChildren(visit); } '
+      'e.visitChildren(visit); '
+      "return (self ? 'self' : '\$taps') + '|' + texts.join(' ').replaceAll(';', ',').replaceAll('|', '/'); }";
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final slots = <(List<SemanticNode>, int, String)>[];
+    void visit(SemanticNode n) {
+      for (final (i, c) in n.children.indexed) {
+        final id = c.glintId;
+        if (c is SemanticUnknown && c.children.isEmpty && id != null && slots.length < maxNodes) {
+          final source = scene.sourceFor(id);
+          if (source != null && source.inspectorId.isNotEmpty) slots.add((n.children, i, source.inspectorId));
+        }
+        visit(c);
+      }
+    }
+
+    for (final layer in scene.overlayLayers) {
+      layer.nodes.forEach(visit);
+    }
+    visit(scene.root);
+    if (slots.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(batchOverElements([for (final s in slots) s.$3], _inside));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != slots.length) return;
+    for (final (i, part) in parts.indexed) {
+      final (siblings, at, _) = slots[i];
+      final f = part.split('|');
+      final text = f.length > 1 ? f[1].trim() : '';
+      final unknown = siblings[at];
+      final tappable = f.first == 'self' || f.first == '1';
+      if (tappable) {
+        siblings[at] = SemanticButton(glintId: unknown.glintId, label: text.isEmpty ? null : text);
+      } else if (f.first == '0' && text.isNotEmpty) {
+        siblings[at] = SemanticText(glintId: unknown.glintId, content: text);
+      }
+    }
+  }
+}
