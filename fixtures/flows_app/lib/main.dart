@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'activity.dart';
+import 'add_bank.dart';
 import 'chat.dart';
 import 'checkout.dart';
 import 'notifications.dart';
@@ -36,6 +37,7 @@ final _router = GoRouter(
               GoRoute(path: 'verify', builder: (_, _) => const VerifyPhoneScreen()),
               GoRoute(path: 'chat', builder: (_, _) => const ChatScreen()),
               GoRoute(path: 'checkout', builder: (_, _) => const CheckoutScreen()),
+              GoRoute(path: 'bank', builder: (_, _) => const AddBankScreen()),
             ],
           ),
         ]),
@@ -83,6 +85,7 @@ class _FlowList extends StatelessWidget {
     ('Verify phone', 'ValueNotifier · code boxes · picker', Icons.verified_user_outlined, '/verify'),
     ('Chat', 'GetX · Cupertino · action sheet', Icons.chat_bubble_outline, '/chat'),
     ('Checkout', 'setState · slivers · Navigator 1', Icons.shopping_bag_outlined, '/checkout'),
+    ('Add bank account', 'Form · validators · custom button', Icons.account_balance_outlined, '/bank'),
   ];
 
   @override
