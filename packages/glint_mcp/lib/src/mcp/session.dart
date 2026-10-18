@@ -183,6 +183,7 @@ class GlintSession {
   ToggleEnricher get toggleEnricher => _requireAttached(_active?.toggleEnricher, 'toggle enricher');
   SemanticsFlagEnricher get flagEnricher => _requireAttached(_active?.flagEnricher, 'flag enricher');
   ButtonFactsEnricher get buttonEnricher => _requireAttached(_active?.buttonEnricher, 'button enricher');
+  InertEnricher get inertEnricher => _requireAttached(_active?.inertEnricher, 'inert enricher');
   OpaqueWidgetEnricher get opaqueEnricher => _requireAttached(_active?.opaqueEnricher, 'opaque widget enricher');
   TabLabelEnricher get tabEnricher => _requireAttached(_active?.tabEnricher, 'tab enricher');
   ImageEnricher get imageEnricher => _requireAttached(_active?.imageEnricher, 'image enricher');
@@ -307,6 +308,7 @@ class GlintSession {
       await linkEnricher.enrich(semantic);
       await mapEnricher.enrich(semantic);
     }
+    if (detail != SceneDetail.structural) await inertEnricher.enrich(semantic);
     return semantic;
   }
 

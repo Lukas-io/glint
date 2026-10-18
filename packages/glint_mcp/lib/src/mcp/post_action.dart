@@ -98,6 +98,7 @@ class SceneSnapshot {
       for (final n in root.walk()) {
         mix(n.glintId ?? '');
         mix(n.role.name);
+        mix(n.inert?.name ?? '');
         if (n is SemanticText) mix(n.content);
         if (n is SemanticInput) {
           mix(n.currentValue ?? '');

@@ -185,6 +185,7 @@ class _Writer {
                     _ => _maxLabelChars,
                   }));
     }
+    if (node.inert case final inert?) buf.write(' ${inert.tag}');
     buf.writeln();
   }
 

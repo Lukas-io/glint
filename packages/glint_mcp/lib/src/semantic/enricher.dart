@@ -751,3 +751,50 @@ class OpaqueWidgetEnricher implements SemanticEnricher {
     }
   }
 }
+
+/// Marks controls a person cannot use right now: faded to opacity 0 ([Inert.hidden]) or under an active IgnorePointer / AbsorbPointer ([Inert.ignoresTouches]); they lose their tap and type markers. Capped at [maxNodes].
+class InertEnricher implements SemanticEnricher {
+  InertEnricher({required this.runtime, this.maxNodes = 80});
+
+  final FlutterRuntime runtime;
+  final int maxNodes;
+
+  static const _cover = '(Element e) { var r = \'\'; '
+      'bool zero(Object? Function() f) { try { final v = f(); return v is num ? v == 0 : (v as dynamic).value == 0; } catch (_) { return false; } } '
+      'bool on(Object? Function() f) { try { return f() == true; } catch (_) { return false; } } '
+      'e.visitAncestorElements((a) { final d = a.widget as dynamic; final n = a.widget.runtimeType.toString(); '
+      "if (const {'Opacity', 'AnimatedOpacity', 'SliverOpacity', 'SliverAnimatedOpacity', 'FadeTransition', 'SliverFadeTransition'}.contains(n) "
+      "&& zero(() => d.opacity)) { r = 'hidden'; return false; } "
+      "if (r.isEmpty && (n == 'IgnorePointer' || n == 'SliverIgnorePointer') && on(() => d.ignoring)) r = 'ignored'; "
+      "if (r.isEmpty && n == 'AbsorbPointer' && on(() => d.absorbing)) r = 'ignored'; "
+      'return true; }); return r; }';
+
+  @override
+  Future<void> enrich(SemanticScene scene) async {
+    final nodes = <(SemanticNode, String)>[];
+    for (final n in scene.allNodes()) {
+      if (!n.affordances.contains(Affordance.tappable) && !n.affordances.contains(Affordance.typeable)) continue;
+      final id = n.glintId;
+      final source = id == null ? null : scene.sourceFor(id);
+      if (source == null || source.inspectorId.isEmpty) continue;
+      nodes.add((n, source.inspectorId));
+      if (nodes.length >= maxNodes) break;
+    }
+    if (nodes.isEmpty) return;
+    final String? raw;
+    try {
+      raw = await runtime.evaluateString(batchOverElements([for (final n in nodes) n.$2], _cover));
+    } on Object {
+      return;
+    }
+    final parts = raw?.split(';') ?? const <String>[];
+    if (parts.length != nodes.length) return;
+    for (final (i, part) in parts.indexed) {
+      final inert = switch (part) { 'hidden' => Inert.hidden, 'ignored' => Inert.ignoresTouches, _ => null };
+      if (inert == null) continue;
+      final node = nodes[i].$1;
+      node.inert = inert;
+      node.affordances.removeAll(const {Affordance.tappable, Affordance.typeable});
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart' show GlintErrorKind;
+import '../../../semantic.dart' show Inert;
 import '../envelope.dart';
 import '../session.dart';
 import '../text_target.dart';
@@ -65,7 +66,7 @@ class WaitForTool extends GlintTool {
       final seen = await session.withScene((scene) async {
         visible = visibleLabels(scene);
         if (text != null) {
-          final matches = textMatches(scene, text);
+          final matches = textMatches(scene, text).where((m) => m.inert != Inert.hidden).toList();
           return matches.isEmpty ? null : (glintId: matches.first.glintId, label: matches.first.label);
         }
         final node = scene.sourceScene.findByGlintId(glintId!);
