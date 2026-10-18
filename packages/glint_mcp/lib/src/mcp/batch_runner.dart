@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
+import '../../perception.dart' show InspectorReadError;
 import 'envelope.dart';
 import 'session.dart';
 import 'tool.dart';
@@ -203,6 +204,8 @@ Future<BatchRun> runBatchSteps(
       }
     } on SessionNotAttachedError {
       rethrow;
+    } on InspectorReadError catch (e) {
+      r = await tool.noFrameResponse(session, e);
     } on Object catch (e) {
       r = StructuredResponse.error(
         summary: '${step.tool} failed',

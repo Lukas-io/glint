@@ -261,7 +261,11 @@ class AppSession {
     });
     try {
       final now = await agent.call(const {'op': 'lifecycle'}).timeout(lifecycleProbeTimeout);
-      _onLifecycle('${now['state']}');
+      final state = '${now['state']}';
+      if (nativeReader != null && nativeSurfaceName == null) {
+        sceneMode = state == 'resumed' ? SceneMode.flutter : SceneMode.native;
+      }
+      _onLifecycle(state);
       return true;
     } on Object {
       return false;
