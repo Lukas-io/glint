@@ -71,7 +71,7 @@ class AttachTool extends GlintTool {
             'input': Schema.string(
               description: 'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
                   'touches (system prompts, keyboards, other apps too); auto = app first, device for the rest. '
-                  'Default auto on iOS (simulator and phone), device on Android. Replies say which in data.input.',
+                  'Default auto. Replies say which in data.input.',
             ),
             'iosInput': Schema.string(
               description:
@@ -469,7 +469,7 @@ class AttachTool extends GlintTool {
             adbPath: adbPath,
             devicePixelRatio: vp?.dpr ?? 1.0,
             server: androidServer,
-            route: requestedRoute ?? InputRoute.device,
+            route: requestedRoute ?? InputRoute.auto,
           );
         case DevicePlatform.ios when info?.physical ?? isPhysicalIosUdid(deviceId):
           final probed = await _probeViewportWithRetry(probe, session.config.attachProbeTimeoutMs, onProgress);
