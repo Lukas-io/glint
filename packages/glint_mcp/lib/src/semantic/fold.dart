@@ -18,9 +18,9 @@ String structuralSignature(SemanticNode node) {
         ..write(bt.selected == true ? 'S' : '');
     case SemanticInput i:
       b
-        ..write(i.hint != null ? ':H' : ':')
+        ..write(':H${i.hint ?? ''}')
         ..write(i.hasValue ? 'V' : '')
-        ..write(i.error != null ? 'E' : '');
+        ..write(i.error != null ? 'E${i.error}' : '');
     case SemanticUnknown u:
       b.write(':${u.label}');
     case SemanticMapItem m:
@@ -42,7 +42,11 @@ String structuralSignature(SemanticNode node) {
 
 /// A run of consecutive siblings that share a [structuralSignature].
 class FoldRun {
-  const FoldRun({required this.start, required this.length, required this.signature});
+  const FoldRun({
+    required this.start,
+    required this.length,
+    required this.signature,
+  });
 
   final int start;
   final int length;
@@ -53,7 +57,11 @@ class FoldRun {
 
 /// The run starting at [start] when at least [threshold] consecutive siblings
 /// share a signature; null otherwise.
-FoldRun? detectFoldRun(List<SemanticNode> children, int start, {int threshold = 4}) {
+FoldRun? detectFoldRun(
+  List<SemanticNode> children,
+  int start, {
+  int threshold = 4,
+}) {
   if (start >= children.length) return null;
   final sig = structuralSignature(children[start]);
   var end = start + 1;
