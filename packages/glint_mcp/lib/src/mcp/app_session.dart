@@ -45,6 +45,7 @@ class AppSession {
   SemanticsFlagEnricher? flagEnricher;
   TabLabelEnricher? tabEnricher;
   ButtonFactsEnricher? buttonEnricher;
+  OpaqueWidgetEnricher? opaqueEnricher;
   ImageEnricher? imageEnricher;
   MapEnricher? mapEnricher;
   IconEnricher? iconEnricher;
@@ -193,6 +194,7 @@ class AppSession {
     flagEnricher = SemanticsFlagEnricher(runtime: rt);
     tabEnricher = TabLabelEnricher(runtime: rt);
     buttonEnricher = ButtonFactsEnricher(runtime: rt);
+    opaqueEnricher = OpaqueWidgetEnricher(runtime: rt);
     imageEnricher = ImageEnricher(runtime: rt);
     mapEnricher = MapEnricher(runtime: rt);
     iconEnricher = IconEnricher(runtime: rt);
