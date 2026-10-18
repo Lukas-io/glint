@@ -24,6 +24,16 @@ enum SemanticRole {
 
 enum Affordance { tappable, typeable, scrollable }
 
+/// Why a control on screen cannot be used right now.
+enum Inert {
+  hidden('[hidden]'),
+  ignoresTouches('[ignores touches]');
+
+  const Inert(this.tag);
+
+  final String tag;
+}
+
 sealed class SemanticNode {
   SemanticNode({
     required this.glintId,
@@ -38,6 +48,9 @@ sealed class SemanticNode {
   /// behavior pass can add ones the role alone can't know (e.g. onTap-wrapped).
   final Set<Affordance> affordances;
   final List<SemanticNode> children;
+
+  /// Set by [InertEnricher] on a control faded to opacity 0 or under an active IgnorePointer / AbsorbPointer.
+  Inert? inert;
 
   SemanticRole get role;
 
@@ -58,6 +71,7 @@ sealed class SemanticNode {
         if (glintId != null) 'glintId': glintId,
         if (affordances.isNotEmpty) 'affordances': affordances.map((a) => a.name).toList(),
         ..._extraJson(),
+        if (inert != null) 'inert': inert!.name,
         if (children.isNotEmpty) 'children': children.map((c) => c.toJson()).toList(),
       };
 

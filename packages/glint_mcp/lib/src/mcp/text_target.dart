@@ -35,7 +35,7 @@ Future<({String? glintId, StructuredResponse? error})> readTarget(
 }
 
 /// One node whose visible text matched, and the id an action on it should hit.
-typedef TextMatch = ({String glintId, String label});
+typedef TextMatch = ({String glintId, String label, Inert? inert});
 
 /// The glintId behind visible [text], or the error to return: exact matches (case-insensitive) win over contains; the top overlay is searched before the screen. With [waitMs] the scene is re-read until the text appears or the time runs out.
 Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(GlintSession session, String text,
@@ -46,7 +46,9 @@ Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(GlintSe
       (scene) async => (textMatches(scene, text), visibleLabels(scene)),
       detail: SceneDetail.interactive,
     );
-    if (matches.length == 1) return (glintId: matches.single.glintId, error: null);
+    final usable = matches.where((m) => m.inert == null).toList();
+    if (usable.length == 1) return (glintId: usable.single.glintId, error: null);
+    if (usable.isEmpty && matches.isNotEmpty) return (glintId: null, error: _inertTarget(tool, text, matches.first));
     if (matches.length > 1) {
       return (
         glintId: null,
@@ -91,16 +93,17 @@ List<TextMatch> textMatches(SemanticScene scene, String text) {
   for (final roots in layers) {
     final exact = <TextMatch>[];
     final partial = <TextMatch>[];
-    void visit(SemanticNode n, String? tappable) {
-      final here = n.glintId != null && n.affordances.contains(Affordance.tappable) ? n.glintId : tappable;
+    void visit(SemanticNode n, SemanticNode? tappable) {
+      final here = n.glintId != null && n.affordances.contains(Affordance.tappable) ? n : tappable;
       final label = _label(n);
-      final id = here ?? n.glintId;
-      if (label != null && id != null) {
+      final target = here ?? (n.glintId != null ? n : null);
+      if (label != null && target != null) {
         final have = _norm(label);
+        final match = (glintId: target.glintId!, label: label, inert: target.inert ?? n.inert);
         if (have == want) {
-          exact.add((glintId: id, label: label));
+          exact.add(match);
         } else if (have.contains(want)) {
-          partial.add((glintId: id, label: label));
+          partial.add(match);
         }
       }
       for (final c in n.children) {
@@ -116,6 +119,27 @@ List<TextMatch> textMatches(SemanticScene scene, String text) {
   }
   return const [];
 }
+
+/// Why the only control showing [text] cannot be used right now, and what usually brings it back.
+StructuredResponse _inertTarget(String tool, String text, TextMatch m) => m.inert == Inert.hidden
+    ? StructuredResponse.error(
+        summary:
+            '$tool: "$text" (${m.glintId}) is hidden: it is faded out to opacity 0, so a person cannot see or tap it',
+        errorKind: GlintErrorKind.notHittable,
+        nextSteps: const [
+          'controls that fade out (video, call and camera screens) come back after a tap on the screen: '
+              'tap an empty area, then retry',
+          'get_scene shows it without [hidden] once it is back',
+        ],
+      )
+    : StructuredResponse.error(
+        summary: '$tool: "$text" (${m.glintId}) ignores touches right now (it sits under an active '
+            'IgnorePointer or AbsorbPointer)',
+        errorKind: GlintErrorKind.notHittable,
+        nextSteps: const [
+          'the screen is usually busy or waiting on a step first: get_scene, do what it asks, then retry',
+        ],
+      );
 
 /// Up to 12 distinct labels on screen, for the not-found detail.
 List<String> visibleLabels(SemanticScene scene) {
