@@ -64,6 +64,11 @@ class AttachTool extends GlintTool {
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
             ),
+            'camera': Schema.string(
+              description:
+                  'webcam: when attach boots an AVD by name, its front camera is the Mac camera (the built-in one, not a '
+                  'Continuity iPhone); the back keeps the AVD\'s own. macOS must allow the emulator to use the camera.',
+            ),
             'iosBackend': Schema.string(
               description: 'bridge (default) | xctest. xctest drives the simulator through '
                   "glint's XCUITest runner, built once per Xcode. iOS, Flutter mode.",
@@ -205,13 +210,26 @@ class AttachTool extends GlintTool {
     final launchPath = (args['launch'] as String?)?.trim();
     final avdArg = args['device'] as String?;
     String? avdLead;
+    final cameraArg = args['camera'] as String?;
+    if (cameraArg != null && cameraArg != 'webcam') {
+      return StructuredResponse.error(
+        summary: 'unknown camera: $cameraArg',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['pass camera:"webcam" with device:"<AVD name>", or leave camera out'],
+      );
+    }
     if (avdArg != null && !scan.devices.any((d) => d.id == avdArg) && !avdArg.startsWith('emulator-')) {
       final avds = Avds(adbPath: adbPath);
       if ((await avds.list()).contains(avdArg)) {
         var serial = await avds.runningSerial(avdArg);
         if (serial == null) {
+          final exe = avds.emulatorPath;
+          final webcam = cameraArg == null || exe == null ? null : builtInWebcam(await listWebcams(exe));
+          if (cameraArg != null && webcam == null) {
+            launchNotes.add('camera:"webcam": the emulator lists no Mac camera, so $avdArg boots with its own camera');
+          }
           try {
-            serial = await avds.boot(avdArg, onProgress: onProgress);
+            serial = await avds.boot(avdArg, webcam: webcam?.id, onProgress: onProgress);
           } on AvdBootError catch (e) {
             return StructuredResponse.error(
               summary: 'could not boot $avdArg: ${e.summary}',
@@ -223,10 +241,15 @@ class AttachTool extends GlintTool {
               ],
             );
           }
-          avdLead = 'booted $avdArg as $serial';
+          avdLead =
+              'booted $avdArg as $serial${webcam == null ? '' : ' with the Mac camera "${webcam.name}" as its front camera'}';
           scan = await discovery.scan();
         } else {
           avdLead = '$avdArg runs as $serial';
+          if (cameraArg != null) {
+            launchNotes.add('camera:"webcam" applies only when glint boots the AVD; $avdArg already runs as $serial '
+                'with the camera it booted with. Close it and attach again to boot it with the Mac camera');
+          }
         }
         args = {...args, 'device': serial};
       }
@@ -242,9 +265,12 @@ class AttachTool extends GlintTool {
         final r = await _attachDeviceMode(session, scan, args, 'android', adbPath, onProgress);
         return r.isError
             ? r
-            : _lead(r, avdLead, [
-                '`attach launch:"<project folder or app id>" device:"$deviceArg"` starts your app on it',
-              ]);
+            : _lead(
+                r,
+                avdLead,
+                ['`attach launch:"<project folder or app id>" device:"$deviceArg"` starts your app on it'],
+                notes: launchNotes,
+              );
       }
     }
     final appArg = (args['app'] as String?)?.trim();
@@ -1585,9 +1611,11 @@ class AttachTool extends GlintTool {
     return null;
   }
 
-  StructuredResponse _lead(StructuredResponse r, String lead, List<String> firstSteps) => StructuredResponse(
+  StructuredResponse _lead(StructuredResponse r, String lead, List<String> firstSteps,
+          {List<String> notes = const []}) =>
+      StructuredResponse(
         summary: '$lead; ${r.summary}',
-        warnings: r.warnings,
+        warnings: [...notes, ...r.warnings],
         nextSteps: [...firstSteps, ...r.nextSteps],
         data: r.data,
         isError: r.isError,

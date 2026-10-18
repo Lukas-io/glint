@@ -30,6 +30,10 @@
         "type": "string",
         "description": "Path to compiled `glint-iossim` binary. iOS only."
       },
+      "camera": {
+        "type": "string",
+        "description": "webcam: when attach boots an AVD by name, its front camera is the Mac camera (the built-in one, not a Continuity iPhone); the back keeps the AVD's own. macOS must allow the emulator to use the camera."
+      },
       "iosBackend": {
         "type": "string",
         "description": "bridge (default) | xctest. xctest drives the simulator through glint's XCUITest runner, built once per Xcode. iOS, Flutter mode."

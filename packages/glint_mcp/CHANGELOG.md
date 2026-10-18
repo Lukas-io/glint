@@ -6,6 +6,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- **The Mac camera on an Android emulator.** `attach device:"<AVD name>" camera:"webcam"` boots the AVD with the Mac's built-in camera as its front camera. It picks the FaceTime camera over a Continuity Camera iPhone, and the back camera stays the emulator's own, since one Mac camera cannot be both. When an emulator camera keeps getting no frames (logcat `Unable to obtain video frame`, which is what a blank preview looks like when macOS has not let the emulator use the camera), `get_scene` warns with the cause and the fix, so a blank preview is not read as an app bug. (#225)
 - **Update notice.** Once a day at startup glint asks pub.dev for its latest version, and `attach` says once per session when a newer one is out, so the agent can tell you: `glint 0.4.3 is out (this is 0.4.2): tell the user to run dart pub global activate glint_mcp, then restart the MCP server`. The request sends nothing about you; `GLINT_NO_UPDATE_CHECK=true` turns it off (TELEMETRY.md).
 
 ### Fixed
