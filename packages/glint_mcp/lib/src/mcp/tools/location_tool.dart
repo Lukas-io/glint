@@ -43,7 +43,7 @@ class LocationTool extends GlintTool {
         name: 'location',
         description: 'Simulated GPS on the iOS simulator, Android emulator or a paired iPhone. op: '
             'set (one position: at "lat,lng"), get (what glint feeds now, route progress, and on Android whether the app is listening), '
-            'clear (stop simulating), route (travel points, a GPX or KML file, or an encoded polyline in the background, at speedKmh or over durationSec; '
+            'clear (stop simulating), route (travel points, a GPX or KML file, an encoded polyline, or a polyline the app draws on its map (polylineId) in the background, at speedKmh or over durationSec; '
             'loop, jitterM noise, dropout lost fixes), pause, resume, stop, seek (progress 0 to 1, meters or waypoint), '
             'permission (value: whileUsing | always | approximate | deny | reset, without a prompt), services (value: on | off, Android), '
             'answer (tap the open system location prompt: choice whileUsing | once | deny | always | keepWhileUsing, precise), '
@@ -59,6 +59,9 @@ class LocationTool extends GlintTool {
             'points': Schema.list(description: 'route: waypoints as "lat,lng" strings, in order.'),
             'file': Schema.string(description: 'route: a host GPX or KML file.'),
             'polyline': Schema.string(description: 'route: a Google encoded polyline, as directions APIs return.'),
+            'polylineId': Schema.string(
+                description:
+                    'route: drive a polyline the attached app draws on its Google map, by the id get_scene lists.'),
             'speedKmh':
                 Schema.num(description: 'route: travel speed. Default 30. set: the reported speed (Android only).'),
             'durationSec':
@@ -117,7 +120,7 @@ class LocationTool extends GlintTool {
         'set' => await _set(backend, args, app, lifecycle),
         'get' => await _get(backend, app, lifecycle),
         'clear' => await _clear(backend),
-        'route' => await _route(backend, args, app, lifecycle),
+        'route' => await _route(backend, args, app, lifecycle, session),
         'seek' => await _seek(backend, args),
         'permission' => await _permission(backend, args, app),
         'services' => await _services(backend, args),
@@ -594,6 +597,69 @@ class LocationTool extends GlintTool {
     );
   }
 
+  /// Every polyline id and its points on the Google maps the app draws now, found by walking the widget tree.
+  static const _polylinesExpr = '(() { final out = <String>[]; '
+      'void visit(Element e) { if (e.widget.runtimeType.toString() == \'GoogleMap\') { '
+      'for (final r in (e.widget as dynamic).polylines) { '
+      "out.add('\${r.polylineId.value}\u001f' + [for (final p in r.points) '\${p.latitude},\${p.longitude}'].join(';')); } } "
+      'e.visitChildren(visit); } '
+      'WidgetsBinding.instance.rootElement?.visitChildren(visit); '
+      "return out.join('\u001e'); })()";
+
+  /// The points of the polyline [id] the attached app draws, or why there are none.
+  Future<({List<LatLng>? points, StructuredResponse? error})> _drawnPolyline(
+      GlintSession session, LocationBackend backend, String id) async {
+    if (!session.isAttached || session.active?.deviceMode == true || session.device.id != backend.id) {
+      return (
+        points: null,
+        error: _bad('polylineId reads the route from the attached Flutter app, and none runs on ${backend.label}',
+            nextSteps: const ['attach to the app that draws the map, then retry']),
+      );
+    }
+    final String? raw;
+    try {
+      raw = await session.runtime.evaluateString(_polylinesExpr, rethrowErrors: true);
+    } on Object catch (e) {
+      return (
+        points: null,
+        error: StructuredResponse.error(
+          summary: 'could not read the app\'s map polylines',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '$e',
+          nextSteps: const ['get_scene detail:"full" lists the map and its routes; pass their points or a GPX instead'],
+        ),
+      );
+    }
+    final lines = [
+      for (final entry in (raw ?? '').split('\u001e'))
+        if (entry.split('\u001f') case [final pid, final pts]) (id: pid, pts: pts),
+    ];
+    final match = lines.where((l) => l.id == id).firstOrNull;
+    if (match == null) {
+      final ids = {for (final l in lines) l.id};
+      return (
+        points: null,
+        error: StructuredResponse.error(
+          summary: ids.isEmpty
+              ? 'the app draws no polyline on a Google map right now'
+              : 'the app draws no polyline "$id"; it draws ${ids.map((i) => '"$i"').join(', ')}',
+          errorKind: GlintErrorKind.targetNotFound,
+          nextSteps: [
+            if (ids.isNotEmpty) 'pass polylineId:"${ids.first}"',
+            'get_scene detail:"full" lists each map\'s routes with their ids',
+          ],
+        ),
+      );
+    }
+    return (
+      points: [
+        for (final p in match.pts.split(';'))
+          if (_parsePoint(p) case final q?) q
+      ],
+      error: null
+    );
+  }
+
   String _routeLine(LocationBackend backend, LocationPlayer p) {
     final pct = (p.fraction * 100).round();
     final where = p.lastFix == null ? '' : ' at ${_fmt(p.lastFix!.at)}';
@@ -658,10 +724,10 @@ class LocationTool extends GlintTool {
   }
 
   Future<StructuredResponse> _route(
-      LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle) async {
-    final sources = [args['points'], args['file'], args['polyline']].where((v) => v != null).length;
+      LocationBackend backend, Map<String, Object?> args, String? app, String? lifecycle, GlintSession session) async {
+    final sources = [args['points'], args['file'], args['polyline'], args['polylineId']].where((v) => v != null).length;
     if (sources != 1) {
-      return _bad('route needs exactly one of points, file or polyline',
+      return _bad('route needs exactly one of points, file, polyline or polylineId',
           nextSteps: const ['e.g. points:["6.5244,3.3792","6.4281,3.4219"]']);
     }
     final List<LatLng> points;
@@ -682,6 +748,11 @@ class LocationTool extends GlintTool {
       final kml = path.toLowerCase().endsWith('.kml') || text.contains('<kml');
       points = kml ? parseKml(text) : parseGpx(text);
       from = file.uri.pathSegments.last;
+    } else if (args['polylineId'] case final String id) {
+      final drawn = await _drawnPolyline(session, backend, id);
+      if (drawn.error != null) return drawn.error!;
+      points = drawn.points!;
+      from = 'the app\'s polyline "$id"';
     } else {
       try {
         points = decodePolyline(args['polyline'] as String);

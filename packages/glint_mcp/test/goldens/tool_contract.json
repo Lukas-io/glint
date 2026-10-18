@@ -339,6 +339,10 @@
         "type": "string",
         "description": "route: a Google encoded polyline, as directions APIs return."
       },
+      "polylineId": {
+        "type": "string",
+        "description": "route: drive a polyline the attached app draws on its Google map, by the id get_scene lists."
+      },
       "speedKmh": {
         "type": "number",
         "description": "route: travel speed. Default 30. set: the reported speed (Android only)."
