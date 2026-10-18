@@ -4,7 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import '../../observability.dart';
-import '../../perception.dart' show suggestIds;
+import '../../perception.dart' show InspectorReadError, suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
@@ -202,6 +202,9 @@ abstract class GlintTool {
       response = await _unresponsiveResponse(session, e);
     } on IosToolchainBlocked catch (e) {
       response = StructuredResponse.toolchainBlocked(e);
+    } on InspectorReadError catch (e) {
+      response =
+          looksLikeConnectionLoss(e) ? await _connectionLostResponse(session, e) : await noFrameResponse(session, e);
     } on ArgTypeError catch (e) {
       response = StructuredResponse.error(
         summary: '${definition.name}: $e',
@@ -284,6 +287,36 @@ abstract class GlintTool {
         if (crash != null) 'this is a crash in the app, worth reporting to the user with the frames above',
         'relaunch the app, then `attach` again',
       ],
+    );
+  }
+
+  /// The widget tree came back empty: a system surface over an app that is not resumed, or no first frame yet.
+  Future<StructuredResponse> noFrameResponse(GlintSession session, InspectorReadError e) async {
+    String? lifecycle;
+    try {
+      lifecycle = await session.lifecycleState();
+    } on Object {
+      lifecycle = null;
+    }
+    await session.active?.refreshSceneMode();
+    final covered = lifecycle != null && lifecycle != 'resumed';
+    return StructuredResponse.error(
+      summary: covered
+          ? 'the app is "$lifecycle", not resumed, so there is no Flutter frame to read: '
+              'a system dialog or another app is in front'
+          : 'the app has no widget tree yet: it has not drawn its first frame '
+              '(still starting, or waiting on something before runApp)',
+      errorKind: GlintErrorKind.appNotResumed,
+      detail: e.toString(),
+      nextSteps: covered
+          ? const [
+              'call get_scene to read what is in front, then tap its buttons by text or glintId',
+              'or `hardware_button home` and reopen the app',
+            ]
+          : const [
+              'call get_scene to check for a system dialog in front, and answer it',
+              'otherwise give the app a moment to start, then retry',
+            ],
     );
   }
 

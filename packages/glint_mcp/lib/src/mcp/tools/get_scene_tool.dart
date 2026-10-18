@@ -3,7 +3,6 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../../../observability.dart';
 import '../../../perception.dart';
-import '../../../runtime.dart' show RuntimeConnectionLostError;
 import '../../../semantic.dart';
 import '../envelope.dart';
 import '../session.dart';
@@ -74,30 +73,7 @@ class GetSceneTool extends GlintTool {
       return _handleNativeMode(session, format);
     }
 
-    try {
-      return await _readFlutterScene(session, format, glintId: glintId, depth: depth);
-    } on InspectorReadError catch (e) {
-      if (looksLikeConnectionLoss(e)) throw RuntimeConnectionLostError(e.message);
-      // A null widget tree usually means no frame to inspect — the app is
-      // backgrounded or paused behind a native surface (permission dialog,
-      // another app). Translate the raw stack trace into an actionable state.
-      final lifecycle = await _safeLifecycle(session);
-      if (lifecycle != null && lifecycle != 'resumed') {
-        return StructuredResponse.error(
-          summary: 'the app is "$lifecycle", not resumed — no Flutter frame to '
-              'read. A native dialog or another app is likely in front.',
-          errorKind: GlintErrorKind.appNotResumed,
-          detail: e.toString(),
-          nextSteps: const [
-            'take a `device op:screenshot` to see what is on top',
-            'dismiss the native surface (e.g. tap its button via raw x,y), '
-                'then retry get_scene',
-            'or `hardware_button home` then reopen the app',
-          ],
-        );
-      }
-      rethrow;
-    }
+    return _readFlutterScene(session, format, glintId: glintId, depth: depth);
   }
 
   Future<StructuredResponse> _readFlutterScene(

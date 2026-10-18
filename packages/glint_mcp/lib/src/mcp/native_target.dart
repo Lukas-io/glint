@@ -33,6 +33,21 @@ Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(Glint
       ...nodes.where((n) => !exact(n) && part(n) && !enabled(n)),
     ].firstOrNull;
   }
+  if (found == null && scene.root.glintId == '_native_surface') {
+    return (
+      hit: null,
+      error: StructuredResponse.error(
+        summary: 'glint cannot read the native surface over the app, so it cannot find '
+            '${glintId != null ? 'node $glintId' : '"$text"'} on it',
+        errorKind: GlintErrorKind.targetNotFound,
+        detail: 'the simulator accessibility read failed (its Simulator window is closed, or the read was refused)',
+        nextSteps: const [
+          'take a `device op:screenshot` and tap the button by x,y',
+          'or re-attach with iosBackend:"xctest", which reads system surfaces without a window',
+        ],
+      ),
+    );
+  }
   if (found == null) {
     final seen = [for (final n in nodes.take(12)) '"${n.textPreview ?? n.glintId}"'];
     return (
