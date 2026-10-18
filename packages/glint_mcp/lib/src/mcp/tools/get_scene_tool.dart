@@ -111,7 +111,11 @@ class GetSceneTool extends GlintTool {
       final budget = session.config.sceneLineBudget;
       final trailerBits = <String>[];
       final dataBits = <String, Object?>{};
-      final warnings = <String>[];
+      final warnings = <String>[
+        if (semantic.sourceScene.root.walk().any((n) => _cameraWidgets.contains(n.baseLabel)) &&
+            await _cameraStarved(session))
+          emulatorCameraStarvedWarning,
+      ];
       if (semantic.sourceScene.degenerate) {
         warnings.add(
           'the inspector returned no widgets created by this project, so the '
@@ -255,6 +259,16 @@ class GetSceneTool extends GlintTool {
     return out;
   }
 
+  /// Flutter widgets that show the camera's live preview.
+  static const _cameraWidgets = {'CameraPreview', 'MobileScanner', 'ReaderWidget'};
+
+  /// An Android emulator whose camera reports no frames lately; false on anything else.
+  Future<bool> _cameraStarved(GlintSession session) async {
+    final device = session.device;
+    if (device is! AndroidDevice || !device.serial.startsWith('emulator-')) return false;
+    return emulatorCameraStarved(device.adbPath, device.serial);
+  }
+
   Future<String?> _safeLifecycle(GlintSession session) async {
     try {
       return await session.lifecycleState();
@@ -284,6 +298,7 @@ class GetSceneTool extends GlintTool {
     final listed = (surface != null || ocr) && !isSentinel && nativeScene.root.children.isNotEmpty;
     final read = isSentinel ? null : classifySurface(nativeScene, owner: surface);
     final sent = capture == null || listed ? null : await session.modelImage(capture.path);
+    final starved = (surface?.toLowerCase().contains('camera') ?? false) && await _cameraStarved(session);
     final readProblem = switch (nativeReader) {
       AndroidNativeReader() => nativeReader.lastReadProblem,
       OcrNativeReader() => nativeReader.lastReadProblem,
@@ -308,6 +323,7 @@ class GetSceneTool extends GlintTool {
         if (capture != null && capture.trigger != 'scene')
           'fresh screenshot failed; this one is ${capture.describe()}, so the screen may have changed',
         if (readProblem != null) readProblem,
+        if (starved) emulatorCameraStarvedWarning,
       ],
       nextSteps: [
         if ((surface != null || ocr) && !isSentinel)

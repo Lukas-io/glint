@@ -74,9 +74,10 @@ class Avds {
     return null;
   }
 
-  /// Boots [avd] detached from glint on a free console port, with gRPC asked for (the emulator does not always start it alone), and waits until Android has booted; returns its serial.
+  /// Boots [avd] detached from glint on a free console port, with gRPC asked for (the emulator does not always start it alone), and waits until Android has booted; returns its serial. A [webcam] id becomes its front camera; one Mac camera cannot back both, so the back keeps the AVD's own.
   Future<String> boot(
     String avd, {
+    String? webcam,
     void Function(int elapsedSec, String phase)? onProgress,
     Duration timeout = const Duration(minutes: 5),
     Duration progressEvery = const Duration(seconds: 15),
@@ -94,12 +95,11 @@ class Avds {
       '/bin/sh',
       [
         '-c',
-        r'exec "$0" -avd "$1" -port "$2" -grpc "$3" -grpc-use-token > "$4" 2>&1',
+        r'exec "$@" > "$0" 2>&1',
+        log.path,
         exe,
-        avd,
-        '$port',
-        '$grpcPort',
-        log.path
+        ...['-avd', avd, '-port', '$port', '-grpc', '$grpcPort', '-grpc-use-token'],
+        if (webcam != null) ...['-camera-front', webcam],
       ],
       mode: ProcessStartMode.detached,
     );
