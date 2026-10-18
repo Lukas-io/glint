@@ -115,10 +115,15 @@ class LocationPlayer {
     );
   }
 
+  /// CoreSimulator spends about a fix at every waypoint on top of the travel, so dense GPX tracks crawl; legs at least this many fixes long keep it near the host clock.
+  static const _legFixes = 5;
+
   Future<void> _leg() {
     final rest = path.pointsFrom(meters);
     if (rest.length < 2) return _hold();
-    return _apply(_fixHere(), () => backend.drive(rest, speed: spec.speed, interval: spec.interval));
+    final step = _legFixes * spec.speed * spec.interval.inMilliseconds / 1000;
+    return _apply(
+        _fixHere(), () => backend.drive(spacedPoints(rest, step), speed: spec.speed, interval: spec.interval));
   }
 
   Future<void> _hold() {
@@ -140,8 +145,7 @@ class LocationPlayer {
       } else {
         meters = path.lengthMeters;
         if (native) {
-          lastFix = _fixHere();
-          _end(RouteState.finished);
+          _settle();
           return;
         }
         _arrive();
@@ -177,6 +181,14 @@ class LocationPlayer {
     }
     _sending = false;
     await _send(force: true);
+    _end(RouteState.finished);
+  }
+
+  /// Pins the device on the last point when the host clock says the route is over, whatever the simulator's own playback reached.
+  Future<void> _settle() async {
+    _timer?.cancel();
+    _timer = null;
+    await _hold();
     _end(RouteState.finished);
   }
 

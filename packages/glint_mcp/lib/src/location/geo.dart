@@ -30,6 +30,17 @@ LatLng offset(LatLng p, double meters, double bearing) {
   return (lat: _deg(lat2), lng: _deg(lng2));
 }
 
+/// [points] thinned so consecutive points are at least [minMeters] apart, keeping both ends.
+List<LatLng> spacedPoints(List<LatLng> points, double minMeters) {
+  if (points.length <= 2 || minMeters <= 0) return points;
+  final kept = [points.first];
+  for (final p in points.skip(1).take(points.length - 2)) {
+    if (distanceMeters(kept.last, p) >= minMeters) kept.add(p);
+  }
+  if (kept.length > 1 && distanceMeters(kept.last, points.last) < minMeters) kept.removeLast();
+  return [...kept, points.last];
+}
+
 /// A path of points with the distance along it at each point, for finding where a traveller is after any distance.
 class GeoPath {
   GeoPath(this.points) : assert(points.length >= 2) {
