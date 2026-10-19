@@ -57,7 +57,12 @@ class AppSession {
     required this.appLogs,
     this.vmUri,
   })  : sceneMode = deviceMode ? SceneMode.native : SceneMode.flutter,
-        attachedAt = DateTime.now();
+        attachedAt = DateTime.now() {
+    if (backend case final FlutterInputBackend routed) routed.touchLog = touchLog;
+  }
+
+  /// Every touch glint sent to this app's device, for drawing onto recordings.
+  final touchLog = TouchLog();
 
   final DeviceTarget device;
   final Uri? vmUri;
