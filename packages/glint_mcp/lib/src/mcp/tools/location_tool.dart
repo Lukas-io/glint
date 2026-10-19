@@ -4,6 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../../interaction/emulator_control.dart' show EmulatorInstance;
+import '../../location/drive_profile.dart';
 import '../../location/geo.dart';
 import '../../location/location_backend.dart';
 import '../../location/location_permission.dart';
@@ -43,7 +44,7 @@ class LocationTool extends GlintTool {
         name: 'location',
         description: 'Simulated GPS on the iOS simulator, Android emulator or a paired iPhone. op: '
             'set (one position: at "lat,lng"), get (what glint feeds now, route progress, and on Android whether the app is listening), '
-            'clear (stop simulating), route (travel points, a GPX or KML file, an encoded polyline, or a polyline the app draws on its map (polylineId) in the background, at speedKmh or over durationSec; '
+            'clear (stop simulating), route (travel points, a GPX or KML file, an encoded polyline, or a polyline the app draws on its map (polylineId) in the background, at speedKmh, between speedKmh and maxSpeedKmh like a driver, or over durationSec; '
             'loop, jitterM noise, dropout lost fixes), pause, resume, stop, seek (progress 0 to 1, meters or waypoint), '
             'permission (value: whileUsing | always | approximate | deny | reset, without a prompt), services (value: on | off, Android), '
             'answer (tap the open system location prompt: choice whileUsing | once | deny | always | keepWhileUsing, precise), '
@@ -66,6 +67,10 @@ class LocationTool extends GlintTool {
                 Schema.num(description: 'route: travel speed. Default 30. set: the reported speed (Android only).'),
             'durationSec':
                 Schema.num(description: 'route: travel the whole route in this many seconds instead of at speedKmh.'),
+            'maxSpeedKmh': Schema.num(
+                description:
+                    'route: drive like a person: cruise wanders between speedKmh and this, accelerating and braking smoothly, slowing for turns and stopping at the end.'),
+            'slowForTurns': Schema.bool(description: 'route with maxSpeedKmh: brake before bends. Default true.'),
             'intervalMs': Schema.int(
                 description:
                     'route: time between fixes. Default 1000; at least 500 on the iOS simulator, 2000 on an iPhone.'),
@@ -660,6 +665,10 @@ class LocationTool extends GlintTool {
     );
   }
 
+  /// "70–100 km/h, braking for 4 turns": what the varied pace will do.
+  String _driveLine(DriveProfile d, num minKmh, num maxKmh) =>
+      '${minKmh.round()}–${maxKmh.round()} km/h${d.slowForTurns ? ', braking for ${d.turns} turn${d.turns == 1 ? '' : 's'}' : ''} and to a stop at the end';
+
   String _routeLine(LocationBackend backend, LocationPlayer p) {
     final pct = (p.fraction * 100).round();
     final where = p.lastFix == null ? '' : ' at ${_fmt(p.lastFix!.at)}';
@@ -690,7 +699,8 @@ class LocationTool extends GlintTool {
         'waypoint': p.waypoint,
         'waypoints': p.path.points.length,
         'remainingSec': p.remaining.inSeconds,
-        'speedKmh': double.parse((p.spec.speed * 3.6).toStringAsFixed(1)),
+        'speedKmh': double.parse(((p.spec.drive?.speed ?? p.spec.speed) * 3.6).toStringAsFixed(1)),
+        if (p.spec.drive case final d?) 'cruiseKmh': [(d.minSpeed * 3.6).round(), (d.maxSpeed * 3.6).round()],
         'intervalMs': p.spec.interval.inMilliseconds,
         if (p.spec.loop) 'laps': p.laps,
         'travel': p.native ? 'device' : 'perFix',
@@ -773,7 +783,16 @@ class LocationTool extends GlintTool {
 
     final durationSec = argNum(args, 'durationSec');
     final speedKmh = argNum(args, 'speedKmh') ?? 30;
+    final maxKmh = argNum(args, 'maxSpeedKmh');
     if (durationSec != null && durationSec <= 0) return _bad('durationSec must be above 0');
+    if (maxKmh != null && durationSec != null) {
+      return _bad('maxSpeedKmh and durationSec both set the pace', nextSteps: const [
+        'keep maxSpeedKmh with speedKmh for varied driving, or durationSec alone for a fixed time'
+      ]);
+    }
+    if (maxKmh != null && (maxKmh < speedKmh || maxKmh > 300)) {
+      return _bad('maxSpeedKmh must be at least speedKmh ($speedKmh) and at most 300, got $maxKmh');
+    }
     if (durationSec == null && (speedKmh <= 0 || speedKmh > 1200)) {
       return _bad('speedKmh must be above 0 and at most 1200, got $speedKmh');
     }
@@ -787,7 +806,12 @@ class LocationTool extends GlintTool {
     final progress = argNum(args, 'progress') ?? 0;
     if (progress < 0 || progress > 1) return _bad('progress must be 0 to 1');
 
+    final drive = maxKmh == null
+        ? null
+        : DriveProfile(path,
+            minSpeed: speedKmh / 3.6, maxSpeed: maxKmh / 3.6, slowForTurns: argBool(args, 'slowForTurns') ?? true);
     final spec = RouteSpec(
+      drive: drive,
       speed: speed,
       interval: Duration(milliseconds: intervalMs),
       loop: argBool(args, 'loop') ?? false,
@@ -807,7 +831,7 @@ class LocationTool extends GlintTool {
     ];
     return StructuredResponse(
       summary:
-          'playing a ${_km(path.lengthMeters)} route from $from on ${backend.label} at ${(speed * 3.6).toStringAsFixed(speed * 3.6 < 10 ? 1 : 0)} km/h, '
+          'playing a ${_km(path.lengthMeters)} route from $from on ${backend.label} at ${drive == null ? '${(speed * 3.6).toStringAsFixed(speed * 3.6 < 10 ? 1 : 0)} km/h' : _driveLine(drive, speedKmh, maxKmh!)}, '
           'one fix every ${(intervalMs / 1000).toStringAsFixed(intervalMs % 1000 == 0 ? 0 : 1)} s${noise.isEmpty ? '' : ' (${noise.join(', ')})'}: '
           '${spec.loop ? 'looping' : 'about ${_dur(player.remaining)} to the end'}',
       warnings: [
