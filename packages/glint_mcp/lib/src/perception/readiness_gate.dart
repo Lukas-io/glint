@@ -15,7 +15,7 @@ class ReadinessGate {
   final CoordinateResolver resolver;
   final int pollIntervalMs;
 
-  /// Polls until [glintId] is hittable, or the ceiling. A screen whose
+  /// Polls until [glintId] is hittable and not faded to opacity 0, or the ceiling. A screen whose
   /// content has not changed for [staleAfterMs] and still lacks the target
   /// fails fast as notFound (with id suggestions) — a static screen will not
   /// grow the node by waiting.
@@ -65,7 +65,7 @@ class ReadinessGate {
           sawInTree = true;
           try {
             final coord = await resolver.resolve(scene, glintId);
-            if (coord.hittable) {
+            if (coord.hittable && coord.nearestAncestorOpacity > 0) {
               return ReadinessResult.ready(
                 glintId: glintId,
                 attempts: attempts,
@@ -73,7 +73,7 @@ class ReadinessGate {
                 coord: coord,
               );
             }
-            lastDetail = 'painted=${coord.painted}, hittable=false, '
+            lastDetail = 'painted=${coord.painted}, hittable=${coord.hittable}, '
                 'ancestorOpacity=${coord.nearestAncestorOpacity}';
           } on GeometryResolveError catch (e) {
             // Geometry can transiently fail mid-build; keep polling.

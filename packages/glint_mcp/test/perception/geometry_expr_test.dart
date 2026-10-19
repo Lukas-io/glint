@@ -23,6 +23,26 @@ void main() {
       expect(expr, contains('IgnorePointer'));
     });
 
+    test('op multiplies every painted opacity up the render chain, not just the nearest Opacity widget', () {
+      final expr = GeometryExpr.build();
+      for (final type in [
+        'RenderOpacity',
+        'RenderAnimatedOpacity',
+        'RenderSliverOpacity',
+        'RenderSliverAnimatedOpacity'
+      ]) {
+        expect(expr, contains("'$type'"));
+      }
+      expect(expr, contains('o = o * r.opacity.value'), reason: 'AnimatedOpacity / FadeTransition paint an Animation');
+      expect(expr, contains('r = r.parent'));
+      expect(expr, isNot(contains('findAncestorWidgetOfExactType<Opacity>')));
+    });
+
+    test('stays a single line for evaluate', () {
+      expect(GeometryExpr.build(), isNot(contains('\n')));
+      expect(GeometryExpr.opacityOf, isNot(contains('\n')));
+    });
+
     test('binds center via Offset-only lambda (no HitTestResult lambda param)', () {
       final expr = GeometryExpr.build();
       expect(expr, contains('(Offset c)'));
