@@ -5,6 +5,7 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
+import '../interaction/emulator_control.dart' show EmulatorControl, EmulatorInstance;
 import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
 import 'capture_ring.dart';
@@ -14,17 +15,32 @@ enum SceneMode { flutter, native }
 
 /// What an app answered when asked to show or hide touches; [errorKind] is set when it could not.
 class TouchesOutcome {
-  const TouchesOutcome(this.on, {this.errorKind, this.detail, this.nextSteps = const []});
+  const TouchesOutcome(this.on,
+      {this.system = false, this.systemDetail, this.errorKind, this.detail, this.nextSteps = const []});
 
   final bool on;
+
+  /// Whether the device draws every real touch too (system dialogs, other apps, recordings), not just the Flutter app.
+  final bool system;
+
+  /// Why the device does not draw them, when touches are on.
+  final String? systemDetail;
   final GlintErrorKind? errorKind;
   final String? detail;
   final List<String> nextSteps;
 
   bool get failed => errorKind != null;
 
+  /// Where touches show, for a reply line.
+  String get describe => !on
+      ? 'hidden'
+      : system
+          ? 'shown everywhere (the device draws every touch, system dialogs and recordings included)'
+          : 'shown in the Flutter app${systemDetail == null ? '' : '; not outside it: $systemDetail'}';
+
   Map<String, Object?> toJson() => {
         'on': on,
+        if (system) 'system': true,
         if (errorKind != null) 'errorKind': errorKind!.name,
         if (detail != null) 'detail': detail,
       };
@@ -156,6 +172,7 @@ class AppSession {
       vmUri: vmUri,
     )..showTouches = showTouches;
     await app._bind(runtimeFactory);
+    await app._restoreStaleSystemTouches();
     return app;
   }
 
@@ -336,8 +353,10 @@ class AppSession {
   /// Shows or hides a dot for each touch inside the app; never throws.
   Future<TouchesOutcome> setShowTouches(bool on) async {
     showTouches = on;
+    final system = await _setSystemTouches(on);
     final rt = runtime;
     final agent = rt == null || deviceMode ? null : AppAgent.of(rt);
+    if (agent == null && system.on) return const TouchesOutcome(true, system: true);
     if (agent == null) {
       return TouchesOutcome(false,
           errorKind: GlintErrorKind.flutterModeRequired,
@@ -345,8 +364,8 @@ class AppSession {
           nextSteps: const ['attach to the running Flutter app (without mode:"device") to show touches']);
     }
     try {
-      final reply = await agent.setTouches(on);
-      if (reply['on'] == on) return TouchesOutcome(on);
+      final reply = await agent.setTouches(on, ownOnly: system.on);
+      if (reply['on'] == on) return TouchesOutcome(on, system: system.on, systemDetail: system.why);
       return TouchesOutcome(false,
           errorKind: GlintErrorKind.unsupportedBackendAction,
           detail: reply['reason'] == 'notDebug'
@@ -371,8 +390,64 @@ class AppSession {
     }
   }
 
+  EmulatorTouches? _emulatorTouches;
+
+  /// Has the device draw every real touch where glint can (an Android emulator's `show_touches`, with input through its own touchscreen); `why` says why not when [on].
+  Future<({bool on, String? why})> _setSystemTouches(bool on) async {
+    final dev = device;
+    final b = backend;
+    final adb = b is FlutterInputBackend ? b.native : b;
+    if (dev is! AndroidDevice || adb is! AdbBackend) {
+      return (on: false, why: on ? 'this device draws no touches of its own for glint' : null);
+    }
+    final setting = ShowTouchesSetting(adbPath: dev.adbPath, serial: dev.serial);
+    if (!on) {
+      adb.systemTouches = null;
+      final t = _emulatorTouches;
+      _emulatorTouches = null;
+      try {
+        await t?.close();
+        await setting.restore();
+      } on Object catch (e) {
+        return (on: false, why: 'could not put Android\'s show_touches setting back: $e');
+      }
+      return (on: false, why: null);
+    }
+    if (!dev.serial.startsWith('emulator-')) {
+      return (on: false, why: 'Android draws only touches from a phone\'s own screen, and glint injects them');
+    }
+    final emulator = await EmulatorInstance.locate(dev.serial, adbPath: dev.adbPath);
+    final grpc = emulator?.grpc;
+    if (grpc == null) {
+      return (on: false, why: emulator?.noControlReason ?? '${dev.serial} serves no gRPC control for its touchscreen');
+    }
+    try {
+      await setting.enable();
+    } on Object catch (e) {
+      return (on: false, why: 'could not switch Android\'s show_touches setting on: $e');
+    }
+    final t = EmulatorTouches(EmulatorControl(grpc));
+    _emulatorTouches = t;
+    adb.systemTouches = t;
+    return (on: true, why: null);
+  }
+
+  /// Puts back an Android `show_touches` setting a glint that exited without detaching left on.
+  Future<void> _restoreStaleSystemTouches() async {
+    final dev = device;
+    if (showTouches || dev is! AndroidDevice) return;
+    final setting = ShowTouchesSetting(adbPath: dev.adbPath, serial: dev.serial);
+    if (!setting.pending) return;
+    try {
+      await setting.restore();
+    } on Object {
+      // best-effort; the next attach tries again
+    }
+  }
+
   Future<void> dispose() async {
     _disposed = true;
+    if (showTouches) await _setSystemTouches(false);
     final rt = runtime;
     if (showTouches && rt != null && rt.isAttached) {
       try {

@@ -242,10 +242,11 @@ class GlintSession {
     return app;
   }
 
-  /// Applies `config.showTouches` to every live Flutter app; device-mode apps have nothing to draw in and are skipped.
+  /// Applies `config.showTouches` to every live Flutter app, and to device-mode Android emulators, which draw touches themselves; other device-mode apps are skipped.
   Future<Map<AppSession, TouchesOutcome>> applyShowTouches() async => {
         for (final app in apps)
-          if (!app.deviceMode && app.isLive) app: await app.setShowTouches(config.showTouches),
+          if (app.isLive && (!app.deviceMode || app.device is AndroidDevice))
+            app: await app.setShowTouches(config.showTouches),
       };
 
   /// Detach one app (the active one by default) and drop it from the pool.
