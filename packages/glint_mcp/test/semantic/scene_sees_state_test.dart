@@ -85,6 +85,24 @@ void main() {
     });
   });
 
+  group('InertEnricher', () {
+    test('reads hidden from the painted opacity the tap gate uses, and drops the tap marker', () async {
+      final scene = _semantic(_n('Scaffold', children: [
+        _n('Column', children: [
+          _n('GestureDetector', children: [_n('Text', text: 'Next')]),
+          _n('GestureDetector', children: [_n('Text', text: 'Skip')]),
+        ]),
+      ]));
+      final rt = _Runtime('hidden;');
+      await InertEnricher(runtime: rt).enrich(scene);
+      final buttons = scene.root.walk().whereType<SemanticButton>().toList();
+      expect(buttons.map((b) => b.inert), [Inert.hidden, null]);
+      expect(buttons[0].affordances, isNot(contains(Affordance.tappable)));
+      expect(buttons[1].affordances, contains(Affordance.tappable));
+      expect(rt.expressions.single, contains(GeometryExpr.opacityOf));
+    });
+  });
+
   group('imageSourceName', () {
     test('asset, memory and long picker names', () {
       expect(imageSourceName('AssetImage(bundle: null, name: "assets/logo.png")'), 'logo.png');
