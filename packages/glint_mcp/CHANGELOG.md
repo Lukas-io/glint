@@ -4,7 +4,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-18
+## [0.5.0] - 2026-10-19
 
 ### Added
 
