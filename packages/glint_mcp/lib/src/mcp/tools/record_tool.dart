@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_mcp/server.dart';
@@ -33,6 +34,9 @@ class RecordTool extends GlintTool {
             'everyMs': Schema.int(description: 'Sample interval in ms (16-1000). Default 50.'),
             'distinctOnly': Schema.bool(description: 'Keep only frames that differ. Default true.'),
             'maxFrames': Schema.int(description: 'Max frames returned (1-60). Default 12.'),
+            'touches': Schema.bool(
+                description: 'Also write video-touches.mp4 with each touch glint sent drawn on it (dot, trail, ring), '
+                    'for people watching; the returned frames stay clean. Default false.'),
             'inline': Schema.bool(
                 description:
                     'Attach up to 4 frames as images (512 px longest side), for clients that cannot read files. Default false.'),
@@ -48,6 +52,7 @@ class RecordTool extends GlintTool {
     final distinctOnly = argBool(args, 'distinctOnly') ?? true;
     final maxFrames = argInt(args, 'maxFrames') ?? 12;
     final inline = argBool(args, 'inline') ?? false;
+    final touches = argBool(args, 'touches') ?? false;
 
     if (durationMs < 0 || durationMs > 30000) {
       return _bad('durationMs must be 0-30000');
@@ -173,8 +178,10 @@ class RecordTool extends GlintTool {
     );
 
     final frames = withHoldMs(extraction.frames, endMs: wallMs);
+    final drawn = touches ? await _drawTouches(app, bridge, video, t0, stopRequestedAt, dir) : null;
     final warnings = <String>[
       ...extraction.warnings,
+      if (drawn?.problem case final problem?) 'touches not drawn: $problem',
       if (extraction.error != null)
         'frames not extracted: ${extraction.error}. The video is at $video. '
             'Build the bridge: cd native/ios_sim_bridge && swift build',
@@ -201,6 +208,7 @@ class RecordTool extends GlintTool {
         ...stepLines,
         if (frames.isNotEmpty && attached.isEmpty) 'frames are PNG files under ${dir.path}/frames; read them in order',
         if (attached.isNotEmpty) '${attached.length} of ${frames.length} frames attached in order',
+        if (drawn?.video case final v?) 'video with ${drawn!.count} touch(es) drawn: $v',
       ].join('\n'),
       warnings: warnings,
       nextSteps: [
@@ -210,6 +218,7 @@ class RecordTool extends GlintTool {
       ],
       data: {
         'video': video,
+        if (drawn?.video case final v?) 'touchesVideo': v,
         'dir': dir.path,
         'wallMs': wallMs,
         if (extraction.durationMs != null) 'videoMs': extraction.durationMs,
@@ -222,6 +231,46 @@ class RecordTool extends GlintTool {
         if (session.isDeviceMode) 'mode': 'device',
       },
     );
+  }
+
+  /// Writes video-touches.mp4 next to [video], with the touches sent between [from] and [to] drawn on it; `problem` says why not.
+  static Future<({String? video, int count, String? problem})> _drawTouches(
+      AppSession app, String? bridge, String video, DateTime from, DateTime to, Directory dir) async {
+    final sent = app.touchLog.between(from, to);
+    if (sent.isEmpty) return (video: null, count: 0, problem: 'glint sent no touches while recording');
+    if (bridge == null || !File(bridge).existsSync()) {
+      return (
+        video: null,
+        count: sent.length,
+        problem: 'drawing needs glint\'s macOS bridge (glint-iossim), not found'
+      );
+    }
+    final json = File('${dir.path}/touches.json')
+      ..writeAsStringSync(jsonEncode({
+        'scale': app.device.devicePixelRatio,
+        'fingers': [
+          for (final r in sent)
+            for (final f in r.fingers)
+              {
+                't': r.at.difference(from).inMicroseconds / 1e6,
+                'points': [
+                  for (final p in f) [p.x, p.y, p.ms]
+                ],
+              },
+        ],
+      }));
+    final out = '${dir.path}/video-touches.mp4';
+    final r = await Process.run(bridge, ['overlay-touches', video, json.path, out]).timeout(const Duration(minutes: 2));
+    if (r.exitCode != 0) {
+      final why = '${r.stderr}'.trim();
+      return (
+        video: null,
+        count: sent.length,
+        problem:
+            why.contains('usage:') ? 'this glint-iossim is older than the overlay-touches command; rebuild it' : why,
+      );
+    }
+    return (video: out, count: sent.length, problem: null);
   }
 
   /// Which stage came back empty: the recording itself (and what may have blocked it) or decoding it.

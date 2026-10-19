@@ -1099,6 +1099,10 @@
         "type": "integer",
         "description": "Max frames returned (1-60). Default 12."
       },
+      "touches": {
+        "type": "boolean",
+        "description": "Also write video-touches.mp4 with each touch glint sent drawn on it (dot, trail, ring), for people watching; the returned frames stay clean. Default false."
+      },
       "inline": {
         "type": "boolean",
         "description": "Attach up to 4 frames as images (512 px longest side), for clients that cannot read files. Default false."

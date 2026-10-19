@@ -5,6 +5,7 @@ import '../flutter_input.dart';
 import '../input_route.dart';
 import '../result.dart';
 import '../screen_recording.dart';
+import '../touch_log.dart';
 import '../touch_path.dart';
 
 /// Delivers input inside the Flutter app when it can (exact, fast), and hands everything else to [native]: system surfaces, the keyboard, native views, buttons.
@@ -17,6 +18,9 @@ class FlutterInputBackend extends InteractionBackend {
 
   /// The app's VM, bound once attach connects; null in device mode.
   FlutterRuntime? runtime;
+
+  /// Where every touch sent through here is noted, for drawing onto recordings.
+  TouchLog? touchLog;
 
   InputReport? _last;
 
@@ -89,16 +93,26 @@ class FlutterInputBackend extends InteractionBackend {
       (x: x / devicePixelRatio, y: y / devicePixelRatio, ms: ms);
 
   @override
-  Future<void> tap({required int physicalX, required int physicalY}) => _deliver(
-        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
-        () => native.tap(physicalX: physicalX, physicalY: physicalY),
-      );
+  Future<void> tap({required int physicalX, required int physicalY}) {
+    touchLog?.add([
+      [(x: physicalX, y: physicalY, ms: 0), (x: physicalX, y: physicalY, ms: 40)]
+    ]);
+    return _deliver(
+      (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, 40)]),
+      () => native.tap(physicalX: physicalX, physicalY: physicalY),
+    );
+  }
 
   @override
-  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) => _deliver(
-        (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
-        () => native.longPress(physicalX: physicalX, physicalY: physicalY, durationMs: durationMs),
-      );
+  Future<void> longPress({required int physicalX, required int physicalY, required int durationMs}) {
+    touchLog?.add([
+      [(x: physicalX, y: physicalY, ms: 0), (x: physicalX, y: physicalY, ms: durationMs)]
+    ]);
+    return _deliver(
+      (f) => f.touch([_logical(physicalX, physicalY, 0), _logical(physicalX, physicalY, durationMs)]),
+      () => native.longPress(physicalX: physicalX, physicalY: physicalY, durationMs: durationMs),
+    );
+  }
 
   @override
   Future<void> swipe({
@@ -110,6 +124,7 @@ class FlutterInputBackend extends InteractionBackend {
     int holdMs = 0,
   }) {
     final path = dragPath(physicalX1, physicalY1, physicalX2, physicalY2, durationMs: durationMs, holdMs: holdMs);
+    touchLog?.add([path]);
     return _deliver(
       (f) => f.touch([for (final p in path) _logical(p.x, p.y, p.ms)]),
       () => native.swipe(
@@ -146,6 +161,7 @@ class FlutterInputBackend extends InteractionBackend {
   Future<void> pinch(
       {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async {
     final from = 120 * devicePixelRatio;
+    touchLog?.add(_pinchFingers(physicalX, physicalY, from, from * scale, durationMs));
     Future<FlutterInputMiss?> viaApp(FlutterInput f) => f.pinch(physicalX / devicePixelRatio,
         physicalY / devicePixelRatio, from / devicePixelRatio, from * scale / devicePixelRatio, durationMs);
     if (route == InputRoute.device) {
@@ -163,6 +179,20 @@ class FlutterInputBackend extends InteractionBackend {
     }
     await _deliver(
         viaApp, () => native.pinch(physicalX: physicalX, physicalY: physicalY, scale: scale, durationMs: durationMs));
+  }
+
+  /// Two fingers on a horizontal line through ([cx], [cy]) going from [from] to [to] pixels apart, as the app path moves them.
+  static List<List<TouchPoint>> _pinchFingers(int cx, int cy, double from, double to, int durationMs) {
+    final steps = (durationMs / 16).ceil().clamp(2, 400);
+    List<TouchPoint> finger(int side) => [
+          for (var i = 0; i <= steps; i++)
+            (
+              x: (cx + side * (from + (to - from) * i / steps) / 2).round(),
+              y: cy,
+              ms: (durationMs * i / steps).round(),
+            ),
+        ];
+    return [finger(-1), finger(1)];
   }
 
   @override
