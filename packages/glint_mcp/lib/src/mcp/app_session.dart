@@ -5,12 +5,46 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
 import '../../semantic.dart';
+import '../interaction/emulator_control.dart' show EmulatorControl, EmulatorInstance;
 import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
 import 'capture_ring.dart';
 
 /// Whether an app is read through the Flutter VM tree or the native OS AX tree.
 enum SceneMode { flutter, native }
+
+/// What an app answered when asked to show or hide touches; [errorKind] is set when it could not.
+class TouchesOutcome {
+  const TouchesOutcome(this.on,
+      {this.system = false, this.systemDetail, this.errorKind, this.detail, this.nextSteps = const []});
+
+  final bool on;
+
+  /// Whether the device draws every real touch too (system dialogs, other apps, recordings), not just the Flutter app.
+  final bool system;
+
+  /// Why the device does not draw them, when touches are on.
+  final String? systemDetail;
+  final GlintErrorKind? errorKind;
+  final String? detail;
+  final List<String> nextSteps;
+
+  bool get failed => errorKind != null;
+
+  /// Where touches show, for a reply line.
+  String get describe => !on
+      ? 'hidden'
+      : system
+          ? 'shown everywhere (the device draws every touch, system dialogs and recordings included)'
+          : 'shown in the Flutter app${systemDetail == null ? '' : '; not outside it: $systemDetail'}';
+
+  Map<String, Object?> toJson() => {
+        'on': on,
+        if (system) 'system': true,
+        if (errorKind != null) 'errorKind': errorKind!.name,
+        if (detail != null) 'detail': detail,
+      };
+}
 
 /// Everything one attachment owns: the VM runtime, the device backend, the
 /// perception pipeline, app logs, reconnect and lifecycle watchers. A
@@ -23,7 +57,12 @@ class AppSession {
     required this.appLogs,
     this.vmUri,
   })  : sceneMode = deviceMode ? SceneMode.native : SceneMode.flutter,
-        attachedAt = DateTime.now();
+        attachedAt = DateTime.now() {
+    if (backend case final FlutterInputBackend routed) routed.touchLog = touchLog;
+  }
+
+  /// Every touch glint sent to this app's device, for drawing onto recordings.
+  final touchLog = TouchLog();
 
   final DeviceTarget device;
   final Uri? vmUri;
@@ -104,6 +143,9 @@ class AppSession {
   /// Wait after a lifecycle change before capturing, so the surface settles.
   int captureSettleMs = 700;
 
+  /// Whether the app draws each touch; carried into every agent this app gets (reconnect, hot restart).
+  bool showTouches = false;
+
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
@@ -125,6 +167,7 @@ class AppSession {
     required DeviceTarget device,
     required FlutterRuntime Function() runtimeFactory,
     int appLogCapacity = 500,
+    bool showTouches = false,
   }) async {
     final app = AppSession._(
       device: device,
@@ -132,8 +175,9 @@ class AppSession {
       deviceMode: false,
       appLogs: AppLogBuffer(capacity: appLogCapacity),
       vmUri: vmUri,
-    );
+    )..showTouches = showTouches;
     await app._bind(runtimeFactory);
+    await app._restoreStaleSystemTouches();
     return app;
   }
 
@@ -183,6 +227,7 @@ class AppSession {
     final sem = Semanticizer();
 
     runtime = rt;
+    AppAgent.of(rt)?.showTouches = showTouches;
     if (backend case final FlutterInputBackend routed) routed.runtime = rt;
     inspector = insp;
     reader = rd;
@@ -230,6 +275,10 @@ class AppSession {
           serverCall: _serverCall(dev.server),
         ),
     };
+    if (backend case final FlutterInputBackend routed) {
+      final reader = nativeReader;
+      routed.coveredBySystem = reader is AndroidNativeReader ? () => _foreignWindowUp(reader) : null;
+    }
 
     try {
       await appLogs.subscribe(rt);
@@ -310,8 +359,112 @@ class AppSession {
     }
   }
 
+  /// Shows or hides a dot for each touch inside the app; never throws.
+  Future<TouchesOutcome> setShowTouches(bool on) async {
+    showTouches = on;
+    final system = await _setSystemTouches(on);
+    final rt = runtime;
+    final agent = rt == null || deviceMode ? null : AppAgent.of(rt);
+    if (agent == null && system.on) return const TouchesOutcome(true, system: true);
+    if (agent == null) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.flutterModeRequired,
+          detail: 'touches are drawn inside the Flutter app, and $label is in device mode with no Flutter VM',
+          nextSteps: const ['attach to the running Flutter app (without mode:"device") to show touches']);
+    }
+    try {
+      final reply = await agent.setTouches(on, ownOnly: system.on);
+      if (reply['on'] == on) return TouchesOutcome(on, system: system.on, systemDetail: system.why);
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+          detail: reply['reason'] == 'notDebug'
+              ? 'the app runs without asserts (not a debug build), and Flutter only draws debug overlays in debug builds'
+              : 'the in-app agent answered ${reply['reason'] ?? reply}',
+          nextSteps: const ['run the app in debug mode (flutter run), then attach again']);
+    } on RuntimeConnectionLostError catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.connectionLost,
+          detail: '$e',
+          nextSteps: const ['relaunch the app, then `attach` again']);
+    } on RuntimeUnresponsiveError catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.appUnresponsive,
+          detail: '$e',
+          nextSteps: const ['if a debugger paused the app, resume it; then set showTouches again']);
+    } on Object catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '$e',
+          nextSteps: const ['set showTouches again; if it keeps failing, `report_issue` with the user\'s OK']);
+    }
+  }
+
+  EmulatorTouches? _emulatorTouches;
+
+  /// Has the device draw every real touch where glint can (an Android emulator's `show_touches`, with input through its own touchscreen); `why` says why not when [on].
+  Future<({bool on, String? why})> _setSystemTouches(bool on) async {
+    final dev = device;
+    final b = backend;
+    final adb = b is FlutterInputBackend ? b.native : b;
+    if (dev is! AndroidDevice || adb is! AdbBackend) {
+      return (on: false, why: on ? 'this device draws no touches of its own for glint' : null);
+    }
+    final setting = ShowTouchesSetting(adbPath: dev.adbPath, serial: dev.serial);
+    if (!on) {
+      adb.systemTouches = null;
+      final t = _emulatorTouches;
+      _emulatorTouches = null;
+      try {
+        await t?.close();
+        await setting.restore();
+      } on Object catch (e) {
+        return (on: false, why: 'could not put Android\'s show_touches setting back: $e');
+      }
+      return (on: false, why: null);
+    }
+    if (!dev.serial.startsWith('emulator-')) {
+      return (on: false, why: 'Android draws only touches from a phone\'s own screen, and glint injects them');
+    }
+    final emulator = await EmulatorInstance.locate(dev.serial, adbPath: dev.adbPath);
+    final grpc = emulator?.grpc;
+    if (grpc == null) {
+      return (on: false, why: emulator?.noControlReason ?? '${dev.serial} serves no gRPC control for its touchscreen');
+    }
+    try {
+      await setting.enable();
+    } on Object catch (e) {
+      return (on: false, why: 'could not switch Android\'s show_touches setting on: $e');
+    }
+    final t = EmulatorTouches(EmulatorControl(grpc));
+    _emulatorTouches = t;
+    adb.systemTouches = t;
+    return (on: true, why: null);
+  }
+
+  /// Puts back an Android `show_touches` setting a glint that exited without detaching left on.
+  Future<void> _restoreStaleSystemTouches() async {
+    final dev = device;
+    if (showTouches || dev is! AndroidDevice) return;
+    final setting = ShowTouchesSetting(adbPath: dev.adbPath, serial: dev.serial);
+    if (!setting.pending) return;
+    try {
+      await setting.restore();
+    } on Object {
+      // best-effort; the next attach tries again
+    }
+  }
+
   Future<void> dispose() async {
     _disposed = true;
+    if (showTouches) await _setSystemTouches(false);
+    final rt = runtime;
+    if (showTouches && rt != null && rt.isAttached) {
+      try {
+        await AppAgent.of(rt)?.setTouches(false).timeout(const Duration(seconds: 2));
+      } on Object {
+        // best-effort; the app may already be gone
+      }
+    }
     final rec = activeRecording;
     activeRecording = null;
     if (rec != null) {
@@ -361,6 +514,16 @@ class AppSession {
       if (_disposed || lastLifecycle != state) return;
       await captureNow('lifecycle');
     });
+  }
+
+  /// Whether a window other than the app's has focus; false when it cannot tell, so the check never blocks input.
+  Future<bool> _foreignWindowUp(AndroidNativeReader reader) async {
+    if (reader.appPackage == null && bundleId != null) reader.appPackage = bundleId;
+    try {
+      return await reader.foreignSurface() != null;
+    } on Object {
+      return false;
+    }
   }
 
   /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
