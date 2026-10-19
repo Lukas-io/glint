@@ -275,6 +275,10 @@ class AppSession {
           serverCall: _serverCall(dev.server),
         ),
     };
+    if (backend case final FlutterInputBackend routed) {
+      final reader = nativeReader;
+      routed.coveredBySystem = reader is AndroidNativeReader ? () => _foreignWindowUp(reader) : null;
+    }
 
     try {
       await appLogs.subscribe(rt);
@@ -510,6 +514,16 @@ class AppSession {
       if (_disposed || lastLifecycle != state) return;
       await captureNow('lifecycle');
     });
+  }
+
+  /// Whether a window other than the app's has focus; false when it cannot tell, so the check never blocks input.
+  Future<bool> _foreignWindowUp(AndroidNativeReader reader) async {
+    if (reader.appPackage == null && bundleId != null) reader.appPackage = bundleId;
+    try {
+      return await reader.foreignSurface() != null;
+    } on Object {
+      return false;
+    }
   }
 
   /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
