@@ -45,6 +45,31 @@ class DriveProfile {
     return cruise + (min(cruise, turnSpeed) - cruise) * t;
   }
 
+  /// Seconds to the end from [from] metres at the current speed, driven at the average cruise; slowing for turns and the stop included.
+  double secondsLeft(double from) {
+    final ghost = DriveProfile._ghost(this);
+    var m = from, t = 0.0;
+    const dt = 0.25;
+    while (m < _length && t < 24 * 3600) {
+      m += ghost.step(m, dt) * dt;
+      t += dt;
+    }
+    return t;
+  }
+
+  /// A copy that holds the average cruise, so estimates don't consume or depend on the random wander.
+  DriveProfile._ghost(DriveProfile o)
+      : minSpeed = (o.minSpeed + o.maxSpeed) / 2,
+        maxSpeed = (o.minSpeed + o.maxSpeed) / 2,
+        slowForTurns = o.slowForTurns,
+        _rng = Random(0),
+        _length = o._length,
+        _corners = o._corners {
+    _cruise = minSpeed;
+    _untilChange = double.infinity;
+    speed = o.speed;
+  }
+
   /// Moves time on by [dt] seconds at [meters] along the path and returns the new speed.
   double step(double meters, double dt) {
     _untilChange -= dt;

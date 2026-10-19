@@ -54,9 +54,11 @@ class LocationPlayer {
 
   double get fraction => path.lengthMeters == 0 ? 1 : meters / path.lengthMeters;
 
-  /// A driven route counts at its average cruise, which overstates a little for the turns and the stop.
+  /// A driven route is timed by driving it ahead at the average cruise, turns and the stop included.
   Duration get remaining {
-    final pace = spec.drive == null ? spec.speed : (spec.drive!.minSpeed + spec.drive!.maxSpeed) / 2;
+    final drive = spec.drive;
+    if (drive != null) return Duration(milliseconds: (drive.secondsLeft(meters) * 1000).round());
+    final pace = spec.speed;
     return pace <= 0 ? Duration.zero : Duration(milliseconds: ((path.lengthMeters - meters) / pace * 1000).round());
   }
 

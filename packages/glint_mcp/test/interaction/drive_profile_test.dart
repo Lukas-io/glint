@@ -62,4 +62,13 @@ void main() {
     final atTurn = run.where((r) => (r.$1 - 600).abs() < 12).map((r) => r.$2);
     expect(atTurn.reduce(max), closeTo(60 / 3.6, 0.5));
   });
+
+  test('time left counts the braking, so it is longer than distance over cruise', () {
+    final d = DriveProfile(_path, minSpeed: 70 / 3.6, maxSpeed: 100 / 3.6, random: Random(3));
+    final est = d.secondsLeft(0);
+    final naive = _path.lengthMeters / (85 / 3.6);
+    expect(est, greaterThan(naive * 1.2));
+    final run = _drive(DriveProfile(_path, minSpeed: 85 / 3.6, maxSpeed: 85 / 3.6, random: Random(3)), dt: 0.25);
+    expect(est, closeTo(run.length * 0.25, 2), reason: 'matches an actual drive at the same cruise');
+  });
 }
