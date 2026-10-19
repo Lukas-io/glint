@@ -126,7 +126,8 @@ class AppLauncher {
       }
       if (exited || _looksFailed(text)) {
         proc.kill();
-        throw LaunchError('flutter $verb failed', logTail: _tail(text), signing: _signingFailed(text));
+        throw LaunchError('flutter $verb failed: ${failureLine(text) ?? 'it exited before the app started'}',
+            logTail: _tail(text), signing: _signingFailed(text));
       }
       if (whileWaiting != null && text.contains('Installing and launching')) await whileWaiting();
       final now = DateTime.now();
@@ -218,6 +219,24 @@ class AppLauncher {
       (text.contains('Gradle task') && text.contains('failed')) ||
       text.contains('the Dart compiler exited unexpectedly') ||
       text.contains('Error: No pubspec.yaml file found');
+
+  /// The log line that says why a build or install failed, so the error's first line is the real reason.
+  static String? failureLine(String text) {
+    final lines = text.split(RegExp(r'[\r\n]')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    for (final p in _failureHints) {
+      for (final l in lines.reversed) {
+        if (p.hasMatch(l)) return l;
+      }
+    }
+    return null;
+  }
+
+  /// Most specific first: an adb install failure code, then build errors, then any error line.
+  static final _failureHints = [
+    RegExp(r'Failure \[|INSTALL_FAILED_'),
+    RegExp(r'FAILURE: |BUILD FAILED|Error \(Xcode\)|error: '),
+    RegExp(r'^Error:|Exception:|^F/'),
+  ];
 
   static String _tail(String text, {int lines = 12}) {
     final all = text.trimRight().split('\n');
