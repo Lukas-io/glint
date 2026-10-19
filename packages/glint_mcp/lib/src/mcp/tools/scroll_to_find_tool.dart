@@ -9,8 +9,18 @@ import '../tool_args.dart';
 import 'scroll_tool.dart';
 import 'tap_tool.dart';
 
+/// What one read of the target means for the scroll loop.
+enum FindVerdict { found, covered, keepScrolling }
+
+/// A lookup needs the target painted on the viewport; a tap needs it hittable there, and a painted one that is not is covered.
+FindVerdict findVerdict(ResolvedCoord coord, {required bool tap}) {
+  if (!coord.centerOnViewport) return FindVerdict.keepScrolling;
+  if (tap ? coord.hittable : coord.painted) return FindVerdict.found;
+  return tap && coord.painted ? FindVerdict.covered : FindVerdict.keepScrolling;
+}
+
 /// Loops `get_scene` + `scroll` until a target (glintId or text content)
-/// is hittable, or the ceiling is reached. Stops early if already visible.
+/// is on screen (and hittable for tap:true), or the ceiling is reached. Stops early if already visible.
 class ScrollToFindTool extends GlintTool {
   const ScrollToFindTool();
 
@@ -18,7 +28,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen and hittable, then return its glintId (tap:true also taps it). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never hittable), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -85,10 +95,14 @@ class ScrollToFindTool extends GlintTool {
     var seenInOverlay = false; // target found in overlay (not in scrollable content)
     var lastTexts = const <String>[];
     var lastIds = const <String>[];
+    ResolvedCoord? covered; // on screen but covered (tap only)
+    int? coveredAt; // the attempt that first saw it covered
+    var last = 0;
 
     String? tapId;
     StructuredResponse? foundReply;
     for (var i = 0; i <= maxScrolls; i++) {
+      last = i;
       final scene = await session.reader.readSummary();
       try {
         lastTexts = _visibleTexts(scene.root);
@@ -104,18 +118,27 @@ class ScrollToFindTool extends GlintTool {
             final coord = await session.resolver.resolve(scene, hit.glintId!);
             // On-viewport is required: a hittable-but-scrolled-out target
             // would send the agent straight back into an offViewport refusal.
-            if (coord.hittable && coord.centerOnViewport) {
+            final verdict = findVerdict(coord, tap: tap);
+            if (verdict == FindVerdict.covered) {
+              covered = coord;
+              coveredAt ??= i;
+            }
+            if (verdict == FindVerdict.found) {
               final found = StructuredResponse(
                 summary: 'found $criterion after $i scroll(s)',
                 data: {
                   'attempts': i,
                   'glintId': hit.glintId,
-                  'hittable': true,
+                  'hittable': coord.hittable,
                   'painted': coord.painted,
                   if (hit.textPreview != null) 'matchedText': hit.textPreview,
                 },
               );
-              if (!tap) return found;
+              if (!tap) {
+                return coord.hittable
+                    ? found
+                    : found.addWarnings(['a tap at its centre would land on ${_cover(coord)}']);
+              }
               tapId = tapTargetFor([scene.root, ...scene.overlayRoots], hit) ?? hit.glintId;
               foundReply = found;
               break;
@@ -129,7 +152,8 @@ class ScrollToFindTool extends GlintTool {
         await scene.dispose();
       }
 
-      if (tapId != null || i == maxScrolls) break;
+      // A covered target gets one more scroll (a bar along the edge may hide it), then the search stops.
+      if (tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt)) break;
       final step = await scroller.handle(session, scrollArgs);
       if (step.isError) {
         return StructuredResponse.error(
@@ -146,6 +170,20 @@ class ScrollToFindTool extends GlintTool {
     }
 
     // Return a diagnostic failure message that distinguishes the root cause.
+    if (covered != null) {
+      return StructuredResponse.error(
+        summary: '$criterion was on screen but covered: a tap at its centre would land on ${_cover(covered)}',
+        errorKind: GlintErrorKind.notHittable,
+        detail: last > coveredAt!
+            ? 'one more scroll did not uncover it, so scrolling further will not help'
+            : 'covered on the last read allowed (maxScrolls $maxScrolls)',
+        nextSteps: [
+          'dismiss or move what is on top, then tap glintId:"${covered.glintId}"',
+          'to only see it, call scroll_to_find without tap:true',
+          'tap glintId:"${covered.glintId}" refuseNotHittable:false taps it anyway',
+        ],
+      ).mergeData({'glintId': covered.glintId, if (covered.hitBy != null) 'coveredBy': covered.hitBy});
+    }
     if (seenInOverlay) {
       return StructuredResponse.error(
         summary: '$criterion is inside a modal overlay, not in the scrollable '
@@ -160,7 +198,7 @@ class ScrollToFindTool extends GlintTool {
     if (seenInTree) {
       return StructuredResponse.error(
         summary: '$criterion appeared in the tree during scrolling but was never '
-            'on-screen and hittable within $maxScrolls scroll(s) in $dirName — '
+            'on-screen${tap ? ' and hittable' : ''} within $maxScrolls scroll(s) in $dirName — '
             'scroll limit hit',
         errorKind: GlintErrorKind.scrollLimitReached,
         nextSteps: [
@@ -187,6 +225,10 @@ class ScrollToFindTool extends GlintTool {
       ],
     );
   }
+
+  /// What a tap at [c]'s centre reaches instead, as precisely as the hit test knows.
+  static String _cover(ResolvedCoord c) =>
+      c.hitBy ?? (c.hitTestReal ? 'another widget' : 'an absorber, overlay or modal (approximate check)');
 
   SceneNode? _findTextNode(SceneNode root, String needle) {
     final want = needle.toLowerCase();
