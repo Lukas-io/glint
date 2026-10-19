@@ -9,6 +9,7 @@ export 'src/interaction/android_server.dart';
 export 'src/interaction/attach_history.dart';
 export 'src/interaction/avd.dart';
 export 'src/interaction/emulator_camera.dart';
+export 'src/interaction/system_touches.dart';
 export 'src/interaction/backend.dart';
 export 'src/interaction/backends/adb_backend.dart';
 export 'src/interaction/backends/flutter_input_backend.dart';

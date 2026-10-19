@@ -103,8 +103,10 @@ class AttachTool extends GlintTool {
               description: 'Wait until the UI settles before returning. Default false.',
             ),
             'showTouches': Schema.bool(
-              description: 'Draw each touch in the app (dot, trail, release ripple) for people watching or recording. '
-                  'Omit to keep the current setting (off by default); config key showTouches toggles it.',
+              description:
+                  'Draw each touch (dot, trail, release ripple) for people watching or recording: in the Flutter '
+                  'app, and system-wide on an Android emulator. Omit to keep the current setting (off by default); config key '
+                  'showTouches toggles it.',
             ),
           },
         ),
@@ -750,7 +752,9 @@ class AttachTool extends GlintTool {
     final all = arg == null ? const <AppSession, TouchesOutcome>{} : await session.applyShowTouches();
     final outcome = all[app] ?? await app.setShowTouches(want);
     final shown = response.mergeData({'touches': outcome.toJson()});
-    if (!outcome.failed) return outcome.on ? shown.copyWith(summary: '${response.summary}\ntouches: shown') : shown;
+    if (!outcome.failed) {
+      return outcome.on ? shown.copyWith(summary: '${response.summary}\ntouches: ${outcome.describe}') : shown;
+    }
     return shown.addWarnings([
       'touches are not shown (${outcome.errorKind!.name}): ${outcome.detail}'
           '${outcome.nextSteps.isEmpty ? '' : '; ${outcome.nextSteps.first}'}',

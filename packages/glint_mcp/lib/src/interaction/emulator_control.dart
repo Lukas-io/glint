@@ -153,6 +153,27 @@ class EmulatorControl {
   static List<int> _lengthDelimited(int field, List<int> bytes) =>
       [(field << 3) | 2, ..._varint(bytes.length), ...bytes];
 
+  /// Sends one frame of the virtual touchscreen: each finger at its display pixel, pressed while its pressure is above 0 and lifted at 0; fingers stay down until lifted.
+  Future<void> sendTouch(List<({int id, int x, int y, int pressure})> fingers) => _client.$createUnaryCall(
+        _method('sendTouch'),
+        [
+          for (final f in fingers)
+            ..._lengthDelimited(1, [
+              0x08,
+              ..._varint(f.x),
+              0x10,
+              ..._varint(f.y),
+              0x18,
+              ..._varint(f.id),
+              0x20,
+              ..._varint(f.pressure),
+              0x38,
+              1,
+            ]),
+        ],
+        options: _options,
+      );
+
   /// Sets the emulator's GPS fix from an encoded `GpsState` message.
   Future<void> setGps(List<int> gpsState) => _client.$createUnaryCall(_method('setGps'), gpsState, options: _options);
 

@@ -28,10 +28,14 @@ class AppAgent {
   /// Whether the app draws each touch; put back whenever the agent installs into a fresh isolate (attach, hot restart).
   bool showTouches = false;
 
+  /// Whether the overlay draws only the touches glint itself sends through the app, because the device already draws every real touch.
+  bool ownTouchesOnly = false;
+
   /// Turns the touch overlay on or off: `{on}`, plus `reason` (`notDebug`) when it could not be drawn.
-  Future<Map<String, Object?>> setTouches(bool on) {
+  Future<Map<String, Object?>> setTouches(bool on, {bool ownOnly = false}) {
     showTouches = on;
-    return call({'op': 'touches', 'on': '$on'});
+    ownTouchesOnly = ownOnly;
+    return call({'op': 'touches', 'on': '$on', 'own': '$ownOnly'});
   }
 
   /// Calls the agent with [args], installing it first in a fresh isolate (after attach or a hot restart).
@@ -56,7 +60,8 @@ class AppAgent {
     _installedIn = isolate;
     if (!showTouches && status != 'present') return;
     try {
-      await runtime.callExtensionOrNull(kAgentExtension, {'op': 'touches', 'on': '$showTouches'});
+      await runtime
+          .callExtensionOrNull(kAgentExtension, {'op': 'touches', 'on': '$showTouches', 'own': '$ownTouchesOnly'});
     } on Object {
       // best-effort: touches never block input or settle; setTouches reports its own failures
     }
@@ -131,6 +136,8 @@ const String _source = r'''
     }
   }
   var touchesOn = false;
+  var ownOnly = false;
+  final own = <int>{};
   var ticking = false;
   final clock = Stopwatch()..start();
   final fingers = <int, List<List<double>>>{};
@@ -152,6 +159,7 @@ const String _source = r'''
     if (ripples.isNotEmpty || fingers.values.any((t) => t.length > 1)) { ticking = true; SchedulerBinding.instance.scheduleFrameCallback(tick); }
   }
   void onPointer(PointerEvent e) {
+    if (ownOnly && !own.contains(e.pointer)) return;
     final now = clock.elapsedMilliseconds.toDouble();
     final at = [e.position.dx, e.position.dy, now];
     if (e is PointerDownEvent) {
@@ -234,6 +242,7 @@ const String _source = r'''
       b.hitTestInView(hit, first, view.viewId);
       if (hit.path.any((e) { final t = e.target.runtimeType.toString(); return t.contains('UiKitView') || t.contains('AppKitView') || t.contains('AndroidView') || t.contains('PlatformView'); })) return {'status': 'platformView'};
       final pointer = int.parse(p['pointer']!);
+      own.add(pointer);
       final t0 = DateTime.now().microsecondsSinceEpoch;
       final clock = Stopwatch()..start();
       Duration at(double ms) => Duration(microseconds: t0 + (ms * 1000).round());
@@ -250,6 +259,7 @@ const String _source = r'''
         }
         if (i == pts.length - 1) b.handlePointerEvent(PointerUpEvent(viewId: view.viewId, pointer: pointer, kind: PointerDeviceKind.touch, position: pos, timeStamp: at(q[2])));
       }
+      own.remove(pointer);
       return {'status': 'ok'};
     }
     if (op == 'pinch') {
@@ -262,6 +272,7 @@ const String _source = r'''
       final to = double.parse(p['to']!);
       final ms = int.parse(p['ms'] ?? '400');
       final base = int.parse(p['pointer']!);
+      own.addAll([base, base + 1]);
       final steps = ms ~/ 16 < 3 ? 3 : ms ~/ 16;
       final t0 = DateTime.now().microsecondsSinceEpoch;
       Offset at(int finger, double span) => Offset(cx + (finger == 0 ? -span / 2 : span / 2), cy);
@@ -283,10 +294,12 @@ const String _source = r'''
       for (var finger = 0; finger < 2; finger++) {
         b.handlePointerEvent(PointerUpEvent(viewId: view.viewId, pointer: base + finger, kind: PointerDeviceKind.touch, position: at(finger, to), timeStamp: end));
       }
+      own.removeAll([base, base + 1]);
       return {'status': 'ok'};
     }
     if (op == 'touches') {
       final want = p['on'] == 'true';
+      ownOnly = p['own'] == 'true';
       if (want == touchesOn) return {'on': touchesOn};
       if (want) {
         var asserts = false;

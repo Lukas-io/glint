@@ -72,7 +72,7 @@
       },
       "showTouches": {
         "type": "boolean",
-        "description": "Draw each touch in the app (dot, trail, release ripple) for people watching or recording. Omit to keep the current setting (off by default); config key showTouches toggles it."
+        "description": "Draw each touch (dot, trail, release ripple) for people watching or recording: in the Flutter app, and system-wide on an Android emulator. Omit to keep the current setting (off by default); config key showTouches toggles it."
       }
     }
   },
