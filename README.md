@@ -27,6 +27,7 @@ It works by reading the **live state of your running app** (via the Dart VM serv
 - **Sees**: every element on screen with two truths: `painted` (is a human looking at it?) and `hittable` (is nothing above it blocking taps, such as an `IgnorePointer` or `AbsorbPointer`?). An opaque sibling drawn on top is not detected yet.
 - **Orients**: knows the navigation stack, including dialogs and bottom sheets, not just routes.
 - **Describes**: gives the agent a compact plain-language scene, not a coordinate dump.
+- **Shows its touches**: `attach showTouches:true` draws each tap, swipe and drag on the app, so people watching the simulator or a recording can follow along.
 - **Scrolls to find**: virtualized lists only build what's near the viewport — glint will scroll to bring an off-screen item into the tree as a first-class action.
 - **Location and maps**: `location` sets the GPS position or plays a route in the background (points, GPX, KML or a polyline), sets or answers location permissions, and waits for arrival. `get_scene` reads a Google map's camera, markers, routes and areas, with the screen point of each marker, and `map` taps markers, pans and zooms like a finger.
 

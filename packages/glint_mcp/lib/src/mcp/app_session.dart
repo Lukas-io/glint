@@ -12,6 +12,24 @@ import 'capture_ring.dart';
 /// Whether an app is read through the Flutter VM tree or the native OS AX tree.
 enum SceneMode { flutter, native }
 
+/// What an app answered when asked to show or hide touches; [errorKind] is set when it could not.
+class TouchesOutcome {
+  const TouchesOutcome(this.on, {this.errorKind, this.detail, this.nextSteps = const []});
+
+  final bool on;
+  final GlintErrorKind? errorKind;
+  final String? detail;
+  final List<String> nextSteps;
+
+  bool get failed => errorKind != null;
+
+  Map<String, Object?> toJson() => {
+        'on': on,
+        if (errorKind != null) 'errorKind': errorKind!.name,
+        if (detail != null) 'detail': detail,
+      };
+}
+
 /// Everything one attachment owns: the VM runtime, the device backend, the
 /// perception pipeline, app logs, reconnect and lifecycle watchers. A
 /// [GlintSession] pools several of these and delegates to the active one.
@@ -104,6 +122,9 @@ class AppSession {
   /// Wait after a lifecycle change before capturing, so the surface settles.
   int captureSettleMs = 700;
 
+  /// Whether the app draws each touch; carried into every agent this app gets (reconnect, hot restart).
+  bool showTouches = false;
+
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
@@ -125,6 +146,7 @@ class AppSession {
     required DeviceTarget device,
     required FlutterRuntime Function() runtimeFactory,
     int appLogCapacity = 500,
+    bool showTouches = false,
   }) async {
     final app = AppSession._(
       device: device,
@@ -132,7 +154,7 @@ class AppSession {
       deviceMode: false,
       appLogs: AppLogBuffer(capacity: appLogCapacity),
       vmUri: vmUri,
-    );
+    )..showTouches = showTouches;
     await app._bind(runtimeFactory);
     return app;
   }
@@ -183,6 +205,7 @@ class AppSession {
     final sem = Semanticizer();
 
     runtime = rt;
+    AppAgent.of(rt)?.showTouches = showTouches;
     if (backend case final FlutterInputBackend routed) routed.runtime = rt;
     inspector = insp;
     reader = rd;
@@ -310,8 +333,54 @@ class AppSession {
     }
   }
 
+  /// Shows or hides a dot for each touch inside the app; never throws.
+  Future<TouchesOutcome> setShowTouches(bool on) async {
+    showTouches = on;
+    final rt = runtime;
+    final agent = rt == null || deviceMode ? null : AppAgent.of(rt);
+    if (agent == null) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.flutterModeRequired,
+          detail: 'touches are drawn inside the Flutter app, and $label is in device mode with no Flutter VM',
+          nextSteps: const ['attach to the running Flutter app (without mode:"device") to show touches']);
+    }
+    try {
+      final reply = await agent.setTouches(on);
+      if (reply['on'] == on) return TouchesOutcome(on);
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.unsupportedBackendAction,
+          detail: reply['reason'] == 'notDebug'
+              ? 'the app runs without asserts (not a debug build), and Flutter only draws debug overlays in debug builds'
+              : 'the in-app agent answered ${reply['reason'] ?? reply}',
+          nextSteps: const ['run the app in debug mode (flutter run), then attach again']);
+    } on RuntimeConnectionLostError catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.connectionLost,
+          detail: '$e',
+          nextSteps: const ['relaunch the app, then `attach` again']);
+    } on RuntimeUnresponsiveError catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.appUnresponsive,
+          detail: '$e',
+          nextSteps: const ['if a debugger paused the app, resume it; then set showTouches again']);
+    } on Object catch (e) {
+      return TouchesOutcome(false,
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '$e',
+          nextSteps: const ['set showTouches again; if it keeps failing, `report_issue` with the user\'s OK']);
+    }
+  }
+
   Future<void> dispose() async {
     _disposed = true;
+    final rt = runtime;
+    if (showTouches && rt != null && rt.isAttached) {
+      try {
+        await AppAgent.of(rt)?.setTouches(false).timeout(const Duration(seconds: 2));
+      } on Object {
+        // best-effort; the app may already be gone
+      }
+    }
     final rec = activeRecording;
     activeRecording = null;
     if (rec != null) {

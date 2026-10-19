@@ -34,6 +34,15 @@ void main() {
       expect(c.scrollAmountFraction, 0.5);
     });
 
+    test('showTouches is off by default and takes only a bool', () {
+      final c = GlintConfig();
+      expect(c.showTouches, isFalse);
+      expect(c.set('showTouches', 'yes'), isNotNull);
+      expect(c.set('showTouches', 'true'), isNull);
+      expect(c.showTouches, isTrue);
+      expect(c.toJson()['showTouches'], isTrue);
+    });
+
     test('unknown key returns an error', () {
       final c = GlintConfig();
       final err = c.set('frobnicator', 42);

@@ -13,7 +13,7 @@ import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
 import 'post_action.dart' show ScrollAnchor;
 
-export 'app_session.dart' show AppSession, SceneMode;
+export 'app_session.dart' show AppSession, SceneMode, TouchesOutcome;
 export 'capture_ring.dart';
 
 /// How far to enrich a scene: [structural] = overlays + route (cheap);
@@ -220,6 +220,7 @@ class GlintSession {
       device: device,
       runtimeFactory: _runtimeFactory,
       appLogCapacity: config.appLogCapacity,
+      showTouches: config.showTouches,
     );
     app.captureSettleMs = config.captureSettleMs;
     _pool[device.id] = app;
@@ -240,6 +241,12 @@ class GlintSession {
     _active = app;
     return app;
   }
+
+  /// Applies `config.showTouches` to every live Flutter app; device-mode apps have nothing to draw in and are skipped.
+  Future<Map<AppSession, TouchesOutcome>> applyShowTouches() async => {
+        for (final app in apps)
+          if (!app.deviceMode && app.isLive) app: await app.setShowTouches(config.showTouches),
+      };
 
   /// Detach one app (the active one by default) and drop it from the pool.
   /// When exactly one other app remains it becomes active.

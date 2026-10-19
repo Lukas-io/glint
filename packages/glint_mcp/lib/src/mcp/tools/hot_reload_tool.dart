@@ -61,10 +61,17 @@ class HotReloadTool extends GlintTool {
         nextSteps: const ['call get_scene to see whether the app came back', 'check the `flutter run` output'],
       );
     }
+    final app = session.active;
+    final touches = restart && app != null && app.showTouches ? await app.setShowTouches(true) : null;
     return StructuredResponse(
-      summary: '$what done in ${watch.elapsedMilliseconds}ms',
+      summary: '$what done in ${watch.elapsedMilliseconds}ms${touches?.on == true ? ' · touches shown' : ''}',
+      warnings: [if (touches != null && touches.failed) 'touches are not shown after the restart: ${touches.detail}'],
       nextSteps: const ['call get_scene to read the updated screen'],
-      data: {'restart': restart, 'elapsedMs': watch.elapsedMilliseconds},
+      data: {
+        'restart': restart,
+        'elapsedMs': watch.elapsedMilliseconds,
+        if (touches != null) 'touches': touches.toJson(),
+      },
     );
   }
 
