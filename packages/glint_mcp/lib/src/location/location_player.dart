@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'drive_profile.dart';
 import 'geo.dart';
 import 'location_backend.dart';
 
@@ -14,6 +15,7 @@ class RouteSpec {
     this.loop = false,
     this.jitterMeters = 0,
     this.dropout = 0,
+    this.drive,
   });
 
   final double speed;
@@ -23,6 +25,9 @@ class RouteSpec {
 
   /// Share of fixes never sent, 0 to 1, like a phone losing GPS under a bridge.
   final double dropout;
+
+  /// When set, speed varies like a driver's instead of holding [speed].
+  final DriveProfile? drive;
 }
 
 /// Plays a [GeoPath] to one device in the background, so the agent keeps driving the app while the position moves.
@@ -49,16 +54,18 @@ class LocationPlayer {
 
   double get fraction => path.lengthMeters == 0 ? 1 : meters / path.lengthMeters;
 
-  Duration get remaining => spec.speed <= 0
-      ? Duration.zero
-      : Duration(milliseconds: ((path.lengthMeters - meters) / spec.speed * 1000).round());
+  /// A driven route counts at its average cruise, which overstates a little for the turns and the stop.
+  Duration get remaining {
+    final pace = spec.drive == null ? spec.speed : (spec.drive!.minSpeed + spec.drive!.maxSpeed) / 2;
+    return pace <= 0 ? Duration.zero : Duration(milliseconds: ((path.lengthMeters - meters) / pace * 1000).round());
+  }
 
   int get waypoint => path.waypointAt(meters);
 
   bool get active => state == RouteState.playing || state == RouteState.paused;
 
   /// The device travels each leg itself (iOS simulator), so the host only keeps time; noise and lost fixes need per-fix sends instead.
-  bool get native => backend.drivesRoutes && spec.jitterMeters == 0 && spec.dropout == 0;
+  bool get native => backend.drivesRoutes && spec.jitterMeters == 0 && spec.dropout == 0 && spec.drive == null;
 
   /// Sends the start position now, then moves it every interval.
   Future<void> start() async {
@@ -109,7 +116,7 @@ class LocationPlayer {
     final moving = state == RouteState.playing && meters < path.lengthMeters;
     return (
       at: noisy ? jitter(here.at, spec.jitterMeters, _rng) : here.at,
-      speed: moving ? spec.speed : 0.0,
+      speed: moving ? (spec.drive?.speed ?? spec.speed) : 0.0,
       heading: here.heading,
       altitude: null,
     );
@@ -133,7 +140,8 @@ class LocationPlayer {
 
   void _tick() {
     if (state != RouteState.playing) return;
-    meters += spec.speed * spec.interval.inMilliseconds / 1000;
+    final dt = spec.interval.inMilliseconds / 1000;
+    meters += (spec.drive?.step(meters, dt) ?? spec.speed) * dt;
     if (meters >= path.lengthMeters) {
       if (spec.loop) {
         laps++;
