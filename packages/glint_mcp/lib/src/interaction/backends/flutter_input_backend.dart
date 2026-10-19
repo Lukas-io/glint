@@ -22,6 +22,9 @@ class FlutterInputBackend extends InteractionBackend {
   /// Where every touch sent through here is noted, for drawing onto recordings.
   TouchLog? touchLog;
 
+  /// Whether another window has focus over the app (a system dialog, Android's notification shade) without changing the app's lifecycle; checked before each in-app delivery.
+  Future<bool> Function()? coveredBySystem;
+
   InputReport? _last;
 
   @override
@@ -60,7 +63,8 @@ class FlutterInputBackend extends InteractionBackend {
       return;
     }
     final input = FlutterInput(rt);
-    final miss = await viaFlutter(input);
+    final covered = await coveredBySystem?.call() ?? false;
+    final miss = covered ? FlutterInputMiss.systemSurface : await viaFlutter(input);
     if (miss == null) {
       _last = (path: InputPath.app, reason: null, ms: clock.elapsedMilliseconds);
       return;
