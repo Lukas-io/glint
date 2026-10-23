@@ -299,7 +299,8 @@ abstract class GlintTool {
     final hit = session.active?.breakpoints.pausedFor;
     if (hit == null || response.summary.contains('paused at breakpoint')) return response;
     return StructuredResponse.error(
-      summary: '${response.summary}: the app paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}) during the call, '
+      summary:
+          '${response.summary}: the app paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}) during the call, '
           'so it most likely landed: ${hit.matchedLine}',
       errorKind: GlintErrorKind.appUnresponsive,
       detail: response.summary,
