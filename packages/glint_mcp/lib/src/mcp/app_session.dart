@@ -140,8 +140,18 @@ class AppSession {
   late final LogBreakpoints breakpoints = LogBreakpoints(
     pauseApp: () => _isolateCall((service, id) => service.pause(id)),
     resumeApp: () => _isolateCall((service, id) => service.resume(id)),
-    capture: () async => (await captureNow('breakpoint'))?.path,
+    capture: _captureForBreakpoint,
   )..listen(appLogs.onEntry);
+
+  /// Screenshots the paused app, retrying because a capture taken just before (e.g. device op:screenshot) can make the next one fail.
+  Future<String?> _captureForBreakpoint() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(const Duration(milliseconds: 600));
+      final shot = await captureNow('breakpoint');
+      if (shot != null) return shot.path;
+    }
+    return null;
+  }
 
   /// Runs a VM call on the UI isolate; returns the failure as text, or null on success.
   Future<String?> _isolateCall(Future<Object?> Function(VmService service, String isolateId) call) async {

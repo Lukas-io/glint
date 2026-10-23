@@ -223,6 +223,7 @@ abstract class GlintTool {
     }
     response = await _checkDeviceGone(session, app, response);
     response = explainMissingBridge(response);
+    response = _explainBreakpointPause(session, response);
     logCall(session, request, response, start);
     return response.toCallResult();
   }
@@ -289,6 +290,20 @@ abstract class GlintTool {
         if (crash != null) 'this is a crash in the app, worth reporting to the user with the frames above',
         'relaunch the app, then `attach` again',
       ],
+    );
+  }
+
+  /// An action that failed because a breakpoint paused the app mid-call most likely landed: say so instead of "not delivered".
+  StructuredResponse _explainBreakpointPause(GlintSession session, StructuredResponse response) {
+    if (!response.isError || definition.name == 'breakpoint') return response;
+    final hit = session.active?.breakpoints.pausedFor;
+    if (hit == null || response.summary.contains('paused at breakpoint')) return response;
+    return StructuredResponse.error(
+      summary: '${response.summary}: the app paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}) during the call, '
+          'so it most likely landed: ${hit.matchedLine}',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: response.summary,
+      nextSteps: const ['breakpoint op:status for the hit, then breakpoint op:resume'],
     );
   }
 
