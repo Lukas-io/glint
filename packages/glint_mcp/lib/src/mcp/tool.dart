@@ -10,6 +10,7 @@ import 'envelope.dart';
 import 'session.dart';
 import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
+import 'tools/breakpoint_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/batch_tool.dart';
 import 'tools/record_tool.dart';
@@ -228,6 +229,7 @@ abstract class GlintTool {
 
   /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.
   Future<StructuredResponse> _unresponsiveResponse(GlintSession session, RuntimeUnresponsiveError e) async {
+    if (pausedAtBreakpoint(session, e) case final paused?) return paused;
     bool? locked;
     try {
       locked = await session.backend.lockState();
@@ -290,8 +292,21 @@ abstract class GlintTool {
     );
   }
 
+  /// A read failed because glint itself paused the app at a log breakpoint; null otherwise.
+  static StructuredResponse? pausedAtBreakpoint(GlintSession session, Object e) {
+    final hit = session.active?.breakpoints.pausedFor;
+    if (hit == null) return null;
+    return StructuredResponse.error(
+      summary: 'the app is paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}): ${hit.matchedLine}',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: e.toString(),
+      nextSteps: const ['breakpoint op:resume, then retry'],
+    );
+  }
+
   /// The widget tree came back empty: a system surface over an app that is not resumed, or no first frame yet.
   Future<StructuredResponse> noFrameResponse(GlintSession session, InspectorReadError e) async {
+    if (pausedAtBreakpoint(session, e) case final paused?) return paused;
     String? lifecycle;
     try {
       lifecycle = await session.lifecycleState();
@@ -537,6 +552,7 @@ const List<GlintTool> kDefaultGlintTools = [
   RecordTool(),
   LogsTool(),
   AppLogsTool(),
+  BreakpointTool(),
   SessionTool(),
   ConfigTool(),
   ReportIssueTool(),

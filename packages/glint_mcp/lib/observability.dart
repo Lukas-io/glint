@@ -3,6 +3,7 @@ library;
 
 export 'src/observability/action_log.dart';
 export 'src/observability/app_log_buffer.dart';
+export 'src/observability/log_breakpoints.dart';
 export 'src/observability/glint_config.dart';
 export 'src/observability/log_renderer.dart';
 export 'src/observability/loose_value.dart';

@@ -11,6 +11,7 @@ export 'src/mcp/tool.dart';
 export 'src/mcp/tools/app_logs_tool.dart';
 export 'src/mcp/tools/attach_tool.dart';
 export 'src/mcp/tools/batch_tool.dart';
+export 'src/mcp/tools/breakpoint_tool.dart';
 export 'src/mcp/tools/config_tool.dart';
 export 'src/mcp/tools/device_tool.dart';
 export 'src/mcp/tools/drag_tool.dart';
