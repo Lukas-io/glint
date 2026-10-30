@@ -19,7 +19,7 @@ class SwipeTool extends GlintTool {
         description: 'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '
             'between raw coordinates (device mode: screenshot pixels; flutter '
             'mode: logical points, as in every reply; points off the screen are '
-            'refused) — coordinates bypass glintId resolution. '
+            'refused); coordinates bypass glintId resolution. '
             '`awaitReady` gates on the `from` endpoint — the `to` only needs '
             'to resolve, not be hittable. '
             'With returnScene: true (default), settles and returns the new scene '
