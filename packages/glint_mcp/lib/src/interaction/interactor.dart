@@ -4,6 +4,7 @@ import 'backend.dart';
 import 'ios_toolchain.dart';
 import 'result.dart';
 import 'target.dart';
+import 'visible_parent.dart';
 
 /// Resolves symbolic targets, gates hittable, dispatches to the backend,
 /// and wraps everything in an [ActionResult].
@@ -85,6 +86,9 @@ class Interactor {
         ],
       );
     } on NotHittableRefused catch (e) {
+      final targetId = _glintIdOf(action);
+      final fadedInput = e.faded && targetId != null && isInputNode(scene, targetId);
+      final parent = fadedInput ? await findVisibleParent(scene, resolver, targetId) : null;
       return ActionResult.failure(
         action: action,
         summary: e.message,
@@ -95,20 +99,32 @@ class Interactor {
         devicePixelRatio: e.devicePixelRatio,
         painted: e.painted,
         hittable: false,
-        nextSteps: e.faded
-            ? const [
-                'it shows once the screen moves on: controls that fade out (video, call, camera) come back after a tap '
-                    'on an empty area; a button that fades in on a later page or step needs that page first',
-                'get_scene shows it without [hidden] once it is back; refuseNotHittable:false taps it anyway',
+        extra: {
+          if (e.faded) 'faded': true,
+          if (parent != null) 'visibleParent': parent,
+        },
+        nextSteps: fadedInput
+            ? [
+                if (parent != null)
+                  'tap $parent (the visible control over it) to focus it, then type without focus'
+                else
+                  'get_scene: tap the visible control that stands over it (an amount shown above an invisible field), then type without focus',
+                'refuseNotHittable:false taps the hidden field itself',
               ]
-            : e.hitBy != null
-                ? [
-                    'something covers the target: scroll it into view with scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", or dismiss what is on top, then retry',
-                    'pass refuseNotHittable:false to tap anyway',
+            : e.faded
+                ? const [
+                    'it shows once the screen moves on: controls that fade out (video, call, camera) come back after a tap '
+                        'on an empty area; a button that fades in on a later page or step needs that page first',
+                    'get_scene shows it without [hidden] once it is back; refuseNotHittable:false taps it anyway',
                   ]
-                : const [
-                    'check what\'s on top with get_scene: a modal or absorber probably covers the target',
-                  ],
+                : e.hitBy != null
+                    ? [
+                        'something covers the target: scroll it into view with scroll_to_find targetGlintId:"${targetId ?? "<glintId>"}", or dismiss what is on top, then retry',
+                        'pass refuseNotHittable:false to tap anyway',
+                      ]
+                    : const [
+                        'check what\'s on top with get_scene: a modal or absorber probably covers the target',
+                      ],
       );
     } on GeometryResolveError catch (e) {
       return ActionResult.failure(
