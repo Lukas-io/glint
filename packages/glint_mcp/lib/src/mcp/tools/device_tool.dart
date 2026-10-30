@@ -23,7 +23,7 @@ class DeviceTool extends GlintTool {
   Tool get definition => Tool(
         name: 'device',
         description:
-            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless; crop with glintId or region, several apps side by side with apps), privacy, biometric; each argument names the ops it serves. On Android (udid: an adb serial) op:privacy sets runtime permissions and screen-capture consent. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed), unsupportedBackendAction.',
+            'Inspect or configure an iOS simulator: the attached one, or udid. op: status (default), appearance, openurl, screenshot (PNG, works headless; crop with glintId or region, several apps side by side with apps), privacy, biometric; each argument names the ops it serves. On Android (udid: an adb serial) op:screenshot works on the attached device, with or without a Flutter app, and op:privacy sets runtime permissions and screen-capture consent. errorKind: invalidArgument, targetNotFound, backendToolError (simctl failed), unsupportedBackendAction.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
@@ -31,7 +31,7 @@ class DeviceTool extends GlintTool {
                   'privacy | biometric | network (physical iPhone: value list | off | <profile>)',
             ),
             'udid': Schema.string(
-              description: 'Target simulator UDID. Defaults to the attached device.',
+              description: 'Target simulator UDID or Android adb serial. Defaults to the attached device.',
             ),
             'inline': Schema.bool(
               description: 'op=screenshot: also return the image as image '
@@ -100,6 +100,13 @@ class DeviceTool extends GlintTool {
     if (op == 'screenshot' && session.active != null && (args['udid'] == null || args['apps'] != null)) {
       if (argBool(args, 'latest') ?? false) return _latest(session, args);
       return attachedScreenshot(session, args, request);
+    }
+    final pooledAndroid = op == 'screenshot' ? _pooledAndroid(session, args['udid'] as String?) : null;
+    if (pooledAndroid != null) {
+      return session.withApp(
+        pooledAndroid,
+        () => argBool(args, 'latest') ?? false ? _latest(session, args) : attachedScreenshot(session, args, request),
+      );
     }
 
     final udid = _resolveUdid(session, args['udid'] as String?);
@@ -198,7 +205,6 @@ class DeviceTool extends GlintTool {
         return _result(err, 'opened $url on $udid');
 
       case 'screenshot':
-        final inline = argBool(args, 'inline') ?? false;
         final path = '${Directory.systemTemp.path}/glint-shot-$udid-'
             '${DateTime.now().millisecondsSinceEpoch}.png';
         final shot = await sim.screenshot(udid, path);
@@ -208,33 +214,7 @@ class DeviceTool extends GlintTool {
             errorKind: GlintErrorKind.backendToolError,
           );
         }
-        final dims = shot.width != null && shot.height != null ? ' (${shot.width}x${shot.height} px)' : '';
-        final sent = inline && shot.width != null && shot.height != null
-            ? await prepareModelImage(shot.path!,
-                width: shot.width!,
-                height: shot.height!,
-                maxSize: argInt(args, 'maxSize') ?? session.config.screenshotMaxSize,
-                format: session.config.screenshotFormat,
-                quality: session.config.screenshotQuality)
-            : null;
-        return StructuredResponse(
-          summary: 'screenshot saved: ${shot.path}$dims',
-          nextSteps: [
-            if (!inline) 'read the image at ${shot.path} to see the screen',
-          ],
-          data: {
-            'ok': true,
-            'path': shot.path,
-            if (shot.width != null) 'width': shot.width,
-            if (shot.height != null) 'height': shot.height,
-            if (sent != null)
-              'coordinates':
-                  'image is ${sent.width}x${sent.height}; tap x,y in screen pixels = image pixel × ${(shot.width! / sent.width).toStringAsFixed(3)}',
-          },
-          imagePaths: [
-            if (sent != null) sent.path else if (inline) shot.path!,
-          ],
-        );
+        return _savedShot(session, args, shot);
 
       case 'biometric':
         return _biometric(sim, udid, args);
@@ -271,10 +251,84 @@ class DeviceTool extends GlintTool {
       RegExp(r'^[\w.-]+:\d+$').hasMatch(id) ||
       RegExp(r'^[A-Za-z0-9]{8,}$').hasMatch(id);
 
+  /// The attached Android app on [serial], or null when [serial] is not an attached Android device.
+  AppSession? _pooledAndroid(GlintSession session, String? serial) {
+    if (serial == null || serial.isEmpty) return null;
+    final app = session.appFor(serial);
+    return app != null && app.device is AndroidDevice ? app : null;
+  }
+
+  /// The reply for a screenshot saved at [shot]: its path and size, plus the image inline (resized) when asked.
+  Future<StructuredResponse> _savedShot(GlintSession session, Map<String, Object?> args, ScreenshotResult shot) async {
+    final inline = argBool(args, 'inline') ?? false;
+    final dims = shot.width != null && shot.height != null ? ' (${shot.width}x${shot.height} px)' : '';
+    final sent = inline && shot.width != null && shot.height != null
+        ? await prepareModelImage(shot.path!,
+            width: shot.width!,
+            height: shot.height!,
+            maxSize: argInt(args, 'maxSize') ?? session.config.screenshotMaxSize,
+            format: session.config.screenshotFormat,
+            quality: session.config.screenshotQuality)
+        : null;
+    return StructuredResponse(
+      summary: 'screenshot saved: ${shot.path}$dims',
+      nextSteps: [
+        if (!inline) 'read the image at ${shot.path} to see the screen',
+      ],
+      data: {
+        'ok': true,
+        'path': shot.path,
+        if (shot.width != null) 'width': shot.width,
+        if (shot.height != null) 'height': shot.height,
+        if (sent != null)
+          'coordinates':
+              'image is ${sent.width}x${sent.height}; tap x,y in screen pixels = image pixel × ${(shot.width! / sent.width).toStringAsFixed(3)}',
+      },
+      imagePaths: [
+        if (sent != null) sent.path else if (inline) shot.path!,
+      ],
+    );
+  }
+
+  /// A screenshot of an Android device glint is not attached to: the whole screen only, through adb.
+  Future<StructuredResponse> _androidScreenshot(GlintSession session, String serial, Map<String, Object?> args) async {
+    final needsAttach = ['glintId', 'region', 'apps', 'waitFor', 'latest'].where((k) => args[k] != null).toList();
+    if (needsAttach.isNotEmpty) {
+      return StructuredResponse.error(
+        summary: '${needsAttach.join(', ')} need $serial to be attached',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: [
+          'attach device:"$serial" (or attach mode:"device" device:"$serial"), then repeat the screenshot',
+          'or drop ${needsAttach.join(', ')} to capture the whole screen',
+        ],
+      );
+    }
+    final afterMs = argInt(args, 'afterMs') ?? 0;
+    if (afterMs < 0 || afterMs > 30000) return _bad('afterMs must be between 0 and 30000');
+    if (afterMs > 0) await Future<void>.delayed(Duration(milliseconds: afterMs));
+    final adbPath = resolveAdbPath(null) ?? 'adb';
+    final path = '${Directory.systemTemp.path}/glint-shot-${serial.replaceAll(RegExp(r'[^\w.-]'), '_')}-'
+        '${DateTime.now().millisecondsSinceEpoch}.png';
+    final shot = await AndroidDevice(serial: serial, adbPath: adbPath).createBackend().screenshot(path);
+    if (shot.error != null || shot.path == null) {
+      return StructuredResponse.error(
+        summary: 'screenshot of $serial failed',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: shot.error,
+        nextSteps: [
+          'adb devices shows whether $serial is online; reconnect or unlock it, then retry',
+          'pass udid:"<the adb serial>" of a device that is listed',
+        ],
+      );
+    }
+    return _savedShot(session, args, shot);
+  }
+
   Future<StructuredResponse> _android(GlintSession session, String serial, String op, Map<String, Object?> args) async {
+    if (op == 'screenshot') return _androidScreenshot(session, serial, args);
     if (op != 'privacy') {
       return StructuredResponse.error(
-        summary: 'device op:$op is iOS simulator only; on Android only op:privacy is here',
+        summary: 'device op:$op is iOS simulator only; on Android only op:screenshot and op:privacy are here',
         errorKind: GlintErrorKind.unsupportedBackendAction,
         nextSteps: const [
           '`media op:event` rotates and sends sensor, call and SMS events to an emulator',

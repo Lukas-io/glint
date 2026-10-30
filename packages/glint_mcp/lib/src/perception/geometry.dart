@@ -411,6 +411,58 @@ class CoordinateResolver {
 /// instead of the JSON blob; surface that as a typed failure, never a crash.
 /// Dart prints unlaid-out geometry as `NaN`, which is not JSON: it becomes
 /// null so callers can name the condition.
+/// Measuring the modal on top of the app: what back needs to close a sheet or dialog.
+extension ModalGeometry on CoordinateResolver {
+  /// Global rect and view size of [node] (an inspector node needs no glintId), or null when it cannot be measured.
+  Future<({double x, double y, double w, double h, double vw, double vh})?> boundsOf(
+      Scene scene, SceneNode node) async {
+    try {
+      await _runtime.setInspectorSelection(
+        inspectorId: node.inspectorId,
+        groupName: scene.fullGroupName ?? scene.groupName,
+      );
+      final json = await _runtime.evaluateString(GeometryExpr.build(), rethrowErrors: true);
+      if (json == null) return null;
+      final d = _decode(json, 'bounds');
+      if (d['gx'] == null || d['gy'] == null) return null;
+      final w = (d['bw'] as num).toDouble(), h = (d['bh'] as num).toDouble();
+      return (
+        x: (d['gx'] as num).toDouble() - w / 2,
+        y: (d['gy'] as num).toDouble() - h / 2,
+        w: w,
+        h: h,
+        vw: (d['vw'] as num).toDouble(),
+        vh: (d['vh'] as num).toDouble(),
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  /// Whether the top modal barrier closes its route when tapped; null when there is no barrier or the app would not say.
+  Future<bool?> barrierDismissible(Scene scene) async {
+    final entry = scene.topBarrier;
+    if (entry == null) return null;
+    final nodes = entry.walk().toList();
+    final barrier = nodes.where((n) => n.baseLabel == 'ModalBarrier').firstOrNull ??
+        nodes.where((n) => n.baseLabel == 'AnimatedModalBarrier').firstOrNull;
+    if (barrier == null) return null;
+    try {
+      await _runtime.setInspectorSelection(
+        inspectorId: barrier.inspectorId,
+        groupName: scene.fullGroupName ?? scene.groupName,
+      );
+      return switch (await _runtime.evaluateString(GeometryExpr.barrierDismissible, rethrowErrors: true)) {
+        'true' => true,
+        'false' => false,
+        _ => null,
+      };
+    } on Object {
+      return null;
+    }
+  }
+}
+
 Map<String, Object?> _decode(String json, String what) {
   try {
     final decoded = jsonDecode(json.replaceAll(RegExp(r'-?(?:NaN|Infinity)'), 'null'));
@@ -447,6 +499,9 @@ class GeometryExpr {
   /// Fallback when the real hit test ([hitPath]) cannot run: nearest AbsorbPointer / IgnorePointer only.
   static const _hittable = '(!($_el.findAncestorWidgetOfExactType<AbsorbPointer>()?.absorbing ?? false) && '
       '!($_el.findAncestorWidgetOfExactType<IgnorePointer>()?.ignoring ?? false))';
+
+  /// The selected ModalBarrier's `dismissible` flag as a string.
+  static const barrierDismissible = '((dynamic w) => w.dismissible.toString())($_el.widget)';
 
   static String build() {
     final body = [
