@@ -120,7 +120,7 @@ class BreakpointTool extends GlintTool {
         nextSteps: const ['omit it for the 60000 ms default'],
       );
     }
-    if (bps.armed.isEmpty && bps.ready == null) {
+    if (bps.armed.isEmpty && !bps.hasPending) {
       return StructuredResponse.error(
         summary: 'no breakpoint is armed, so nothing can hit',
         errorKind: GlintErrorKind.invalidArgument,
@@ -174,7 +174,7 @@ class BreakpointTool extends GlintTool {
       summary: '${hit.paused ? 'paused at' : 'hit'} ${hit.breakpoint.id} (hit ${hit.number}): ${hit.matchedLine}',
       warnings: [
         if (hit.pauseError != null) 'the app could not be paused: ${hit.pauseError}',
-        if (hit.screenshotPath == null) 'no screenshot was captured at the hit',
+        if (hit.breakpoint.pause && hit.screenshotPath == null) 'no screenshot was captured at the hit',
         if (hit.alsoMatched.isNotEmpty)
           '${hit.alsoMatched.length} more line(s) matched while paused; see data.hit.alsoMatched',
       ],

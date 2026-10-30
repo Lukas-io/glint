@@ -295,7 +295,7 @@ abstract class GlintTool {
 
   /// An action that failed because a breakpoint paused the app mid-call most likely landed: say so instead of "not delivered".
   StructuredResponse _explainBreakpointPause(GlintSession session, StructuredResponse response) {
-    if (!response.isError || definition.name == 'breakpoint') return response;
+    if (!response.isError || definition.name == 'breakpoint' || !_looksLikeStall(response)) return response;
     final hit = session.active?.breakpoints.pausedFor;
     if (hit == null || response.summary.contains('paused at breakpoint')) return response;
     return StructuredResponse.error(
@@ -306,6 +306,15 @@ abstract class GlintTool {
       detail: response.summary,
       nextSteps: const ['breakpoint op:status for the hit, then breakpoint op:resume'],
     );
+  }
+
+  /// Whether an error is the kind a paused app causes: unresponsive, never ready, or a timeout.
+  static bool _looksLikeStall(StructuredResponse response) {
+    final data = response.data ?? const <String, Object?>{};
+    final kind = data['errorKind'];
+    if (kind == GlintErrorKind.appUnresponsive.name || kind == GlintErrorKind.targetNeverReady.name) return true;
+    final text = '${response.summary} ${data['detail'] ?? ''}'.toLowerCase();
+    return text.contains('timed out') || text.contains('timeout');
   }
 
   /// A read failed because glint itself paused the app at a log breakpoint; null otherwise.

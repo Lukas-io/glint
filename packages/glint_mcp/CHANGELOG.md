@@ -6,7 +6,7 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Added
 
-- **Log breakpoints.** `breakpoint op:set pattern:"<regex>"` pauses the app the moment it logs a matching line (print, debugPrint, `developer.log` or stderr), screenshots that screen, and holds it until `breakpoint op:resume`. `op:wait` blocks until the next hit, with progress every 15 s; `op:status`, `op:list` and `op:clear` manage the rest. `pause:false` records hits without pausing. While paused, scene reads say which breakpoint holds the app instead of reporting a generic unresponsive app, and glint resumes a paused app when it detaches.
+- **Log breakpoints.** `breakpoint op:set pattern:"<regex>"` pauses the app the moment it logs a matching line (print, debugPrint, `developer.log` or stderr), screenshots that screen, and holds it until `breakpoint op:resume`. `op:wait` blocks until the next hit, with progress every 15 s; `op:status`, `op:list` and `op:clear` manage the rest. `pause:false` records hits without pausing. While paused, scene reads say which breakpoint holds the app instead of reporting a generic unresponsive app, `hot_reload` refuses while the app is paused, and glint resumes a paused app when it detaches.
 
 ## [0.5.0] - 2026-10-19
 
