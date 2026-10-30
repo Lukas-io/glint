@@ -155,12 +155,16 @@ SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
   );
 }
 
-/// Walks the render tree once and hashes decorations, opacity and physical-model colour and elevation; type names are compared as strings so it compiles in any eval library.
+/// Walks the render tree once and hashes decorations, plain fills (`Container(color:)`), painted text and icon glyphs with their colour, opacity and physical-model colour and elevation; type names are compared as strings so it compiles in any eval library.
 const _paintExpr = '(() { var h = 0; void v(dynamic r) { final t = r.runtimeType.toString(); String s = ""; '
+    'try { '
     'if (t == "RenderDecoratedBox") { s = r.decoration.toString(); } '
+    'else if (t == "_RenderColoredBox") { s = r.color.toString(); } '
+    'else if (t == "RenderParagraph") { s = r.text.toPlainText().toString() + (r.text.style?.color).toString(); } '
     'else if (t == "RenderOpacity") { s = r.opacity.toString(); } '
     'else if (t == "RenderAnimatedOpacity") { s = r.opacity.value.toString(); } '
     'else if (t == "RenderPhysicalModel" || t == "RenderPhysicalShape") { s = r.color.toString() + r.elevation.toString(); } '
+    '} catch (_) {} '
     'if (s.isNotEmpty) h = (h * 31 + s.hashCode) & 0x7fffffff; r.visitChildren(v); } '
     'for (final view in RendererBinding.instance.renderViews) { v(view); } return h.toString(); })()';
 

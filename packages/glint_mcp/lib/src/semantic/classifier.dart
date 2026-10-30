@@ -265,6 +265,11 @@ class ButtonClassifier extends WidgetClassifier {
     'CupertinoNavigationBarBackButton',
     'PopupMenuButton',
     'DropdownButton',
+    'ChoiceChip',
+    'FilterChip',
+    'InputChip',
+    'ActionChip',
+    'RawChip',
     'InkWell',
     'GestureDetector',
   };
