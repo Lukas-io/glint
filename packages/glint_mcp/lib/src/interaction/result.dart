@@ -65,6 +65,9 @@ enum GlintErrorKind {
   // scroll_to_find specific failures
   targetNotFound,
   scrollLimitReached,
+
+  /// A scroll moved something outside the list being searched (the route, or another PageView's page); `data.sideEffect`.
+  scrollSideEffect,
   // bug bucket — should never happen; if it does, it's on us
   internal,
 }

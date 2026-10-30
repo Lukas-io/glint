@@ -11,6 +11,9 @@ import '../tool_args.dart';
 
 enum ScrollDirection { up, down, left, right }
 
+/// The scrollable [scroll] is told to drive instead of the main one (null keeps the main one), and the PageViews whose visible page must not change while it does.
+typedef ScrollTarget = ({ScrollAnchor? anchor, Set<String> watchedPagedIds});
+
 /// Rest at the end of a scroll swipe so the list stops where the finger does instead of flinging on.
 const scrollHoldMs = 120;
 
@@ -42,7 +45,10 @@ class ScrollTool extends GlintTool {
       );
 
   @override
-  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
+  Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) => perform(session, request);
+
+  /// [handle], optionally driving [target] and reporting `sideEffect` in the data when the route or a watched PageView page changed.
+  Future<StructuredResponse> perform(GlintSession session, CallToolRequest request, {ScrollTarget? target}) async {
     final args = request.arguments ?? const {};
     final dirName = args['direction']! as String;
     final amount = (argNum(args, 'amountFraction') ?? session.config.scrollAmountFraction).toDouble();
@@ -78,7 +84,8 @@ class ScrollTool extends GlintTool {
     final horizontal = dir == ScrollDirection.left || dir == ScrollDirection.right;
     final action = await openActionScene(session, snapshot: returnScene);
     try {
-      final anchor = action.semantic == null ? null : await session.scrollAnchorIn(action.scene, action.semantic!);
+      final anchor = target?.anchor ??
+          (action.semantic == null ? null : await session.scrollAnchorIn(action.scene, action.semantic!));
       final ({double logicalW, double logicalH, double dpr}) vp;
       try {
         vp = await session.viewportIn(action.scene);
@@ -94,7 +101,8 @@ class ScrollTool extends GlintTool {
         );
       }
       final keyboard = (await session.uiState()).keyboardBottomPx / vp.dpr;
-      final region = swipeRegion((x: 0.0, y: 0.0, w: vp.logicalW, h: vp.logicalH - keyboard), anchor?.clip);
+      final region = swipeRegion((x: 0.0, y: 0.0, w: vp.logicalW, h: vp.logicalH - keyboard), anchor?.clip,
+          horizontal: horizontal);
       final line = _swipeLine(dir, amount, region);
       var response = await coordinateSwipe(session, line.fromX, line.fromY, line.toX, line.toY, 300,
           verb: 'scrolled', holdMs: scrollHoldMs);
@@ -110,6 +118,8 @@ class ScrollTool extends GlintTool {
             'changeCategory': merged.category,
             if (movedPx != null) 'scrolledPx': movedPx.round(),
           });
+          final sideEffect = target == null ? null : sideEffectOf(action.pre, post.snapshot, target.watchedPagedIds);
+          if (sideEffect != null) response = response.mergeData({'sideEffect': sideEffect});
           if (!merged.changed) {
             final reason = await _whyStill(session, action.scene, anchor, dir);
             response = response
@@ -194,13 +204,14 @@ class ScrollTool extends GlintTool {
 
 typedef Rect4 = ({double x, double y, double w, double h});
 
-/// Where to swipe: [screen] (already above the keyboard) narrowed to the scrollable's visible [clip]; falls back to [screen] when the overlap is too small to swipe in.
-Rect4 swipeRegion(Rect4 screen, Rect4? clip) {
+/// Where to swipe: [screen] (already above the keyboard) narrowed to the scrollable's visible [clip]; falls back to [screen] when the overlap is too small to swipe in (a thin strip such as a tab bar is enough across the swipe).
+Rect4 swipeRegion(Rect4 screen, Rect4? clip, {bool horizontal = false}) {
   if (clip == null) return screen;
   final x = clip.x > screen.x ? clip.x : screen.x;
   final y = clip.y > screen.y ? clip.y : screen.y;
   final right = (clip.x + clip.w) < (screen.x + screen.w) ? clip.x + clip.w : screen.x + screen.w;
   final bottom = (clip.y + clip.h) < (screen.y + screen.h) ? clip.y + clip.h : screen.y + screen.h;
-  if (right - x < 80 || bottom - y < 80) return screen;
+  final minWidth = horizontal ? 80 : 24, minHeight = horizontal ? 24 : 80;
+  if (right - x < minWidth || bottom - y < minHeight) return screen;
   return (x: x, y: y, w: right - x, h: bottom - y);
 }

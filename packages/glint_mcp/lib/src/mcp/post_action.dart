@@ -67,6 +67,7 @@ class SceneSnapshot {
     required this.hasOverlay,
     required this.contentHash,
     this.paintHash,
+    this.pages = const {},
   });
 
   final String routeName;
@@ -75,6 +76,9 @@ class SceneSnapshot {
 
   /// What the render tree paints beyond text (fills, opacity, elevation), so a colour-only change still registers.
   final int? paintHash;
+
+  /// For each PageView / TabBarView, the glintIds of the pages on screen, joined by commas.
+  final Map<String, String> pages;
 
   /// Whether a native surface covered the app when this was taken; a lifecycle event can land mid-action, so the post-action read must not ask afterwards.
   bool? coveredBefore;
@@ -152,7 +156,37 @@ SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
     hasOverlay: base.hasOverlay,
     contentHash: hash,
     paintHash: paintHash,
+    pages: _visiblePages(semantic),
   );
+}
+
+Map<String, String> _visiblePages(SemanticScene semantic) {
+  final pages = <String, String>{};
+  for (final list in semantic.root.walk().whereType<SemanticList>()) {
+    final id = list.glintId;
+    final measured = list.children.whereType<SemanticPage>().where((p) => p.onViewport != null);
+    if (id == null || measured.isEmpty) continue;
+    pages[id] = [
+      for (final p in measured)
+        if (p.onViewport! && p.glintId != null) p.glintId!
+    ].join(',');
+  }
+  return pages;
+}
+
+/// What [after] moved beside the scroll itself: the route, or the visible page of a PageView in [pagedIds]; null when neither moved or a snapshot is missing.
+String? sideEffectOf(SceneSnapshot? before, SceneSnapshot? after, Set<String> pagedIds) {
+  if (before == null || after == null) return null;
+  if (before.routeName != after.routeName) {
+    return 'the route changed from "${before.routeName}" to "${after.routeName}"';
+  }
+  for (final id in pagedIds) {
+    final was = before.pages[id], now = after.pages[id];
+    if (was != null && now != null && was != now) {
+      return 'the page shown by $id changed from "$was" to "$now"';
+    }
+  }
+  return null;
 }
 
 /// Walks the render tree once and hashes decorations, opacity and physical-model colour and elevation; type names are compared as strings so it compiles in any eval library.
@@ -200,7 +234,11 @@ class PostActionState {
     this.surface,
     this.note,
     this.lateMs,
+    this.snapshot,
   });
+
+  /// The scene snapshot the post-action read compared against; null for a native-surface read.
+  final SceneSnapshot? snapshot;
 
   /// How long after the action settled the screen changed, when it changed late (a network response, a timer).
   final int? lateMs;
@@ -217,6 +255,7 @@ class PostActionState {
         surface: surface,
         note: note,
         lateMs: ms,
+        snapshot: snapshot,
       );
 
   /// The native surface over the app, read as data, when it could be read.
@@ -318,6 +357,7 @@ Future<PostActionState?> readPostActionState(
             final post = snapshotOf(semantic, paintHash: pre?.paintHash == null ? null : await paintSignature(session));
             final category = pre != null ? changeCategory(pre, post) : 'unknown';
             return PostActionState(
+              snapshot: post,
               changed: category != 'nothing',
               changeCategory: category,
               state: const StateObserver().observe(semantic).name,
