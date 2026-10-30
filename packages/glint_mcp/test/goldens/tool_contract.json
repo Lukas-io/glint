@@ -150,7 +150,7 @@
       },
       "service": {
         "type": "string",
-        "description": "privacy: a simctl service: photos | microphone | location | location-always | contacts | notifications | … On Android also camera, phone, sms, screen-capture (the MediaProjection app op) and all."
+        "description": "privacy: a simctl service: photos | microphone | location | location-always | contacts | … On Android also notifications, camera, phone, sms, screen-capture (the MediaProjection app op) and all. The iOS simulator has no notifications service."
       },
       "bundleId": {
         "type": "string",
