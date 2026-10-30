@@ -42,6 +42,7 @@ import 'tools/key_tool.dart';
 import 'tools/type_tool.dart';
 import 'tools/wait_for_settle_tool.dart';
 import 'tools/wait_for_tool.dart';
+import 'tools/watch_tool.dart';
 
 /// One MCP tool. Subclasses provide a [definition] + [handle]; [invoke]
 /// wraps both with the envelope conversion + uniform error catch.
@@ -594,6 +595,7 @@ const List<GlintTool> kDefaultGlintTools = [
   HardwareButtonTool(),
   WaitForSettleTool(),
   WaitForTool(),
+  WatchTool(),
   NotificationsTool(),
   SensorsTool(),
   BatchTool(),

@@ -939,6 +939,76 @@
       }
     }
   },
+  "watch": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "add | list | cancel | events. Default add."
+      },
+      "conditions": {
+        "type": "array",
+        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log (state goes with text or glintId). Any one matching fires the watch.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Visible text, matched as tap text: does (exact, then contains)."
+            },
+            "glintId": {
+              "type": "string",
+              "description": "Id to watch instead of text."
+            },
+            "state": {
+              "type": "string",
+              "description": "With text or glintId: appears (default) | disappears."
+            },
+            "route": {
+              "type": "string",
+              "description": "Route change; the route name to wait for, or empty for any change."
+            },
+            "overlay": {
+              "type": "string",
+              "description": "appears | dismisses (dialog, sheet or system surface)."
+            },
+            "log": {
+              "type": "string",
+              "description": "Regex matched against each new app log line."
+            }
+          }
+        }
+      },
+      "label": {
+        "type": "string",
+        "description": "op=add: your note on why, echoed in every event."
+      },
+      "once": {
+        "type": "boolean",
+        "description": "op=add: end after the first match. Default true."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "description": "op=add: 1000-21600000. Default 1800000 (30 min)."
+      },
+      "id": {
+        "type": "string",
+        "description": "op=cancel: watch id from add or list. op=events: only that watch."
+      },
+      "all": {
+        "type": "boolean",
+        "description": "op=cancel: cancel every watch (of the targeted app when app is given)."
+      },
+      "sinceSeq": {
+        "type": "integer",
+        "description": "op=events: only events after this seq. Default 0."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "op=events: 1-200. Default 50."
+      }
+    }
+  },
   "notifications": {
     "type": "object",
     "properties": {
