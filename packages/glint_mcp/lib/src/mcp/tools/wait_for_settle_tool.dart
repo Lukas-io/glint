@@ -21,6 +21,9 @@ class WaitForSettleTool extends GlintTool {
             'ceilingMs': Schema.int(
               description: 'Hard cap on wait time. Default 5000.',
             ),
+            'timeoutMs': Schema.int(
+              description: 'Same as ceilingMs, named as in wait_for.',
+            ),
             'quietFrames': Schema.int(
               description: 'Consecutive quiet polls required to declare settled. Default 3.',
             ),
@@ -35,7 +38,7 @@ class WaitForSettleTool extends GlintTool {
   @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
-    final ceilingMs = argInt(args, 'ceilingMs') ?? session.config.settleCeilingMs;
+    final ceilingMs = argInt(args, 'ceilingMs') ?? argInt(args, 'timeoutMs') ?? session.config.settleCeilingMs;
     final quietFrames = argInt(args, 'quietFrames') ?? session.config.settleQuietFrames;
     final checkAffordances = argBool(args, 'checkLoadingAffordances') ?? true;
 
