@@ -231,11 +231,10 @@ Future<String> renderEnvironment(GlintSession session, {ProcessRunner run = Proc
   }
   lines
     ..add('- mode: ${app.deviceMode ? 'device (no Flutter app)' : 'flutter'}')
-    ..add('- device: ${app.deviceName ?? app.device.id} (${app.device.platform.name}, ${app.device.id})')
+    ..add('- device: ${_deviceKind(app.device)}')
     ..add('- input: ${app.inputSetup ?? 'setup not recorded for this attach'} · route ${app.device.route.name}');
-  if (!app.deviceMode) lines.add('- app: ${app.label}');
   if (DeviceClaims().heldByOther(app.device.id) case final claim?) {
-    lines.add('- another glint process holds this device: ${claim.describe}');
+    lines.add('- another glint process (pid ${claim.pid}) holds this device');
   }
   return lines.join('\n');
 }
@@ -273,3 +272,10 @@ Future<String?> glintCommit({ProcessRunner run = Process.run}) async {
   }
   return _commit;
 }
+
+/// The kind of device, without its user-set name or hardware id, since the report is public.
+String _deviceKind(DeviceTarget d) => switch (d) {
+      IosSimulator() => 'iOS simulator',
+      IosDevice() => 'iPhone (physical)',
+      _ => '${d.platform.name} device',
+    };
