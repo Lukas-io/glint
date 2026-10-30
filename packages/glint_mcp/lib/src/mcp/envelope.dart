@@ -75,7 +75,7 @@ class StructuredResponse {
   /// Builds a response from an [ActionResult]. The envelope already carries
   /// `summary`/`warnings`/`nextSteps` at the top level, so those are dropped
   /// from `data` rather than duplicated. Geometry (painted, hittable,
-  /// physicalCenter) is omitted unless [detail] is true — the agent only needs
+  /// logicalCenter) is omitted unless [detail] is true — the agent only needs
   /// `ok` + the changed-signal to continue. The failure reason is routed to the
   /// shared `detail` key so it surfaces in prose and the action log.
   factory StructuredResponse.fromActionResult(
@@ -83,7 +83,7 @@ class StructuredResponse {
     bool detail = false,
   }) {
     const dup = {'summary', 'warnings', 'nextSteps', 'error'};
-    const geometry = {'painted', 'hittable', 'physicalCenter'};
+    const geometry = {'painted', 'hittable', 'logicalCenter'};
     final data = <String, Object?>{
       for (final e in r.toJson().entries)
         if (!dup.contains(e.key) && (detail || !geometry.contains(e.key))) e.key: e.value,

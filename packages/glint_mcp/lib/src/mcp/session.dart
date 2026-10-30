@@ -445,7 +445,27 @@ class GlintSession {
   /// [probeScrollAnchor] against a scene + semantic view the caller holds; the anchor is scrolled content, never the viewport itself, whose center stays put.
   Future<ScrollAnchor?> scrollAnchorIn(Scene scene, SemanticScene semantic) async {
     final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
-    if (list == null) return null;
+    return list == null ? null : _anchorWithin(scene, list);
+  }
+
+  /// The anchor of the innermost scrollable whose viewport contains logical point [x], [y]; null when the point is over no scrollable.
+  Future<ScrollAnchor?> scrollAnchorAt(Scene scene, SemanticScene semantic, double x, double y) async {
+    ScrollAnchor? best;
+    var bestArea = double.infinity;
+    for (final list in semantic.root.walk().whereType<SemanticList>()) {
+      final anchor = await _anchorWithin(scene, list);
+      final clip = anchor?.clip;
+      if (anchor == null || clip == null) continue;
+      final contains = x >= clip.x && x <= clip.x + clip.w && y >= clip.y && y <= clip.y + clip.h;
+      if (contains && clip.w * clip.h < bestArea) {
+        best = anchor;
+        bestArea = clip.w * clip.h;
+      }
+    }
+    return best;
+  }
+
+  Future<ScrollAnchor?> _anchorWithin(Scene scene, SemanticList list) async {
     for (final n in list.walk()) {
       final id = n.glintId;
       if (id == null || identical(n, list)) continue;

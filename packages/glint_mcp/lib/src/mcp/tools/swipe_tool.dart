@@ -5,6 +5,7 @@ import '../armed.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
+import '../segment_swipe.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -17,7 +18,8 @@ class SwipeTool extends GlintTool {
         name: 'swipe',
         description: 'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '
             'between raw coordinates (device mode: screenshot pixels; flutter '
-            'mode: logical points) — coordinates bypass glintId resolution. '
+            'mode: logical points, as in every reply; points off the screen are '
+            'refused) — coordinates bypass glintId resolution. '
             '`awaitReady` gates on the `from` endpoint — the `to` only needs '
             'to resolve, not be hittable. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -34,10 +36,10 @@ class SwipeTool extends GlintTool {
             'toGlintId': Schema.string(
               description: 'End point — stable id from get_scene.',
             ),
-            'x1': Schema.num(description: 'Raw start x (with y1,x2,y2).'),
-            'y1': Schema.num(description: 'Raw start y.'),
-            'x2': Schema.num(description: 'Raw end x.'),
-            'y2': Schema.num(description: 'Raw end y.'),
+            'x1': Schema.num(description: 'Start x in logical points (device mode: screen pixels), with y1,x2,y2.'),
+            'y1': Schema.num(description: 'Start y, same unit.'),
+            'x2': Schema.num(description: 'End x, same unit.'),
+            'y2': Schema.num(description: 'End y, same unit.'),
             'durationMs': Schema.int(
               description: 'Coordinate swipe duration. Default 300.',
             ),
@@ -89,12 +91,8 @@ class SwipeTool extends GlintTool {
     final seg = readSegment(args);
     if (seg != null) {
       final durationMs = argInt(args, 'durationMs') ?? 300;
-      return withCoordinateChange(
-        session,
-        () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs),
-        returnScene: t.returnScene,
-        fetchScene: t.fetchScene,
-      );
+      return segmentSwipe(session, 'swipe', seg, durationMs,
+          verb: 'swiped', returnScene: t.returnScene, fetchScene: t.fetchScene);
     }
 
     final from = args['fromGlintId'] as String?;

@@ -127,7 +127,6 @@ class ResolvedCoord {
           'w': logicalViewSize.w,
           'h': logicalViewSize.h,
         },
-        'physicalCenter': {'x': physicalCenter.x, 'y': physicalCenter.y},
         'nearestAncestorOpacity': nearestAncestorOpacity,
         'nearestAncestorVisible': nearestAncestorVisible,
         'painted': painted,
@@ -283,13 +282,27 @@ class CoordinateResolver {
     );
   }
 
-  /// The selected node's nearest scroll viewport as a global rect; null when there is none or the eval fails.
+  /// The selected node's nearest scroll viewport as a global rect, minus the strip pinned headers cover; null when there is none or the eval fails.
   Future<({double x, double y, double w, double h})?> _clipRect() async {
+    final ({double x, double y, double w, double h}) rect;
     try {
       final raw = await _runtime.evaluateString(GeometryExpr.clip, rethrowErrors: true);
       final parts = raw?.split(',').map(double.tryParse).toList();
       if (parts == null || parts.length != 4 || parts.contains(null)) return null;
-      return (x: parts[0]!, y: parts[1]!, w: parts[2]!, h: parts[3]!);
+      rect = (x: parts[0]!, y: parts[1]!, w: parts[2]!, h: parts[3]!);
+    } on Object {
+      return null;
+    }
+    return _withoutLeadingCover(rect, await _leadingCover());
+  }
+
+  /// How far earlier pinned slivers cover the selected node's sliver, with the sliver's axis and growth direction indexes; null when unknown.
+  Future<({double overlap, int axis, int growth})?> _leadingCover() async {
+    try {
+      final raw = await _runtime.evaluateString(GeometryExpr.leadingCover, rethrowErrors: true);
+      final parts = raw?.split(',').map(double.tryParse).toList();
+      if (parts == null || parts.length != 3 || parts.contains(null)) return null;
+      return (overlap: parts[0]!, axis: parts[1]!.toInt(), growth: parts[2]!.toInt());
     } on Object {
       return null;
     }
@@ -334,6 +347,26 @@ class CoordinateResolver {
     return parts.first.replaceFirst('miss:', '').trim().isEmpty
         ? 'another widget'
         : parts.first.replaceFirst('miss:', '').trim();
+  }
+}
+
+/// [rect] with the strip along its leading edge that pinned slivers paint over cut off; [cover] indexes follow Flutter's AxisDirection (up, right, down, left) and GrowthDirection (forward, reverse).
+({double x, double y, double w, double h}) _withoutLeadingCover(
+  ({double x, double y, double w, double h}) rect,
+  ({double overlap, int axis, int growth})? cover,
+) {
+  if (cover == null || !cover.overlap.isFinite || cover.overlap <= 0.5) return rect;
+  final paintAxis = cover.growth == 0 ? cover.axis : (cover.axis + 2) % 4;
+  final o = cover.overlap;
+  switch (paintAxis) {
+    case 2:
+      return (x: rect.x, y: rect.y + o, w: rect.w, h: (rect.h - o).clamp(0.0, rect.h));
+    case 0:
+      return (x: rect.x, y: rect.y, w: rect.w, h: (rect.h - o).clamp(0.0, rect.h));
+    case 1:
+      return (x: rect.x + o, y: rect.y, w: (rect.w - o).clamp(0.0, rect.w), h: rect.h);
+    default:
+      return (x: rect.x, y: rect.y, w: (rect.w - o).clamp(0.0, rect.w), h: rect.h);
   }
 }
 
@@ -418,6 +451,12 @@ class GeometryExpr {
       "b.localToGlobal(Offset.zero).dx.toString() + ',' + b.localToGlobal(Offset.zero).dy.toString() + ',' + "
       "b.size.width.toString() + ',' + b.size.height.toString())(v as RenderBox))"
       '(RenderAbstractViewport.maybeOf($_ro))';
+
+  /// The nearest sliver around the selected node: `overlap,axisDirection,growthDirection`, where overlap is how much pinned slivers before it paint over its start; empty when it is in no sliver.
+  static const leadingCover = '((dynamic r) { while (r != null && r is! RenderSliver) { r = r.parent; } '
+      "if (r == null) { return ''; } final c = (r as RenderSliver).constraints; "
+      "return c.overlap.toString() + ',' + c.axisDirection.index.toString() + ',' + c.growthDirection.index.toString(); })"
+      '($_ro)';
 
   /// Library that declares `GestureBinding` and imports `HitTestResult` directly, so a real hit test compiles there.
   static const gesturesLibrary = 'flutter/src/gestures/binding.dart';

@@ -32,10 +32,10 @@ class TapTool extends GlintTool {
             ),
             'x': Schema.num(
               description: 'Raw x coordinate (with y). Device mode: screenshot pixels; '
-                  'flutter mode: logical points. Bypasses glintId.',
+                  'flutter mode: logical points. Off-screen points are refused. Bypasses glintId.',
             ),
             'y': Schema.num(
-              description: 'Raw y coordinate (with x).',
+              description: 'Raw y coordinate (with x), same unit.',
             ),
             'sequence': Schema.list(
               description: 'Several taps in one call, fired back to back: '
@@ -66,7 +66,7 @@ class TapTool extends GlintTool {
               description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
-              description: 'Include geometry (painted, hittable, physicalCenter). Default false.',
+              description: 'Include geometry (painted, hittable, logicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
               description: 'Also return the new scene text as postScene. Default false.',
@@ -99,6 +99,8 @@ class TapTool extends GlintTool {
     // blind about whether anything happened.
     final pt = readPoint(args);
     if (pt != null) {
+      final off = await rejectOffScreen(session, 'tap', pointCoordinates(pt.x, pt.y));
+      if (off != null) return off;
       return withCoordinateChange(
         session,
         () => coordinateTap(session, pt.x, pt.y),

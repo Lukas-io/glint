@@ -524,11 +524,11 @@
       },
       "x": {
         "type": "number",
-        "description": "Raw x coordinate (with y). Device mode: screenshot pixels; flutter mode: logical points. Bypasses glintId."
+        "description": "Raw x coordinate (with y). Device mode: screenshot pixels; flutter mode: logical points. Off-screen points are refused. Bypasses glintId."
       },
       "y": {
         "type": "number",
-        "description": "Raw y coordinate (with x)."
+        "description": "Raw y coordinate (with x), same unit."
       },
       "sequence": {
         "type": "array",
@@ -570,7 +570,7 @@
       },
       "detail": {
         "type": "boolean",
-        "description": "Include geometry (painted, hittable, physicalCenter). Default false."
+        "description": "Include geometry (painted, hittable, logicalCenter). Default false."
       },
       "fetchScene": {
         "type": "boolean",
@@ -591,11 +591,11 @@
       },
       "x": {
         "type": "number",
-        "description": "Raw x (with y). Bypasses glintId."
+        "description": "Raw x in logical points (device mode: screen pixels), with y. Off-screen points are refused. Bypasses glintId."
       },
       "y": {
         "type": "number",
-        "description": "Raw y (with x)."
+        "description": "Raw y (with x), same unit."
       },
       "durationMs": {
         "type": "integer",
@@ -632,7 +632,7 @@
       },
       "x": {
         "type": "number",
-        "description": "Center x in logical points (device mode: screenshot pixels), with y."
+        "description": "Center x in logical points (device mode: screenshot pixels), with y. Off-screen points are refused."
       },
       "y": {
         "type": "number",
@@ -672,19 +672,19 @@
       },
       "x1": {
         "type": "number",
-        "description": "Raw start x (with y1,x2,y2)."
+        "description": "Start x in logical points (device mode: screen pixels), with y1,x2,y2."
       },
       "y1": {
         "type": "number",
-        "description": "Raw start y."
+        "description": "Start y, same unit."
       },
       "x2": {
         "type": "number",
-        "description": "Raw end x."
+        "description": "End x, same unit."
       },
       "y2": {
         "type": "number",
-        "description": "Raw end y."
+        "description": "End y, same unit."
       },
       "durationMs": {
         "type": "integer",
@@ -721,19 +721,19 @@
       },
       "x1": {
         "type": "number",
-        "description": "Raw start x (with y1,x2,y2)."
+        "description": "Start x in logical points (device mode: screen pixels), with y1,x2,y2."
       },
       "y1": {
         "type": "number",
-        "description": "Raw start y."
+        "description": "Start y, same unit."
       },
       "x2": {
         "type": "number",
-        "description": "Raw end x."
+        "description": "End x, same unit."
       },
       "y2": {
         "type": "number",
-        "description": "Raw end y."
+        "description": "End y, same unit."
       },
       "durationMs": {
         "type": "integer",
@@ -847,7 +847,7 @@
       },
       "detail": {
         "type": "boolean",
-        "description": "Include geometry (painted, hittable, physicalCenter). Default false."
+        "description": "Include geometry (painted, hittable, logicalCenter). Default false."
       },
       "fetchScene": {
         "type": "boolean",
