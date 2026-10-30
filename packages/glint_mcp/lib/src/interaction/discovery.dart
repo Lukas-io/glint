@@ -183,6 +183,66 @@ class DeviceDiscovery {
     return devices.any((d) => d.id == deviceId);
   }
 
+  /// Why each of [devices] is gone from the host, keyed by id; one `adb devices` and one `simctl list` at most, run together. A device the host could not be asked about, and a physical iPhone, is left out.
+  Future<Map<String, String>> goneReasons(Iterable<({String id, DevicePlatform platform})> devices) async {
+    final android = [
+      for (final d in devices)
+        if (d.platform == DevicePlatform.android) d.id
+    ];
+    final sims = [
+      for (final d in devices)
+        if (d.platform == DevicePlatform.ios && !isPhysicalIosUdid(d.id)) d.id
+    ];
+    final states = await Future.wait([
+      android.isEmpty ? Future.value(null) : _adbStates(),
+      sims.isEmpty ? Future.value(null) : _simStates(),
+    ]);
+    final adb = states[0];
+    final simctl = states[1];
+    return {
+      if (adb != null)
+        for (final id in android)
+          if (adb[id] != 'device')
+            id: adb[id] == null ? 'not listed by `adb devices`' : '`adb devices` lists it as ${adb[id]}',
+      if (simctl != null)
+        for (final id in sims)
+          if (simctl[id] != 'Booted') id: simctl[id] == null ? 'not listed by `simctl`' : 'simulator is ${simctl[id]}',
+    };
+  }
+
+  /// Serial to adb state from `adb devices`, or null when adb did not answer.
+  Future<Map<String, String>?> _adbStates() async {
+    try {
+      final res = await Process.run(adbPath, ['devices']).timeout(const Duration(seconds: 3));
+      if (res.exitCode != 0) return null;
+      final out = <String, String>{};
+      for (final line in (res.stdout as String).split('\n').skip(1)) {
+        final parts = line.trim().split(RegExp(r'\s+'));
+        if (parts.length >= 2) out[parts[0]] = parts[1];
+      }
+      return out;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// UDID to simulator state from `simctl list devices -j`, or null when simctl did not answer.
+  Future<Map<String, String>?> _simStates() async {
+    try {
+      final res = await Process.run('xcrun', ['simctl', 'list', 'devices', '-j']).timeout(const Duration(seconds: 3));
+      if (res.exitCode != 0) return null;
+      final devices = (jsonDecode(res.stdout as String) as Map)['devices'];
+      if (devices is! Map) return null;
+      return {
+        for (final list in devices.values.whereType<List>())
+          for (final d in list.whereType<Map>())
+            if (d['udid'] is String) d['udid'] as String: '${d['state']}',
+      };
+    } on Object {
+      return null;
+    }
+  }
+
   Future<DiscoveryResult> scan() async {
     final vmUris = await _scanVmUris();
     final ios = await _bootedIosSims();

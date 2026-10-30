@@ -51,6 +51,17 @@ class DeviceClaims {
     }
   }
 
+  /// Frees [deviceId] for other agents when this process holds the claim; a claim another process holds is left alone.
+  void release(String deviceId) {
+    try {
+      final f = _file(deviceId);
+      final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
+      if ((j['pid'] as num).toInt() == ownPid) f.deleteSync();
+    } on Object {
+      // no claim file means nothing to free
+    }
+  }
+
   static final _touched = <String, DateTime>{};
 
   /// Records that this process just acted on [deviceId], at most every 30 s, so others can tell a busy claim from an idle one.
