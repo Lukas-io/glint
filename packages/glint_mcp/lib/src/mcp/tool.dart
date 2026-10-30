@@ -224,8 +224,21 @@ abstract class GlintTool {
     response = await _checkDeviceGone(session, app, response);
     response = explainMissingBridge(response);
     response = _explainBreakpointPause(session, response);
+    response = _warnSharedDevice(app, response);
     logCall(session, request, response, start);
     return response.toCallResult();
+  }
+
+  /// A no-change action on a device another live glint process drove recently: say so, since its input may be what the app received.
+  static StructuredResponse _warnSharedDevice(AppSession? app, StructuredResponse response) {
+    final id = app?.device.id;
+    if (id == null || response.isError || response.data?['changed'] != false) return response;
+    final other = DeviceClaims().heldByOther(id);
+    if (other == null || other.idle) return response;
+    return response.addWarnings([
+      'another glint process (pid ${other.pid}${other.app == null ? '' : ', app ${other.app}'}) is also driving '
+          'this device; input may interleave or not reach your app',
+    ]);
   }
 
   /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.

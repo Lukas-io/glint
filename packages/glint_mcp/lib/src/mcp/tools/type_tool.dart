@@ -6,6 +6,7 @@ import '../../../interaction.dart';
 import '../../../perception.dart' show Scene;
 import '../armed.dart';
 import '../envelope.dart';
+import '../focus_through_parent.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -75,6 +76,7 @@ class TypeTool extends GlintTool {
 
     final warnings = <String>[];
     ArmingReady? focusArming;
+    String? focusedThrough;
 
     if (focus != null) {
       final arming = await maybeAwaitReady(
@@ -93,10 +95,15 @@ class TypeTool extends GlintTool {
     final pre = action.pre;
     try {
       if (focus != null) {
-        final focusResult = await session.interactor.run(
+        var focusResult = await session.interactor.run(
           scene,
           Tap(SymbolicTarget(focus)),
         );
+        final parent = visibleParentOf(focusResult);
+        if (parent != null) {
+          focusResult = await focusThroughParent(session, scene, focus, parent);
+          if (focusResult.ok) focusedThrough = focusResult.summary;
+        }
         if (!focusResult.ok) {
           return StructuredResponse.error(
             summary: 'failed to focus $focus before typing',
@@ -106,7 +113,7 @@ class TypeTool extends GlintTool {
           );
         }
         warnings.addAll(focusResult.warnings);
-        if (!await _awaitReadyToType(session)) {
+        if (focusedThrough == null && !await awaitReadyToType(session)) {
           warnings.add('$focus did not report focus within 2s after the tap; '
               'typed anyway');
         }
@@ -154,6 +161,7 @@ class TypeTool extends GlintTool {
         }
       }
       if (focusArming != null) response = withArmedMetadata(response, focusArming);
+      if (focusedThrough != null) response = response.copyWith(summary: '$focusedThrough, ${response.summary}');
 
       if (t.returnScene && !response.isError) {
         final post = await readPostActionState(session, pre, includeSceneText: t.fetchScene);
@@ -302,35 +310,6 @@ class TypeTool extends GlintTool {
         'remaining': remaining,
       },
     );
-  }
-
-  /// Keys sent before the tapped field takes focus are lost, and on Android `input text` also needs the soft keyboard fully shown; waits up to 2s for both.
-  Future<bool> _awaitReadyToType(GlintSession session) async {
-    final needsKeyboard = session.device.platform == DevicePlatform.android;
-    final deadline = DateTime.now().add(const Duration(seconds: 2));
-    double? lastInset;
-    DateTime? focusedAt;
-    while (DateTime.now().isBefore(deadline)) {
-      try {
-        final focused = await session.focusedFieldText() != null;
-        if (focused && !needsKeyboard) return true;
-        if (focused) {
-          focusedAt ??= DateTime.now();
-          // The inset turns non-zero as the keyboard starts sliding in; it takes keys once it stops moving.
-          final inset = (await session.uiState()).keyboardBottomPx;
-          if (inset > 0 && inset == lastInset) return true;
-          // No soft keyboard at all (a hardware keyboard is attached): focus is enough.
-          if (inset == 0 && DateTime.now().difference(focusedAt) > const Duration(milliseconds: 600)) {
-            return true;
-          }
-          lastInset = inset;
-        }
-      } on Object {
-        return true;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-    }
-    return false;
   }
 }
 
