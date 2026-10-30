@@ -83,7 +83,7 @@ class StructuredResponse {
     bool detail = false,
   }) {
     const dup = {'summary', 'warnings', 'nextSteps', 'error'};
-    const geometry = {'painted', 'hittable', 'logicalCenter'};
+    const geometry = {'painted', 'hittable', 'physicalCenter', 'logicalCenter'};
     final data = <String, Object?>{
       for (final e in r.toJson().entries)
         if (!dup.contains(e.key) && (detail || !geometry.contains(e.key))) e.key: e.value,

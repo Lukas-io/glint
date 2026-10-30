@@ -101,7 +101,7 @@ void main(List<String> argv) async {
     });
     stdout.writeln(txtOf(res));
     final resStructured = (res['result'] as Map)['structuredContent'] as Map<String, Object?>;
-    if (resStructured['logicalCenter'] == null || resStructured['hittable'] != true) {
+    if (resStructured['physicalCenter'] == null || resStructured['hittable'] != true) {
       stderr.writeln('resolve did not return geometry: ${resStructured.keys.toList()}');
       failed++;
     }

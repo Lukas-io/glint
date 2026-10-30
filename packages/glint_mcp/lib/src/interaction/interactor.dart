@@ -70,6 +70,7 @@ class Interactor {
         summary: e.message,
         error: e.message,
         errorKind: GlintErrorKind.offViewport,
+        physicalCenter: e.physicalCenter,
         logicalCenter: e.logicalCenter,
         devicePixelRatio: e.devicePixelRatio,
         painted: false,
@@ -89,6 +90,7 @@ class Interactor {
         summary: e.message,
         error: e.message,
         errorKind: GlintErrorKind.notHittable,
+        physicalCenter: e.physicalCenter,
         logicalCenter: e.logicalCenter,
         devicePixelRatio: e.devicePixelRatio,
         painted: e.painted,
@@ -171,6 +173,7 @@ class Interactor {
           action: action,
           summary: 'swiped (${pointText(from.logicalCenter.x)}, ${pointText(from.logicalCenter.y)})'
               ' -> (${pointText(to.logicalCenter.x)}, ${pointText(to.logicalCenter.y)}) pt',
+          physicalCenter: to.physicalCenter,
           logicalCenter: to.logicalCenter,
           devicePixelRatio: to.devicePixelRatio,
           painted: to.painted,
@@ -238,6 +241,7 @@ class Interactor {
     }
     throw OffViewportRefused(
       message: 'refusing action: ${coord.glintId} resolved to $at, $why',
+      physicalCenter: coord.physicalCenter,
       logicalCenter: coord.logicalCenter,
       devicePixelRatio: coord.devicePixelRatio,
       underKeyboard: coord.centerUnderKeyboard,
@@ -251,6 +255,7 @@ class Interactor {
     throw NotHittableRefused(
       message: 'refusing action: ${coord.glintId} is hidden: it is faded out to opacity 0, '
           'so a person cannot see or tap it',
+      physicalCenter: coord.physicalCenter,
       logicalCenter: coord.logicalCenter,
       devicePixelRatio: coord.devicePixelRatio,
       painted: false,
@@ -267,6 +272,7 @@ class Interactor {
               '${coord.hitBy ?? 'another widget'}, not on it'
           : 'refusing action: target is not hittable '
               '(painted=${coord.painted}, hittable=false)',
+      physicalCenter: coord.physicalCenter,
       logicalCenter: coord.logicalCenter,
       devicePixelRatio: coord.devicePixelRatio,
       painted: coord.painted,
@@ -279,6 +285,7 @@ class Interactor {
       action: action,
       summary: '$verb ${action.targetSummary} at '
           '(${pointText(c.logicalCenter.x)}, ${pointText(c.logicalCenter.y)}) pt',
+      physicalCenter: c.physicalCenter,
       logicalCenter: c.logicalCenter,
       devicePixelRatio: c.devicePixelRatio,
       painted: c.painted,
@@ -298,11 +305,13 @@ class UnresolvedTarget implements Exception {
 class OffViewportRefused implements Exception {
   OffViewportRefused({
     required this.message,
+    this.physicalCenter,
     this.logicalCenter,
     this.devicePixelRatio,
     this.underKeyboard = false,
   });
   final String message;
+  final ({int x, int y})? physicalCenter;
   final ({double x, double y})? logicalCenter;
   final double? devicePixelRatio;
   final bool underKeyboard;
@@ -311,6 +320,7 @@ class OffViewportRefused implements Exception {
 class NotHittableRefused implements Exception {
   NotHittableRefused({
     required this.message,
+    this.physicalCenter,
     this.logicalCenter,
     this.devicePixelRatio,
     this.painted,
@@ -318,6 +328,7 @@ class NotHittableRefused implements Exception {
     this.faded = false,
   });
   final String message;
+  final ({int x, int y})? physicalCenter;
   final ({double x, double y})? logicalCenter;
   final double? devicePixelRatio;
   final bool? painted;

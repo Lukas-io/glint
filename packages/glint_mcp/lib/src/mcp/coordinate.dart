@@ -134,17 +134,22 @@ List<NamedCoordinate> segmentCoordinates(({double x1, double y1, double x2, doub
       ...pointCoordinates(s.x2, s.y2, xName: 'x2', yName: 'y2'),
     ];
 
-/// The screen a raw coordinate must land on: screen pixels in device mode, logical points in Flutter mode; null when its size is unknown.
+/// The screen a raw coordinate must land on: screen pixels in device mode, logical points in Flutter mode; null when its size is unknown or the app does not answer quickly.
 Future<({double w, double h, double dpr, String unit})?> _coordinateSpace(GlintSession session) async {
-  final fixed = session.device.screenSize;
+  final device = session.device;
+  final fixed = device.screenSize;
   if (session.isDeviceMode) {
     return fixed == null ? null : (w: fixed.w, h: fixed.h, dpr: 1.0, unit: 'px');
   }
+  if (fixed != null && device.platform == DevicePlatform.ios) {
+    final side = fixed.w > fixed.h ? fixed.w : fixed.h;
+    return (w: side, h: side, dpr: device.devicePixelRatio, unit: 'pt');
+  }
   try {
-    final v = await session.resolver.resolveViewportNodeFree();
+    final v = await session.resolver.resolveViewportNodeFree().timeout(const Duration(milliseconds: 1500));
     return (w: v.w, h: v.h, dpr: v.dpr, unit: 'pt');
   } on Object {
-    return fixed == null ? null : (w: fixed.w, h: fixed.h, dpr: session.device.devicePixelRatio, unit: 'pt');
+    return null;
   }
 }
 

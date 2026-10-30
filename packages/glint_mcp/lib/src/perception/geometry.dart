@@ -127,6 +127,7 @@ class ResolvedCoord {
           'w': logicalViewSize.w,
           'h': logicalViewSize.h,
         },
+        'physicalCenter': {'x': physicalCenter.x, 'y': physicalCenter.y},
         'nearestAncestorOpacity': nearestAncestorOpacity,
         'nearestAncestorVisible': nearestAncestorVisible,
         'painted': painted,

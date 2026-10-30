@@ -70,6 +70,7 @@ class ActionResult {
   ActionResult.success({
     required this.action,
     required this.summary,
+    this.physicalCenter,
     this.logicalCenter,
     this.devicePixelRatio,
     this.painted,
@@ -87,6 +88,7 @@ class ActionResult {
     required this.summary,
     required this.errorKind,
     required this.error,
+    this.physicalCenter,
     this.logicalCenter,
     this.devicePixelRatio,
     this.painted,
@@ -100,6 +102,7 @@ class ActionResult {
   final Action action;
   final bool ok;
   final String summary;
+  final ({int x, int y})? physicalCenter;
   final ({double x, double y})? logicalCenter;
   final double? devicePixelRatio;
   final bool? painted;
@@ -119,6 +122,7 @@ class ActionResult {
   ActionResult withInput(InputReport input) => ActionResult.success(
         action: action,
         summary: '$summary · ${input.label}',
+        physicalCenter: physicalCenter,
         logicalCenter: logicalCenter,
         devicePixelRatio: devicePixelRatio,
         painted: painted,
@@ -132,6 +136,7 @@ class ActionResult {
         'action': action.label,
         'ok': ok,
         'summary': summary,
+        if (physicalCenter != null) 'physicalCenter': {'x': physicalCenter!.x, 'y': physicalCenter!.y},
         if (logicalCenter != null) 'logicalCenter': {'x': logicalCenter!.x, 'y': logicalCenter!.y},
         if (devicePixelRatio != null) 'devicePixelRatio': devicePixelRatio,
         if (painted != null) 'painted': painted,
