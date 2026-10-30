@@ -69,7 +69,7 @@ class OverlayEnricher implements SemanticEnricher {
       layers.add(SemanticOverlayLayer(
         nodes: nodes,
         isBarriered: scene.sourceScene.hasBarrierOverlay,
-        kind: _inferKind(root),
+        kind: inferKind(root),
       ));
     }
     scene.overlayLayers = layers;
@@ -84,7 +84,8 @@ class OverlayEnricher implements SemanticEnricher {
     return false;
   }
 
-  static String _inferKind(SceneNode root) {
+  /// `bottomSheet`, `dialog`, `snackbar` or `toast` for an overlay entry.
+  static String inferKind(SceneNode root) {
     for (final n in root.walk()) {
       final l = n.label;
       if (l.contains('BottomSheet') || l.contains('Sheet')) return 'bottomSheet';
