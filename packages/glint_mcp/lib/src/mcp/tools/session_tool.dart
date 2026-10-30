@@ -240,7 +240,7 @@ class SessionTool extends GlintTool {
     final what = targets.map((a) => '${a.label} on ${a.deviceName ?? a.id}').join(', ');
     return StructuredResponse(
       summary: [
-        'detached $what; its device claim is released',
+        'detached $what and released its device claim',
         active == null ? 'no active app' : 'active: ${active.label} on ${active.deviceName ?? active.id}',
         remaining.isEmpty
             ? 'nothing attached'
