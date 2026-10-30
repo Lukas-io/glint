@@ -297,13 +297,20 @@ class CoordinateResolver {
     return _withoutLeadingCover(rect, await _leadingCover());
   }
 
-  /// How far earlier pinned slivers cover the selected node's sliver, with the sliver's axis and growth direction indexes; null when unknown.
-  Future<({double overlap, int axis, int growth})?> _leadingCover() async {
+  /// How far earlier pinned slivers cover the selected node's sliver, with the sliver's axis and growth direction indexes and its painted box; null when unknown.
+  Future<({double overlap, int axis, int growth, double x, double y, double extent})?> _leadingCover() async {
     try {
       final raw = await _runtime.evaluateString(GeometryExpr.leadingCover, rethrowErrors: true);
       final parts = raw?.split(',').map(double.tryParse).toList();
-      if (parts == null || parts.length != 3 || parts.contains(null)) return null;
-      return (overlap: parts[0]!, axis: parts[1]!.toInt(), growth: parts[2]!.toInt());
+      if (parts == null || parts.length != 6 || parts.contains(null)) return null;
+      return (
+        overlap: parts[0]!,
+        axis: parts[1]!.toInt(),
+        growth: parts[2]!.toInt(),
+        x: parts[3]!,
+        y: parts[4]!,
+        extent: parts[5]!
+      );
     } on Object {
       return null;
     }
@@ -351,23 +358,29 @@ class CoordinateResolver {
   }
 }
 
-/// [rect] with the strip along its leading edge that pinned slivers paint over cut off; [cover] indexes follow Flutter's AxisDirection (up, right, down, left) and GrowthDirection (forward, reverse).
+/// [rect] with the strip pinned slivers paint over the start of the node's own sliver cut off; [cover] indexes follow Flutter's AxisDirection (up, right, down, left) and GrowthDirection (forward, reverse).
 ({double x, double y, double w, double h}) _withoutLeadingCover(
   ({double x, double y, double w, double h}) rect,
-  ({double overlap, int axis, int growth})? cover,
+  ({double overlap, int axis, int growth, double x, double y, double extent})? cover,
 ) {
   if (cover == null || !cover.overlap.isFinite || cover.overlap <= 0.5) return rect;
   final paintAxis = cover.growth == 0 ? cover.axis : (cover.axis + 2) % 4;
   final o = cover.overlap;
+  final right = rect.x + rect.w;
+  final bottom = rect.y + rect.h;
   switch (paintAxis) {
     case 2:
-      return (x: rect.x, y: rect.y + o, w: rect.w, h: (rect.h - o).clamp(0.0, rect.h));
+      final top = (cover.y + o).clamp(rect.y, bottom);
+      return (x: rect.x, y: top, w: rect.w, h: bottom - top);
     case 0:
-      return (x: rect.x, y: rect.y, w: rect.w, h: (rect.h - o).clamp(0.0, rect.h));
+      final end = (cover.y + cover.extent - o).clamp(rect.y, bottom);
+      return (x: rect.x, y: rect.y, w: rect.w, h: end - rect.y);
     case 1:
-      return (x: rect.x + o, y: rect.y, w: (rect.w - o).clamp(0.0, rect.w), h: rect.h);
+      final left = (cover.x + o).clamp(rect.x, right);
+      return (x: left, y: rect.y, w: right - left, h: rect.h);
     default:
-      return (x: rect.x, y: rect.y, w: (rect.w - o).clamp(0.0, rect.w), h: rect.h);
+      final end = (cover.x + cover.extent - o).clamp(rect.x, right);
+      return (x: rect.x, y: rect.y, w: end - rect.x, h: rect.h);
   }
 }
 
@@ -453,10 +466,11 @@ class GeometryExpr {
       "b.size.width.toString() + ',' + b.size.height.toString())(v as RenderBox))"
       '(RenderAbstractViewport.maybeOf($_ro))';
 
-  /// The nearest sliver around the selected node: `overlap,axisDirection,growthDirection`, where overlap is how much pinned slivers before it paint over its start; empty when it is in no sliver.
+  /// The nearest sliver around the selected node: `overlap,axisDirection,growthDirection,x,y,paintExtent`, where overlap is how much pinned slivers before it paint over its start and x,y is its global origin; empty when it is in no sliver.
   static const leadingCover = '((dynamic r) { while (r != null && r is! RenderSliver) { r = r.parent; } '
-      "if (r == null) { return ''; } final c = (r as RenderSliver).constraints; "
-      "return c.overlap.toString() + ',' + c.axisDirection.index.toString() + ',' + c.growthDirection.index.toString(); })"
+      "if (r == null) { return ''; } final c = (r as RenderSliver).constraints; final t = r.getTransformTo(null).getTranslation(); "
+      "return c.overlap.toString() + ',' + c.axisDirection.index.toString() + ',' + c.growthDirection.index.toString() + ',' + "
+      "t.x.toString() + ',' + t.y.toString() + ',' + (r as RenderSliver).geometry!.paintExtent.toString(); })"
       '($_ro)';
 
   /// Library that declares `GestureBinding` and imports `HitTestResult` directly, so a real hit test compiles there.
