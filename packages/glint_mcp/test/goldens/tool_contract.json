@@ -1355,7 +1355,49 @@
       },
       "body": {
         "type": "string",
-        "description": "What happened, what you expected, repro steps. Redacted before submission."
+        "description": "Anything the fields below do not cover. Redacted before submission."
+      },
+      "expected": {
+        "type": "string",
+        "description": "What should have happened."
+      },
+      "actual": {
+        "type": "string",
+        "description": "What happened instead: exact reply text, errorKind, numbers."
+      },
+      "timeline": {
+        "type": "array",
+        "description": "Ordered steps with timings, e.g. \"t+0 attach ok (2.1s)\", \"t+4s tap save: notHittable\".",
+        "items": {
+          "type": "string"
+        }
+      },
+      "failureSeqs": {
+        "type": "array",
+        "description": "Action-log seq numbers of the failing calls (see `logs`). Rendered as a table of call, elapsed time, errorKind and the whole detail.",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "suspectedCause": {
+        "type": "string",
+        "description": "Where you think it breaks: file, symbol or layer."
+      },
+      "suggestedFix": {
+        "type": "string",
+        "description": "What you would change."
+      },
+      "workaround": {
+        "type": "string",
+        "description": "What got you unblocked, if anything."
+      },
+      "impact": {
+        "type": "string",
+        "description": "Who or what this blocks, and how often."
+      },
+      "repro": {
+        "type": "string",
+        "description": "Shortest sequence of calls that shows it."
       },
       "includeContext": {
         "type": "boolean",
@@ -1363,13 +1405,12 @@
       },
       "dryRun": {
         "type": "boolean",
-        "description": "Compose and return the redacted issue without filing. Use it to show the user exactly what would be posted."
+        "description": "Compose and return the redacted issue without filing, plus the sections still empty. Use it to show the user exactly what would be posted."
       }
     },
     "required": [
       "type",
-      "title",
-      "body"
+      "title"
     ]
   },
   "telemetry": {
