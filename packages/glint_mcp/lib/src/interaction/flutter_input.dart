@@ -31,6 +31,9 @@ class FlutterInput {
   /// The agent's own error after an [FlutterInputMiss.evalFailed] or a partial edit, for the reply.
   String? lastError;
 
+  /// How long the VM was given when the last call got no answer in time; null when it failed another way.
+  Duration? lastTimeout;
+
   /// How much of the last partial edit landed: `delivered` of `of`.
   ({int delivered, int of})? lastPartial;
 
@@ -64,6 +67,7 @@ class FlutterInput {
   Future<FlutterInputMiss?> _call(Map<String, String> args, {int extraMs = 0}) async {
     lastError = null;
     lastPartial = null;
+    lastTimeout = null;
     final agent = AppAgent.of(runtime);
     if (agent == null) {
       lastError = 'this connection cannot call service extensions';
@@ -71,8 +75,9 @@ class FlutterInput {
     }
     final Map<String, Object?> reply;
     try {
-      reply = await agent.call(args, timeout: Duration(milliseconds: 10000 + extraMs));
+      reply = await agent.call(args, timeout: Duration(milliseconds: 10000 + extraMs), dropLate: true);
     } on Object catch (e) {
+      if (e is RuntimeUnresponsiveError) lastTimeout = e.timeout;
       lastError = '$e'.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '$e');
       return FlutterInputMiss.evalFailed;
     }

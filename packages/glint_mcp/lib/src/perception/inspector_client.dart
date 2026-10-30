@@ -50,7 +50,7 @@ class InspectorClient {
         subtreeDepth: subtreeDepth,
       );
     } on Object catch (e) {
-      throw InspectorReadError('getDetailsSubtree($inspectorId): $e');
+      throw InspectorReadError('getDetailsSubtree($inspectorId): $e', cause: e);
     }
   }
 
@@ -67,7 +67,7 @@ class InspectorClient {
         isSummaryTree: isSummaryTree,
       );
     } on Object catch (e) {
-      throw InspectorReadError('readWidgetTree failed: $e');
+      throw InspectorReadError('readWidgetTree failed: $e', cause: e);
     }
     return _SceneNodeParser().parse(root);
   }
@@ -129,8 +129,16 @@ class _SceneNodeParser {
 }
 
 class InspectorReadError implements Exception {
-  InspectorReadError(this.message);
+  InspectorReadError(this.message, {this.cause});
   final String message;
+  final Object? cause;
   @override
   String toString() => 'InspectorReadError: $message';
 }
+
+/// The VM timeout behind [e] when the VM did not answer in time (busy or blocked), else null.
+RuntimeUnresponsiveError? appBusyCause(Object e) => switch (e) {
+      RuntimeUnresponsiveError() => e,
+      InspectorReadError(:final cause) when cause is RuntimeUnresponsiveError => cause,
+      _ => null,
+    };

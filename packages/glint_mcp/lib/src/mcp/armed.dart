@@ -45,6 +45,10 @@ Future<ArmingOutcome> maybeAwaitReady({
   switch (result) {
     case ReadyResult():
       return ArmingReady(attempts: result.attempts, elapsedMs: result.elapsedMs);
+    case BusyResult():
+      return ArmingFailed(StructuredResponse.appBusy(result.timeout,
+          summary: '${toolLabel ?? "action"} on $glintId: the app stayed busy '
+              '(${result.attempts} polls, ${result.elapsedMs}ms)'));
     case NotFoundResult():
       final hint = didYouMean(result.suggestions);
       return ArmingFailed(StructuredResponse.error(
