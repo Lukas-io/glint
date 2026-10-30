@@ -50,6 +50,8 @@ const _workflow = '''
 5. Long lists fold: one row in full, then `… N more like it: "label" #hash`. Tap `<base>#hash`, or `get_scene glintId:<list>` for all.
 
 Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>"` on any tool targets one call.
+
+Long run in a big conversation? Each call re-reads all of it: delegate the driving to a subagent with a self-contained brief; keep irreversible steps.
 ''';
 
 const _addressing = '''
@@ -110,9 +112,6 @@ const _examples = '''
 
 ```
 tap glintId=floating_action_button                → changed:true · routeChanged
-type text="user@example.com" focus="email_field"
-scroll_to_find text="Password" direction="down"
-get_scene glintId="list_view_in_orders"           # drill into one list
 ```
 ''';
 
