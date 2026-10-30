@@ -265,12 +265,14 @@ class GlintSession {
     final target = deviceId != null ? _pool[deviceId] : _active;
     if (target == null) return;
     await _drop(target);
+    DeviceClaims().release(target.id);
     if (_active == null && _pool.length == 1) _active = _pool.values.single;
   }
 
   Future<void> detachAll() async {
     for (final app in _pool.values.toList()) {
       await _drop(app);
+      DeviceClaims().release(app.id);
     }
   }
 

@@ -1213,7 +1213,15 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "status (default) | open | close | note | list | export"
+        "description": "status (default) | open | close | note | list | export | detach"
+      },
+      "app": {
+        "type": "string",
+        "description": "op=detach: the app to detach (device id, name, package or simulator). Default: the active one."
+      },
+      "all": {
+        "type": "boolean",
+        "description": "op=detach: detach every attached app."
       },
       "name": {
         "type": "string",
