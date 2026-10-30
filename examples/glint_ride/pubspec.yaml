@@ -1,0 +1,29 @@
+name: glintride
+description: "glint Ride: a rider and driver demo app for glint."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^14.1.1
+  google_maps_flutter: ^2.19.0
+  lucide_icons_flutter: ^4.0.0
+  sprung: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/car.png
+  fonts:
+    - family: InstrumentSans
+      fonts:
+        - asset: assets/fonts/InstrumentSans.ttf

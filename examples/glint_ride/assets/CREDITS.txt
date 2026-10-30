@@ -1,0 +1,3 @@
+car.png: rendered top-down from "Car Concept", Khronos glTF Sample Assets, CC BY 4.0 (https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/CarConcept), based on a CC0 model by Unity Fan. Repainted silver, tinted glass, wheels hidden.
+Instrument Sans: SIL Open Font License 1.1.
+Icons: Lucide, ISC License.
