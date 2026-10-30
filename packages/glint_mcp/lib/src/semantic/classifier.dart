@@ -296,7 +296,7 @@ class ButtonClassifier extends WidgetClassifier {
     // Leaf button: absorb caption text into the label; keep Icon / Image as
     // children so the IconEnricher can populate them post-classify.
     final label = _captionIn(children) ?? _implicitLabels[node.baseLabel];
-    final kept = children.where((c) => c is SemanticIcon || c is SemanticImage).toList();
+    final kept = _mediaIn(children);
     return SemanticButton(
       glintId: node.glintId,
       label: label,
@@ -324,6 +324,12 @@ class ButtonClassifier extends WidgetClassifier {
   }
 
   /// Caption label: up to two texts joined with ' · ' so a subtitle survives.
+  /// Icons and images anywhere in a leaf button's content (a Row of icon and caption included), so state icons still reach the enrichers.
+  List<SemanticNode> _mediaIn(List<SemanticNode> nodes) => [
+        for (final n in nodes)
+          if (n is SemanticIcon || n is SemanticImage) n else ..._mediaIn(n.children),
+      ];
+
   String? _captionIn(List<SemanticNode> nodes) {
     final texts = <String>[];
     void visit(List<SemanticNode> ns) {
