@@ -4,7 +4,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent7';
+const String kAgentExtension = 'ext.flutter.glintAgent8';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -25,6 +25,9 @@ class AppAgent {
   final VmServiceRuntime runtime;
   String? _installedIn;
 
+  /// The app's clock minus glint's, from the time the install reply carries; null when it carried none.
+  int? _clockOffsetMs;
+
   /// Whether the app draws each touch; put back whenever the agent installs into a fresh isolate (attach, hot restart).
   bool showTouches = false;
 
@@ -38,11 +41,15 @@ class AppAgent {
     return call({'op': 'touches', 'on': '$on', 'own': '$ownOnly'});
   }
 
-  /// Calls the agent with [args], installing it first in a fresh isolate (after attach or a hot restart).
-  Future<Map<String, Object?>> call(Map<String, String> args, {Duration? timeout}) async {
+  /// Calls the agent with [args], installing it first in a fresh isolate (after attach or a hot restart); with [dropLate] the app skips the call if it only runs after [timeout], so input glint gave up on never lands later.
+  Future<Map<String, Object?>> call(Map<String, String> args, {Duration? timeout, bool dropLate = false}) async {
     for (var attempt = 0; attempt < 2; attempt++) {
       if (_installedIn != runtime.flutterIsolateId) await _install();
-      final reply = await runtime.callExtensionOrNull(kAgentExtension, args, timeout: timeout);
+      final offset = _clockOffsetMs;
+      final sent = dropLate && timeout != null && offset != null
+          ? {...args, 'expires': '${DateTime.now().millisecondsSinceEpoch + offset + timeout.inMilliseconds}'}
+          : args;
+      final reply = await runtime.callExtensionOrNull(kAgentExtension, sent, timeout: timeout);
       if (reply != null) return reply;
       _installedIn = null;
     }
@@ -53,11 +60,15 @@ class AppAgent {
   Future<void> _install() async {
     final isolate = runtime.flutterIsolateId;
     final r = await runtime.evaluateIn(_source.replaceAll('\n', ' '), librarySuffix: _agentLibrary);
-    final status = r.valueAsString;
+    final received = DateTime.now().millisecondsSinceEpoch;
+    final reply = (r.valueAsString ?? '').split(' ');
+    final status = reply.first;
     if (status != 'installed' && status != 'present') {
-      throw RuntimeEvalError(kAgentExtension, 'install replied ${status ?? r.kind}');
+      throw RuntimeEvalError(kAgentExtension, 'install replied ${r.valueAsString ?? r.kind}');
     }
     _installedIn = isolate;
+    final appNow = reply.length > 1 ? int.tryParse(reply[1]) : null;
+    _clockOffsetMs = appNow == null ? null : appNow - received;
     if (!showTouches && status != 'present') return;
     try {
       await runtime
@@ -212,6 +223,8 @@ const String _source = r'''
   }
   Future<Map<String, dynamic>> handle(Map<String, String> p) async {
     final op = p['op'];
+    final expires = int.tryParse(p['expires'] ?? '');
+    if (expires != null && DateTime.now().millisecondsSinceEpoch > expires) return {'status': 'expired'};
     if (op == 'lifecycle') return {'state': b.lifecycleState?.name ?? 'resumed'};
     if (op == 'settle') {
       final quietMs = int.parse(p['quietMs'] ?? '100');
@@ -361,14 +374,14 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent7', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent8', callback: handle);
   } catch (e) {
-    return 'present';
+    return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
   final owner = b.buildOwner!;
   final scheduled = owner.onBuildScheduled;
   owner.onBuildScheduled = () { lastBuild = DateTime.now().millisecondsSinceEpoch; scheduled?.call(); };
   AppLifecycleListener(onStateChange: (s) => b.postEvent('glint.lifecycle', {'state': s.name}));
-  return 'installed';
+  return 'installed ' + DateTime.now().millisecondsSinceEpoch.toString();
 })()
 ''';

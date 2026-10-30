@@ -1,4 +1,5 @@
 import '../../interaction.dart' show GlintErrorKind;
+import '../../perception.dart' show appBusyCause;
 import '../../semantic.dart';
 import 'envelope.dart';
 import 'session.dart';
@@ -42,10 +43,22 @@ Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(GlintSe
     {required String tool, int waitMs = 0}) async {
   final deadline = DateTime.now().add(Duration(milliseconds: waitMs));
   while (true) {
-    final (matches, visible) = await session.withScene(
-      (scene) async => (textMatches(scene, text), visibleLabels(scene)),
-      detail: SceneDetail.interactive,
-    );
+    final List<TextMatch> matches;
+    final List<String> visible;
+    try {
+      (matches, visible) = await session.withScene(
+        (scene) async => (textMatches(scene, text), visibleLabels(scene)),
+        detail: SceneDetail.interactive,
+      );
+    } on Object catch (e) {
+      final busy = appBusyCause(e);
+      if (busy == null || waitMs == 0) rethrow;
+      if (!DateTime.now().isBefore(deadline)) {
+        return (glintId: null, error: StructuredResponse.appBusy(busy.timeout, summary: '$tool: the app stayed busy'));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      continue;
+    }
     final usable = matches.where((m) => m.inert == null).toList();
     if (usable.length == 1) return (glintId: usable.single.glintId, error: null);
     if (usable.isEmpty && matches.isNotEmpty) return (glintId: null, error: _inertTarget(tool, text, matches.first));

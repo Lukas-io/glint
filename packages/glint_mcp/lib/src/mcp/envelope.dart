@@ -58,6 +58,15 @@ class StructuredResponse {
     return gap == null ? null : StructuredResponse.notOnThisDevice(ability, gap);
   }
 
+  /// The VM gave no answer within [timeout] though the app has drawn frames before: busy, not starting. [summary] overrides the headline.
+  factory StructuredResponse.appBusy(Duration timeout, {String? summary, bool maybeQueued = false}) =>
+      StructuredResponse.error(
+        summary: summary ?? 'the app is busy: it did not answer in time',
+        errorKind: GlintErrorKind.appBusy,
+        detail: appBusyDetail(timeout),
+        nextSteps: appBusyNextSteps(maybeQueued: maybeQueued),
+      );
+
   /// A backend exception as a reply: a [BackendFailure] keeps its kind, data and next steps; anything unknown is a `backendToolError`.
   factory StructuredResponse.backendError(String summary, Object e) => switch (e) {
         IosToolchainBlocked() => StructuredResponse.toolchainBlocked(e),

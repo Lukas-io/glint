@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart' show GlintErrorKind;
+import '../../../perception.dart' show appBusyCause;
 import '../../../semantic.dart' show Inert;
 import '../envelope.dart';
 import '../session.dart';
@@ -63,15 +64,28 @@ class WaitForTool extends GlintTool {
     var lastProgress = start;
     var visible = const <String>[];
     while (true) {
-      final seen = await session.withScene((scene) async {
-        visible = visibleLabels(scene);
-        if (text != null) {
-          final matches = textMatches(scene, text).where((m) => m.inert != Inert.hidden).toList();
-          return matches.isEmpty ? null : (glintId: matches.first.glintId, label: matches.first.label);
+      ({String glintId, String label})? seen;
+      try {
+        seen = await session.withScene((scene) async {
+          visible = visibleLabels(scene);
+          if (text != null) {
+            final matches = textMatches(scene, text).where((m) => m.inert != Inert.hidden).toList();
+            return matches.isEmpty ? null : (glintId: matches.first.glintId, label: matches.first.label);
+          }
+          final node = scene.sourceScene.findByGlintId(glintId!);
+          return node == null ? null : (glintId: glintId, label: node.textPreview ?? glintId);
+        }, detail: SceneDetail.interactive);
+      } on Object catch (e) {
+        final busy = appBusyCause(e);
+        if (busy == null) rethrow;
+        if (DateTime.now().difference(start).inMilliseconds >= timeoutMs) {
+          return StructuredResponse.appBusy(busy.timeout, summary: '$where stayed busy while waiting for $what');
         }
-        final node = scene.sourceScene.findByGlintId(glintId!);
-        return node == null ? null : (glintId: glintId, label: node.textPreview ?? glintId);
-      }, detail: SceneDetail.interactive);
+        progress?.call(
+            DateTime.now().difference(start).inSeconds, 'the app is busy, still waiting for $what on $where');
+        await Future<void>.delayed(_poll);
+        continue;
+      }
       final waited = DateTime.now().difference(start).inMilliseconds;
       if ((seen != null) != gone) {
         final secs = (waited / 1000).toStringAsFixed(1);
