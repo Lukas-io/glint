@@ -118,8 +118,11 @@ class AppSession {
     }
   }
 
-  /// The foreign window in front of the app at the last check (Android), e.g. a system photo picker.
+  /// The foreign window in front of the app at the last check (Android, iOS simulator), e.g. a system photo picker.
   String? nativeSurfaceName;
+
+  /// Whether a scene read has ever found a drawn widget tree, which tells a busy app from one that has not started.
+  bool hasDrawnFrame = false;
 
   /// Identity filled in by `attach` once known; used for routing by name.
   String? package;
@@ -276,7 +279,7 @@ class AppSession {
     await rt.attach(vmUri!);
 
     final insp = InspectorClient(rt);
-    final rd = SceneReader(insp, rt);
+    final rd = SceneReader(insp, rt)..onDrawnTree = () => hasDrawnFrame = true;
     final res = CoordinateResolver(rt);
     final sem = Semanticizer();
 
@@ -331,7 +334,11 @@ class AppSession {
     };
     if (backend case final FlutterInputBackend routed) {
       final reader = nativeReader;
-      routed.coveredBySystem = reader is AndroidNativeReader ? () => _foreignWindowUp(reader) : null;
+      routed.coveredBySystem = switch (reader) {
+        AndroidNativeReader() => ({bool fresh = false}) => _foreignWindowUp(reader),
+        RunnerNativeReader() => ({bool fresh = false}) => _systemSurfaceUp(reader, fresh: fresh),
+        _ => null,
+      };
     }
 
     try {
@@ -577,6 +584,17 @@ class AppSession {
     if (reader.appPackage == null && bundleId != null) reader.appPackage = bundleId;
     try {
       return await reader.foreignSurface() != null;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Whether the runner sees a system surface over the app; the free poll answer rules out a cover, and only a cover it saw (or a [fresh] ask after the app went quiet) costs a runner read.
+  Future<bool> _systemSurfaceUp(RunnerNativeReader reader, {required bool fresh}) async {
+    if (!fresh && nativeSurfaceName == null) return false;
+    try {
+      nativeSurfaceName = await reader.foreignSurface();
+      return nativeSurfaceName != null;
     } on Object {
       return false;
     }

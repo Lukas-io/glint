@@ -117,5 +117,8 @@ Future<StructuredResponse> coordinateSwipe(
   );
 }
 
-StructuredResponse _failed(String what, String where, Object e) =>
-    StructuredResponse.backendError('$what at $where was not delivered', e);
+StructuredResponse _failed(String what, String where, Object e) => StructuredResponse.backendError(
+    e is BackendFailure && e.kind == GlintErrorKind.appBusy
+        ? '$what at $where got no answer: the app is busy'
+        : '$what at $where was not delivered',
+    e);

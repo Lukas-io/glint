@@ -15,6 +15,9 @@ class SceneReader {
   final InspectorClient _inspector;
   final FlutterRuntime _runtime;
 
+  /// Called after each read that found a drawn widget tree.
+  void Function()? onDrawnTree;
+
   /// Source location behind each glintId this reader has handed out, so a renamed id still finds its own widget.
   final Map<String, int> _seenLocations = {};
 
@@ -36,6 +39,7 @@ class SceneReader {
     final groupName = _inspector.nextReadGroup();
     final root = await _inspector.readSummaryTree(groupName: groupName);
     final degenerate = isDegenerateTree(root);
+    if (root.children.isNotEmpty) onDrawnTree?.call();
 
     // Mark offstage IndexedStack children BEFORE id assignment so stable-id
     // generation skips them and firstAddressableId()/hoistPage are unaffected.
