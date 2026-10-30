@@ -74,7 +74,7 @@ List<String> appBusyNextSteps({bool maybeQueued = false}) => [
       'wait_for_settle, then retry',
       'if a system alert or sheet is up, get_scene shows it; tap its buttons by text',
       if (maybeQueued)
-        'the input may still be queued in the app and was not resent, so get_scene before sending it again',
+        'the input was not resent, and the app drops it if it only gets to it now, so get_scene, then send it again',
     ];
 
 class ActionResult {

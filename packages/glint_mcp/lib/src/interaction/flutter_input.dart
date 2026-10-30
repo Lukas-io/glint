@@ -75,7 +75,7 @@ class FlutterInput {
     }
     final Map<String, Object?> reply;
     try {
-      reply = await agent.call(args, timeout: Duration(milliseconds: 10000 + extraMs));
+      reply = await agent.call(args, timeout: Duration(milliseconds: 10000 + extraMs), dropLate: true);
     } on Object catch (e) {
       if (e is RuntimeUnresponsiveError) lastTimeout = e.timeout;
       lastError = '$e'.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '$e');
