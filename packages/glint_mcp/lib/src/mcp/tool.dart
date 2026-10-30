@@ -10,6 +10,7 @@ import 'envelope.dart';
 import 'session.dart';
 import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
+import 'tools/breakpoint_tool.dart';
 import 'tools/attach_tool.dart';
 import 'tools/batch_tool.dart';
 import 'tools/record_tool.dart';
@@ -222,12 +223,14 @@ abstract class GlintTool {
     }
     response = await _checkDeviceGone(session, app, response);
     response = explainMissingBridge(response);
+    response = _explainBreakpointPause(session, response);
     logCall(session, request, response, start);
     return response.toCallResult();
   }
 
   /// The isolate stopped answering: name the likeliest cause, checking the lock screen first.
   Future<StructuredResponse> _unresponsiveResponse(GlintSession session, RuntimeUnresponsiveError e) async {
+    if (pausedAtBreakpoint(session, e) case final paused?) return paused;
     bool? locked;
     try {
       locked = await session.backend.lockState();
@@ -290,8 +293,45 @@ abstract class GlintTool {
     );
   }
 
+  /// An action that failed because a breakpoint paused the app mid-call most likely landed: say so instead of "not delivered".
+  StructuredResponse _explainBreakpointPause(GlintSession session, StructuredResponse response) {
+    if (!response.isError || definition.name == 'breakpoint' || !_looksLikeStall(response)) return response;
+    final hit = session.active?.breakpoints.pausedFor;
+    if (hit == null || response.summary.contains('paused at breakpoint')) return response;
+    return StructuredResponse.error(
+      summary:
+          '${response.summary}: the app paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}) during the call, '
+          'so it most likely landed: ${hit.matchedLine}',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: response.summary,
+      nextSteps: const ['breakpoint op:status for the hit, then breakpoint op:resume'],
+    );
+  }
+
+  /// Whether an error is the kind a paused app causes: unresponsive, never ready, or a timeout.
+  static bool _looksLikeStall(StructuredResponse response) {
+    final data = response.data ?? const <String, Object?>{};
+    final kind = data['errorKind'];
+    if (kind == GlintErrorKind.appUnresponsive.name || kind == GlintErrorKind.targetNeverReady.name) return true;
+    final text = '${response.summary} ${data['detail'] ?? ''}'.toLowerCase();
+    return text.contains('timed out') || text.contains('timeout');
+  }
+
+  /// A read failed because glint itself paused the app at a log breakpoint; null otherwise.
+  static StructuredResponse? pausedAtBreakpoint(GlintSession session, Object e) {
+    final hit = session.active?.breakpoints.pausedFor;
+    if (hit == null) return null;
+    return StructuredResponse.error(
+      summary: 'the app is paused at breakpoint ${hit.breakpoint.id} (hit ${hit.number}): ${hit.matchedLine}',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: e.toString(),
+      nextSteps: const ['breakpoint op:resume, then retry'],
+    );
+  }
+
   /// The widget tree came back empty: a system surface over an app that is not resumed, or no first frame yet.
   Future<StructuredResponse> noFrameResponse(GlintSession session, InspectorReadError e) async {
+    if (pausedAtBreakpoint(session, e) case final paused?) return paused;
     String? lifecycle;
     try {
       lifecycle = await session.lifecycleState();
@@ -537,6 +577,7 @@ const List<GlintTool> kDefaultGlintTools = [
   RecordTool(),
   LogsTool(),
   AppLogsTool(),
+  BreakpointTool(),
   SessionTool(),
   ConfigTool(),
   ReportIssueTool(),

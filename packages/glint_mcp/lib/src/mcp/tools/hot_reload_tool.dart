@@ -30,6 +30,9 @@ class HotReloadTool extends GlintTool {
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final restart = argBool(request.arguments ?? const {}, 'restart') ?? false;
     final what = restart ? 'hot restart' : 'hot reload';
+    if (GlintTool.pausedAtBreakpoint(session, 'a paused isolate cannot apply a $what') case final paused?) {
+      return paused;
+    }
     final runtime = session.runtime;
     final service = runtime.rawService;
     final isolateId = runtime.flutterIsolateId;

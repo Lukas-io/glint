@@ -60,9 +60,13 @@ class AppLogBuffer {
   StreamSubscription<Event>? _logSub;
   VmService? _service;
   Future<void> _logQueue = Future.value();
+  final _added = StreamController<AppLogEntry>.broadcast(sync: true);
 
   int get length => _entries.length;
   int get nextSequence => _seq;
+
+  /// Every entry as it is appended, in order, so watchers react without polling.
+  Stream<AppLogEntry> get onEntry => _added.stream;
 
   Future<void> subscribe(FlutterRuntime runtime) async {
     await unsubscribe();
@@ -152,17 +156,19 @@ class AppLogBuffer {
     DateTime? timestamp,
   }) {
     if (content.trim().isEmpty) return;
-    _entries.add(AppLogEntry(
+    final entry = AppLogEntry(
       sequence: _seq++,
       timestamp: timestamp ?? DateTime.now(),
       stream: stream,
       content: content,
       loggerName: loggerName,
       level: level,
-    ));
+    );
+    _entries.add(entry);
     while (_entries.length > capacity) {
       _entries.removeFirst();
     }
+    _added.add(entry);
   }
 
   Iterable<AppLogEntry> query({

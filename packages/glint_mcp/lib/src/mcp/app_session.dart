@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:vm_service/vm_service.dart' show EventKind, SentinelException, VmService;
+
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart';
@@ -133,6 +135,58 @@ class AppSession {
 
   /// Background screenshots of this device, newest first.
   final CaptureRing captures = CaptureRing();
+
+  /// Log breakpoints armed on this app; they pause its UI isolate when a log line matches.
+  late final LogBreakpoints breakpoints = LogBreakpoints(
+    pauseApp: () => _isolateCall((service, id) => service.pause(id)),
+    resumeApp: () => _isolateCall((service, id) => service.resume(id)),
+    capture: _captureForBreakpoint,
+    isolatePaused: _isolateIsPaused,
+  )..listen(appLogs.onEntry);
+
+  /// Screenshots the paused app, retrying because a capture taken just before (e.g. device op:screenshot) can make the next one fail.
+  Future<String?> _captureForBreakpoint() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(const Duration(milliseconds: 600));
+      final shot = await captureNow('breakpoint');
+      if (shot != null) return shot.path;
+    }
+    return null;
+  }
+
+  /// Whether the UI isolate is still paused; false when it is running or collected, true when that cannot be told.
+  Future<bool> _isolateIsPaused() async {
+    final rt = runtime;
+    if (rt == null || !rt.isAttached) return true;
+    try {
+      final isolate = await rt.rawService.getIsolate(rt.flutterIsolateId).timeout(const Duration(seconds: 5));
+      return _pauseKinds.contains(isolate.pauseEvent?.kind);
+    } on SentinelException {
+      return false;
+    } on Object {
+      return true;
+    }
+  }
+
+  static const _pauseKinds = {
+    EventKind.kPauseStart,
+    EventKind.kPauseExit,
+    EventKind.kPauseBreakpoint,
+    EventKind.kPauseInterrupted,
+    EventKind.kPauseException,
+  };
+
+  /// Runs a VM call on the UI isolate; returns the failure as text, or null on success.
+  Future<String?> _isolateCall(Future<Object?> Function(VmService service, String isolateId) call) async {
+    final rt = runtime;
+    if (rt == null || !rt.isAttached) return 'not connected to the app\'s VM service';
+    try {
+      await call(rt.rawService, rt.flutterIsolateId).timeout(const Duration(seconds: 5));
+      return null;
+    } on Object catch (e) {
+      return '$e';
+    }
+  }
 
   /// A recording in flight (set by the record tool); stopped on dispose so a crash mid-record does not orphan the simctl/adb process.
   ScreenRecording? activeRecording;
@@ -332,6 +386,7 @@ class AppSession {
         await _teardownRuntime();
         await _bind(runtimeFactory);
         reconnectCount++;
+        await breakpoints.reconcile();
         return;
       } on Object {
         // keep retrying until exhausted
@@ -455,6 +510,7 @@ class AppSession {
   }
 
   Future<void> dispose() async {
+    await breakpoints.dispose();
     _disposed = true;
     if (showTouches) await _setSystemTouches(false);
     final rt = runtime;

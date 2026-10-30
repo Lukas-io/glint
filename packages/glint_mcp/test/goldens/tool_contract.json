@@ -1171,6 +1171,43 @@
       }
     }
   },
+  "breakpoint": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "set | wait | status | resume | list | clear. Default status."
+      },
+      "pattern": {
+        "type": "string",
+        "description": "op=set: regex matched against each log line, e.g. \"\\[EventTracker\\] vip_\"."
+      },
+      "stream": {
+        "type": "string",
+        "description": "op=set: only lines from stdout, stderr or logging. Default all."
+      },
+      "pause": {
+        "type": "boolean",
+        "description": "op=set: pause the app on a hit. Default true; false only records hits."
+      },
+      "once": {
+        "type": "boolean",
+        "description": "op=set: remove the breakpoint after its first hit. Default false."
+      },
+      "caseSensitive": {
+        "type": "boolean",
+        "description": "op=set: default true."
+      },
+      "id": {
+        "type": "string",
+        "description": "op=clear: breakpoint id from set or list. Omit to clear all."
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "description": "op=wait: 100-120000. Default 60000."
+      }
+    }
+  },
   "session": {
     "type": "object",
     "properties": {
