@@ -31,6 +31,9 @@ class DriveProfile {
   late double _cruise;
   double _untilChange = 0;
 
+  /// Back to rest, so a resume or seek pulls away instead of jumping to the old speed.
+  void reset() => speed = 0;
+
   /// Upcoming turns this profile slows for.
   int get turns => _corners.length;
 
@@ -49,7 +52,7 @@ class DriveProfile {
   double secondsLeft(double from) {
     final ghost = DriveProfile._ghost(this);
     var m = from, t = 0.0;
-    const dt = 0.25;
+    const dt = 1.0;
     while (m < _length && t < 24 * 3600) {
       m += ghost.step(m, dt) * dt;
       t += dt;
@@ -75,9 +78,10 @@ class DriveProfile {
     _untilChange -= dt;
     if (_untilChange <= 0) _cruise = _pickCruise();
     var target = _cruise;
+    final window = max(300.0, maxSpeed * maxSpeed / (2 * _plan) + 50);
     for (final c in _corners) {
       final ahead = c.meters - meters;
-      if (ahead < -10 || ahead > 300) continue;
+      if (ahead < -10 || ahead > window) continue;
       // Reach the corner's speed 10 m before it and hold it until 10 m past.
       final v = sqrt(pow(cornerSpeed(c.degrees, _cruise), 2) + 2 * _plan * max(0.0, ahead - 10));
       target = min(target, v);
@@ -85,7 +89,7 @@ class DriveProfile {
     final left = _length - meters;
     target = min(target, sqrt(2 * _plan * max(0.0, left - 1)));
     // Never halt short of the end: creep the last metres in.
-    if (left > 0) target = max(target, left > 2 ? 1.5 : 1.0);
+    if (left > 0) target = max(target, min(left > 2 ? 1.5 : 1.0, min(_cruise, maxSpeed)));
     final change = (target - speed).clamp(-brake * dt, accel * dt);
     speed = max(0.0, speed + change);
     return speed;

@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- **Drive a route like a person.** `location op:route maxSpeedKmh:90` varies the speed between `speedKmh` and `maxSpeedKmh` the way a driver does: it accelerates and brakes smoothly, slows before bends and comes to a stop at the end, so testing an app against real driving no longer needs a constant-speed GPX. `slowForTurns:false` skips the braking for bends. The reply lists the cruise range and how many turns it brakes for, and `op:get` reports the current speed.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added

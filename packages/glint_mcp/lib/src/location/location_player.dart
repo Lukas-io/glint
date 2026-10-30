@@ -83,6 +83,7 @@ class LocationPlayer {
   Future<void> pause() async {
     if (state != RouteState.playing) return;
     state = RouteState.paused;
+    spec.drive?.reset();
     if (native) await _hold();
   }
 
@@ -104,6 +105,7 @@ class LocationPlayer {
   /// Jumps to [toMeters] along the path and moves the device there at once.
   Future<void> seek(double toMeters) async {
     meters = toMeters.clamp(0, path.lengthMeters).toDouble();
+    spec.drive?.reset();
     if (state == RouteState.finished) {
       state = RouteState.paused;
       _timer ??= Timer.periodic(spec.interval, (_) => _tick());
@@ -221,6 +223,7 @@ class LocationPlayer {
   void _end(RouteState how) {
     if (!active) return;
     state = how;
+    spec.drive?.reset();
     _timer?.cancel();
     _timer = null;
   }

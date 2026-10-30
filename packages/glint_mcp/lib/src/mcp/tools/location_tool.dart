@@ -699,7 +699,8 @@ class LocationTool extends GlintTool {
         'waypoint': p.waypoint,
         'waypoints': p.path.points.length,
         'remainingSec': p.remaining.inSeconds,
-        'speedKmh': double.parse(((p.spec.drive?.speed ?? p.spec.speed) * 3.6).toStringAsFixed(1)),
+        'speedKmh': double.parse(
+            (p.state == RouteState.playing ? (p.spec.drive?.speed ?? p.spec.speed) * 3.6 : 0.0).toStringAsFixed(1)),
         if (p.spec.drive case final d?) 'cruiseKmh': [(d.minSpeed * 3.6).round(), (d.maxSpeed * 3.6).round()],
         'intervalMs': p.spec.interval.inMilliseconds,
         if (p.spec.loop) 'laps': p.laps,
@@ -791,7 +792,8 @@ class LocationTool extends GlintTool {
       ]);
     }
     if (maxKmh != null && (maxKmh < speedKmh || maxKmh > 300)) {
-      return _bad('maxSpeedKmh must be at least speedKmh ($speedKmh) and at most 300, got $maxKmh');
+      return _bad('maxSpeedKmh must be at least speedKmh ($speedKmh) and at most 300, got $maxKmh',
+          nextSteps: const ['pass maxSpeedKmh at or above speedKmh (default 30) and at most 300']);
     }
     if (durationSec == null && (speedKmh <= 0 || speedKmh > 1200)) {
       return _bad('speedKmh must be above 0 and at most 1200, got $speedKmh');
@@ -841,7 +843,10 @@ class LocationTool extends GlintTool {
         if (askedMs < intervalMs) 'intervalMs raised to $intervalMs: ${backend.label} takes no fixes faster',
         if (backend is IosDeviceLocation) 'an iPhone takes position only: the app sees no speed or heading',
         if (backend is IosSimulatorLocation && !player.native)
-          'with jitterM or dropout the simulator gets one fix at a time, so the app sees no heading',
+          drive != null
+              ? 'a driven route (maxSpeedKmh) is sent one fix at a time, so the app sees no heading'
+              : 'with jitterM or dropout the simulator gets one fix at a time, so the app sees no heading',
+        if (maxKmh == null && argBool(args, 'slowForTurns') != null) 'slowForTurns only applies with maxSpeedKmh',
         if (backend is IosSimulatorLocation)
           'iOS reports speed 0 for simulated travel; apps that show speed must work it out from successive fixes',
       ],
