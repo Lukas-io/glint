@@ -465,10 +465,13 @@ class GlintSession {
     return best;
   }
 
+  /// The first resolvable descendant of [list], tried from the middle outward since pinned headers and footers sit at the ends and never move with the content.
   Future<ScrollAnchor?> _anchorWithin(Scene scene, SemanticList list) async {
-    for (final n in list.walk()) {
-      final id = n.glintId;
-      if (id == null || identical(n, list)) continue;
+    final ids = [
+      for (final n in list.walk())
+        if (n.glintId != null && !identical(n, list)) n.glintId!,
+    ];
+    for (final id in _middleOut(ids)) {
       try {
         final c = await resolver.resolve(scene, id);
         if (c.hasNonZeroBounds) {
@@ -520,4 +523,13 @@ class SessionNotAttachedError implements Exception {
 
   @override
   String toString() => 'glint session is not attached; call `attach` before using `$missing`';
+}
+
+/// [items] starting at the middle and alternating outward.
+Iterable<T> _middleOut<T>(List<T> items) sync* {
+  final mid = items.length ~/ 2;
+  for (var d = 0; d <= items.length; d++) {
+    if (mid - d >= 0 && mid - d < items.length) yield items[mid - d];
+    if (d > 0 && mid + d < items.length) yield items[mid + d];
+  }
 }
