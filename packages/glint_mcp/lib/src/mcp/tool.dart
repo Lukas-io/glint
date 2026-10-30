@@ -4,7 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import '../../observability.dart';
-import '../../perception.dart' show InspectorReadError, suggestIds;
+import '../../perception.dart' show InspectorReadError, appBusyCause, suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'session.dart';
@@ -237,6 +237,10 @@ abstract class GlintTool {
     } on Object {
       locked = null;
     }
+    final app = session.active;
+    if (locked != true && app != null && app.hasDrawnFrame && app.sceneMode == SceneMode.flutter) {
+      return StructuredResponse.appBusy(e.timeout);
+    }
     return StructuredResponse.error(
       summary: locked == true
           ? 'the device is locked, so the app is suspended and runs no Dart code'
@@ -312,7 +316,11 @@ abstract class GlintTool {
   static bool _looksLikeStall(StructuredResponse response) {
     final data = response.data ?? const <String, Object?>{};
     final kind = data['errorKind'];
-    if (kind == GlintErrorKind.appUnresponsive.name || kind == GlintErrorKind.targetNeverReady.name) return true;
+    if (kind == GlintErrorKind.appUnresponsive.name ||
+        kind == GlintErrorKind.appBusy.name ||
+        kind == GlintErrorKind.targetNeverReady.name) {
+      return true;
+    }
     final text = '${response.summary} ${data['detail'] ?? ''}'.toLowerCase();
     return text.contains('timed out') || text.contains('timeout');
   }
@@ -332,6 +340,8 @@ abstract class GlintTool {
   /// The widget tree came back empty: a system surface over an app that is not resumed, or no first frame yet.
   Future<StructuredResponse> noFrameResponse(GlintSession session, InspectorReadError e) async {
     if (pausedAtBreakpoint(session, e) case final paused?) return paused;
+    final busy = appBusyCause(e);
+    if (busy != null && (session.active?.hasDrawnFrame ?? false)) return StructuredResponse.appBusy(busy.timeout);
     String? lifecycle;
     try {
       lifecycle = await session.lifecycleState();

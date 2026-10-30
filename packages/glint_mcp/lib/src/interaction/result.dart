@@ -29,6 +29,9 @@ enum GlintErrorKind {
   /// The isolate stopped answering: device locked, app suspended by the OS, or paused at a breakpoint.
   appUnresponsive,
 
+  /// The app's VM did not answer in time but the app has drawn frames before: a heavy build or a native surface holding its main thread.
+  appBusy,
+
   /// A physical device stopped answering glint's device input: unplugged, locked before trust, or out of Developer Mode.
   deviceNotConnected,
 
@@ -65,6 +68,17 @@ enum GlintErrorKind {
   // bug bucket — should never happen; if it does, it's on us
   internal,
 }
+
+/// The `detail` of an [GlintErrorKind.appBusy] reply for a VM that gave no answer within [timeout].
+String appBusyDetail(Duration timeout) => 'the app is busy: its VM did not answer within ${timeout.inSeconds}s';
+
+/// Next steps for [GlintErrorKind.appBusy]; [maybeQueued] adds that an input sent earlier may still land.
+List<String> appBusyNextSteps({bool maybeQueued = false}) => [
+      'wait_for_settle, then retry',
+      'if a system alert or sheet is up, get_scene shows it; tap its buttons by text',
+      if (maybeQueued)
+        'the input was not resent, and the app drops it if it only gets to it now, so get_scene, then send it again',
+    ];
 
 class ActionResult {
   ActionResult.success({
