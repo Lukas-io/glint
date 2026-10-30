@@ -169,6 +169,9 @@ List<String> visibleLabels(SemanticScene scene) {
   return out;
 }
 
+/// The text a person reads on [n]: button label, text content, input hint or app bar title.
+String? nodeLabel(SemanticNode n) => _label(n);
+
 String? _label(SemanticNode n) => switch (n) {
       SemanticButton(:final label) => label,
       SemanticText(:final content) => content,
