@@ -1,6 +1,9 @@
 import 'action.dart';
 import 'input_route.dart';
 
+/// A coordinate for a reply: whole numbers bare, fractions to one decimal.
+String pointText(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
 /// Closed set of failure modes — interaction, perception, MCP all use this.
 enum GlintErrorKind {
   // interaction-layer failures
@@ -68,6 +71,7 @@ class ActionResult {
     required this.action,
     required this.summary,
     this.physicalCenter,
+    this.logicalCenter,
     this.devicePixelRatio,
     this.painted,
     this.hittable,
@@ -85,6 +89,7 @@ class ActionResult {
     required this.errorKind,
     required this.error,
     this.physicalCenter,
+    this.logicalCenter,
     this.devicePixelRatio,
     this.painted,
     this.hittable,
@@ -98,6 +103,7 @@ class ActionResult {
   final bool ok;
   final String summary;
   final ({int x, int y})? physicalCenter;
+  final ({double x, double y})? logicalCenter;
   final double? devicePixelRatio;
   final bool? painted;
   final bool? hittable;
@@ -117,6 +123,7 @@ class ActionResult {
         action: action,
         summary: '$summary · ${input.label}',
         physicalCenter: physicalCenter,
+        logicalCenter: logicalCenter,
         devicePixelRatio: devicePixelRatio,
         painted: painted,
         hittable: hittable,
@@ -130,6 +137,7 @@ class ActionResult {
         'ok': ok,
         'summary': summary,
         if (physicalCenter != null) 'physicalCenter': {'x': physicalCenter!.x, 'y': physicalCenter!.y},
+        if (logicalCenter != null) 'logicalCenter': {'x': logicalCenter!.x, 'y': logicalCenter!.y},
         if (devicePixelRatio != null) 'devicePixelRatio': devicePixelRatio,
         if (painted != null) 'painted': painted,
         if (hittable != null) 'hittable': hittable,

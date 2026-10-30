@@ -34,8 +34,10 @@ class LongPressTool extends GlintTool {
             'glintId': Schema.string(
               description: 'Stable id from get_scene.',
             ),
-            'x': Schema.num(description: 'Raw x (with y). Bypasses glintId.'),
-            'y': Schema.num(description: 'Raw y (with x).'),
+            'x': Schema.num(
+                description:
+                    'Raw x in logical points (device mode: screen pixels), with y. Off-screen points are refused. Bypasses glintId.'),
+            'y': Schema.num(description: 'Raw y (with x), same unit.'),
             'durationMs': Schema.int(
               description: 'Hold time in ms. Default 800.',
             ),
@@ -63,6 +65,8 @@ class LongPressTool extends GlintTool {
 
     final pt = readPoint(args);
     if (pt != null) {
+      final off = await rejectOffScreen(session, 'long_press', pointCoordinates(pt.x, pt.y));
+      if (off != null) return off;
       return withCoordinateChange(
         session,
         () => coordinateLongPress(session, pt.x, pt.y, durationMs),

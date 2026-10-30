@@ -1,5 +1,6 @@
 import '../../interaction.dart';
 import '../../perception.dart';
+import 'coordinate.dart';
 import 'envelope.dart';
 import 'post_action.dart';
 import 'session.dart';
@@ -58,6 +59,12 @@ Future<StructuredResponse> runTapSequence(
   required bool returnScene,
   required bool fetchScene,
 }) async {
+  final off = await rejectOffScreen(session, 'tap sequence', [
+    for (var i = 0; i < steps.length; i++)
+      if (steps[i].glintId == null)
+        ...pointCoordinates(steps[i].x!, steps[i].y!, xName: 'step ${i + 1} x', yName: 'step ${i + 1} y'),
+  ]);
+  if (off != null) return off;
   final needsScene = steps.any((s) => s.glintId != null);
   if (needsScene && session.isDeviceMode) {
     return StructuredResponse.error(

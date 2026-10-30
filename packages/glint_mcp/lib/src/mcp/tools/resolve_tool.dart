@@ -9,7 +9,7 @@ import '../tool.dart';
 import '../tool_args.dart';
 
 /// Read-only geometry lookup. Resolves a glintId against the live render
-/// tree and returns its physical-pixel center, bounds, painted, hittable
+/// tree and returns its logical-point center, bounds, painted, hittable
 /// flags — without side effects. Use this when you need to know *where*
 /// a node is without firing a gesture against it.
 class ResolveTool extends GlintTool {
@@ -19,8 +19,8 @@ class ResolveTool extends GlintTool {
   Tool get definition => Tool(
         name: 'resolve',
         description: 'Drill-down geometry for a glintId. Needs a Flutter app (device '
-            'mode: errorKind flutterModeRequired). Returns: physicalCenter (px), '
-            'logicalBounds (logical px), logicalViewSize, devicePixelRatio, '
+            'mode: errorKind flutterModeRequired). Returns: logicalCenter, '
+            'logicalBounds (all logical points), logicalViewSize, devicePixelRatio, '
             'painted (visible to human), hittable (would receive a tap), '
             'and warnings (e.g. "target is not painted", "target is not hittable"). '
             'Use this when an action fails or behaves unexpectedly — resolve the '
@@ -62,8 +62,8 @@ class ResolveTool extends GlintTool {
       }
       final c = await session.resolver.resolve(scene, glintId);
       return StructuredResponse(
-        summary: 'resolved $glintId at (${c.physicalCenter.x}, '
-            '${c.physicalCenter.y}) px '
+        summary: 'resolved $glintId at (${pointText(c.logicalCenter.x)}, '
+            '${pointText(c.logicalCenter.y)}) pt '
             '(painted=${c.painted}, hittable=${c.hittable})',
         warnings: c.warnings,
         data: c.toJson(),

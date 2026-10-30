@@ -44,7 +44,7 @@ class TypeTool extends GlintTool {
               description: 'Settle, then report changed and changeCategory. Default true.',
             ),
             'detail': Schema.bool(
-              description: 'Include geometry (painted, hittable, physicalCenter). Default false.',
+              description: 'Include geometry (painted, hittable, logicalCenter). Default false.',
             ),
             'fetchScene': Schema.bool(
               description: 'Also return the new scene text as postScene. Default false.',

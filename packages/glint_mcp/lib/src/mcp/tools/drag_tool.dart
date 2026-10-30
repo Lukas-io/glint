@@ -2,9 +2,9 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../armed.dart';
-import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
+import '../segment_swipe.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -19,7 +19,7 @@ class DragTool extends GlintTool {
         name: 'drag',
         description: 'Drag from one glintId to another, OR pass x1,y1,x2,y2 for raw '
             'coordinates (device mode: screenshot pixels; flutter mode: logical '
-            'points). Same as swipe but with a longer hold (800ms default) so '
+            'points; points off the screen are refused). Same as swipe but with a longer hold (800ms default) so '
             'the framework recognises it as a drag gesture rather than a fling. '
             '`awaitReady` gates on the `from` endpoint. '
             'With returnScene: true (default), settles and returns the new scene '
@@ -32,10 +32,10 @@ class DragTool extends GlintTool {
             'toGlintId': Schema.string(
               description: 'End point — stable id from get_scene.',
             ),
-            'x1': Schema.num(description: 'Raw start x (with y1,x2,y2).'),
-            'y1': Schema.num(description: 'Raw start y.'),
-            'x2': Schema.num(description: 'Raw end x.'),
-            'y2': Schema.num(description: 'Raw end y.'),
+            'x1': Schema.num(description: 'Start x in logical points (device mode: screen pixels), with y1,x2,y2.'),
+            'y1': Schema.num(description: 'Start y, same unit.'),
+            'x2': Schema.num(description: 'End x, same unit.'),
+            'y2': Schema.num(description: 'End y, same unit.'),
             'durationMs': Schema.int(
               description: 'Hold time in ms. Default 800.',
             ),
@@ -63,12 +63,8 @@ class DragTool extends GlintTool {
 
     final seg = readSegment(args);
     if (seg != null) {
-      return withCoordinateChange(
-        session,
-        () => coordinateSwipe(session, seg.x1, seg.y1, seg.x2, seg.y2, durationMs, verb: 'dragged'),
-        returnScene: t.returnScene,
-        fetchScene: t.fetchScene,
-      );
+      return segmentSwipe(session, 'drag', seg, durationMs,
+          verb: 'dragged', returnScene: t.returnScene, fetchScene: t.fetchScene);
     }
 
     final from = args['fromGlintId'] as String?;
