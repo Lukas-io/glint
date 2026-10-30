@@ -8,6 +8,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 - **Log breakpoints.** `breakpoint op:set pattern:"<regex>"` pauses the app the moment it logs a matching line (print, debugPrint, `developer.log` or stderr), screenshots that screen, and holds it until `breakpoint op:resume`. `op:wait` blocks until the next hit, with progress every 15 s; `op:status`, `op:list` and `op:clear` manage the rest. `pause:false` records hits without pausing. While paused, scene reads say which breakpoint holds the app instead of reporting a generic unresponsive app, `hot_reload` refuses while the app is paused, and glint resumes a paused app when it detaches.
 
+### Fixed
+
+- **`attach launch:` named the real reason when `flutter run` failed.** The error used to open with whatever line came last, such as Xcode's `Linker command failed` or Gradle's `BUILD FAILED in 9s`. It now picks the root cause: the first Xcode error (`Library 'c++' not found`), the line under Gradle's `What went wrong`, a Dart compile error with its file and line, or an adb `INSTALL_FAILED_` code. A launch that times out includes the reason too.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added
