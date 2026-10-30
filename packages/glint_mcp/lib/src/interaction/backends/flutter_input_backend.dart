@@ -22,8 +22,8 @@ class FlutterInputBackend extends InteractionBackend {
   /// Where every touch sent through here is noted, for drawing onto recordings.
   TouchLog? touchLog;
 
-  /// Whether another window has focus over the app (a system dialog, Android's notification shade) without changing the app's lifecycle; checked before each in-app delivery.
-  Future<bool> Function()? coveredBySystem;
+  /// Whether another window has focus over the app (a system dialog, Android's notification shade) without changing the app's lifecycle; checked before each in-app delivery, and with `fresh` again after the app did not answer.
+  Future<bool> Function({bool fresh})? coveredBySystem;
 
   InputReport? _last;
 
@@ -63,7 +63,7 @@ class FlutterInputBackend extends InteractionBackend {
       return;
     }
     final input = FlutterInput(rt);
-    final covered = await coveredBySystem?.call() ?? false;
+    final covered = await coveredBySystem?.call(fresh: false) ?? false;
     final miss = covered ? FlutterInputMiss.systemSurface : await viaFlutter(input);
     if (miss == null) {
       _last = (path: InputPath.app, reason: null, ms: clock.elapsedMilliseconds);
@@ -79,6 +79,14 @@ class FlutterInputBackend extends InteractionBackend {
           if (p != null) 'delivered': p.delivered,
           if (p != null) 'of': p.of
         });
+      case FlutterInputMiss.evalFailed when input.lastTimeout != null:
+        if (route == InputRoute.auto && await coveredBySystem?.call(fresh: true) == true) {
+          await viaNative();
+          _last = (path: InputPath.device, reason: FlutterInputMiss.systemSurface, ms: clock.elapsedMilliseconds);
+          return;
+        }
+        throw BackendFailure(GlintErrorKind.appBusy, appBusyDetail(input.lastTimeout!),
+            nextSteps: appBusyNextSteps(maybeQueued: true));
       case FlutterInputMiss.evalFailed:
         throw BackendFailure(GlintErrorKind.backendToolError, '${miss.reason}$why', nextSteps: const [
           'call get_scene: if the app answers, retry once; it was not sent another way, so it did not land twice'

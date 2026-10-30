@@ -16,15 +16,25 @@ class RunnerNativeReader extends NativeReader {
   List<Map<String, Object?>> _surface = const [];
   ({double w, double h})? _screen;
 
+  /// Longest a tree read may take; the runner answers one request at a time, and the app's own tree waits for the app to go idle.
+  static const readLimit = Duration(seconds: 3);
+
+  /// Reads system alerts first: that read never waits on the app, so an alert that blocks the app ("Allow Paste") is still seen; the app's own tree is read only when there is none.
   @override
   Future<String?> foreignSurface() async {
-    final Map<String, Object?> reply;
     try {
-      reply = await tree(bundleId());
+      final system = await tree(null).timeout(readLimit);
+      final alerts = system['alerts'];
+      final app = bundleId();
+      if ((alerts is List && alerts.isNotEmpty) || app == null) return _take(system);
+      return _take(await tree(app).timeout(readLimit));
     } on Object {
       _surface = const [];
       return null;
     }
+  }
+
+  String? _take(Map<String, Object?> reply) {
     final found = findNativeSurface(reply);
     _surface = found?.roots ?? const [];
     _screen = screenOf(reply);

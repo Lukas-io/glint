@@ -1,5 +1,7 @@
+import '../runtime/flutter_runtime.dart' show RuntimeUnresponsiveError;
 import 'geometry.dart';
 import 'id_suggest.dart';
+import 'inspector_client.dart' show appBusyCause;
 import 'scene_reader.dart';
 
 /// §7.2 readiness primitive. Polls fresh scenes until [glintId] both exists in
@@ -31,10 +33,27 @@ class ReadinessGate {
     String? lastSignature;
     DateTime? stableSince;
     var suggestions = const <String>[];
+    RuntimeUnresponsiveError? busy;
 
     while (true) {
       attempts++;
-      final scene = await reader.readSummary();
+      busy = null;
+      final Scene scene;
+      try {
+        scene = await reader.readSummary();
+      } on Object catch (e) {
+        busy = appBusyCause(e);
+        if (busy == null) rethrow;
+        if (DateTime.now().difference(start).inMilliseconds >= ceilingMs) {
+          return ReadinessResult.busy(
+              glintId: glintId,
+              attempts: attempts,
+              elapsedMs: DateTime.now().difference(start).inMilliseconds,
+              timeout: busy.timeout);
+        }
+        await Future<void>.delayed(Duration(milliseconds: pollIntervalMs));
+        continue;
+      }
       try {
         final node = scene.findByGlintId(glintId);
         if (node == null) {
@@ -78,6 +97,10 @@ class ReadinessGate {
           } on GeometryResolveError catch (e) {
             // Geometry can transiently fail mid-build; keep polling.
             lastDetail = 'geometry resolve error: ${e.message}';
+          } on Object catch (e) {
+            busy = appBusyCause(e);
+            if (busy == null) rethrow;
+            lastDetail = 'the app did not answer within ${busy.timeout.inSeconds}s';
           }
         } else {
           lastDetail = 'no node with glintId "$glintId" in scene';
@@ -88,6 +111,9 @@ class ReadinessGate {
 
       final elapsed = DateTime.now().difference(start).inMilliseconds;
       if (elapsed >= ceilingMs) {
+        if (busy != null) {
+          return ReadinessResult.busy(glintId: glintId, attempts: attempts, elapsedMs: elapsed, timeout: busy.timeout);
+        }
         return sawInTree
             ? ReadinessResult.neverReady(
                 glintId: glintId,
@@ -129,6 +155,13 @@ sealed class ReadinessResult {
     String? detail,
   }) = NeverReadyResult;
 
+  factory ReadinessResult.busy({
+    required String glintId,
+    required int attempts,
+    required int elapsedMs,
+    required Duration timeout,
+  }) = BusyResult;
+
   factory ReadinessResult.notFound({
     required String glintId,
     required int attempts,
@@ -160,6 +193,17 @@ class NeverReadyResult extends ReadinessResult {
     this.detail,
   });
   final String? detail;
+}
+
+/// The app's VM stopped answering while the gate polled and had not recovered by the ceiling.
+class BusyResult extends ReadinessResult {
+  const BusyResult({
+    required super.glintId,
+    required super.attempts,
+    required super.elapsedMs,
+    required this.timeout,
+  });
+  final Duration timeout;
 }
 
 class NotFoundResult extends ReadinessResult {

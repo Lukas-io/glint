@@ -258,15 +258,19 @@ class PostActionState {
       };
 }
 
-/// Snapshot the scene BEFORE an action fires, for [readPostActionState].
-/// Prefer [openActionScene] when the caller also needs the live scene.
+/// Longest the before-action snapshot may take, so a blocked app cannot hold the action back.
+const preSnapshotLimit = Duration(seconds: 4);
+
+/// Snapshot the scene BEFORE an action fires, for [readPostActionState]; null when it cannot be read in time.
 Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
     final covered = session.sceneMode == SceneMode.native;
-    return await session.withScene(
-      (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session))..coveredBefore = covered,
-      detail: SceneDetail.interactive,
-    );
+    return await session
+        .withScene(
+          (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session))..coveredBefore = covered,
+          detail: SceneDetail.interactive,
+        )
+        .timeout(preSnapshotLimit);
   } on Object {
     return null;
   }
