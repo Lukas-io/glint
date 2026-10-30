@@ -24,6 +24,7 @@ class GlintConfig {
     this.screenshotMaxSize = 1024,
     this.screenshotFormat = 'jpeg',
     this.screenshotQuality = 75,
+    this.showTouches = false,
   });
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
@@ -82,6 +83,9 @@ class GlintConfig {
   /// JPEG quality 1-100 for images sent to the model.
   int screenshotQuality;
 
+  /// Draw each touch inside attached apps (dot, trail, release ripple) for people watching or recording.
+  bool showTouches;
+
   /// All known keys → string of current value, for the `config get` view.
   /// Telemetry is env-controlled (GLINT_TELEMETRY, DO_NOT_TRACK, GLINT_NO_TELEMETRY), never agent-controlled.
   Map<String, Object> toJson() => {
@@ -103,6 +107,7 @@ class GlintConfig {
         'screenshotMaxSize': screenshotMaxSize,
         'screenshotFormat': screenshotFormat,
         'screenshotQuality': screenshotQuality,
+        'showTouches': showTouches,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -182,6 +187,10 @@ class GlintConfig {
         final v = looseInt(value);
         if (v == null || v < 1 || v > 100) return 'screenshotQuality must be 1-100';
         screenshotQuality = v;
+      case 'showTouches':
+        final v = looseBool(value);
+        if (v == null) return 'showTouches must be true or false';
+        showTouches = v;
       default:
         return 'unknown config key: $key';
     }

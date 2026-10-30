@@ -134,12 +134,14 @@ void main() {
 }
 
 class _NoGeometryRuntime implements FlutterRuntime {
+  _NoGeometryRuntime({this.op = 1.0});
+  final double op;
   @override
   Future<void> setInspectorSelection({required String inspectorId, required String groupName}) async {}
   @override
   Future<String?> evaluateString(String expression, {bool rethrowErrors = false}) async =>
       '{"gx":1,"gy":1,"bx":0,"by":0,"bw":1,"bh":1,"dpr":1,"vw":1,"vh":1,'
-      '"op":1.0,"vis":true,"hit":true}';
+      '"op":$op,"vis":true,"hit":true}';
   @override
   dynamic noSuchMethod(Invocation i) => throw UnimplementedError();
 }
@@ -157,5 +159,16 @@ void readinessGateMain() {
     expect(nf.staleScreen, isTrue);
     expect(nf.elapsedMs, lessThan(1000));
     expect(nf.suggestions, contains('text'));
+  });
+
+  test('ReadinessGate does not call a target faded to opacity 0 ready, though it is hittable', () async {
+    final rt = _NoGeometryRuntime(op: 0);
+    final reader = _FakeReader(rt, [
+      _node('Scaffold', kids: [_node('TextButton')])
+    ]);
+    final gate = ReadinessGate(reader: reader, resolver: CoordinateResolver(rt), pollIntervalMs: 5);
+    final r = await gate.awaitReady(glintId: 'textbutton', ceilingMs: 60);
+    expect(r, isA<NeverReadyResult>());
+    expect((r as NeverReadyResult).detail, contains('ancestorOpacity=0.0'));
   });
 }

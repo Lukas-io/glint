@@ -93,14 +93,20 @@ class Interactor {
         devicePixelRatio: e.devicePixelRatio,
         painted: e.painted,
         hittable: false,
-        nextSteps: e.hitBy != null
-            ? [
-                'something covers the target: scroll it into view with scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", or dismiss what is on top, then retry',
-                'pass refuseNotHittable:false to tap anyway',
+        nextSteps: e.faded
+            ? const [
+                'it shows once the screen moves on: controls that fade out (video, call, camera) come back after a tap '
+                    'on an empty area; a button that fades in on a later page or step needs that page first',
+                'get_scene shows it without [hidden] once it is back; refuseNotHittable:false taps it anyway',
               ]
-            : const [
-                'check what\'s on top with get_scene: a modal or absorber probably covers the target',
-              ],
+            : e.hitBy != null
+                ? [
+                    'something covers the target: scroll it into view with scroll_to_find targetGlintId:"${_glintIdOf(action) ?? "<glintId>"}", or dismiss what is on top, then retry',
+                    'pass refuseNotHittable:false to tap anyway',
+                  ]
+                : const [
+                    'check what\'s on top with get_scene: a modal or absorber probably covers the target',
+                  ],
       );
     } on GeometryResolveError catch (e) {
       return ActionResult.failure(
@@ -121,6 +127,7 @@ class Interactor {
       case Tap():
         final c = await _resolveOrThrow(scene, action.target);
         _gateOnScreen(c);
+        _gateFaded(c);
         _gateHittable(c);
         await backend.tap(physicalX: c.physicalCenter.x, physicalY: c.physicalCenter.y);
         return _coordinateResult(action, c, verb: 'tapped');
@@ -128,6 +135,7 @@ class Interactor {
       case LongPress():
         final c = await _resolveOrThrow(scene, action.target);
         _gateOnScreen(c);
+        _gateFaded(c);
         _gateHittable(c);
         await backend.longPress(
           physicalX: c.physicalCenter.x,
@@ -139,6 +147,7 @@ class Interactor {
       case DoubleTap():
         final c = await _resolveOrThrow(scene, action.target);
         _gateOnScreen(c);
+        _gateFaded(c);
         _gateHittable(c);
         await backend.tap(physicalX: c.physicalCenter.x, physicalY: c.physicalCenter.y);
         await Future<void>.delayed(Duration(milliseconds: action.gapMs));
@@ -235,6 +244,20 @@ class Interactor {
     );
   }
 
+  /// A target faded to opacity 0 still takes Flutter's hit test, but a person cannot see it, so the tap is refused unless [refuseNotHittable] is false.
+  void _gateFaded(ResolvedCoord coord) {
+    if (coord.glintId == '<coord>' || coord.nearestAncestorOpacity > 0) return;
+    if (refuseNotHittable == false) return;
+    throw NotHittableRefused(
+      message: 'refusing action: ${coord.glintId} is hidden: it is faded out to opacity 0, '
+          'so a person cannot see or tap it',
+      physicalCenter: coord.physicalCenter,
+      devicePixelRatio: coord.devicePixelRatio,
+      painted: false,
+      faded: true,
+    );
+  }
+
   void _gateHittable(ResolvedCoord coord) {
     if (coord.hittable) return;
     if (!(refuseNotHittable ?? coord.hitTestReal)) return;
@@ -292,12 +315,16 @@ class NotHittableRefused implements Exception {
     this.devicePixelRatio,
     this.painted,
     this.hitBy,
+    this.faded = false,
   });
   final String message;
   final ({int x, int y})? physicalCenter;
   final double? devicePixelRatio;
   final bool? painted;
   final String? hitBy;
+
+  /// True when the target is faded to opacity 0 rather than covered.
+  final bool faded;
 }
 
 /// The glintId an action aims at, when it targets one node symbolically.

@@ -7,6 +7,7 @@ import '../input_route.dart';
 import '../image_size.dart';
 import '../key_codes.dart';
 import '../screen_recording.dart';
+import '../system_touches.dart';
 
 /// Android KEYCODE_* values for glint's [HardwareButton]. `unlock` is null —
 /// no stock biometric-match equivalent and per-OEM lock-screen behaviour; surfaced as [UnsupportedBackendAction] until v1.
@@ -41,6 +42,9 @@ class AdbBackend implements InteractionBackend {
   /// Why the last input fell back from the server to `adb shell input`.
   String? serverProblem;
 
+  /// The emulator's own touchscreen, set while touches are shown so Android draws each one; pointer input goes through it instead of the server.
+  EmulatorTouches? systemTouches;
+
   @override
   String get label => 'adb($deviceSerial)';
 
@@ -74,6 +78,7 @@ class AdbBackend implements InteractionBackend {
 
   @override
   Future<void> tap({required int physicalX, required int physicalY}) async {
+    if (systemTouches case final t?) return t.tap(physicalX, physicalY);
     if (await _viaServer({'cmd': 'tap', 'x': physicalX, 'y': physicalY})) return;
     await _shell(['input', 'tap', '$physicalX', '$physicalY']);
   }
@@ -86,6 +91,7 @@ class AdbBackend implements InteractionBackend {
     required int physicalY,
     required int durationMs,
   }) async {
+    if (systemTouches case final t?) return t.longPress(physicalX, physicalY, durationMs);
     if (await _viaServer({'cmd': 'longpress', 'x': physicalX, 'y': physicalY, 'ms': durationMs})) return;
     await _shell([
       'input',
@@ -107,6 +113,9 @@ class AdbBackend implements InteractionBackend {
     required int durationMs,
     int holdMs = 0,
   }) async {
+    if (systemTouches case final t?) {
+      return t.swipe(physicalX1, physicalY1, physicalX2, physicalY2, durationMs: durationMs, holdMs: holdMs);
+    }
     if (await _viaServer({
       'cmd': 'swipe',
       'x1': physicalX1,
@@ -185,8 +194,12 @@ class AdbBackend implements InteractionBackend {
 
   @override
   Future<void> pinch(
-          {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async =>
-      throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
+      {required int physicalX, required int physicalY, required double scale, int durationMs = 400}) async {
+    final t = systemTouches;
+    if (t == null) throw UnsupportedBackendAction(label, 'pinch: this backend has no multi-touch');
+    const from = 300;
+    await t.pinch(physicalX, physicalY, from: from, to: (from * scale).round(), durationMs: durationMs);
+  }
 
   @override
   Future<void> edgeSwipe(ScreenEdge edge) async =>
