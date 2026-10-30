@@ -11,6 +11,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Fixed
 
+- **Several agents sharing one glint no longer land on each other's apps.** Each call named its app by swapping a field shared by every call in flight, so a `scroll_to_find app:"<udid>"`, or a `record` whose steps did not repeat `app`, could read another agent's app halfway through. The app a call names is now bound to that call alone (and to the tools and steps it runs inside it), and the shared active app only applies to calls that name none. (#279)
+- **`app_logs` kept its entries when the same app is attached again.** Detaching or switching modes (`mode:"device"` then back) threw the log buffer away even though the app process had not restarted. glint now keeps the buffers of the last few detached apps and hands the old one back when the same VM service is attached again, so entries and `nextSequence` carry on. When the app really was a new process, `attach` warns that the earlier entries are gone. (#277)
 - **`attach launch:` named the real reason when `flutter run` failed.** The error used to open with whatever line came last, such as Xcode's `Linker command failed` or Gradle's `BUILD FAILED in 9s`. It now picks the root cause: the first Xcode error (`Library 'c++' not found`), the line under Gradle's `What went wrong`, a Dart compile error with its file and line, or an adb `INSTALL_FAILED_` code. A launch that times out includes the reason too.
 
 ## [0.5.0] - 2026-10-19

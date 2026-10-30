@@ -583,6 +583,7 @@ class AttachTool extends GlintTool {
       // ── 7. Hand the resolved target to the session ────────────────────────
       final rebuilt = rebuild?.deviceId == deviceId;
       await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
+      if (session.takeLogNote(device.id) case final note?) warnings.add(note);
       unawaited(session.backend.warm());
 
       // ── 8. Gather post-attach context ─────────────────────────────────────
