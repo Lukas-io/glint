@@ -1,5 +1,6 @@
 import '../../interaction.dart';
 import 'envelope.dart';
+import 'native_target.dart';
 import 'post_action.dart';
 import 'session.dart';
 
@@ -19,14 +20,18 @@ String _unit(GlintSession session) => session.isDeviceMode ? 'px' : 'pt';
 /// Runs a raw-coordinate [action] and, in Flutter mode with [returnScene], adds
 /// the changed-signal via pre/post snapshots — so a raw x,y tap answers "did
 /// anything happen?" the same way a glintId tap does. Device mode has no Flutter
-/// scene to compare, so it returns the bare action result unchanged.
+/// scene to compare, so it returns the action result, plus what is now in front when the runner can read it.
 Future<StructuredResponse> withCoordinateChange(
   GlintSession session,
   Future<StructuredResponse> Function() action, {
   bool returnScene = true,
   bool fetchScene = false,
 }) async {
-  if (session.isDeviceMode || !returnScene) return action();
+  if (session.isDeviceMode) {
+    final response = await action();
+    return returnScene ? withNativeAftermath(session, response) : response;
+  }
+  if (!returnScene) return action();
   final pre = await snapshotPreAction(session);
   final response = await action();
   if (response.isError) return response;

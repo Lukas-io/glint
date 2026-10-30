@@ -53,15 +53,7 @@ class GetSceneTool extends GlintTool {
       );
     }
 
-    // Device mode: no Flutter widget tree on this attachment.
-    if (session.isDeviceMode) {
-      return StructuredResponse(
-        summary: 'device mode: no Flutter widget tree.\n'
-            'Use `device op:screenshot` to see the screen, then tap / swipe '
-            'with x,y in screenshot pixels.',
-        data: {'mode': 'device', 'state': 'device'},
-      );
-    }
+    if (session.isDeviceMode) return _handleDeviceMode(session);
 
     if (session.sceneMode == SceneMode.native ||
         session.nativeReader is AndroidNativeReader ||
@@ -275,6 +267,52 @@ class GetSceneTool extends GlintTool {
     } on Object {
       return null;
     }
+  }
+
+  /// Device mode has no Flutter tree: the runner's read of the screen when attached with it, else a plain statement of what cannot be read.
+  Future<StructuredResponse> _handleDeviceMode(GlintSession session) async {
+    final reader = session.nativeReader;
+    if (reader is! RunnerNativeReader) {
+      final simulator = session.device is IosSimulator;
+      return StructuredResponse(
+        summary: 'device mode: no Flutter widget tree.\n'
+            '${simulator ? 'glint cannot read system alerts or native screens on this attach, so it cannot tap them by text.\n' : ''}'
+            'Use `device op:screenshot` to see the screen, then tap / swipe '
+            'with x,y in screenshot pixels.',
+        nextSteps: [
+          if (simulator)
+            'attach mode:"device" iosBackend:"xctest" to read and tap system alerts and native screens by text',
+          'device op:screenshot shows the screen; tap with x,y in screenshot pixels',
+        ],
+        data: {'mode': 'device', 'state': 'device', 'nativeRead': false},
+      );
+    }
+    final scene = await reader.readFresh();
+    final surface = reader.lastSurfaceName;
+    final listed = scene.root.children.isNotEmpty;
+    final read = listed ? classifySurface(scene, owner: surface) : null;
+    return StructuredResponse(
+      summary: [
+        '--- device mode: ${surface ?? 'nothing readable'} ---',
+        if (listed) NativeSceneReader.renderAsText(scene).trimRight(),
+      ].join('\n'),
+      warnings: [if (reader.lastReadProblem != null) reader.lastReadProblem!],
+      nextSteps: [
+        if (listed) 'tap an element above by its text or glintId (tap text:"OK"); x,y also works, in screenshot pixels',
+        if (!listed) '`device op:screenshot inline:true` to see the screen, then tap with x,y in screenshot pixels',
+        if (!listed && reader.lastReadProblem != null)
+          'attach mode:"device" iosBackend:"xctest" again to restart the runner',
+      ],
+      data: {
+        'mode': 'device',
+        'state': 'device',
+        'nativeRead': true,
+        'nativeScene': true,
+        if (surface != null) 'nativeSurface': surface,
+        if (read != null) 'surface': read.toJson(),
+        'coordinates': 'screenshot pixels',
+      },
+    );
   }
 
   Future<StructuredResponse> _handleNativeMode(GlintSession session, String format) async {

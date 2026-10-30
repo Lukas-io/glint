@@ -6,14 +6,16 @@ import 'session.dart';
 /// A native node a tool named by `glintId` or `text`, at its center in logical points.
 typedef NativeHit = ({double x, double y, String label});
 
-/// Resolves [glintId] / [text] against the native surface over the app; null when the app's own screen is in front, so the Flutter path runs.
+/// Resolves [glintId] / [text] against the native surface over the app (in device mode, the runner's read of the screen, in pixels); null when the app's own screen is in front, so the Flutter path runs.
 Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(GlintSession session,
     {String? glintId, String? text}) async {
   final reader = session.nativeReader;
-  if (session.isDeviceMode || reader == null || (glintId == null && text == null)) return null;
+  if (reader == null || (glintId == null && text == null)) return null;
   if (reader is AndroidNativeReader) await session.active?.refreshSceneMode();
   if (session.sceneMode != SceneMode.native) return null;
-  final scene = await reader.readSnapshot();
+  final scene =
+      session.isDeviceMode && reader is RunnerNativeReader ? await reader.readFresh() : await reader.readSnapshot();
+  final what = session.isDeviceMode ? 'screen' : 'native surface';
   final nodes = [
     for (final n in _walk(scene.root))
       if (n.axFrame != null && n.glintId != null && !n.glintId!.startsWith('_native')) n,
@@ -53,15 +55,41 @@ Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(Glint
     return (
       hit: null,
       error: StructuredResponse.error(
-        summary: 'no ${glintId != null ? 'node $glintId' : '"$text"'} on the native surface over the app',
+        summary:
+            'no ${glintId != null ? 'node $glintId' : '"$text"'} on the ${session.isDeviceMode ? 'screen' : 'native surface over the app'}',
         errorKind: GlintErrorKind.targetNotFound,
-        detail: seen.isEmpty ? 'the native surface shows no readable text' : 'it shows ${seen.join(', ')}',
-        nextSteps: const ['call get_scene to read the surface, then tap one of its items by text or glintId'],
+        detail: seen.isEmpty ? 'the $what shows no readable text' : 'it shows ${seen.join(', ')}',
+        nextSteps: ['call get_scene to read the $what, then tap one of its items by text or glintId'],
       ),
     );
   }
   final f = found.axFrame!;
   return (hit: (x: f.x + f.w / 2, y: f.y + f.h / 2, label: found.textPreview ?? found.glintId!), error: null);
+}
+
+/// Device mode with the runner: [response] plus what is in front once the screen has stopped changing, so the next step needs no extra look; unchanged elsewhere and on errors.
+Future<StructuredResponse> withNativeAftermath(GlintSession session, StructuredResponse response) async {
+  final reader = session.nativeReader;
+  if (response.isError || !session.isDeviceMode || reader is! RunnerNativeReader) return response;
+  final front = await _settledSurface(reader);
+  final problem = reader.lastReadProblem;
+  return response.copyWith(
+    summary: '${response.summary}\nnow in front: ${front ?? 'nothing the runner can read'}',
+    warnings: [...response.warnings, if (problem != null) problem],
+    nextSteps: [...response.nextSteps, 'get_scene lists what is on screen to tap by text or glintId'],
+  ).mergeData({'nativeSurface': front});
+}
+
+Future<String?> _settledSurface(RunnerNativeReader reader) async {
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  var front = await reader.foreignSurface();
+  for (var i = 0; i < 3; i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final again = await reader.foreignSurface();
+    if (again == front) break;
+    front = again;
+  }
+  return front;
 }
 
 Iterable<SceneNode> _walk(SceneNode n) sync* {

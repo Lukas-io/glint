@@ -36,7 +36,7 @@
       },
       "iosBackend": {
         "type": "string",
-        "description": "bridge (default) | xctest. xctest drives the simulator through glint's XCUITest runner, built once per Xcode. iOS, Flutter mode."
+        "description": "bridge (default) | xctest. xctest drives the simulator through glint's XCUITest runner, built once per Xcode. In device mode it also lets get_scene read native screens and system alerts, and tap act on them by text. iOS simulator."
       },
       "input": {
         "type": "string",

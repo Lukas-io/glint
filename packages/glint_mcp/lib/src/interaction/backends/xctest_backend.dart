@@ -7,10 +7,13 @@ import 'ios_sim_backend.dart';
 
 /// iOS input through glint's XCUITest runner; screenshots, recording and lock stay on the bridge ([sim]).
 class XcTestBackend implements InteractionBackend {
-  XcTestBackend({required this.runner, required this.sim});
+  XcTestBackend({required this.runner, required this.sim, this.pixelsPerPoint});
 
   final XcTestRunner runner;
   final IosSimBackend sim;
+
+  /// Device mode: how many screenshot pixels make one point; null in Flutter mode, where the simulator's own pixel ratio applies.
+  final double? pixelsPerPoint;
 
   /// The app under test; XCUITest types only into the app that holds keyboard focus.
   String? bundleId;
@@ -21,7 +24,10 @@ class XcTestBackend implements InteractionBackend {
   @override
   BackendCapabilities get capabilities => sim.capabilities;
 
-  ({double x, double y}) _logical(int x, int y) => (x: x / sim.devicePixelRatio, y: y / sim.devicePixelRatio);
+  ({double x, double y}) _logical(int x, int y) {
+    final scale = pixelsPerPoint ?? sim.devicePixelRatio;
+    return (x: x / scale, y: y / scale);
+  }
 
   Future<void> _call(String path, Map<String, Object?> body) async {
     try {
