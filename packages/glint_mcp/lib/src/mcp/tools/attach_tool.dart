@@ -634,6 +634,7 @@ class AttachTool extends GlintTool {
         ..displayName = displayName
         ..bundleId = bundleId
         ..deviceName = deviceName
+        ..inputSetup = input.line.replaceFirst('setup: ', '')
         ..projectDir = projectDir;
       session.markOwnedApp([package, bundleId]);
 

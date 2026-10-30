@@ -130,6 +130,9 @@ class AppSession {
   String? bundleId;
   String? deviceName;
 
+  /// The input setup line `attach` judged (OS, Xcode, macOS, backend and verified status), for issue reports.
+  String? inputSetup;
+
   /// Flutter project root behind the app, when attach could resolve it.
   String? projectDir;
 
