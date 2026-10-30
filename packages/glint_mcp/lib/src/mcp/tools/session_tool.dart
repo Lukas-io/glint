@@ -242,9 +242,10 @@ class SessionTool extends GlintTool {
       summary: [
         'detached $what and released its device claim',
         active == null ? 'no active app' : 'active: ${active.label} on ${active.deviceName ?? active.id}',
-        remaining.isEmpty
-            ? 'nothing attached'
-            : 'still attached: ${remaining.map((a) => '${a.label} on ${a.deviceName ?? a.id}').join(', ')}',
+        if (remaining.isEmpty)
+          'nothing attached'
+        else if (remaining.any((a) => !identical(a, active)))
+          'still attached: ${remaining.map((a) => '${a.label} on ${a.deviceName ?? a.id}').join(', ')}',
       ].join('\n'),
       nextSteps: [
         if (remaining.isNotEmpty && active == null)
