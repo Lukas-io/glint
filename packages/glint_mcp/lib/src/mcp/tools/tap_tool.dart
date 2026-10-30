@@ -6,6 +6,7 @@ import '../../../perception.dart';
 import '../armed.dart';
 import '../coordinate.dart';
 import '../envelope.dart';
+import '../focus_through_parent.dart';
 import '../post_action.dart';
 import '../session.dart';
 import '../tap_sequence.dart';
@@ -140,8 +141,10 @@ class TapTool extends GlintTool {
     final scene = action.scene;
     try {
       final interactor = session.interactor..refuseNotHittable = refuse;
-      final result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
+      var result = await interactor.run(scene, Tap(SymbolicTarget(glintId)));
       interactor.refuseNotHittable = null;
+      final parent = visibleParentOf(result);
+      if (parent != null) result = await focusThroughParent(session, scene, glintId, parent);
       var response = StructuredResponse.fromActionResult(result, detail: t.detail);
       if (arming is ArmingReady) response = withArmedMetadata(response, arming);
 
