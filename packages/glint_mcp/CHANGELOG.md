@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- **A call on a physical iPhone.** While a phone or VoIP call is active, iOS refuses real touches (CoreDevice code 9022). glint reported that as `deviceBusy`, "another Device Hub may be viewing it", which sent agents looking for a viewer that was not there. It now reports a new error kind, `callInProgress`, and says that targets inside the Flutter app still work through `input:auto` (#195).
+
 ## [0.5.0] - 2026-10-19
 
 ### Added
