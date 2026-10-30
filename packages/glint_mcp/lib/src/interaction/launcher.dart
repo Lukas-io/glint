@@ -126,7 +126,7 @@ class AppLauncher {
       }
       if (exited || _looksFailed(text)) {
         proc.kill();
-        throw LaunchError('flutter $verb failed: ${failureLine(text) ?? 'it exited before the app started'}',
+        throw LaunchError('flutter $verb failed: ${failureLine(text) ?? 'see the log tail for what flutter reported'}',
             logTail: _tail(text), signing: _signingFailed(text));
       }
       if (whileWaiting != null && text.contains('Installing and launching')) await whileWaiting();
@@ -138,9 +138,11 @@ class AppLauncher {
     }
     proc.kill();
     final phase = _phase(out.text);
+    final reported = failureLine(out.text);
     throw LaunchError(
       'timed out after ${timeout.inSeconds}s waiting for the VM service'
-      '${phase == null ? "" : " (last: $phase)"}',
+      '${phase == null ? "" : " (last: $phase)"}'
+      '${reported == null ? "" : "; flutter reported: $reported"}',
       logTail: _tail(out.text),
     );
   }
@@ -223,19 +225,39 @@ class AppLauncher {
   /// The log line that says why a build or install failed, so the error's first line is the real reason.
   static String? failureLine(String text) {
     final lines = text.split(RegExp(r'[\r\n]')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-    for (final p in _failureHints) {
-      for (final l in lines.reversed) {
-        if (p.hasMatch(l)) return l;
-      }
+    final reason = _gradleReason(lines) ?? _tieredReason(lines);
+    if (reason == null) return null;
+    return reason.length <= _maxFailureChars ? reason : '${reason.substring(0, _maxFailureChars - 1)}…';
+  }
+
+  static const _maxFailureChars = 300;
+
+  /// The line under Gradle's `* What went wrong:` heading, which names the cause the `BUILD FAILED` banner hides.
+  static String? _gradleReason(List<String> lines) {
+    final i = lines.indexWhere((l) => l.startsWith('* What went wrong:'));
+    return i == -1 || i + 1 >= lines.length ? null : lines[i + 1];
+  }
+
+  static String? _tieredReason(List<String> lines) {
+    for (final tier in _failureTiers) {
+      final matches = lines.where(tier.pattern.hasMatch).toList();
+      if (matches.isEmpty) continue;
+      final specific = matches.where((l) => !_wrapperLine.hasMatch(l)).toList();
+      final pool = specific.isEmpty ? matches : specific;
+      return tier.first ? pool.first : pool.last;
     }
     return null;
   }
 
-  /// Most specific first: an adb install failure code, then build errors, then any error line.
-  static final _failureHints = [
-    RegExp(r'Failure \[|INSTALL_FAILED_'),
-    RegExp(r'FAILURE: |BUILD FAILED|Error \(Xcode\)|error: '),
-    RegExp(r'^Error:|Exception:|^F/'),
+  static final _wrapperLine = RegExp(r'Linker command failed|PhaseScriptExecution failed|BUILD FAILED');
+
+  /// Most specific first. Build errors take the first match (the root cause), runtime errors the last.
+  static final _failureTiers = [
+    (pattern: RegExp(r'Failure \[|INSTALL_FAILED_'), first: false),
+    (pattern: RegExp(r'FAILURE: '), first: false),
+    (pattern: RegExp(r'Error \(Xcode\)|^ld: |error: '), first: true),
+    (pattern: RegExp(r':\d+:\d+: Error: '), first: true),
+    (pattern: RegExp(r'^Error:|^(Unhandled )?\S*Exception:|^F/'), first: false),
   ];
 
   static String _tail(String text, {int lines = 12}) {
