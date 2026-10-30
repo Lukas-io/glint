@@ -14,7 +14,8 @@ final class Router {
         do {
             switch (request.method, request.path) {
             case ("GET", "/status"):
-                let screen = UIScreen.main.bounds.size
+                // UIScreen.main inside the runner reports a legacy 320x480; SpringBoard's frame is the real screen in points
+                let screen = app(springboardId).frame.size
                 return .ok(["runner": runnerProtocol, "os": UIDevice.current.systemVersion, "screen": [screen.width, screen.height]])
             case ("GET", "/frontmost"):
                 let candidates = (request.query["apps"] ?? "").split(separator: ",").map(String.init)
