@@ -225,12 +225,13 @@ class AppSession {
     required FlutterRuntime Function() runtimeFactory,
     int appLogCapacity = 500,
     bool showTouches = false,
+    AppLogBuffer? appLogs,
   }) async {
     final app = AppSession._(
       device: device,
       backend: device.createBackend(),
       deviceMode: false,
-      appLogs: AppLogBuffer(capacity: appLogCapacity),
+      appLogs: appLogs ?? AppLogBuffer(capacity: appLogCapacity),
       vmUri: vmUri,
     )..showTouches = showTouches;
     await app._bind(runtimeFactory);

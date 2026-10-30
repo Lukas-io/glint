@@ -57,9 +57,21 @@ class GlintSession {
   // ── pool ──────────────────────────────────────────────────────────────────
   final Map<String, AppSession> _pool = {};
   AppSession? _active;
+  final Object _bindingKey = Object();
 
   /// Logs of the last detached app, so `app_logs` keeps answering after detach.
   AppLogBuffer _orphanLogs = AppLogBuffer();
+
+  static const _retainedLogLimit = 4;
+
+  /// Log buffers of recently detached Flutter apps, oldest first, so re-attaching the same app process continues them.
+  final List<_RetainedLogs> _retainedLogs = [];
+
+  /// Per-device warning that a re-attach started a fresh log buffer, read once by `attach`.
+  final Map<String, String> _logNotes = {};
+
+  /// The warning for [deviceId] when its last re-attach could not continue the earlier app logs.
+  String? takeLogNote(String deviceId) => _logNotes.remove(deviceId);
 
   /// Forwards [ProgressNotification]s to the client; wired by the server.
   void Function(ProgressNotification)? progressNotifier;
@@ -103,7 +115,10 @@ class GlintSession {
   }
 
   // ── active app ────────────────────────────────────────────────────────────
-  AppSession? get active => _active;
+  AppSession? get active => _current;
+
+  /// The app this call is bound to via [withApp], else the explicitly activated one.
+  AppSession? get _current => (Zone.current[_bindingKey] as AppSession?) ?? _active;
 
   /// Every attached app, most recently attached first.
   List<AppSession> get apps => _pool.values.toList()..sort((a, b) => b.attachedAt.compareTo(a.attachedAt));
@@ -142,61 +157,51 @@ class GlintSession {
 
   void activate(AppSession app) => _active = app;
 
-  /// Runs [body] with [target] active, restoring the previous active app
-  /// afterwards — the per-call `app:` routing every tool supports.
-  Future<T> withApp<T>(AppSession target, Future<T> Function() body) async {
-    final previous = _active;
-    _active = target;
-    try {
-      return await body();
-    } finally {
-      if (_pool.containsValue(previous) || previous == null) {
-        _active = previous;
-      }
-    }
-  }
+  /// Runs [body] bound to [target] through a zone value, so concurrent calls never see each other's app.
+  Future<T> withApp<T>(AppSession target, Future<T> Function() body) =>
+      runZoned(body, zoneValues: {_bindingKey: target});
 
-  bool get isAttached => _active != null;
-  bool get isDeviceMode => _active?.deviceMode ?? false;
+  bool get isAttached => _current != null;
+  bool get isDeviceMode => _current?.deviceMode ?? false;
 
-  SceneMode get sceneMode => _active?.sceneMode ?? SceneMode.flutter;
-  set sceneMode(SceneMode m) => _active?.sceneMode = m;
+  SceneMode get sceneMode => _current?.sceneMode ?? SceneMode.flutter;
+  set sceneMode(SceneMode m) => _current?.sceneMode = m;
 
   /// Bundle id / package of the active app, when known — used by `kill_app`.
-  String? get attachedBundleId => _active?.bundleId;
-  set attachedBundleId(String? v) => _active?.bundleId = v;
+  String? get attachedBundleId => _current?.bundleId;
+  set attachedBundleId(String? v) => _current?.bundleId = v;
 
-  int get reconnectCount => _active?.reconnectCount ?? 0;
+  int get reconnectCount => _current?.reconnectCount ?? 0;
 
-  AppLogBuffer get appLogs => _active?.appLogs ?? _orphanLogs;
+  AppLogBuffer get appLogs => _current?.appLogs ?? _orphanLogs;
 
-  FlutterRuntime get runtime => _requireAttached(_active?.runtime, 'runtime');
-  DeviceTarget get device => _requireAttached(_active?.device, 'device');
-  InteractionBackend get backend => _requireAttached(_active?.backend, 'backend');
-  InspectorClient get inspector => _requireAttached(_active?.inspector, 'inspector');
-  SceneReader get reader => _requireAttached(_active?.reader, 'scene reader');
-  CoordinateResolver get resolver => _requireAttached(_active?.resolver, 'resolver');
-  Interactor get interactor => _requireAttached(_active?.interactor, 'interactor');
-  Semanticizer get semanticizer => _requireAttached(_active?.semanticizer, 'semanticizer');
-  OverlayEnricher get overlayEnricher => _requireAttached(_active?.overlayEnricher, 'overlay enricher');
-  InputEnricher get inputEnricher => _requireAttached(_active?.inputEnricher, 'input enricher');
-  ToggleEnricher get toggleEnricher => _requireAttached(_active?.toggleEnricher, 'toggle enricher');
-  SemanticsFlagEnricher get flagEnricher => _requireAttached(_active?.flagEnricher, 'flag enricher');
-  ButtonFactsEnricher get buttonEnricher => _requireAttached(_active?.buttonEnricher, 'button enricher');
-  InertEnricher get inertEnricher => _requireAttached(_active?.inertEnricher, 'inert enricher');
-  OpaqueWidgetEnricher get opaqueEnricher => _requireAttached(_active?.opaqueEnricher, 'opaque widget enricher');
-  TabLabelEnricher get tabEnricher => _requireAttached(_active?.tabEnricher, 'tab enricher');
-  ImageEnricher get imageEnricher => _requireAttached(_active?.imageEnricher, 'image enricher');
-  MapEnricher get mapEnricher => _requireAttached(_active?.mapEnricher, 'map enricher');
-  IconEnricher get iconEnricher => _requireAttached(_active?.iconEnricher, 'icon enricher');
-  LinkEnricher get linkEnricher => _requireAttached(_active?.linkEnricher, 'link enricher');
-  NavigationEnricher get navEnricher => _requireAttached(_active?.navEnricher, 'nav enricher');
-  PagedViewportEnricher get pagedEnricher => _requireAttached(_active?.pagedEnricher, 'paged enricher');
-  ReadinessGate get readinessGate => _requireAttached(_active?.readinessGate, 'readiness gate');
-  SettleDetector get settleDetector => _requireAttached(_active?.settleDetector, 'settle detector');
+  FlutterRuntime get runtime => _requireAttached(_current?.runtime, 'runtime');
+  DeviceTarget get device => _requireAttached(_current?.device, 'device');
+  InteractionBackend get backend => _requireAttached(_current?.backend, 'backend');
+  InspectorClient get inspector => _requireAttached(_current?.inspector, 'inspector');
+  SceneReader get reader => _requireAttached(_current?.reader, 'scene reader');
+  CoordinateResolver get resolver => _requireAttached(_current?.resolver, 'resolver');
+  Interactor get interactor => _requireAttached(_current?.interactor, 'interactor');
+  Semanticizer get semanticizer => _requireAttached(_current?.semanticizer, 'semanticizer');
+  OverlayEnricher get overlayEnricher => _requireAttached(_current?.overlayEnricher, 'overlay enricher');
+  InputEnricher get inputEnricher => _requireAttached(_current?.inputEnricher, 'input enricher');
+  ToggleEnricher get toggleEnricher => _requireAttached(_current?.toggleEnricher, 'toggle enricher');
+  SemanticsFlagEnricher get flagEnricher => _requireAttached(_current?.flagEnricher, 'flag enricher');
+  ButtonFactsEnricher get buttonEnricher => _requireAttached(_current?.buttonEnricher, 'button enricher');
+  InertEnricher get inertEnricher => _requireAttached(_current?.inertEnricher, 'inert enricher');
+  OpaqueWidgetEnricher get opaqueEnricher => _requireAttached(_current?.opaqueEnricher, 'opaque widget enricher');
+  TabLabelEnricher get tabEnricher => _requireAttached(_current?.tabEnricher, 'tab enricher');
+  ImageEnricher get imageEnricher => _requireAttached(_current?.imageEnricher, 'image enricher');
+  MapEnricher get mapEnricher => _requireAttached(_current?.mapEnricher, 'map enricher');
+  IconEnricher get iconEnricher => _requireAttached(_current?.iconEnricher, 'icon enricher');
+  LinkEnricher get linkEnricher => _requireAttached(_current?.linkEnricher, 'link enricher');
+  NavigationEnricher get navEnricher => _requireAttached(_current?.navEnricher, 'nav enricher');
+  PagedViewportEnricher get pagedEnricher => _requireAttached(_current?.pagedEnricher, 'paged enricher');
+  ReadinessGate get readinessGate => _requireAttached(_current?.readinessGate, 'readiness gate');
+  SettleDetector get settleDetector => _requireAttached(_current?.settleDetector, 'settle detector');
 
   /// Null when the active device is not an iOS simulator.
-  NativeReader? get nativeReader => _active?.nativeReader;
+  NativeReader? get nativeReader => _current?.nativeReader;
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -215,13 +220,18 @@ class GlintSession {
       return existing;
     }
     if (existing != null) await _drop(existing);
+    final key = _vmKey(vmUri);
+    final retained = _retainedLogs.where((r) => r.key == key).firstOrNull;
     final app = await AppSession.connect(
       vmUri: vmUri,
       device: device,
       runtimeFactory: _runtimeFactory,
       appLogCapacity: config.appLogCapacity,
       showTouches: config.showTouches,
+      appLogs: retained?.buffer,
     );
+    _retainedLogs.remove(retained);
+    _noteLostLogs(device.id, vmUri);
     app.captureSettleMs = config.captureSettleMs;
     _pool[device.id] = app;
     _ownedDevices.add(device.id);
@@ -264,8 +274,31 @@ class GlintSession {
     }
   }
 
+  static String _vmKey(Uri vmUri) => '${vmUri.host}:${vmUri.port}${vmUri.path.replaceFirst(RegExp(r'/+$'), '')}';
+
+  void _retainLogs(AppSession app) {
+    final vmUri = app.vmUri;
+    if (app.deviceMode || vmUri == null || app.appLogs.nextSequence == 0) return;
+    _retainedLogs
+      ..removeWhere((r) => r.key == _vmKey(vmUri))
+      ..add(_RetainedLogs(app.id, _vmKey(vmUri), app.appLogs));
+    while (_retainedLogs.length > _retainedLogLimit) {
+      _retainedLogs.removeAt(0);
+    }
+  }
+
+  void _noteLostLogs(String deviceId, Uri vmUri) {
+    final stale = _retainedLogs.where((r) => r.deviceId == deviceId && r.key != _vmKey(vmUri)).toList();
+    if (stale.isEmpty) return;
+    _retainedLogs.removeWhere(stale.contains);
+    final lost = stale.fold(0, (n, r) => n + r.buffer.length);
+    _logNotes[deviceId] = 'app_logs restarted empty: the $lost earlier log entries belonged to a different app '
+        'process on this device (new VM service $vmUri). Read them before re-attaching next time.';
+  }
+
   Future<void> _drop(AppSession app) async {
     _pool.remove(app.id);
+    _retainLogs(app);
     if (identical(_active, app)) {
       _active = null;
       _orphanLogs = app.appLogs;
@@ -500,4 +533,11 @@ class SessionNotAttachedError implements Exception {
 
   @override
   String toString() => 'glint session is not attached; call `attach` before using `$missing`';
+}
+
+class _RetainedLogs {
+  _RetainedLogs(this.deviceId, this.key, this.buffer);
+  final String deviceId;
+  final String key;
+  final AppLogBuffer buffer;
 }
