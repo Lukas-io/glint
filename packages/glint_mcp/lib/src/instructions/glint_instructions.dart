@@ -76,11 +76,11 @@ const _recovery = '''
 - `targetNotFound` — `scroll_to_find` miss; `detail` lists visible text.
 - `scrollLimitReached` — stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped; re-`attach`.
-- `appUnresponsive` — suspended (locked/breakpoint); unlock, retry.
+- `appUnresponsive` / `appBusy` — locked, paused or busy; unlock or wait, retry.
 - `deviceGone` — device closed; `attach device:"<id>"` relaunches.
 - `deviceClaimed` — another agent's device; pass your own `device:`.
 - `notOwned`: not your app/device; `force:true` only if the user asked.
-- `flutterModeRequired`: device mode; re-attach to the app, or use x,y tools.
+- `flutterModeRequired`: device mode; re-attach the app, or use x,y.
 - `unknownApp` — `app:` matched none/several apps; pick from the list.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — native surface on top; dismiss, retry.

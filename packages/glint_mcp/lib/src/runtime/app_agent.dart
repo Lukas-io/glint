@@ -25,7 +25,7 @@ class AppAgent {
   final VmServiceRuntime runtime;
   String? _installedIn;
 
-  /// The app's clock minus glint's, measured at install; null when it could not be read.
+  /// The app's clock minus glint's, from the time the install reply carries; null when it carried none.
   int? _clockOffsetMs;
 
   /// Whether the app draws each touch; put back whenever the agent installs into a fresh isolate (attach, hot restart).
@@ -60,32 +60,21 @@ class AppAgent {
   Future<void> _install() async {
     final isolate = runtime.flutterIsolateId;
     final r = await runtime.evaluateIn(_source.replaceAll('\n', ' '), librarySuffix: _agentLibrary);
-    final status = r.valueAsString;
+    final received = DateTime.now().millisecondsSinceEpoch;
+    final reply = (r.valueAsString ?? '').split(' ');
+    final status = reply.first;
     if (status != 'installed' && status != 'present') {
-      throw RuntimeEvalError(kAgentExtension, 'install replied ${status ?? r.kind}');
+      throw RuntimeEvalError(kAgentExtension, 'install replied ${r.valueAsString ?? r.kind}');
     }
     _installedIn = isolate;
-    await _measureClock();
+    final appNow = reply.length > 1 ? int.tryParse(reply[1]) : null;
+    _clockOffsetMs = appNow == null ? null : appNow - received;
     if (!showTouches && status != 'present') return;
     try {
       await runtime
           .callExtensionOrNull(kAgentExtension, {'op': 'touches', 'on': '$showTouches', 'own': '$ownTouchesOnly'});
     } on Object {
       // best-effort: touches never block input or settle; setTouches reports its own failures
-    }
-  }
-
-  Future<void> _measureClock() async {
-    _clockOffsetMs = null;
-    try {
-      final before = DateTime.now().millisecondsSinceEpoch;
-      final r = await runtime.callExtensionOrNull(kAgentExtension, const {'op': 'clock'},
-          timeout: const Duration(seconds: 3));
-      final after = DateTime.now().millisecondsSinceEpoch;
-      final now = r?['now'];
-      if (now is num) _clockOffsetMs = now.toInt() - (before + after) ~/ 2;
-    } on Object {
-      // best-effort: without an offset, input is sent without an expiry, as before
     }
   }
 
@@ -234,7 +223,6 @@ const String _source = r'''
   }
   Future<Map<String, dynamic>> handle(Map<String, String> p) async {
     final op = p['op'];
-    if (op == 'clock') return {'now': DateTime.now().millisecondsSinceEpoch};
     final expires = int.tryParse(p['expires'] ?? '');
     if (expires != null && DateTime.now().millisecondsSinceEpoch > expires) return {'status': 'expired'};
     if (op == 'lifecycle') return {'state': b.lifecycleState?.name ?? 'resumed'};
@@ -388,12 +376,12 @@ const String _source = r'''
   try {
     b.registerServiceExtension(name: 'glintAgent8', callback: handle);
   } catch (e) {
-    return 'present';
+    return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
   final owner = b.buildOwner!;
   final scheduled = owner.onBuildScheduled;
   owner.onBuildScheduled = () { lastBuild = DateTime.now().millisecondsSinceEpoch; scheduled?.call(); };
   AppLifecycleListener(onStateChange: (s) => b.postEvent('glint.lifecycle', {'state': s.name}));
-  return 'installed';
+  return 'installed ' + DateTime.now().millisecondsSinceEpoch.toString();
 })()
 ''';
