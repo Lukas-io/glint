@@ -179,6 +179,28 @@ class IconEnricher implements SemanticEnricher {
         // best-effort
       }
     }
+    for (final button in scene.allNodes().whereType<SemanticButton>()) {
+      button.toggleState ??= _stateIconIn(button.children);
+    }
+  }
+
+  /// Checked state shown by a custom control's own icon, e.g. check_box vs check_box_outline_blank.
+  static const _stateIcons = {
+    'check_box': 'on',
+    'check_box_outline_blank': 'off',
+    'radio_button_checked': 'on',
+    'radio_button_unchecked': 'off',
+    'toggle_on': 'on',
+    'toggle_off': 'off',
+  };
+
+  static String? _stateIconIn(List<SemanticNode> nodes) {
+    for (final n in nodes) {
+      if (n is SemanticButton) continue;
+      final state = n is SemanticIcon ? _stateIcons[n.name] : _stateIconIn(n.children);
+      if (state != null) return state;
+    }
+    return null;
   }
 
   Future<void> _enrichOne(SceneNode source, String groupName, SemanticIcon target) async {
@@ -420,7 +442,7 @@ String batchOverElements(List<String> ids, String f) => "<String>[${ids.map((i) 
     '.map((id) => ($f)(WidgetInspectorService.instance.toObject(id) as Element))'
     ".join(';')";
 
-/// Reads selection and checked state for buttons from the widget (`selected` on chips) or its nearest `Semantics` wrapper, in one eval. Capped at [maxNodes].
+/// Reads selection and checked state for buttons from the widget (`selected` on chips), its nearest `Semantics` wrapper or a `Semantics` inside it, in one eval. Capped at [maxNodes].
 class SemanticsFlagEnricher implements SemanticEnricher {
   SemanticsFlagEnricher({required this.runtime, this.maxNodes = 40});
 
@@ -436,6 +458,12 @@ class SemanticsFlagEnricher implements SemanticEnricher {
       'var n = 0; if (s == null) e.visitAncestorElements((a) { n++; final w = a.widget; '
       'if (w is Semantics) { s ??= w.properties.selected; c ??= w.properties.checked ?? w.properties.toggled; return false; } '
       'return n < 6; }); '
+      'if (s == null && c == null) { var seen = 0; '
+      'void down(Element x, int depth) { if ((s != null || c != null) || depth > 8 || seen++ > 80) return; final w = x.widget; '
+      'if (w is Semantics) { s = w.properties.selected; c = w.properties.checked ?? w.properties.toggled; if (s != null || c != null) return; } '
+      'else if (depth > 0) { final t = w.runtimeType.toString(); '
+      "if (t == 'GestureDetector' || t.startsWith('Ink') || t.contains('Checkbox') || t.contains('Switch') || t.contains('Radio') || t.contains('Chip')) return; } "
+      'x.visitChildren((ch) => down(ch, depth + 1)); } down(e, 0); } '
       "return (s == null ? '' : s.toString()) + ',' + (c == null ? '' : c.toString()); }";
 
   @override

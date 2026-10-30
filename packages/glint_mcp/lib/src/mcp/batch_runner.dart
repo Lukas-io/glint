@@ -94,6 +94,16 @@ Schema batchStepsSchema(int maxSteps, {required String description}) => Schema.l
       );
     }
     final args = (s['args'] as Map?)?.cast<String, Object?>() ?? {};
+    if (args['expectChange'] != null && args['expectChange'] is! bool) {
+      return (
+        steps: null,
+        error: StructuredResponse.error(
+          summary: 'step ${i + 1}: expectChange must be true or false',
+          errorKind: GlintErrorKind.invalidArgument,
+          nextSteps: const ['pass expectChange:false in the step args when it is fine for the step to change nothing'],
+        ),
+      );
+    }
     steps.add((tool: tool, args: args));
   }
   return (steps: steps, error: null);
@@ -126,6 +136,7 @@ class StepOutcome {
         'step': index,
         'tool': tool,
         if (args['app'] != null) 'app': args['app'],
+        if (args['expectChange'] == false) 'expectChange': false,
         'ok': !isError,
         'elapsedMs': elapsedMs,
         if (origin != null) 'firedAtMs': startedAt.difference(origin).inMilliseconds,
@@ -160,7 +171,7 @@ class BatchRun {
   int get completed => stoppedAt == null ? outcomes.length : (reason == 'error' ? stoppedAt! - 1 : stoppedAt!);
 }
 
-/// Runs [steps] in order with batch's arg defaults, logging each under its own tool name. Rethrows [SessionNotAttachedError].
+/// Runs [steps] in order with batch's arg defaults, logging each under its own tool name; a step with `expectChange:false` never stops the run on `changed:false`. Rethrows [SessionNotAttachedError].
 Future<BatchRun> runBatchSteps(
   GlintSession session,
   List<BatchStep> steps, {
@@ -176,7 +187,11 @@ Future<BatchRun> runBatchSteps(
     onStepStart?.call(i + 1, step.tool);
     final tool = kBatchStepTools[step.tool]!;
     final start = DateTime.now();
-    final own = CallToolRequest(name: step.tool, arguments: {...step.args}..remove('app'));
+    final own = CallToolRequest(
+        name: step.tool,
+        arguments: {...step.args}
+          ..remove('app')
+          ..remove('expectChange'));
     final invalid = GlintTool.checkArguments(tool.definition, own);
     final stepArgs = {
       ...?own.arguments,
@@ -227,7 +242,8 @@ Future<BatchRun> runBatchSteps(
       stoppedAt = i + 1;
       break;
     }
-    if (stopOnNoChange && (r.data?['changed'] as bool?) == false) {
+    final expectsChange = step.args['expectChange'] != false;
+    if (stopOnNoChange && expectsChange && (r.data?['changed'] as bool?) == false) {
       reason = 'noChange';
       stoppedAt = i + 1;
       break;
