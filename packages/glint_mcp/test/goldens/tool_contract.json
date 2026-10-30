@@ -85,7 +85,7 @@
       },
       "udid": {
         "type": "string",
-        "description": "Target simulator UDID. Defaults to the attached device."
+        "description": "Target simulator UDID or Android adb serial. Defaults to the attached device."
       },
       "inline": {
         "type": "boolean",
