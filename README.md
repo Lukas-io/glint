@@ -2,11 +2,47 @@
 
 **Let an AI agent use your Flutter app the way a person would.**
 
+![An agent answers "When was the Taj Mahal built?" by driving the Wonderous app with glint](docs/media/glint-demo.gif)
+
 You tell an agent what you want done — "sign in as test@example.com, find the order from yesterday, and cancel it" — and it taps, scrolls, and types its way through your app on a simulator until it's done. The app doesn't need to be modified. No package to add. No init code. Glint reads your running app from the outside and drives it through native input.
 
 > **Status:** pre-1.0 and in daily use. Tool names and arguments can still change between versions. Design notes live in [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md).
 
 ---
+
+## Install
+
+glint needs the Dart SDK, which comes with Flutter.
+
+**Claude Code plugin.** One plugin brings both servers, glint and glint network:
+
+```
+/plugin marketplace add Lukas-io/glint
+/plugin install glint@glint
+```
+
+The first start installs the servers from pub.dev (about 20 seconds); run `/mcp` to reconnect if it times out. Details are in [plugin/README.md](plugin/README.md).
+
+**Any MCP host.** Install from pub.dev, with `~/.pub-cache/bin` on your `PATH`, and add the `glint` command:
+
+```bash
+dart pub global activate glint_mcp
+
+# For example, Claude Code:
+claude mcp add glint -- glint
+```
+
+To run it from a checkout instead:
+
+```bash
+git clone https://github.com/Lukas-io/glint.git
+cd glint && dart pub get
+claude mcp add glint -- dart run "$PWD/packages/glint_mcp/bin/glint.dart"
+```
+
+On iOS, `attach` reports the Xcode version and which bridge it found. It looks for `GLINT_IOS_BRIDGE`, then a build inside the glint checkout, then `~/.glint/bin/glint-iossim-<version>`, and otherwise downloads the bridge attached to the matching GitHub Release, checked against its published sha256 (`GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off).
+
+Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with `flutter run` on a simulator or emulator and ask the agent to call `attach` with no arguments; glint finds the app and the device.
 
 ## In plain language
 
@@ -33,14 +69,16 @@ It works by reading the **live state of your running app** (via the Dart VM serv
 
 ## Two devices at once (rider and driver)
 
-One glint session can hold apps on several devices; `attach` again adds one, and `device:` on `location` picks which device moves. A ride-hailing flow looks like this:
+![Rider and driver phones at the pickup: the rider's app shows "Tunde is here" after glint drove the driver's GPS along the route](docs/media/glint-ride.png)
 
-1. `attach device:"<simulator>"` for the rider app and `attach device:"emulator-5554"` for the driver app.
-2. `location op:route device:"emulator-5554" points:[...] durationSec:60` moves the driver in the background.
-3. `location op:wait device:"<simulator>" text:"Driver arrived"` blocks until the rider app shows it, with progress every 15 s.
-4. `location op:wait device:"emulator-5554" until:"near" at:"lat,lng"` checks where the driver ended up.
+One prompt, two live apps: *"Drive Tunde to Ada's pickup. Tell me when her app says he's there."* The agent:
 
-`fixtures/ride_app` is a rider and driver app built for this, with a small relay the two copies share.
+1. `location op:route polylineId:"route" speedKmh:70 maxSpeedKmh:100` on the driver's phone. glint drives the route the app draws on its map (polyline id `route`), with speed that varies like a driver's and slows for each turn.
+2. `location op:wait until:"arrived"`, with progress every 15 s.
+3. `tap text:"Arrived"` on the driver's phone.
+4. `get_scene` on the rider's phone, which now reads "Tunde is here".
+
+One glint session can hold apps on several devices: `attach` again adds one, and `device:` on `location` picks which device moves. [`examples/glint_ride`](./examples/glint_ride) is the rider and driver app in the video, two roles in one Flutter app linked over a local socket.
 
 ## What makes it fast
 
@@ -91,40 +129,6 @@ v1 focuses on **discovery-mode task execution** — making the first run through
 - **Non-MCP interface.** CLI / UI for humans driving the same capabilities directly.
 
 Full roadmap: [`source-of-truth.md`](./packages/glint_mcp/source-of-truth.md) §11.
-
-## Install
-
-glint needs the Dart SDK, which comes with Flutter.
-
-**Claude Code plugin.** One plugin brings both servers, glint and glint network:
-
-```
-/plugin marketplace add Lukas-io/glint
-/plugin install glint@glint
-```
-
-The first start installs the servers from pub.dev (about 20 seconds); run `/mcp` to reconnect if it times out. Details are in [plugin/README.md](plugin/README.md).
-
-**Any MCP host.** Install from pub.dev, with `~/.pub-cache/bin` on your `PATH`, and add the `glint` command:
-
-```bash
-dart pub global activate glint_mcp
-
-# For example, Claude Code:
-claude mcp add glint -- glint
-```
-
-To run it from a checkout instead:
-
-```bash
-git clone https://github.com/Lukas-io/glint.git
-cd glint && dart pub get
-claude mcp add glint -- dart run "$PWD/packages/glint_mcp/bin/glint.dart"
-```
-
-On iOS, `attach` reports the Xcode version and which bridge it found. It looks for `GLINT_IOS_BRIDGE`, then a build inside the glint checkout, then `~/.glint/bin/glint-iossim-<version>`, and otherwise downloads the bridge attached to the matching GitHub Release, checked against its published sha256 (`GLINT_NO_BRIDGE_DOWNLOAD=true` turns that off).
-
-Android needs `adb` on your `PATH` or `ANDROID_HOME` set. Then run your app with `flutter run` on a simulator or emulator and ask the agent to call `attach` with no arguments; glint finds the app and the device.
 
 ## Limits today
 

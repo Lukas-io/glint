@@ -355,6 +355,14 @@
         "type": "number",
         "description": "route: travel the whole route in this many seconds instead of at speedKmh."
       },
+      "maxSpeedKmh": {
+        "type": "number",
+        "description": "route: drive like a person: cruise wanders between speedKmh and this, accelerating and braking smoothly, slowing for turns and stopping at the end."
+      },
+      "slowForTurns": {
+        "type": "boolean",
+        "description": "route with maxSpeedKmh: brake before bends. Default true."
+      },
       "intervalMs": {
         "type": "integer",
         "description": "route: time between fixes. Default 1000; at least 500 on the iOS simulator, 2000 on an iPhone."
