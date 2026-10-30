@@ -52,6 +52,9 @@ enum GlintErrorKind {
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
 
+  /// Back found a modal sheet or dialog that neither its barrier tap nor a drag closes: the app made it undismissible.
+  modalNotDismissible,
+
   /// Another live glint session is driving the device attach would have picked.
   deviceClaimed,
 
