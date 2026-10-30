@@ -28,7 +28,7 @@ The route is real: four turns through Lekki Phase 1, Lagos, to a pickup on Admir
 
 With both apps attached, give your agent one prompt: *"Drive Tunde to Ada's pickup. Tell me when her app says he's there."* It runs:
 
-1. `location op:route polylineId:route speedKmh:70 maxSpeedKmh:100` on the driver. glint drives the blue route the app draws, with speed that varies between 70 and 100 km/h and slows for each turn.
+1. `location op:route polylineId:route speedKmh:70 maxSpeedKmh:100` on the driver. glint drives the route the app draws on its map (polyline id `route`), with speed that varies between 70 and 100 km/h and slows for each turn.
 2. `location op:wait until:arrived`, which reports progress every 15 s.
 3. `tap text:"Arrived"` on the driver.
 4. `get_scene` on the rider, which now reads "Tunde is here".

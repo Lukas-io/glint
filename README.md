@@ -73,7 +73,7 @@ It works by reading the **live state of your running app** (via the Dart VM serv
 
 One prompt, two live apps: *"Drive Tunde to Ada's pickup. Tell me when her app says he's there."* The agent:
 
-1. `location op:route polylineId:"route" speedKmh:70 maxSpeedKmh:100` on the driver's phone. glint drives the blue line the app itself draws, with speed that varies like a driver's and slows for each turn.
+1. `location op:route polylineId:"route" speedKmh:70 maxSpeedKmh:100` on the driver's phone. glint drives the route the app draws on its map (polyline id `route`), with speed that varies like a driver's and slows for each turn.
 2. `location op:wait until:"arrived"`, with progress every 15 s.
 3. `tap text:"Arrived"` on the driver's phone.
 4. `get_scene` on the rider's phone, which now reads "Tunde is here".
