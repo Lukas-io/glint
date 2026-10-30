@@ -57,6 +57,7 @@ class SceneReader {
       knownLocations: _seenLocations,
       overlayRoots: overlay?.contentRoots ?? const [],
       hasBarrierOverlay: overlay?.hasBarrier ?? false,
+      topBarrier: overlay?.topBarrier,
       fullGroupName: overlay?.groupName,
       degenerate: degenerate,
     );
@@ -168,6 +169,7 @@ class SceneReader {
     return _OverlayResult(
       contentRoots: extraction.contentRoots,
       hasBarrier: extraction.hasBarrier,
+      topBarrier: extraction.topBarrier,
       groupName: fullGroup,
     );
   }
@@ -238,6 +240,7 @@ class SceneReader {
     final contentRoots = <SceneNode>[];
     final nestedContent = <SceneNode>[];
     var hasBarrier = false;
+    SceneNode? topBarrier;
 
     /// A route page's entry can hold a nested Navigator (a shell route, a tab with its own stack) whose Overlay carries sheets and dialogs opened from its pages.
     void readOverlay(SceneNode overlay, {required bool nested}) {
@@ -257,7 +260,10 @@ class SceneReader {
         }
         if (_isTextEditingOverlay(entry)) continue; // cursor handles / toolbar
         if (_isBarrierOnlyEntry(entry)) {
-          if (i > topPage) hasBarrier = true;
+          if (i > topPage) {
+            hasBarrier = true;
+            topBarrier = entry;
+          }
           continue;
         }
         if (_isEmptyEntry(entry)) continue;
@@ -267,7 +273,8 @@ class SceneReader {
     }
 
     readOverlay(overlay, nested: false);
-    return _DialogExtraction(contentRoots: contentRoots, hasBarrier: hasBarrier, nestedContent: nestedContent);
+    return _DialogExtraction(
+        contentRoots: contentRoots, hasBarrier: hasBarrier, topBarrier: topBarrier, nestedContent: nestedContent);
   }
 
   /// The outermost Overlays below [node], not counting [node] itself.
@@ -386,9 +393,11 @@ class _OverlayResult {
     required this.contentRoots,
     required this.hasBarrier,
     required this.groupName,
+    this.topBarrier,
   });
   final List<SceneNode> contentRoots;
   final bool hasBarrier;
+  final SceneNode? topBarrier;
   final String groupName;
 }
 
@@ -396,10 +405,12 @@ class _DialogExtraction {
   const _DialogExtraction({
     required this.contentRoots,
     required this.hasBarrier,
+    this.topBarrier,
     this.nestedContent = const [],
   });
   final List<SceneNode> contentRoots;
   final bool hasBarrier;
+  final SceneNode? topBarrier;
 
   /// The entries of [contentRoots] that came from a nested navigator's Overlay.
   final List<SceneNode> nestedContent;
@@ -413,6 +424,7 @@ class Scene {
     required InspectorClient inspector,
     this.overlayRoots = const [],
     this.hasBarrierOverlay = false,
+    this.topBarrier,
     String? fullGroupName,
     this.degenerate = false,
     Map<String, int> knownLocations = const {},
@@ -437,6 +449,9 @@ class Scene {
   /// True when a [ModalBarrier] sits between the topmost overlay and the
   /// base screen — the screen is painted but not hittable.
   final bool hasBarrierOverlay;
+
+  /// The overlay entry of the topmost modal barrier (full-tree node, resolvable in [fullGroupName]); null without one.
+  final SceneNode? topBarrier;
 
   final String? _fullGroupName;
 

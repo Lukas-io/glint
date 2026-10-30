@@ -4,6 +4,8 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../../../perception.dart';
+import '../../semantic/enricher.dart';
+import '../coordinate.dart';
 import '../envelope.dart';
 import '../post_action.dart';
 import '../session.dart';
@@ -107,6 +109,10 @@ class HardwareButtonTool extends GlintTool {
     final keyboardUp = session.device.platform == DevicePlatform.android && await _keyboardVisible(session);
     final scene = await session.reader.readSummary();
     try {
+      if (session.device.platform == DevicePlatform.ios) {
+        final dismissed = await _dismissModal(session, scene, pre);
+        if (dismissed != null) return dismissed;
+      }
       final result = await session.interactor.run(
         scene,
         PressHardwareButton(button),
@@ -135,6 +141,94 @@ class HardwareButtonTool extends GlintTool {
     } finally {
       await scene.dispose();
     }
+  }
+
+  /// iPhone has no back button for a sheet or dialog, so close it as a person does: tap outside it on the barrier, else drag a sheet down. Null when no such modal is up or it could not be measured.
+  Future<StructuredResponse?> _dismissModal(GlintSession session, Scene scene, SceneSnapshot? pre) async {
+    final modal = _topModal(scene);
+    if (modal == null) return null;
+    final what = modal.kind == 'bottomSheet' ? 'bottom sheet' : 'dialog';
+    final surface = _surfaceNode(modal.root, modal.kind);
+    final rect = surface == null ? null : await session.resolver.boundsOf(scene, surface);
+    if (rect == null) return null;
+    final dismissible = await session.resolver.barrierDismissible(scene);
+    if (dismissible != false) {
+      final spot = _spotOutside(rect);
+      if (spot != null) {
+        final tapped = await coordinateTap(session, spot.x, spot.y);
+        if (tapped.isError) return tapped;
+        final post = await readPostActionState(session, pre, includeSceneText: false);
+        if (post?.changed ?? false) {
+          return _dismissed(tapped, 'dismissed the $what by tapping its barrier', post!, 'barrierTap');
+        }
+      }
+    }
+    if (modal.kind == 'bottomSheet') {
+      final x = rect.x + rect.w / 2;
+      final from = rect.y + (rect.h < 48 ? rect.h / 2 : 12);
+      final dragged = await coordinateSwipe(session, x, from, x, rect.vh, 350, verb: 'dragged');
+      if (dragged.isError) return dragged;
+      final post = await readPostActionState(session, pre, includeSceneText: false);
+      if (post?.changed ?? false) {
+        return _dismissed(dragged, 'dismissed the bottom sheet by dragging it down', post!, 'dragDown');
+      }
+    }
+    return StructuredResponse.error(
+      summary:
+          'back cannot close the $what: ${dismissible == false ? 'its barrier is not dismissible' : 'it stayed open'}',
+      errorKind: GlintErrorKind.modalNotDismissible,
+      detail: dismissible == false
+          ? 'the $what\'s ModalBarrier has dismissible:false${modal.kind == 'bottomSheet' ? ' and dragging it down did nothing' : ''}'
+          : 'tapping outside the $what${modal.kind == 'bottomSheet' ? ' and dragging it down' : ''} changed nothing',
+      nextSteps: [
+        'get_scene, then tap the $what\'s own close, cancel or done button',
+        'if it has none, the app wants a choice made: pick one of its actions',
+      ],
+    ).mergeData({'changed': false, 'changeCategory': 'nothing'});
+  }
+
+  static StructuredResponse _dismissed(StructuredResponse input, String summary, PostActionState post, String via) {
+    return input.copyWith(
+      summary: summary,
+      data: {...?input.data, ...post.toData(), 'dismissedVia': via},
+      nextSteps: const ['call get_scene to read the screen you went back to'],
+    );
+  }
+
+  /// The topmost sheet or dialog that sits behind a modal barrier; snackbars and toasts are not modal.
+  static ({SceneNode root, String kind})? _topModal(Scene scene) {
+    if (!scene.hasBarrierOverlay) return null;
+    for (final root in scene.overlayRoots.reversed) {
+      final kind = OverlayEnricher.inferKind(root);
+      if (kind == 'bottomSheet' || kind == 'dialog') return (root: root, kind: kind);
+    }
+    return null;
+  }
+
+  /// The widget in a modal entry whose box is the visible sheet or dialog card, not the full-screen wrapper around it.
+  static SceneNode? _surfaceNode(SceneNode root, String kind) {
+    final labels = kind == 'bottomSheet'
+        ? const ['BottomSheet', 'CupertinoActionSheet', 'CupertinoPopupSurface', 'Material']
+        : const ['CupertinoPopupSurface', 'Material'];
+    final nodes = root.walk().toList();
+    for (final label in labels) {
+      for (final n in nodes) {
+        if (n.baseLabel == label) return n;
+      }
+    }
+    return null;
+  }
+
+  /// A point on the barrier beside [rect], in logical points: above first, then below, left, right; null when the card fills the screen.
+  static ({double x, double y})? _spotOutside(({double x, double y, double w, double h, double vw, double vh}) rect) {
+    const margin = 48.0;
+    final below = rect.vh - (rect.y + rect.h);
+    final right = rect.vw - (rect.x + rect.w);
+    if (rect.y > margin) return (x: rect.vw / 2, y: rect.y / 2);
+    if (below > margin) return (x: rect.vw / 2, y: rect.y + rect.h + below / 2);
+    if (rect.x > margin) return (x: rect.x / 2, y: rect.vh / 2);
+    if (right > margin) return (x: rect.x + rect.w + right / 2, y: rect.vh / 2);
+    return null;
   }
 
   Future<bool> _keyboardVisible(GlintSession session) async {
