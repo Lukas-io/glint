@@ -69,6 +69,10 @@
       "awaitSettle": {
         "type": "boolean",
         "description": "Wait until the UI settles before returning. Default false."
+      },
+      "showTouches": {
+        "type": "boolean",
+        "description": "Draw each touch (dot, trail, release ripple) for people watching or recording: in the Flutter app, and system-wide on an Android emulator. Omit to keep the current setting (off by default); config key showTouches toggles it."
       }
     }
   },
@@ -1102,6 +1106,10 @@
       "maxFrames": {
         "type": "integer",
         "description": "Max frames returned (1-60). Default 12."
+      },
+      "touches": {
+        "type": "boolean",
+        "description": "Also write video-touches.mp4 with each touch glint sent drawn on it (dot, trail, ring), for people watching; the returned frames stay clean. Default false."
       },
       "inline": {
         "type": "boolean",

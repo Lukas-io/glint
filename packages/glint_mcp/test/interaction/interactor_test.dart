@@ -11,6 +11,7 @@ ResolvedCoord _coord({
   double keyboardInset = 0,
   bool hitTestReal = false,
   String? hitBy,
+  double opacity = 1,
 }) {
   return ResolvedCoord(
     clip: clip,
@@ -22,7 +23,7 @@ ResolvedCoord _coord({
     logicalBounds: (x: 0, y: 0, w: 40, h: 40),
     devicePixelRatio: 3,
     logicalViewSize: (w: vw, h: vh),
-    nearestAncestorOpacity: 1,
+    nearestAncestorOpacity: opacity,
     nearestAncestorVisible: true,
     hittable: hittable,
   );
@@ -134,6 +135,37 @@ void main() {
       final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
       expect(r.ok, isTrue);
       expect(r.warnings.join(), contains('approximate'));
+    });
+
+    test('a target faded to opacity 0 refuses as hidden, though the hit test reaches it', () async {
+      final i = build(_coord(x: 200, y: 400, opacity: 0, hitTestReal: true));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.errorKind, GlintErrorKind.notHittable);
+      expect(r.summary, contains('faded out to opacity 0'));
+      expect(r.nextSteps.join(), contains('[hidden]'));
+      expect(backend.taps, isEmpty);
+    });
+
+    test('a faded long-press refuses too', () async {
+      final i = build(_coord(x: 200, y: 400, opacity: 0));
+      final r = await i.run(_FakeScene(), const LongPress(SymbolicTarget('target')));
+      expect(r.errorKind, GlintErrorKind.notHittable);
+      expect(backend.longPresses, isEmpty);
+    });
+
+    test('refuseNotHittable:false taps a faded target anyway', () async {
+      final i = build(_coord(x: 200, y: 400, opacity: 0))..refuseNotHittable = false;
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.ok, isTrue);
+      expect(r.warnings.join(), contains('not painted'));
+      expect(backend.taps, hasLength(1));
+    });
+
+    test('a half-faded target still taps', () async {
+      final i = build(_coord(x: 200, y: 400, opacity: 0.4));
+      final r = await i.run(_FakeScene(), const Tap(SymbolicTarget('target')));
+      expect(r.ok, isTrue);
+      expect(backend.taps, hasLength(1));
     });
 
     test('coordinate targets bypass the gate — caller owns raw coords', () async {

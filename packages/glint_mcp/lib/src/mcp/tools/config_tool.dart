@@ -17,7 +17,7 @@ class ConfigTool extends GlintTool {
         name: 'config',
         description: 'Inspect or override glint defaults at runtime '
             '(readyTimeoutMs, settleCeilingMs, scrollMaxScrolls, '
-            'scrollAmountFraction, etc.). Per-call args still win over config.',
+            'scrollAmountFraction, showTouches, etc.). Per-call args still win over config.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'get | set'),
@@ -70,6 +70,7 @@ class ConfigTool extends GlintTool {
             ],
           );
         }
+        if (key == 'showTouches') return _showTouches(session);
         final stored = cfg.toJson()[key];
         // Echo only the changed setting — `config op:get` returns the full map.
         return StructuredResponse(
@@ -82,5 +83,37 @@ class ConfigTool extends GlintTool {
           errorKind: GlintErrorKind.invalidArgument,
         );
     }
+  }
+
+  /// Applies the new showTouches to every attached Flutter app and says where touches are now drawn.
+  Future<StructuredResponse> _showTouches(GlintSession session) async {
+    final on = session.config.showTouches;
+    final outcomes = await session.applyShowTouches();
+    final data = {
+      'key': 'showTouches',
+      'value': on,
+      if (outcomes.isNotEmpty) 'touches': {for (final e in outcomes.entries) e.key.label: e.value.toJson()},
+    };
+    if (outcomes.isEmpty) {
+      return StructuredResponse(
+        summary: 'showTouches = $on · no Flutter app attached yet; it applies when one is',
+        data: data,
+      );
+    }
+    final failed = outcomes.entries.where((e) => e.value.failed).toList();
+    if (failed.isEmpty) {
+      return StructuredResponse(
+        summary:
+            'showTouches = $on · touches ${on ? 'shown' : 'hidden'} on ${outcomes.keys.map((a) => a.label).join(', ')}',
+        data: data,
+      );
+    }
+    final (app, why) = (failed.first.key, failed.first.value);
+    return StructuredResponse.error(
+      summary: 'showTouches = $on is set, but ${app.label} cannot ${on ? 'show' : 'hide'} touches',
+      errorKind: why.errorKind!,
+      detail: why.detail,
+      nextSteps: why.nextSteps,
+    ).mergeData(data);
   }
 }
