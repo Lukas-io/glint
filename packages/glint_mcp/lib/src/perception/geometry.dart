@@ -139,6 +139,29 @@ class ResolvedCoord {
       };
 }
 
+/// The scrollable that moves content along one axis: its global [rect] and whether it [paged] (PageView, TabBarView).
+typedef AxisScrollable = ({({double x, double y, double w, double h}) rect, bool paged});
+
+/// The nearest scrollable around [node] that scrolls along the [horizontal] or vertical axis, skipping nearer ones on the other axis; null when there is none or the eval fails.
+Future<AxisScrollable?> scrollableAround(
+  FlutterRuntime runtime,
+  Scene scene,
+  SceneNode node, {
+  required bool horizontal,
+}) async {
+  final groupName = (node.glintId != null && scene.isInOverlay(node.glintId!))
+      ? (scene.fullGroupName ?? scene.groupName)
+      : scene.groupName;
+  final raw = await runtime.evaluateWithSelection(
+    expression: GeometryExpr.axisScrollable(horizontal: horizontal),
+    inspectorId: node.inspectorId,
+    groupName: groupName,
+  );
+  final parts = raw?.split(',').map(double.tryParse).toList();
+  if (parts == null || parts.length != 5 || parts.contains(null)) return null;
+  return (rect: (x: parts[0]!, y: parts[1]!, w: parts[2]!, h: parts[3]!), paged: parts[4] == 1);
+}
+
 /// Resolves nodes to live geometry. Lazy — re-queries every call.
 class CoordinateResolver {
   CoordinateResolver(this._runtime);
@@ -520,6 +543,14 @@ class GeometryExpr {
       "b.localToGlobal(Offset.zero).dx.toString() + ',' + b.localToGlobal(Offset.zero).dy.toString() + ',' + "
       "b.size.width.toString() + ',' + b.size.height.toString())(v as RenderBox))"
       '(RenderAbstractViewport.maybeOf($_ro))';
+
+  /// The nearest scrollable around the selected node along one axis as `x,y,w,h,paged`, or empty when there is none; each step up asks the scrollable's own context, so scrollables on the other axis are skipped.
+  static String axisScrollable({required bool horizontal}) => '((Element e) { dynamic s = Scrollable.maybeOf(e); '
+      'while (s != null && s.axisDirection.index % 2 != ${horizontal ? 1 : 0}) { s = Scrollable.maybeOf(s.context); } '
+      "if (s == null) { return ''; } final b = s.context.findRenderObject() as RenderBox; final o = b.localToGlobal(Offset.zero); "
+      "return o.dx.toString() + ',' + o.dy.toString() + ',' + b.size.width.toString() + ',' + b.size.height.toString() + ',' + "
+      "(s.position.runtimeType.toString().contains('PagePosition') ? '1' : '0'); })"
+      '($_el)';
 
   /// The nearest sliver around the selected node: `overlap,axisDirection,growthDirection,x,y,paintExtent`, where overlap is how much pinned slivers before it paint over its start and x,y is its global origin; empty when it is in no sliver.
   static const leadingCover = '((dynamic r) { while (r != null && r is! RenderSliver) { r = r.parent; } '

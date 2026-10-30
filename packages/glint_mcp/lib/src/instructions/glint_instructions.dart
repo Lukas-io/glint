@@ -71,11 +71,11 @@ const _armedIntent = '''
 const _recovery = '''
 ## Recovery
 
-- `unresolvedTarget` — stale id; use the "did you mean" or `get_scene`.
+- `unresolvedTarget`: stale id; take the "did you mean".
 - `notHittable` — covered by overlay/absorber. Dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady` — never hittable; dismiss the cover.
-- `targetNotFound` — `scroll_to_find` miss; `detail` lists visible text.
+- `targetNotFound`: `scroll_to_find` miss; see `detail`.
 - `scrollLimitReached` — stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped; re-`attach`.
 - `appUnresponsive` / `appBusy`: locked, paused or busy; unlock or wait, retry.
@@ -88,8 +88,8 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial` — part landed (`data.delivered` of `data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` — follow `detail` + `nextSteps`.
-- `invalidArgument` — fix the arg.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect`: follow `detail` + `nextSteps`.
+- `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';
 

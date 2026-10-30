@@ -2,6 +2,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
 import '../../../perception.dart';
+import '../../../semantic.dart' show kPagedLabels;
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -19,6 +20,44 @@ FindVerdict findVerdict(ResolvedCoord coord, {required bool tap}) {
   return tap && coord.painted ? FindVerdict.covered : FindVerdict.keepScrolling;
 }
 
+/// The scrollable that moves [hit] along [dir]'s axis (not whatever sits under the default swipe point) and the PageViews around it that must stay on their page; a target with no anchor keeps the default swipe.
+Future<ScrollTarget> scrollTargetFor(GlintSession session, Scene scene, SceneNode hit, ScrollDirection dir) async {
+  const none = (anchor: null, watchedPagedIds: <String>{});
+  final id = hit.glintId;
+  if (id == null || scene.isInOverlay(id)) return none;
+  try {
+    final horizontal = dir == ScrollDirection.left || dir == ScrollDirection.right;
+    final driven = await scrollableAround(session.runtime, scene, hit, horizontal: horizontal);
+    final paged = [
+      for (final a in _ancestorsOf(scene.root, hit))
+        if (a.glintId != null && kPagedLabels.contains(a.baseLabel)) a.glintId!,
+    ];
+    final watched = {...paged.skip(driven != null && driven.paged ? 1 : 0)};
+    if (driven == null) return (anchor: null, watchedPagedIds: watched);
+    final coord = await session.resolver.resolve(scene, id);
+    final anchor = coord.hasNonZeroBounds
+        ? (glintId: id, x: coord.logicalCenter.x, y: coord.logicalCenter.y, clip: driven.rect)
+        : null;
+    return (anchor: anchor, watchedPagedIds: watched);
+  } on Object {
+    return none;
+  }
+}
+
+/// [target]'s ancestors under [root], nearest first.
+List<SceneNode> _ancestorsOf(SceneNode root, SceneNode target) {
+  final path = <SceneNode>[];
+  bool visit(SceneNode n) {
+    if (identical(n, target)) return true;
+    path.add(n);
+    if (n.children.any(visit)) return true;
+    path.removeLast();
+    return false;
+  }
+
+  return visit(root) ? path.reversed.toList() : const [];
+}
+
 /// Loops `get_scene` + `scroll` until a target (glintId or text content)
 /// is on screen (and hittable for tap:true), or the ceiling is reached. Stops early if already visible.
 class ScrollToFindTool extends GlintTool {
@@ -28,7 +67,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -95,6 +134,7 @@ class ScrollToFindTool extends GlintTool {
     var seenInOverlay = false; // target found in overlay (not in scrollable content)
     var lastTexts = const <String>[];
     var lastIds = const <String>[];
+    ScrollTarget target = (anchor: null, watchedPagedIds: const <String>{});
     ResolvedCoord? covered; // on screen but covered (tap only)
     int? coveredAt; // the attempt that first saw it covered
     var last = 0;
@@ -147,6 +187,7 @@ class ScrollToFindTool extends GlintTool {
             // resolve can fail mid-scroll if the node was just replaced;
             // fall through and try another scroll.
           }
+          target = await scrollTargetFor(session, scene, hit, dir);
         }
       } finally {
         await scene.dispose();
@@ -154,7 +195,7 @@ class ScrollToFindTool extends GlintTool {
 
       // A covered target gets one more scroll (a bar along the edge may hide it), then the search stops.
       if (tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt)) break;
-      final step = await scroller.handle(session, scrollArgs);
+      final step = await scroller.perform(session, scrollArgs, target: target);
       if (step.isError) {
         return StructuredResponse.error(
           summary: 'scroll step $i failed; aborting scroll_to_find',
@@ -162,6 +203,8 @@ class ScrollToFindTool extends GlintTool {
           detail: step.summary,
         );
       }
+      final sideEffect = step.data?['sideEffect'] as String?;
+      if (sideEffect != null) return _sideEffectReply(criterion, i + 1, sideEffect, target);
     }
 
     if (tapId != null && foundReply != null) {
@@ -225,6 +268,21 @@ class ScrollToFindTool extends GlintTool {
       ],
     );
   }
+
+  static StructuredResponse _sideEffectReply(String criterion, int scrolls, String sideEffect, ScrollTarget target) =>
+      StructuredResponse.error(
+        summary: 'stopped looking for $criterion after $scrolls scroll(s): $sideEffect. '
+            'glint stopped to avoid more side effects',
+        errorKind: GlintErrorKind.scrollSideEffect,
+        detail: target.anchor == null
+            ? 'glint found no scrollable around the target that moves along this direction, so the swipe used the default point and reached an outer one'
+            : 'the swipe was aimed at the nearest scrollable around the target, yet something outside it moved too',
+        nextSteps: const [
+          'get_scene to see where the app is now',
+          'go back first: pop the route, or swipe the PageView back to the page it was on',
+          'then swipe or drag with x1,y1,x2,y2 inside the container that holds the target (resolve glintId:"<container>" gives its bounds)',
+        ],
+      ).mergeData({'attempts': scrolls, 'sideEffect': sideEffect});
 
   /// What a tap at [c]'s centre reaches instead, as precisely as the hit test knows.
   static String _cover(ResolvedCoord c) =>
