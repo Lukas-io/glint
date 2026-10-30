@@ -904,6 +904,10 @@
         "type": "integer",
         "description": "Hard cap on wait time. Default 5000."
       },
+      "timeoutMs": {
+        "type": "integer",
+        "description": "Same as ceilingMs, named as in wait_for."
+      },
       "quietFrames": {
         "type": "integer",
         "description": "Consecutive quiet polls required to declare settled. Default 3."
