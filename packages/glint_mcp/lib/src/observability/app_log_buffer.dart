@@ -35,6 +35,9 @@ class AppLogEntry {
     return c.contains('exception') || c.contains('error') || c.contains('flutter error') || c.contains('stack trace');
   }
 
+  /// Whether [test] holds for the content or the logger name.
+  bool mentions(bool Function(String text) test) => test(content) || (loggerName != null && test(loggerName!));
+
   Map<String, Object?> toJson() => {
         'seq': sequence,
         'ts': timestamp.toIso8601String(),
@@ -43,6 +46,15 @@ class AppLogEntry {
         if (level != null) 'level': level,
         'content': content,
       };
+}
+
+/// What [AppLogBuffer.scan] found: the entries to show and the counts behind them.
+class AppLogScan {
+  const AppLogScan({required this.entries, required this.scanned, required this.matched});
+
+  final List<AppLogEntry> entries;
+  final int scanned;
+  final int matched;
 }
 
 /// Bounded ring of app-side log events. Subscribes to the VM service's
@@ -171,20 +183,42 @@ class AppLogBuffer {
     _added.add(entry);
   }
 
+  /// The last [limit] entries that pass every filter, plus how many were scanned and how many matched before [limit] applied.
+  AppLogScan scan({
+    int? sinceSeq,
+    AppLogStream? streamFilter,
+    bool errorsOnly = false,
+    String? contains,
+    RegExp? pattern,
+    int limit = 50,
+  }) {
+    final needle = contains?.toLowerCase();
+    var scanned = 0;
+    final matched = <AppLogEntry>[];
+    for (final e in _entries) {
+      if (sinceSeq != null && e.sequence < sinceSeq) continue;
+      if (streamFilter != null && e.stream != streamFilter) continue;
+      if (errorsOnly && !e.looksLikeError) continue;
+      scanned++;
+      if (needle != null && !e.mentions((text) => text.toLowerCase().contains(needle))) continue;
+      if (pattern != null && !e.mentions(pattern.hasMatch)) continue;
+      matched.add(e);
+    }
+    final start = matched.length > limit ? matched.length - limit : 0;
+    return AppLogScan(
+      entries: matched.sublist(limit <= 0 ? matched.length : start),
+      scanned: scanned,
+      matched: matched.length,
+    );
+  }
+
   Iterable<AppLogEntry> query({
     int? sinceSeq,
     AppLogStream? streamFilter,
     bool errorsOnly = false,
     int limit = 50,
-  }) {
-    Iterable<AppLogEntry> out = _entries;
-    if (sinceSeq != null) out = out.where((e) => e.sequence >= sinceSeq);
-    if (streamFilter != null) {
-      out = out.where((e) => e.stream == streamFilter);
-    }
-    if (errorsOnly) out = out.where((e) => e.looksLikeError);
-    return out.toList().reversed.take(limit).toList().reversed;
-  }
+  }) =>
+      scan(sinceSeq: sinceSeq, streamFilter: streamFilter, errorsOnly: errorsOnly, limit: limit).entries;
 
   void clear() {
     _entries.clear();

@@ -1168,6 +1168,18 @@
       "sinceSeq": {
         "type": "integer",
         "description": "Return entries with sequence >= sinceSeq."
+      },
+      "contains": {
+        "type": "string",
+        "description": "Only entries containing this text (case-insensitive). Applied before limit."
+      },
+      "match": {
+        "type": "string",
+        "description": "Only entries matching this Dart regex (content or logger name). Applied before limit; combine with contains to require both."
+      },
+      "maxChars": {
+        "type": "integer",
+        "description": "Cut each entry to this many chars, with a marker naming what was dropped. Default 600, 0 = no cap."
       }
     }
   },

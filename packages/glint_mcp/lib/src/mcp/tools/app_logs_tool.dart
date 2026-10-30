@@ -13,12 +13,17 @@ import '../tool_args.dart';
 class AppLogsTool extends GlintTool {
   const AppLogsTool();
 
+  static const _defaultMaxChars = 600;
+  static const _totalCapChars = 20000;
+
   @override
   Tool get definition => Tool(
         name: 'app_logs',
         description: 'Query the running app\'s log buffer (FlutterError dumps + '
             'developer.log + stderr writes). Use `errorsOnly` to surface only '
-            'entries that look like exceptions / stack traces.',
+            'entries that look like exceptions / stack traces, and `contains` / '
+            '`match` to find lines in a noisy app. Entries are cut at `maxChars` '
+            'each and the reply at ~20000 chars; `seq` addresses the full entry.',
         inputSchema: ObjectSchema(
           properties: {
             'limit': Schema.int(description: 'Max entries. Default 50.'),
@@ -40,6 +45,17 @@ class AppLogsTool extends GlintTool {
             'sinceSeq': Schema.int(
               description: 'Return entries with sequence >= sinceSeq.',
             ),
+            'contains': Schema.string(
+              description: 'Only entries containing this text (case-insensitive). Applied before limit.',
+            ),
+            'match': Schema.string(
+              description:
+                  'Only entries matching this Dart regex (content or logger name). Applied before limit; combine with contains to require both.',
+            ),
+            'maxChars': Schema.int(
+              description:
+                  'Cut each entry to this many chars, with a marker naming what was dropped. Default 600, 0 = no cap.',
+            ),
           },
         ),
       );
@@ -52,6 +68,9 @@ class AppLogsTool extends GlintTool {
     final asJson = (args['format'] as String?) == 'json';
     final streamName = args['stream'] as String?;
     final sinceSeq = argInt(args, 'sinceSeq');
+    final contains = _nonEmpty(args['contains']);
+    final matchSource = _nonEmpty(args['match']);
+    final maxChars = argInt(args, 'maxChars') ?? _defaultMaxChars;
     if (argBool(args, 'native') ?? false) return _nativeCrashes(session, asJson);
 
     AppLogStream? streamFilter;
@@ -66,30 +85,91 @@ class AppLogsTool extends GlintTool {
       }
     }
 
-    final entries = session.appLogs
-        .query(
-          limit: limit,
-          errorsOnly: errorsOnly,
-          streamFilter: streamFilter,
-          sinceSeq: sinceSeq,
-        )
-        .toList();
+    if (maxChars < 0) {
+      return StructuredResponse.error(
+        summary: 'maxChars cannot be negative',
+        errorKind: GlintErrorKind.invalidArgument,
+        detail: 'got maxChars:$maxChars',
+        nextSteps: const ['pass a positive maxChars, or 0 for no per-entry cap'],
+      );
+    }
 
-    final summary = entries.isEmpty ? '(no entries)${_whyEmpty(session)}' : entries.map(_renderEntry).join('\n');
+    RegExp? pattern;
+    if (matchSource != null) {
+      try {
+        pattern = RegExp(matchSource);
+      } on FormatException catch (e) {
+        return StructuredResponse.error(
+          summary: 'match is not a valid regex',
+          errorKind: GlintErrorKind.invalidArgument,
+          detail: e.message,
+          nextSteps: const [
+            r'escape regex characters such as [ ] ( ) . with a backslash, e.g. match:"\[EventTracker\]"',
+            'or use contains:"<text>" for a plain case-insensitive substring',
+          ],
+        );
+      }
+    }
 
+    final scan = session.appLogs.scan(
+      limit: limit,
+      errorsOnly: errorsOnly,
+      streamFilter: streamFilter,
+      sinceSeq: sinceSeq,
+      contains: contains,
+      pattern: pattern,
+    );
+    final shown = _fitTotalCap(scan.entries.map((e) => _CutEntry(e, maxChars)).toList());
+    final entries = [for (final c in shown) c.entry];
+    final filtered = contains != null || pattern != null;
+
+    final body = shown.isEmpty ? '(no entries)${_whyEmpty(session)}' : shown.map((c) => c.render()).join('\n');
+    final summary = [
+      if (filtered) '${scan.matched} of ${scan.scanned} entries matched ${_filterLabel(contains, matchSource)}',
+      body,
+    ].join('\n');
+
+    final hidden = scan.matched - shown.length;
     return StructuredResponse(
       summary: summary,
-      nextSteps: entries.isEmpty ? _emptyNextSteps(session) : const [],
+      nextSteps: [
+        if (shown.isEmpty) ..._emptyNextSteps(session, filtered: filtered && scan.scanned > 0),
+        if (hidden > 0)
+          '$hidden older matching entries not shown (limit or the ${_totalCapChars ~/ 1000}k char reply cap); narrow with contains/match or raise limit',
+        if (shown.any((c) => c.cut > 0))
+          'entries cut at $maxChars chars; pass maxChars:0 to read them whole (narrow with sinceSeq or contains first)',
+      ],
       data: {
         'count': entries.length,
+        'scanned': scan.scanned,
+        'matched': scan.matched,
         'capacity': session.appLogs.capacity,
         'nextSequence': session.appLogs.nextSequence,
         // The rendered summary already carries the entries; only ship the
         // structured array when json is explicitly requested (matches `logs`).
-        if (asJson) 'entries': entries.map((e) => e.toJson()).toList(),
+        if (asJson) 'entries': shown.map((c) => c.toJson()).toList(),
       },
     );
   }
+
+  /// Keeps the newest entries whose rendered text fits the reply cap, always at least one.
+  List<_CutEntry> _fitTotalCap(List<_CutEntry> all) {
+    var used = 0;
+    var keepFrom = all.length;
+    for (var i = all.length - 1; i >= 0; i--) {
+      used += all[i].render().length + 1;
+      if (used > _totalCapChars && keepFrom < all.length) break;
+      keepFrom = i;
+    }
+    return all.sublist(keepFrom);
+  }
+
+  String? _nonEmpty(Object? value) => value is String && value.isNotEmpty ? value : null;
+
+  String _filterLabel(String? contains, String? match) => [
+        if (contains != null) '"$contains"',
+        if (match != null) '/$match/',
+      ].join(' and ');
 
   Future<StructuredResponse> _nativeCrashes(GlintSession session, bool asJson) async {
     final active = session.active;
@@ -125,7 +205,8 @@ class AppLogsTool extends GlintTool {
     return '';
   }
 
-  List<String> _emptyNextSteps(GlintSession session) {
+  List<String> _emptyNextSteps(GlintSession session, {required bool filtered}) {
+    if (filtered) return const ['nothing matched; loosen contains/match, or drop errorsOnly/stream, or lower sinceSeq'];
     final active = session.active;
     if (active == null) return const ['attach (no args) to start collecting app logs'];
     if (!active.deviceMode) return const [];
@@ -134,9 +215,30 @@ class AppLogsTool extends GlintTool {
       'until then read logs where the app was launched (the flutter run output)',
     ];
   }
+}
 
-  String _renderEntry(AppLogEntry e) {
-    final tag = e.loggerName != null ? '${e.stream.name}:${e.loggerName}' : e.stream.name;
-    return '[seq=${e.sequence} ${e.timestamp.toIso8601String()} $tag] ${e.content}';
+/// A log entry with its content cut to [maxChars] (0 = whole), remembering how much was dropped.
+class _CutEntry {
+  _CutEntry(this.entry, int maxChars) : cut = _dropped(entry, maxChars) {
+    content = cut > 0 ? '${entry.content.substring(0, maxChars)}... [$cut more chars cut]' : entry.content;
   }
+
+  static int _dropped(AppLogEntry entry, int maxChars) =>
+      maxChars > 0 && entry.content.length > maxChars ? entry.content.length - maxChars : 0;
+
+  final AppLogEntry entry;
+  final int cut;
+  late final String content;
+
+  String render() {
+    final e = entry;
+    final tag = e.loggerName != null ? '${e.stream.name}:${e.loggerName}' : e.stream.name;
+    return '[seq=${e.sequence} ${e.timestamp.toIso8601String()} $tag] $content';
+  }
+
+  Map<String, Object?> toJson() => {
+        ...entry.toJson(),
+        'content': content,
+        if (cut > 0) 'truncatedChars': cut,
+      };
 }
