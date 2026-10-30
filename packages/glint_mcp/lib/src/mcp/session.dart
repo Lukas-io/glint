@@ -478,10 +478,33 @@ class GlintSession {
   /// [probeScrollAnchor] against a scene + semantic view the caller holds; the anchor is scrolled content, never the viewport itself, whose center stays put.
   Future<ScrollAnchor?> scrollAnchorIn(Scene scene, SemanticScene semantic) async {
     final list = semantic.root.walk().whereType<SemanticList>().firstOrNull;
-    if (list == null) return null;
-    for (final n in list.walk()) {
-      final id = n.glintId;
-      if (id == null || identical(n, list)) continue;
+    return list == null ? null : _anchorWithin(scene, list);
+  }
+
+  /// The anchor of the innermost scrollable whose viewport contains logical point [x], [y]; null when the point is over no scrollable.
+  Future<ScrollAnchor?> scrollAnchorAt(Scene scene, SemanticScene semantic, double x, double y) async {
+    ScrollAnchor? best;
+    var bestArea = double.infinity;
+    for (final list in semantic.root.walk().whereType<SemanticList>()) {
+      final anchor = await _anchorWithin(scene, list);
+      final clip = anchor?.clip;
+      if (anchor == null || clip == null) continue;
+      final contains = x >= clip.x && x <= clip.x + clip.w && y >= clip.y && y <= clip.y + clip.h;
+      if (contains && clip.w * clip.h < bestArea) {
+        best = anchor;
+        bestArea = clip.w * clip.h;
+      }
+    }
+    return best;
+  }
+
+  /// The first resolvable descendant of [list], tried from the middle outward since pinned headers and footers sit at the ends and never move with the content.
+  Future<ScrollAnchor?> _anchorWithin(Scene scene, SemanticList list) async {
+    final ids = [
+      for (final n in list.walk())
+        if (n.glintId != null && !identical(n, list)) n.glintId!,
+    ];
+    for (final id in _middleOut(ids)) {
       try {
         final c = await resolver.resolve(scene, id);
         if (c.hasNonZeroBounds) {
@@ -533,6 +556,15 @@ class SessionNotAttachedError implements Exception {
 
   @override
   String toString() => 'glint session is not attached; call `attach` before using `$missing`';
+}
+
+/// [items] starting at the middle and alternating outward.
+Iterable<T> _middleOut<T>(List<T> items) sync* {
+  final mid = items.length ~/ 2;
+  for (var d = 0; d <= items.length; d++) {
+    if (mid - d >= 0 && mid - d < items.length) yield items[mid - d];
+    if (d > 0 && mid + d < items.length) yield items[mid + d];
+  }
 }
 
 class _RetainedLogs {

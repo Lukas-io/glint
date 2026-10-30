@@ -24,7 +24,9 @@ class PinchTool extends GlintTool {
           properties: {
             'glintId': Schema.string(description: 'Stable id from get_scene: pinch around its center.'),
             'text': Schema.string(description: 'Visible text of the target instead of glintId.'),
-            'x': Schema.num(description: 'Center x in logical points (device mode: screenshot pixels), with y.'),
+            'x': Schema.num(
+                description:
+                    'Center x in logical points (device mode: screenshot pixels), with y. Off-screen points are refused.'),
             'y': Schema.num(description: 'Center y, with x.'),
             'scale': Schema.num(
                 description: 'How far apart the fingers end relative to where they start: 2 zooms in, 0.5 zooms out.'),
@@ -50,7 +52,10 @@ class PinchTool extends GlintTool {
     final t = readTargetedArgs(args, session.config);
     var center = readPoint(args);
     String? label;
-    if (center == null) {
+    if (center != null) {
+      final off = await rejectOffScreen(session, 'pinch', pointCoordinates(center.x, center.y));
+      if (off != null) return off;
+    } else {
       final native =
           await resolveNativeTarget(session, glintId: args['glintId'] as String?, text: args['text'] as String?);
       if (native?.error case final error?) return error;
