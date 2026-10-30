@@ -203,13 +203,25 @@ class Avds {
     throw AvdBootError('$avd did not finish booting in ${timeout.inMinutes} min', detail: _tail(run.log));
   }
 
+  /// Asks the emulator glint started to quit through its console first, which reaches it even with adbd offline, then signals its pid.
   Future<void> _stop(_Launched run) async {
-    for (final signal in [ProcessSignal.sigterm, ProcessSignal.sigkill]) {
-      Process.killPid(run.pid, signal);
+    Future<bool> gone() async {
       for (var i = 0; i < 10; i++) {
         await Future<void>.delayed(const Duration(seconds: 1));
-        if (await _adbState(run.serial) == null) return;
+        if (await _adbState(run.serial) == null) return true;
       }
+      return false;
+    }
+
+    try {
+      await emulatorConsole(adbPath, run.serial, ['kill']);
+    } on Object {
+      // the signals below still stop it
+    }
+    if (await gone()) return;
+    for (final signal in [ProcessSignal.sigterm, ProcessSignal.sigkill]) {
+      Process.killPid(run.pid, signal);
+      if (await gone()) return;
     }
     throw AvdBootError('the ${run.avd} emulator ${run.serial} would not stop for the cold boot restart',
         detail: 'glint started it (pid ${run.pid}) and asked it to quit, but adb still lists it',
