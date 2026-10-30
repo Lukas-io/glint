@@ -1378,7 +1378,10 @@ class AttachTool extends GlintTool {
         nextSteps: [
           if (phone && watcher?.answered == null)
             'if the phone shows a local network prompt, a debug build needs "Allow" before its VM service can be found',
-          'check the build output in detail',
+          if (detail.contains('INSUFFICIENT_STORAGE'))
+            'the device is out of storage: uninstall apps or wipe its data (Android Studio > Device Manager > Wipe Data), then attach again'
+          else
+            'read detail for the full build log tail',
           'raise the wait for slow builds: config set launchTimeoutMs <ms>',
         ],
       ));

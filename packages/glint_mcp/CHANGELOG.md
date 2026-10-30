@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- **`attach launch:` named the real reason when `flutter run` failed.** The error used to open with whatever line came last, such as Xcode's `Linker command failed` or Gradle's `BUILD FAILED in 9s`. It now picks the root cause: the first Xcode error (`Library 'c++' not found`), the line under Gradle's `What went wrong`, a Dart compile error with its file and line, or an adb `INSTALL_FAILED_` code. A launch that times out includes the reason too.
+
 ## [0.5.0] - 2026-10-19
 
 ### Added
