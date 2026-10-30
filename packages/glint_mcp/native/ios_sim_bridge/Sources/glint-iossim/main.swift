@@ -312,6 +312,14 @@ do {
             distinctOnly: distinct == 1,
         ))
 
+    case "overlay-touches":
+        // Draw glint's touches onto a recording, for people watching it.
+        guard args.count == 5 else { die("usage: glint-iossim overlay-touches <video> <touches.json> <out.mp4>") }
+        try TouchOverlay.run(
+            video: URL(fileURLWithPath: args[2]),
+            touches: URL(fileURLWithPath: args[3]),
+            out: URL(fileURLWithPath: args[4]))
+
     case "ax-snapshot":
         // Read the iOS Simulator window's accessibility tree via macOS AXUIElement.
         // Works because the Simulator renders as a standard macOS window whose

@@ -759,12 +759,11 @@ class InertEnricher implements SemanticEnricher {
   final FlutterRuntime runtime;
   final int maxNodes;
 
+  /// Hidden is the same painted opacity the tap gate reads ([GeometryExpr.opacityOf]), so the scene and a tap agree.
   static const _cover = '(Element e) { var r = \'\'; '
-      'bool zero(Object? Function() f) { try { final v = f(); return v is num ? v == 0 : (v as dynamic).value == 0; } catch (_) { return false; } } '
+      "try { if (${GeometryExpr.opacityOf}(e.renderObject) == 0) return 'hidden'; } catch (_) {} "
       'bool on(Object? Function() f) { try { return f() == true; } catch (_) { return false; } } '
       'e.visitAncestorElements((a) { final d = a.widget as dynamic; final n = a.widget.runtimeType.toString(); '
-      "if (const {'Opacity', 'AnimatedOpacity', 'SliverOpacity', 'SliverAnimatedOpacity', 'FadeTransition', 'SliverFadeTransition'}.contains(n) "
-      "&& zero(() => d.opacity)) { r = 'hidden'; return false; } "
       "if (r.isEmpty && (n == 'IgnorePointer' || n == 'SliverIgnorePointer') && on(() => d.ignoring)) r = 'ignored'; "
       "if (r.isEmpty && n == 'AbsorbPointer' && on(() => d.absorbing)) r = 'ignored'; "
       'return true; }); return r; }';

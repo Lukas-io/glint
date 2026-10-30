@@ -102,13 +102,24 @@ class AttachTool extends GlintTool {
             'awaitSettle': Schema.bool(
               description: 'Wait until the UI settles before returning. Default false.',
             ),
+            'showTouches': Schema.bool(
+              description:
+                  'Draw each touch (dot, trail, release ripple) for people watching or recording: in the Flutter '
+                  'app, and system-wide on an Android emulator. Omit to keep the current setting (off by default); config key '
+                  'showTouches toggles it.',
+            ),
           },
         ),
       );
 
   @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
-    final response = await _attach(session, request);
+    final args = request.arguments ?? const <String, Object?>{};
+    final showTouches = argBool(args, 'showTouches');
+    var response = await _attach(session, request);
+    if (!response.isError && argBool(args, 'dryRun') != true) {
+      response = await _showTouches(session, showTouches, response);
+    }
     if (response.isError || session.updateNoticeShown) return response;
     final notice = updateNotice();
     if (notice == null) return response;
@@ -729,6 +740,25 @@ class AttachTool extends GlintTool {
     } finally {
       await probe.disconnect();
     }
+  }
+
+  /// Applies `showTouches` (the argument, else the session setting) and reports how the attached app took it; a failure is a warning, never a failed attach.
+  Future<StructuredResponse> _showTouches(GlintSession session, bool? arg, StructuredResponse response) async {
+    final app = session.active;
+    if (app == null || (arg == null && !session.config.showTouches)) return response;
+    if (arg != null) session.config.showTouches = arg;
+    final want = session.config.showTouches;
+    if (app.deviceMode && !want) return response;
+    final all = arg == null ? const <AppSession, TouchesOutcome>{} : await session.applyShowTouches();
+    final outcome = all[app] ?? await app.setShowTouches(want);
+    final shown = response.mergeData({'touches': outcome.toJson()});
+    if (!outcome.failed) {
+      return outcome.on ? shown.copyWith(summary: '${response.summary}\ntouches: ${outcome.describe}') : shown;
+    }
+    return shown.addWarnings([
+      'touches are not shown (${outcome.errorKind!.name}): ${outcome.detail}'
+          '${outcome.nextSteps.isEmpty ? '' : '; ${outcome.nextSteps.first}'}',
+    ]);
   }
 
   /// Refuses to auto-pick [deviceId] while another live glint session drives it.

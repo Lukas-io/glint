@@ -29,6 +29,8 @@ class ResolvedCoord {
   final ({double x, double y, double w, double h}) logicalBounds;
   final double devicePixelRatio;
   final ({double w, double h}) logicalViewSize;
+
+  /// Every ancestor opacity multiplied (Opacity, AnimatedOpacity, FadeTransition); 0 means the node paints nothing.
   final double nearestAncestorOpacity;
   final bool nearestAncestorVisible;
   final bool hittable;
@@ -357,13 +359,19 @@ class GeometryResolveError implements Exception {
   String toString() => 'GeometryResolveError: $message';
 }
 
-// Single-line Dart expression sent via `evaluate`. CFE rejects newlines and
-// statement-block lambdas, so fields are string-concatenated into a JSON blob.
+// Single-line Dart expression sent via `evaluate`. CFE rejects newlines, so
+// fields are string-concatenated into a JSON blob.
 class GeometryExpr {
   static const _ro = 'WidgetInspectorService.instance.selection.current!';
   static const _el = 'WidgetInspectorService.instance.selection.currentElement!';
   static const _view = 'View.of($_el)';
-  static const _ancOpacity = '($_el.findAncestorWidgetOfExactType<Opacity>()?.opacity ?? 1.0)';
+  static const _ancOpacity = '$opacityOf($_ro)';
+
+  /// How opaque a render object really paints: every Opacity, AnimatedOpacity and FadeTransition (box or sliver) above it, multiplied; type names are compared as strings so it compiles in any eval library.
+  static const opacityOf = '((dynamic r) { var o = 1.0; while (r != null) { final t = r.runtimeType.toString(); '
+      "if (t == 'RenderOpacity' || t == 'RenderSliverOpacity') { o = o * r.opacity; } "
+      "else if (t == 'RenderAnimatedOpacity' || t == 'RenderSliverAnimatedOpacity') { o = o * r.opacity.value; } "
+      'r = r.parent; } return o; })';
   static const _ancVisible = '($_el.findAncestorWidgetOfExactType<Visibility>()?.visible ?? true)';
 
   /// Fallback when the real hit test ([hitPath]) cannot run: nearest AbsorbPointer / IgnorePointer only.
