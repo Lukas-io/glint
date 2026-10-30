@@ -240,22 +240,19 @@ class AttachTool extends GlintTool {
             launchNotes.add('camera:"webcam": the emulator lists no Mac camera, so $avdArg boots with its own camera');
           }
           try {
-            serial = await avds.boot(avdArg, webcam: webcam?.id, onProgress: onProgress);
+            serial = await avds.boot(avdArg, webcam: webcam?.id, onProgress: onProgress, notes: launchNotes);
           } on AvdBootError catch (e) {
-            return StructuredResponse.error(
-              summary: 'could not boot $avdArg: ${e.summary}',
-              errorKind: GlintErrorKind.backendToolError,
-              detail: e.detail,
-              nextSteps: const [
-                '`attach dryRun:true` lists what is running',
-                'check the AVD starts from Android Studio\'s device manager'
-              ],
-            );
+            return _bootFailure(avdArg, e);
           }
           avdLead =
               'booted $avdArg as $serial${webcam == null ? '' : ' with the Mac camera "${webcam.name}" as its front camera'}';
           scan = await discovery.scan();
         } else {
+          try {
+            await avds.awaitOnline(serial, avdArg, onProgress: onProgress);
+          } on AvdBootError catch (e) {
+            return _bootFailure(avdArg, e, running: true);
+          }
           avdLead = '$avdArg runs as $serial';
           if (cameraArg != null) {
             launchNotes.add('camera:"webcam" applies only when glint boots the AVD; $avdArg already runs as $serial '
@@ -1655,6 +1652,18 @@ class AttachTool extends GlintTool {
         isError: r.isError,
         textOnly: r.textOnly,
         imagePaths: r.imagePaths,
+      );
+
+  StructuredResponse _bootFailure(String avd, AvdBootError e, {bool running = false}) => StructuredResponse.error(
+        summary: '${running ? 'could not use the running' : 'could not boot'} $avd: ${e.summary}',
+        errorKind: e.errorKind ?? GlintErrorKind.backendToolError,
+        detail: e.detail,
+        nextSteps: e.nextSteps.isNotEmpty
+            ? e.nextSteps
+            : const [
+                '`attach dryRun:true` lists what is running',
+                'check the AVD starts from Android Studio\'s device manager'
+              ],
       );
 
   /// Builds a 15s-cadence progress sink from the request's progress token, or null.
