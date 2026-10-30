@@ -52,7 +52,7 @@ class DriveProfile {
   double secondsLeft(double from) {
     final ghost = DriveProfile._ghost(this);
     var m = from, t = 0.0;
-    const dt = 1.0;
+    const dt = 0.25;
     while (m < _length && t < 24 * 3600) {
       m += ghost.step(m, dt) * dt;
       t += dt;
