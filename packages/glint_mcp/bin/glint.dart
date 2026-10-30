@@ -58,6 +58,9 @@ Future<void> main(List<String> args) async {
     try {
       server.session.killLaunchedApps();
     } catch (_) {/* best effort */}
+    try {
+      server.session.watches.close();
+    } catch (_) {/* best effort */}
     await server.session.usageReporter.shipOnExit();
     exit(0);
   }
