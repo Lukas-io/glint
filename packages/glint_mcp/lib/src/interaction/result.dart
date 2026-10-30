@@ -32,7 +32,7 @@ enum GlintErrorKind {
   /// The app's VM did not answer in time but the app has drawn frames before: a heavy build or a native surface holding its main thread.
   appBusy,
 
-  /// A physical device stopped answering glint's device input: unplugged, locked before trust, or out of Developer Mode.
+  /// A device stopped answering glint's input: a phone unplugged, locked before trust or out of Developer Mode, or an emulator whose adb stays offline.
   deviceNotConnected,
 
   /// The phone has no developer disk image mounted, so its input and screen services are missing.
@@ -51,6 +51,9 @@ enum GlintErrorKind {
   inputPartial,
   // the simulator / emulator behind the session is no longer booted
   deviceGone,
+
+  /// Back found a modal sheet or dialog that neither its barrier tap nor a drag closes: the app made it undismissible.
+  modalNotDismissible,
 
   /// Another live glint session is driving the device attach would have picked.
   deviceClaimed,
