@@ -5,7 +5,7 @@ import 'dart:io';
 import 'shipped_files.dart';
 
 /// Must equal `runnerProtocol` in native/ios_xctest_runner/UITests/Router.swift.
-const int expectedRunnerProtocol = 4;
+const int expectedRunnerProtocol = 5;
 
 /// The runner's Xcode project relative to glint's package root.
 const String kRunnerProject = 'native/ios_xctest_runner/GlintRunner.xcodeproj';
@@ -63,6 +63,25 @@ class XcTestRunner {
     } on Object {
       return null;
     }
+  }
+
+  /// The screen size in points, or null when the runner does not say.
+  Future<({double w, double h})?> screenPoints() async {
+    try {
+      final screen = (await call('GET', '/status', timeout: const Duration(seconds: 5)))['screen'];
+      if (screen is! List || screen.length != 2) return null;
+      return (w: (screen[0] as num).toDouble(), h: (screen[1] as num).toDouble());
+    } on Object {
+      return null;
+    }
+  }
+
+  /// The first of [bundleIds] that is in the foreground, or null when none is.
+  Future<String?> frontmost(List<String> bundleIds) async {
+    if (bundleIds.isEmpty) return null;
+    final reply = await call('GET', '/frontmost?apps=${Uri.encodeQueryComponent(bundleIds.join(','))}',
+        timeout: const Duration(seconds: 5));
+    return reply['app'] as String?;
   }
 
   /// Reuses a runner already answering, else builds (once per Xcode) and starts one; [onPhase] names each slow step.

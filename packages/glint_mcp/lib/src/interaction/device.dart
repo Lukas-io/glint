@@ -141,6 +141,7 @@ class IosSimulator extends DeviceTarget {
     this.toolchain,
     this.hidMode = 'auto',
     this.runner,
+    this.pixelsPerPoint,
     this.route = InputRoute.device,
   });
 
@@ -167,6 +168,9 @@ class IosSimulator extends DeviceTarget {
   /// When set, input goes through this XCUITest runner instead of the bridge.
   final XcTestRunner? runner;
 
+  /// Device mode with a runner: screenshot pixels per point, so pixel coordinates reach the runner as points.
+  final double? pixelsPerPoint;
+
   @override
   DevicePlatform get platform => DevicePlatform.ios;
 
@@ -188,6 +192,7 @@ class IosSimulator extends DeviceTarget {
       hidMode: hidMode,
     );
     final r = runner;
-    return _routed(r == null ? sim : XcTestBackend(runner: r, sim: sim), devicePixelRatio, route);
+    return _routed(
+        r == null ? sim : XcTestBackend(runner: r, sim: sim, pixelsPerPoint: pixelsPerPoint), devicePixelRatio, route);
   }
 }

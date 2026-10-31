@@ -71,7 +71,8 @@ class AttachTool extends GlintTool {
             ),
             'iosBackend': Schema.string(
               description: 'bridge (default) | xctest. xctest drives the simulator through '
-                  "glint's XCUITest runner, built once per Xcode. iOS, Flutter mode.",
+                  "glint's XCUITest runner, built once per Xcode. In device mode it also lets get_scene read native "
+                  'screens and system alerts, and tap act on them by text. iOS simulator.',
             ),
             'input': Schema.string(
               description: 'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
@@ -1083,6 +1084,27 @@ class AttachTool extends GlintTool {
             detail: shot.error,
           );
         }
+        XcTestRunner? runner;
+        double? pixelsPerPoint;
+        if (args['iosBackend'] == 'xctest') {
+          final started = await startXcTestRunner(target.id, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
+          if (started.error != null) return started.error!;
+          runner = started.runner;
+          final points = await runner!.screenPoints();
+          if (points == null) {
+            return StructuredResponse.error(
+              summary: 'the XCTest runner did not report the screen size, so pixel taps cannot be mapped to it',
+              errorKind: GlintErrorKind.backendToolError,
+              detail: 'GET /status on port ${runner.port} had no screen',
+              nextSteps: const [
+                'attach again with mode:"device" iosBackend:"xctest" to restart the runner',
+                'or attach mode:"device" without iosBackend and tap by x,y from a screenshot',
+              ],
+            );
+          }
+          final longestPixels = shot.width! > shot.height! ? shot.width! : shot.height!;
+          pixelsPerPoint = longestPixels / (points.w > points.h ? points.w : points.h);
+        }
         device = IosSimulator(
           udid: target.id,
           logicalWidth: shot.width!.toDouble(),
@@ -1091,6 +1113,8 @@ class AttachTool extends GlintTool {
           bridgePath: toolchain.bridge.path,
           toolchain: toolchain,
           hidMode: iosTransport,
+          runner: runner,
+          pixelsPerPoint: pixelsPerPoint,
         );
       case DevicePlatform.android:
         // Android taps take raw pixels; the size only enables center scroll.
@@ -1109,6 +1133,7 @@ class AttachTool extends GlintTool {
     final bound = await session.attachDevice(device: device);
     unawaited(session.backend.warm());
     deviceClaims.claim(target.id);
+    final nativeRead = bound.nativeReader is RunnerNativeReader;
 
     final caps = session.backend.capabilities;
     final simStatus = target.platform == DevicePlatform.ios ? await const SimControl().status(target.id) : null;
@@ -1119,13 +1144,17 @@ class AttachTool extends GlintTool {
           '(${target.id}) — no Flutter app; drive via screenshot + coordinates'
           '${device.abilities.line == null ? '' : '\nnot on this device: ${device.abilities.line}'}',
       warnings: warnings,
-      nextSteps: const [
+      nextSteps: [
+        if (nativeRead) 'call `get_scene` to read the screen and any system alert; tap its items by text or glintId',
         'call `device op:screenshot` to see the screen',
         'tap / swipe with x,y in screenshot pixels',
+        if (target.platform == DevicePlatform.ios && !target.physical && !nativeRead)
+          'attach mode:"device" iosBackend:"xctest" to read and tap system alerts and native screens by text',
       ],
       data: {
         'platform': target.platform.name,
         'device': target.id,
+        'nativeRead': nativeRead,
         'deviceName': simStatus?.name ?? target.name,
         if (simStatus?.osVersion != null) 'osVersion': simStatus!.osVersion,
         if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,
@@ -1628,7 +1657,7 @@ class AttachTool extends GlintTool {
     final device = app.device;
     final ios = args['iosBackend'] as String?;
     final now = _inputOf(device);
-    if (device is IosSimulator && ios != null && !app.deviceMode && ios != now) return (from: now!, to: ios);
+    if (device is IosSimulator && ios != null && ios != now) return (from: now!, to: ios);
     final legacy = switch (args['iosInput']) {
       'flutter' => InputRoute.app,
       'dtuhid' when device is IosDevice => InputRoute.device,

@@ -66,6 +66,19 @@ class SimControl {
     );
   }
 
+  /// Bundle ids of the apps running on [udid] right now (backgrounded ones too), empty when the list cannot be read.
+  Future<List<String>> runningApps(String udid) async {
+    try {
+      final r = await Process.run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']);
+      if (r.exitCode != 0) return const [];
+      return {
+        for (final m in RegExp(r'UIKitApplication:([^\[\s]+)\[').allMatches(r.stdout.toString())) m.group(1)!,
+      }.toList();
+    } on Object {
+      return const [];
+    }
+  }
+
   /// SpringBoard's lock state: true locked, false unlocked, null when unreadable.
   Future<bool?> isLocked(String udid) async {
     try {

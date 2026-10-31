@@ -4,14 +4,32 @@ import 'scene_reader.dart';
 
 /// iOS native UI read through glint's XCUITest runner: system alerts, and surfaces the app presents in-process (photo picker, edit menu) that leave the Flutter lifecycle resumed.
 class RunnerNativeReader extends NativeReader {
-  RunnerNativeReader({required this.tree, required this.bundleId, required this.fallback});
+  RunnerNativeReader({
+    required this.tree,
+    required this.bundleId,
+    this.fallback,
+    this.frontmost,
+    this.pixelsPerPoint = 1,
+  });
 
   /// The runner's `/tree` reply for [bundleId]; throws when the runner does not answer.
   final Future<Map<String, Object?>> Function(String? bundleId) tree;
   final String? Function() bundleId;
 
   /// Used when the runner finds nothing over the app, e.g. while it is backgrounded.
-  final NativeReader fallback;
+  final NativeReader? fallback;
+
+  /// Device mode: names the app in front when [bundleId] is null; its presence makes the reader return the whole app, not only what covers it.
+  final Future<String?> Function()? frontmost;
+
+  /// Device mode: screenshot pixels per point, so frames come out in the pixels device-mode taps take.
+  final double pixelsPerPoint;
+
+  /// What the last read of the runner got wrong, or null when it worked.
+  String? lastReadProblem;
+
+  /// The name of the surface the last read found, or null when it found none.
+  String? lastSurfaceName;
 
   List<Map<String, Object?>> _surface = const [];
   ({double w, double h})? _screen;
@@ -25,29 +43,48 @@ class RunnerNativeReader extends NativeReader {
     try {
       final system = await tree(null).timeout(readLimit);
       final alerts = system['alerts'];
-      final app = bundleId();
-      if ((alerts is List && alerts.isNotEmpty) || app == null) return _take(system);
-      return _take(await tree(app).timeout(readLimit));
-    } on Object {
+      final app = bundleId() ?? await frontmost?.call().timeout(readLimit);
+      if ((alerts is List && alerts.isNotEmpty) || app == null) return _take(system, app);
+      return _take(await tree(app).timeout(readLimit), app);
+    } on Object catch (e) {
+      lastReadProblem = 'the XCTest runner could not be read: $e';
+      lastSurfaceName = null;
       _surface = const [];
       return null;
     }
   }
 
-  String? _take(Map<String, Object?> reply) {
-    final found = findNativeSurface(reply);
+  String? _take(Map<String, Object?> reply, String? app) {
+    lastReadProblem = null;
+    final found = findNativeSurface(reply, wholeApp: frontmost != null, appId: app);
     _surface = found?.roots ?? const [];
     _screen = screenOf(reply);
+    lastSurfaceName = found?.name;
     return found?.name;
   }
 
   @override
   Future<Scene> readSnapshot() async {
     if (_surface.isEmpty) await foreignSurface();
-    if (_surface.isEmpty) return fallback.readSnapshot();
-    return nativeScene(nativeElements(_surface, screen: _screen), 1);
+    return _scene();
+  }
+
+  /// Reads the runner again before answering, for callers that must not act on a surface from an earlier moment.
+  Future<Scene> readFresh() async {
+    await foreignSurface();
+    return _scene();
+  }
+
+  Future<Scene> _scene() async {
+    if (_surface.isEmpty) return await fallback?.readSnapshot() ?? nativeScene(const [], 1);
+    return nativeScene(
+        nativeElements(_surface,
+            screen: _screen, scale: pixelsPerPoint, max: frontmost == null ? 40 : _wholeAppElements),
+        1);
   }
 }
+
+const _wholeAppElements = 60;
 
 /// Element types UIKit draws but Flutter's accessibility bridge never produces.
 const _uikitOnly = {
@@ -71,6 +108,7 @@ const _tappable = {
   'menuItem',
   'cell',
   'link',
+  'icon',
   'textField',
   'secureTextField',
   'searchField',
@@ -91,8 +129,9 @@ List<Map<String, Object?>> _children(Map<String, Object?> n) => [
         if (c is Map) c.cast<String, Object?>()
     ];
 
-/// What covers the app in a runner `/tree` reply: a system alert, else the window's top-level view holding the UIKit-only elements (Flutter's own sit in another, or are hidden by a full-screen modal); null when only Flutter and the keyboard are on screen.
-({String name, List<Map<String, Object?>> roots})? findNativeSurface(Map<String, Object?> reply) {
+/// What covers the app in a runner `/tree` reply: a system alert, else the window's top-level view holding the UIKit-only elements (Flutter's own sit in another, or are hidden by a full-screen modal); null when only Flutter and the keyboard are on screen. With [wholeApp] (device mode, no Flutter) it is the app's alert or sheet, else the whole app, named from [appId].
+({String name, List<Map<String, Object?>> roots})? findNativeSurface(Map<String, Object?> reply,
+    {bool wholeApp = false, String? appId}) {
   final alerts = [
     for (final a in (reply['alerts'] as List? ?? const []))
       if (a is Map) a.cast<String, Object?>()
@@ -103,6 +142,7 @@ List<Map<String, Object?>> _children(Map<String, Object?> n) => [
   }
   final app = reply['app'];
   if (app is! Map) return null;
+  if (wholeApp) return _wholeAppSurface(app.cast<String, Object?>(), appId);
   final paths = <List<Map<String, Object?>>>[];
   void walk(Map<String, Object?> n, List<Map<String, Object?>> path) {
     if (_isKeyboard(n)) return;
@@ -125,6 +165,30 @@ List<Map<String, Object?>> _children(Map<String, Object?> n) => [
   }
   final root = common[common.length < 3 ? common.length - 1 : 2];
   return (name: _surfaceName([for (final p in paths) p.last]), roots: [root]);
+}
+
+({String name, List<Map<String, Object?>> roots}) _wholeAppSurface(Map<String, Object?> app, String? appId) {
+  final covers = <Map<String, Object?>>[];
+  final marks = <Map<String, Object?>>[];
+  void walk(Map<String, Object?> n) {
+    if (_isKeyboard(n)) return;
+    final type = n['type'];
+    if (type == 'alert' || type == 'sheet') covers.add(n);
+    if (_uikitOnly.contains(type)) marks.add(n);
+    _children(n).forEach(walk);
+  }
+
+  walk(app);
+  if (covers.isNotEmpty) {
+    final top = covers.last;
+    final label = top['label'] as String?;
+    final type = top['type'];
+    return (name: label == null || label.isEmpty ? 'a $type' : '$type "$label"', roots: [top]);
+  }
+  if (appId == 'com.apple.springboard') return (name: 'the home screen', roots: [app]);
+  if (marks.isNotEmpty) return (name: _surfaceName(marks), roots: [app]);
+  final label = app['label'] as String?;
+  return (name: 'app "${label == null || label.isEmpty ? appId ?? 'unknown' : label}"', roots: [app]);
 }
 
 String _surfaceName(List<Map<String, Object?>> marks) {
@@ -156,8 +220,9 @@ String _surfaceName(List<Map<String, Object?>> marks) {
   return (w: (f[2] as num).toDouble(), h: (f[3] as num).toDouble());
 }
 
-/// The labelled or tappable elements under [roots] whose center is on [screen], in logical points, at most [max].
-List<NativeNode> nativeElements(List<Map<String, Object?>> roots, {({double w, double h})? screen, int max = 40}) {
+/// The labelled or tappable elements under [roots] whose center is on [screen] (points), at most [max], with frames in points times [scale].
+List<NativeNode> nativeElements(List<Map<String, Object?>> roots,
+    {({double w, double h})? screen, int max = 40, double scale = 1}) {
   final out = <NativeNode>[];
   final seen = <String>{};
   void walk(Map<String, Object?> n, bool insideTappable) {
@@ -179,10 +244,10 @@ List<NativeNode> nativeElements(List<Map<String, Object?>> roots, {({double w, d
           cls: type,
           label: label,
           clickable: tappable && n['enabled'] != false,
-          x1: x.round(),
-          y1: y.round(),
-          x2: (x + w).round(),
-          y2: (y + h).round(),
+          x1: (x * scale).round(),
+          y1: (y * scale).round(),
+          x2: ((x + w) * scale).round(),
+          y2: ((y + h) * scale).round(),
         ));
       }
     }

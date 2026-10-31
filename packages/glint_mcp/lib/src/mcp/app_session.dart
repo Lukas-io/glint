@@ -242,13 +242,27 @@ class AppSession {
     return app;
   }
 
-  /// Bind an OS-level device with no Flutter VM (screenshots + coordinates).
-  static AppSession bindDevice({required DeviceTarget device}) => AppSession._(
-        device: device,
-        backend: device.createBackend(),
-        deviceMode: true,
-        appLogs: AppLogBuffer(),
+  /// Bind an OS-level device with no Flutter VM (screenshots + coordinates); an iOS simulator with a runner also reads the native screen.
+  static AppSession bindDevice({required DeviceTarget device}) {
+    final app = AppSession._(
+      device: device,
+      backend: device.createBackend(),
+      deviceMode: true,
+      appLogs: AppLogBuffer(),
+    );
+    if (device case IosSimulator(:final runner?, :final udid, :final pixelsPerPoint)) {
+      app.nativeReader = RunnerNativeReader(
+        tree: (bundleId) => runner.call(
+            'GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
+            timeout: const Duration(seconds: 5)),
+        bundleId: () => app.bundleId,
+        frontmost: () async =>
+            runner.frontmost([...await const SimControl().runningApps(udid), 'com.apple.springboard']),
+        pixelsPerPoint: pixelsPerPoint ?? 1,
       );
+    }
+    return app;
+  }
 
   /// True when [query] names this session: device id, app identity, or a
   /// case-insensitive prefix of the app or device name.
@@ -606,7 +620,13 @@ class AppSession {
 
   /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
   /// read right after a native dialog closes does not report a stale mode.
-  Future<void> refreshSceneMode() => _pollLifecycle();
+  Future<void> refreshSceneMode() async {
+    if (deviceMode) {
+      nativeSurfaceName = await nativeReader?.foreignSurface();
+      return;
+    }
+    await _pollLifecycle();
+  }
 
   /// A suspended app (device locked, backgrounded) never answers; a live one answers well inside this.
   static const lifecycleProbeTimeout = Duration(seconds: 2);

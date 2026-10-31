@@ -1,7 +1,7 @@
 import XCTest
 
 /// Bumped whenever a route's arguments or reply change; glint checks it before driving the runner.
-let runnerProtocol = 4
+let runnerProtocol = 5
 
 private let springboardId = "com.apple.springboard"
 
@@ -14,7 +14,13 @@ final class Router {
         do {
             switch (request.method, request.path) {
             case ("GET", "/status"):
-                return .ok(["runner": runnerProtocol, "os": UIDevice.current.systemVersion])
+                // UIScreen.main inside the runner reports a legacy 320x480; SpringBoard's frame is the real screen in points
+                let screen = app(springboardId).frame.size
+                return .ok(["runner": runnerProtocol, "os": UIDevice.current.systemVersion, "screen": [screen.width, screen.height]])
+            case ("GET", "/frontmost"):
+                let candidates = (request.query["apps"] ?? "").split(separator: ",").map(String.init)
+                guard let front = candidates.first(where: { app($0).state == .runningForeground }) else { return .ok([:]) }
+                return .ok(["app": front])
             case ("GET", "/tree"):
                 return .ok(try tree(bundleId: request.query["app"]))
             case ("POST", "/tap"):

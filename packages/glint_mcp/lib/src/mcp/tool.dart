@@ -283,9 +283,11 @@ abstract class GlintTool {
       errorKind: GlintErrorKind.flutterModeRequired,
       detail: 'device mode drives the simulator with no Flutter widget tree, '
           'so the ${cause.missing} is unavailable',
-      nextSteps: const [
+      nextSteps: [
         'once the app is running, attach without mode:"device" '
             '(attach app:"<name>" or attach vmUri:<uri>)',
+        if (app.device case IosSimulator(runner: null))
+          'attach mode:"device" iosBackend:"xctest" to read and tap system alerts and native screens by text',
         'in device mode use tap / long_press / swipe / drag with x,y '
             '(screenshot pixels), type, hardware_button, device op:screenshot',
       ],
