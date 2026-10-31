@@ -486,9 +486,10 @@ class LocationTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'glint cannot read the iOS location prompt on this attach',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'the prompt belongs to the system, and only the XCUITest runner can read it',
+        detail:
+            'the prompt belongs to the system, and only the XCUITest runner can read it (still starting, failed, or iosNativeRunner is false)',
         nextSteps: const [
-          'attach iosBackend:"xctest", then answer',
+          'attach again with config iosNativeRunner true, then answer',
           'or set it without a prompt: `location op:permission`'
         ],
       );

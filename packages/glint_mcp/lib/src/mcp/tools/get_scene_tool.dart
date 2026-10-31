@@ -107,6 +107,7 @@ class GetSceneTool extends GlintTool {
         if (semantic.sourceScene.root.walk().any((n) => _cameraWidgets.contains(n.baseLabel)) &&
             await _cameraStarved(session))
           emulatorCameraStarvedWarning,
+        if (session.active?.nativeRunnerNote case final note?) note,
       ];
       if (semantic.sourceScene.degenerate) {
         warnings.add(
@@ -274,14 +275,18 @@ class GetSceneTool extends GlintTool {
     final reader = session.nativeReader;
     if (reader is! RunnerNativeReader) {
       final simulator = session.device is IosSimulator;
+      final note = session.active?.nativeRunnerNote;
       return StructuredResponse(
         summary: 'device mode: no Flutter widget tree.\n'
-            '${simulator ? 'glint cannot read system alerts or native screens on this attach, so it cannot tap them by text.\n' : ''}'
+            '${simulator ? 'glint cannot read system alerts or native screens yet, so it cannot tap them by text.\n' : ''}'
             'Use `device op:screenshot` to see the screen, then tap / swipe '
             'with x,y in screenshot pixels.',
+        warnings: [if (note != null) note],
         nextSteps: [
-          if (simulator)
-            'attach mode:"device" iosBackend:"xctest" to read and tap system alerts and native screens by text',
+          if (simulator && note != null)
+            'get_scene again once the XCTest runner is up; detach and attach again retries a failed start'
+          else if (simulator)
+            'config op:set key:iosNativeRunner value:true, then attach again, to read and tap system alerts and native screens by text',
           'device op:screenshot shows the screen; tap with x,y in screenshot pixels',
         ],
         data: {'mode': 'device', 'state': 'device', 'nativeRead': false},
@@ -304,8 +309,7 @@ class GetSceneTool extends GlintTool {
       nextSteps: [
         if (listed) 'tap an element above by its text or glintId (tap text:"OK"); x,y also works, in screenshot pixels',
         if (!listed) '`device op:screenshot inline:true` to see the screen, then tap with x,y in screenshot pixels',
-        if (!listed && reader.lastReadProblem != null)
-          'attach mode:"device" iosBackend:"xctest" again to restart the runner',
+        if (!listed && reader.lastReadProblem != null) 'attach mode:"device" again to restart the runner',
       ],
       data: {
         'mode': 'device',
@@ -365,6 +369,7 @@ class GetSceneTool extends GlintTool {
         if (capture != null && capture.trigger != 'scene')
           'fresh screenshot failed; this one is ${capture.describe()}, so the screen may have changed',
         if (readProblem != null) readProblem,
+        if (app?.nativeRunnerNote case final note?) note,
         if (starved) emulatorCameraStarvedWarning,
       ],
       nextSteps: [

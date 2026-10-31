@@ -5,6 +5,7 @@ import 'dart:math' show min;
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../observability.dart';
 import '../../../perception.dart';
 import '../../../runtime.dart';
 import '../../../semantic.dart';
@@ -14,6 +15,10 @@ import '../tool.dart';
 import '../tool_args.dart';
 import '../xctest_start.dart';
 import '../update_notice.dart';
+
+/// How long attach waits for a runner start before replying; a warm start is up well inside it.
+const nativeRunnerGrace = Duration(seconds: 3);
+const nativeRunnerPending = 'pending';
 
 /// `attach` — connect to a Flutter app's VM and bind the device it's actually
 /// running on. Every argument is optional: glint discovers the app, derives the
@@ -70,9 +75,10 @@ class AttachTool extends GlintTool {
                   'Continuity iPhone); the back keeps the AVD\'s own. macOS must allow the emulator to use the camera.',
             ),
             'iosBackend': Schema.string(
-              description: 'bridge (default) | xctest. xctest drives the simulator through '
-                  "glint's XCUITest runner, built once per Xcode. In device mode it also lets get_scene read native "
-                  'screens and system alerts, and tap act on them by text. iOS simulator.',
+              description: 'bridge (default) | xctest: where simulator input goes. xctest sends it through '
+                  "glint's XCUITest runner, built once per Xcode. Either way get_scene reads native screens and "
+                  'system alerts through that runner (started in the background), unless config iosNativeRunner is false. '
+                  'iOS simulator.',
             ),
             'input': Schema.string(
               description: 'auto | app | device: where gestures go. app = inside the Flutter app; device = real '
@@ -378,6 +384,7 @@ class AttachTool extends GlintTool {
 
     // ── 2. Connect a probe runtime to read platform + viewport ──────────────
     final probe = VmServiceRuntime();
+    NativeRunnerStart? nativeStart;
     try {
       await probe.attach(vmUri);
     } on RuntimeUnresponsiveError catch (e) {
@@ -557,6 +564,9 @@ class AttachTool extends GlintTool {
               timeoutMs: timeoutMs,
             );
           }
+          if (runner == null && session.config.iosNativeRunner) {
+            nativeStart = beginNativeRunnerStart(deviceId, toolchain)..listener = (phase) => onProgress?.call(0, phase);
+          }
           device = IosSimulator(
             udid: deviceId,
             logicalWidth: vp.w,
@@ -581,6 +591,11 @@ class AttachTool extends GlintTool {
       // ── 7. Hand the resolved target to the session ────────────────────────
       final rebuilt = rebuild?.deviceId == deviceId;
       await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
+      if (nativeStart != null) {
+        if (await _followNativeRunner(session.active!, nativeStart) case final note?) warnings.add(note);
+      } else if (device is IosSimulator && device.runner == null) {
+        session.active!.dropNativeRunner();
+      }
       if (session.takeLogNote(device.id) case final note?) warnings.add(note);
       unawaited(session.backend.warm());
 
@@ -732,14 +747,51 @@ class AttachTool extends GlintTool {
           if (toolchain != null) 'toolchain': toolchain.toJson(),
           'setup': input.json,
           'inputRoute': device.route.name,
+          if (device is IosSimulator) 'nativeRunner': _nativeRunnerState(session.active!, session.config),
           if (settleData != null) 'settle': settleData,
           if (sceneText != null) 'scene': sceneText,
           'apps': session.appsJson(),
         },
       );
     } finally {
+      nativeStart?.listener = null;
       await probe.disconnect();
     }
+  }
+
+  /// Hands the background runner start to [app] and waits a moment for it, so a warm start serves the first read; the warning to show when it is not ready, else null.
+  Future<String?> _followNativeRunner(AppSession app, NativeRunnerStart start,
+      {Future<double?> Function(XcTestRunner runner)? pixelsPerPoint}) async {
+    app.nativeRunnerNote = 'the XCTest runner is starting (${start.phase})';
+    Future<String?> adopt() async {
+      final r = await start.result;
+      final runner = r.runner;
+      final scale = runner == null ? null : await pixelsPerPoint?.call(runner);
+      if (runner != null && (pixelsPerPoint == null || scale != null)) {
+        app.adoptNativeRunner(runner, pixelsPerPoint: scale);
+        return null;
+      }
+      final why = r.error;
+      final problem = why == null
+          ? 'the XCTest runner did not report the screen size, so device-mode pixels cannot be mapped to it'
+          : '${why.summary}${why.data?['detail'] == null ? '' : ' (${why.data!['detail']})'}';
+      app.nativeRunnerNote = 'native reads stay on the bridge reader: $problem';
+      return '${app.nativeRunnerNote}; system alerts over the app may go unseen. '
+          'Detach and attach again to retry, or turn the runner off with config op:set key:iosNativeRunner value:false';
+    }
+
+    final adopting = adopt();
+    final waited = await adopting.timeout(nativeRunnerGrace, onTimeout: () => nativeRunnerPending);
+    start.listener = null;
+    if (!identical(waited, nativeRunnerPending)) return waited;
+    return 'the XCTest runner is still starting (${start.phase}). '
+        'Until it is up, system alerts over the app may go unseen; get_scene warns while it is starting';
+  }
+
+  String _nativeRunnerState(AppSession app, GlintConfig config) {
+    if (app.nativeReader is RunnerNativeReader) return 'ready';
+    if (!config.iosNativeRunner) return 'off';
+    return app.nativeRunnerNote?.startsWith('native reads stay') ?? false ? 'unavailable' : 'starting';
   }
 
   /// Applies `showTouches` (the argument, else the session setting) and reports how the attached app took it; a failure is a warning, never a failed attach.
@@ -1038,6 +1090,7 @@ class AttachTool extends GlintTool {
     }
     final DeviceTarget device;
     IosToolchain? toolchain;
+    NativeRunnerStart? nativeStart;
     switch (target.platform) {
       case DevicePlatform.ios when target.physical:
         if (screen == null) {
@@ -1086,6 +1139,9 @@ class AttachTool extends GlintTool {
         }
         XcTestRunner? runner;
         double? pixelsPerPoint;
+        if (args['iosBackend'] != 'xctest' && session.config.iosNativeRunner) {
+          nativeStart = beginNativeRunnerStart(target.id, toolchain)..listener = (phase) => onProgress?.call(0, phase);
+        }
         if (args['iosBackend'] == 'xctest') {
           final started = await startXcTestRunner(target.id, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
           if (started.error != null) return started.error!;
@@ -1133,6 +1189,16 @@ class AttachTool extends GlintTool {
     final bound = await session.attachDevice(device: device);
     unawaited(session.backend.warm());
     deviceClaims.claim(target.id);
+    if (nativeStart != null) {
+      final screenWidth = shot.width!, screenHeight = shot.height!;
+      final note = await _followNativeRunner(bound, nativeStart, pixelsPerPoint: (runner) async {
+        final points = await runner.screenPoints();
+        if (points == null) return null;
+        final longestPixels = screenWidth > screenHeight ? screenWidth : screenHeight;
+        return longestPixels / (points.w > points.h ? points.w : points.h);
+      });
+      if (note != null) warnings.add(note);
+    }
     final nativeRead = bound.nativeReader is RunnerNativeReader;
 
     final caps = session.backend.capabilities;
@@ -1149,12 +1215,16 @@ class AttachTool extends GlintTool {
         'call `device op:screenshot` to see the screen',
         'tap / swipe with x,y in screenshot pixels',
         if (target.platform == DevicePlatform.ios && !target.physical && !nativeRead)
-          'attach mode:"device" iosBackend:"xctest" to read and tap system alerts and native screens by text',
+          if (!session.config.iosNativeRunner)
+            'config op:set key:iosNativeRunner value:true, then attach again, to read and tap system alerts and native screens by text'
+          else
+            'get_scene reads native screens and system alerts once the runner is up; until then use device op:screenshot',
       ],
       data: {
         'platform': target.platform.name,
         'device': target.id,
         'nativeRead': nativeRead,
+        if (device is IosSimulator) 'nativeRunner': _nativeRunnerState(bound, session.config),
         'deviceName': simStatus?.name ?? target.name,
         if (simStatus?.osVersion != null) 'osVersion': simStatus!.osVersion,
         if (simStatus?.deviceType != null) 'deviceType': simStatus!.deviceType,

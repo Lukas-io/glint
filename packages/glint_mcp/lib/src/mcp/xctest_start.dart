@@ -42,6 +42,63 @@ Future<({XcTestRunner? runner, StructuredResponse? error})> startXcTestRunner(St
 }
 
 final _runners = <String, XcTestRunner>{};
+final _starting = <String, NativeRunnerStart>{};
+
+/// A runner start running in the background; calls for the same simulator share one.
+class NativeRunnerStart {
+  NativeRunnerStart._(this.udid);
+
+  final String udid;
+
+  /// The step the start is on, for progress.
+  String phase = 'checking the iOS toolchain';
+
+  /// Hears each step as it begins; attach sets it while its call is open and clears it after.
+  void Function(String phase)? listener;
+
+  bool done = false;
+  late final Future<({XcTestRunner? runner, StructuredResponse? error})> result;
+
+  void _enter(String p) {
+    phase = p;
+    listener?.call(p);
+  }
+}
+
+/// Begins starting the XCTest runner on [udid] without waiting for it, or joins the start already running.
+NativeRunnerStart beginNativeRunnerStart(String udid, IosToolchain toolchain) {
+  final running = _starting[udid];
+  if (running != null) return running;
+  final start = NativeRunnerStart._(udid);
+  _starting[udid] = start;
+  start.result = _startQuietly(start, toolchain).whenComplete(() {
+    start.done = true;
+    _starting.remove(udid);
+  });
+  return start;
+}
+
+Future<({XcTestRunner? runner, StructuredResponse? error})> _startQuietly(
+    NativeRunnerStart start, IosToolchain toolchain) async {
+  try {
+    final r = await startXcTestRunner(start.udid, toolchain, onPhase: start._enter);
+    if (r.runner != null) _runners[start.udid] = r.runner!;
+    return r;
+  } on Object catch (e) {
+    return (
+      runner: null,
+      error: StructuredResponse.error(
+        summary: 'could not start the XCTest runner',
+        errorKind: GlintErrorKind.backendToolError,
+        detail: '$e',
+        nextSteps: const [
+          'read the runner log under ~/.glint/xctest',
+          'or turn it off with config op:set key:iosNativeRunner value:false',
+        ],
+      ),
+    );
+  }
+}
 
 /// The simulator's XCTest runner for a tool call: the attached backend's, one started earlier, or a new one (built on first use, with progress every 15 s).
 Future<({XcTestRunner? runner, StructuredResponse? error})> xcTestRunnerFor(
@@ -61,6 +118,15 @@ Future<({XcTestRunner? runner, StructuredResponse? error})> xcTestRunnerFor(
           notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
         });
   try {
+    final joined = _starting[dev.udid];
+    if (joined != null) {
+      joined.listener = (p) => phase = p;
+      try {
+        return await joined.result;
+      } finally {
+        joined.listener = null;
+      }
+    }
     final toolchain = await checkIosToolchain(null, onPhase: (p) => phase = p);
     final r = await startXcTestRunner(dev.udid, toolchain, onPhase: (p) => phase = p);
     if (r.runner != null) _runners[dev.udid] = r.runner!;
