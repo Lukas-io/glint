@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-31
+
 ### Added
 
 - **`watch` registers conditions, returns at once, and wakes the agent when one matches.** `watch conditions:[{text:"Welcome back"}, {glintId:"id", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"<regex>"}]` (any one fires; `label`, `once` default true, `timeoutMs` default 30 min, max 6 h) answers with a watch id, an events file and a ready `tail -n0 -F ~/.glint/watch/<pid>.jsonl` line to run as a background shell monitor, since clients do not show server notifications to an idle model. Each event is one JSON line (`seq`, `ts`, `watch`, `label`, `kind` match or ended, `condition`, `matched`, `route`, `app`, and the texts and ids that appeared since the last read), also sent as a logging notification. Scene conditions share one read per app about every 1.5 s and back off while the device is locked or the app does not answer; a watch ends with an `ended` event on timeout, cancel or detach. `op:list`, `op:cancel id|all` and `op:events sinceSeq` cover the rest. (#262)
