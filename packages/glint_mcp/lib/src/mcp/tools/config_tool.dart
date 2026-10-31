@@ -17,7 +17,7 @@ class ConfigTool extends GlintTool {
         name: 'config',
         description: 'Inspect or override glint defaults at runtime '
             '(readyTimeoutMs, settleCeilingMs, scrollMaxScrolls, '
-            'scrollAmountFraction, showTouches, etc.). Per-call args still win over config.',
+            'scrollAmountFraction, showTouches, iosNativeRunner, etc.). Per-call args still win over config.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'get | set'),
