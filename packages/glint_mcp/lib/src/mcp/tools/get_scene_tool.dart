@@ -290,7 +290,11 @@ class GetSceneTool extends GlintTool {
     final scene = await reader.readFresh();
     final surface = reader.lastSurfaceName;
     final listed = scene.root.children.isNotEmpty;
-    final read = listed ? classifySurface(scene, owner: surface) : null;
+    final wholeScreen = surface == null ||
+        surface == 'the home screen' ||
+        surface.startsWith('app "') ||
+        surface.startsWith('native screen "');
+    final read = listed && !wholeScreen ? classifySurface(scene, owner: surface) : null;
     return StructuredResponse(
       summary: [
         '--- device mode: ${surface ?? 'nothing readable'} ---',
