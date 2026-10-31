@@ -4,6 +4,8 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-31
+
 ### Added
 
 - **System alerts over the app are now seen by default on the iOS simulator.** `attach` starts glint's XCUITest runner in the background for native reads in both Flutter and device mode, so an "Allow Paste" or location prompt appears as `state: native` in `get_scene`, `tap text:` reaches it, and device mode can read Settings and other native screens, without `iosBackend:"xctest"` (input still goes through the bridge unless you ask for xctest). The first attach on an Xcode builds the runner once (about 15 s, cached under `~/.glint/xctest`, progress reported); later attaches start it in about 2 s. Attach never waits long for it: if it is not up yet or fails to build, the reply warns and native reads fall back to the accessibility reader as before. Turn it off with `config op:set key:iosNativeRunner value:false`; `data.nativeRunner` on the attach reply says `ready`, `starting`, `unavailable` or `off`. (#249)
