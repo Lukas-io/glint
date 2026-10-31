@@ -25,6 +25,7 @@ class GlintConfig {
     this.screenshotFormat = 'jpeg',
     this.screenshotQuality = 75,
     this.showTouches = false,
+    this.iosNativeRunner = true,
   });
 
   /// Default ceiling for tap/long_press/swipe/drag/type `awaitReady`.
@@ -86,6 +87,9 @@ class GlintConfig {
   /// Draw each touch inside attached apps (dot, trail, release ripple) for people watching or recording.
   bool showTouches;
 
+  /// Start the XCUITest runner on every iOS simulator attach so native UI (system alerts, device-mode screens) is read through it.
+  bool iosNativeRunner;
+
   /// All known keys → string of current value, for the `config get` view.
   /// Telemetry is env-controlled (GLINT_TELEMETRY, DO_NOT_TRACK, GLINT_NO_TELEMETRY), never agent-controlled.
   Map<String, Object> toJson() => {
@@ -108,6 +112,7 @@ class GlintConfig {
         'screenshotFormat': screenshotFormat,
         'screenshotQuality': screenshotQuality,
         'showTouches': showTouches,
+        'iosNativeRunner': iosNativeRunner,
       };
 
   /// Returns null on success, or a description of the validation failure.
@@ -191,6 +196,10 @@ class GlintConfig {
         final v = looseBool(value);
         if (v == null) return 'showTouches must be true or false';
         showTouches = v;
+      case 'iosNativeRunner':
+        final v = looseBool(value);
+        if (v == null) return 'iosNativeRunner must be true or false';
+        iosNativeRunner = v;
       default:
         return 'unknown config key: $key';
     }

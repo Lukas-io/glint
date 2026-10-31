@@ -45,7 +45,7 @@ Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(Glint
         detail: 'the simulator accessibility read failed (its Simulator window is closed, or the read was refused)',
         nextSteps: const [
           'take a `device op:screenshot` and tap the button by x,y',
-          'or re-attach with iosBackend:"xctest", which reads system surfaces without a window',
+          'or attach again so the XCTest runner starts (config iosNativeRunner), which reads system surfaces without a window',
         ],
       ),
     );

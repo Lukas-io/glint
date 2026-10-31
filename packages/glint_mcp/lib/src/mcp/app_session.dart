@@ -250,16 +250,8 @@ class AppSession {
       deviceMode: true,
       appLogs: AppLogBuffer(),
     );
-    if (device case IosSimulator(:final runner?, :final udid, :final pixelsPerPoint)) {
-      app.nativeReader = RunnerNativeReader(
-        tree: (bundleId) => runner.call(
-            'GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
-            timeout: const Duration(seconds: 5)),
-        bundleId: () => app.bundleId,
-        frontmost: () async =>
-            runner.frontmost([...await const SimControl().runningApps(udid), 'com.apple.springboard']),
-        pixelsPerPoint: pixelsPerPoint ?? 1,
-      );
+    if (device case IosSimulator(:final runner?, :final pixelsPerPoint)) {
+      app.nativeReader = app._runnerReader(runner, device, pixelsPerPoint);
     }
     return app;
   }
@@ -327,13 +319,8 @@ class AppSession {
     settleDetector = SettleDetector(runtime: rt, reader: rd);
     final dev = device;
     nativeReader = switch (dev) {
-      IosSimulator(:final runner?) => RunnerNativeReader(
-          tree: (bundleId) => runner.call(
-              'GET', '/tree${bundleId == null ? '' : '?app=${Uri.encodeQueryComponent(bundleId)}'}',
-              timeout: const Duration(seconds: 5)),
-          bundleId: () => bundleId,
-          fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
-        ),
+      IosSimulator() when (dev.runner ?? nativeRunner) != null =>
+        _runnerReader((dev.runner ?? nativeRunner)!, dev, null),
       IosSimulator() => NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
       IosDevice() => OcrNativeReader(
           capture: () async {
@@ -350,14 +337,7 @@ class AppSession {
           serverCall: _serverCall(dev.server),
         ),
     };
-    if (backend case final FlutterInputBackend routed) {
-      final reader = nativeReader;
-      routed.coveredBySystem = switch (reader) {
-        AndroidNativeReader() => ({bool fresh = false}) => _foreignWindowUp(reader),
-        RunnerNativeReader() => ({bool fresh = false}) => _systemSurfaceUp(reader, fresh: fresh),
-        _ => null,
-      };
-    }
+    _wireCoveredBySystem();
 
     try {
       await appLogs.subscribe(rt);
@@ -378,6 +358,70 @@ class AppSession {
         (_) => _pollLifecycle(background: true),
       );
     }
+  }
+
+  void _wireCoveredBySystem() {
+    if (backend case final FlutterInputBackend routed) {
+      final reader = nativeReader;
+      routed.coveredBySystem = switch (reader) {
+        AndroidNativeReader() => ({bool fresh = false}) => _foreignWindowUp(reader),
+        RunnerNativeReader() => ({bool fresh = false}) => _systemSurfaceUp(reader, fresh: fresh),
+        _ => null,
+      };
+    }
+  }
+
+  RunnerNativeReader _runnerReader(XcTestRunner runner, IosSimulator dev, double? pixelsPerPoint) {
+    Future<Map<String, Object?>> tree(String? id) =>
+        runner.call('GET', '/tree${id == null ? '' : '?app=${Uri.encodeQueryComponent(id)}'}',
+            timeout: const Duration(seconds: 5));
+    if (deviceMode) {
+      return RunnerNativeReader(
+        tree: tree,
+        bundleId: () => bundleId,
+        frontmost: () async =>
+            runner.frontmost([...await const SimControl().runningApps(dev.udid), 'com.apple.springboard']),
+        pixelsPerPoint: pixelsPerPoint ?? 1,
+      );
+    }
+    return RunnerNativeReader(
+      tree: tree,
+      bundleId: () => bundleId,
+      fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
+    );
+  }
+
+  /// A runner started for reads only (input stays on the configured backend); null until it is up, or when switched off.
+  XcTestRunner? nativeRunner;
+
+  /// Why native reads still use the bridge's reader: the runner is starting, or why it failed; null when it is in use or off.
+  String? nativeRunnerNote;
+
+  /// Reads native UI through [runner] from now on; in device mode [pixelsPerPoint] maps its points to screenshot pixels.
+  void adoptNativeRunner(XcTestRunner runner, {double? pixelsPerPoint}) {
+    final dev = device;
+    if (_disposed || dev is! IosSimulator || dev.runner != null) return;
+    nativeRunner = runner;
+    nativeRunnerNote = null;
+    nativeReader = _runnerReader(runner, dev, pixelsPerPoint);
+    _wireCoveredBySystem();
+    if (!deviceMode && runtime != null && !(_lifecyclePollTimer?.isActive ?? false)) {
+      _lifecyclePollTimer = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (_) => _pollLifecycle(background: true),
+      );
+    }
+  }
+
+  /// Back to the bridge's reader, for a runner switched off after an earlier attach.
+  void dropNativeRunner() {
+    nativeRunnerNote = null;
+    final dev = device;
+    if (nativeRunner == null || dev is! IosSimulator || dev.runner != null) return;
+    nativeRunner = null;
+    nativeSurfaceName = null;
+    nativeReader = deviceMode ? null : NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath);
+    _wireCoveredBySystem();
   }
 
   /// Installs glint's in-app agent and follows the lifecycle changes it posts; false when the app cannot host it, so the caller polls instead.

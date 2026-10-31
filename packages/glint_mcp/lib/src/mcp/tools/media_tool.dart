@@ -473,8 +473,9 @@ class MediaTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'glint cannot read the iOS photo picker on this attach',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: 'the picker runs in its own process, and only the XCUITest runner can read it',
-        nextSteps: const ['attach iosBackend:"xctest", open the picker again, then pick'],
+        detail:
+            'the picker runs in its own process, and only the XCUITest runner can read it (still starting, failed, or iosNativeRunner is false)',
+        nextSteps: const ['attach again with config iosNativeRunner true, open the picker again, then pick'],
       );
     }
     await app.refreshSceneMode();
