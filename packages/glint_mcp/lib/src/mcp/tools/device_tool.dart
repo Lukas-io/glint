@@ -6,6 +6,7 @@ import '../../../interaction.dart';
 import '../../media/android_privacy.dart';
 import '../../media/gallery.dart' show MediaDevice;
 import '../../media/permissions.dart' show PermissionRefused, PermissionUnsupported;
+import '../../notifications/notification_access.dart' show readNotificationAccess;
 import '../envelope.dart';
 import '../screenshot.dart';
 import '../session.dart';
@@ -83,7 +84,7 @@ class DeviceTool extends GlintTool {
             ),
             'service': Schema.string(
               description:
-                  'privacy: a simctl service: photos | microphone | location | location-always | contacts | notifications | … On Android also camera, phone, sms, screen-capture (the MediaProjection app op) and all.',
+                  'privacy: a simctl service: photos | microphone | location | location-always | contacts | … On Android also notifications, camera, phone, sms, screen-capture (the MediaProjection app op) and all. The iOS simulator has no notifications service.',
             ),
             'bundleId': Schema.string(
               description:
@@ -232,6 +233,7 @@ class DeviceTool extends GlintTool {
         if (action != 'reset' && (bundleId == null || bundleId.isEmpty)) {
           return _bad('op=privacy $action requires bundleId');
         }
+        if (service == 'notifications') return _iosNotificationsPrivacy(udid, bundleId);
         final err = await sim.privacy(udid, action!, service, bundleId: bundleId);
         return _result(
             err,
@@ -242,6 +244,21 @@ class DeviceTool extends GlintTool {
         return _bad('unknown op: $op '
             '(use status | appearance | openurl | screenshot | privacy)');
     }
+  }
+
+  Future<StructuredResponse> _iosNotificationsPrivacy(String udid, String? bundleId) async {
+    final access =
+        bundleId == null ? null : await readNotificationAccess(MediaDevice(DevicePlatform.ios, udid), bundleId);
+    return StructuredResponse.error(
+      summary: 'simctl privacy has no notifications service, so glint cannot set it on the iOS simulator',
+      errorKind: GlintErrorKind.unsupportedBackendAction,
+      detail: access == null ? null : '$bundleId reads $access on $udid',
+      nextSteps: [
+        'open the screen in the app that asks for notification permission, then notifications op:answer choice:allow while the prompt shows',
+        if (access == 'denied')
+          'iOS asks only once: allow it under Settings > Notifications > the app, or reinstall the app so it asks again',
+      ],
+    );
   }
 
   /// An adb serial: the attached Android device, an emulator, a Wi-Fi `host:port`, or a USB serial (letters and digits, no dashes, unlike a UDID).

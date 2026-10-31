@@ -7,7 +7,9 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../../interaction/image_size.dart';
 import '../../notifications/android_notifications.dart';
+import '../../media/gallery.dart' show MediaDevice;
 import '../../notifications/ios_notifications.dart';
+import '../../notifications/notification_access.dart';
 import '../envelope.dart';
 import '../session.dart';
 import '../tool.dart';
@@ -52,7 +54,7 @@ class NotificationsTool extends GlintTool {
     final app = session.active;
     if (app == null) throw SessionNotAttachedError(missing: 'app');
     final dev = app.device;
-    return switch (dev) {
+    final FutureOr<StructuredResponse> pending = switch (dev) {
       AndroidDevice() => op == 'send'
           ? StructuredResponse.error(
               summary: 'Android has no simulated push: a notification only comes from the app or its push server',
@@ -70,6 +72,41 @@ class NotificationsTool extends GlintTool {
           StructuredResponse.error(
               summary: 'notifications are not available on ${dev.id}', errorKind: GlintErrorKind.notOnThisDevice),
     };
+    final reply = await pending;
+    if (op == 'send' || op == 'answer' || !_cameBackEmpty(reply)) return reply;
+    return _explainSilence(reply, dev, dev is AndroidDevice ? (app.bundleId ?? app.package) : app.bundleId);
+  }
+
+  bool _cameBackEmpty(StructuredResponse r) {
+    final data = r.data;
+    if (r.isError) return data?['errorKind'] == GlintErrorKind.targetNotFound.name;
+    final listed = data?['notifications'];
+    return (listed is List && listed.isEmpty) || data?['cleared'] == 0;
+  }
+
+  /// Adds the app's notification permission to an empty reply when the system is blocking it.
+  Future<StructuredResponse> _explainSilence(StructuredResponse reply, DeviceTarget dev, String? appId) async {
+    if (appId == null) return reply;
+    final ios = dev is IosSimulator;
+    final device = ios
+        ? MediaDevice(DevicePlatform.ios, dev.udid)
+        : dev is AndroidDevice
+            ? MediaDevice(DevicePlatform.android, dev.serial, adbPath: dev.adbPath)
+            : null;
+    if (device == null) return reply;
+    final access = await readNotificationAccess(device, appId);
+    if (access == null || !notificationsBlocked(access)) return reply;
+    final hint = notificationAccessHint(appId, access, ios: ios);
+    final detail = reply.data?['detail'];
+    return reply.copyWith(
+      warnings: reply.isError ? null : [hint, ...reply.warnings],
+      nextSteps: [...notificationAccessSteps(appId, access, ios: ios), ...reply.nextSteps],
+      data: {
+        ...?reply.data,
+        'notificationAccess': access,
+        if (reply.isError) 'detail': detail == null ? hint : '$detail\n$hint',
+      },
+    );
   }
 
   Future<StructuredResponse> _android(
@@ -390,9 +427,20 @@ class NotificationsTool extends GlintTool {
         nextSteps: const ['check the app is installed on this simulator and allowed to show notifications'],
       );
     }
+    final access = await readNotificationAccess(MediaDevice(DevicePlatform.ios, udid), bundleId);
+    final hint = notificationsBlocked(access) ? notificationAccessHint(bundleId, access!, ios: true) : null;
+    final sent = 'pushed to $bundleId on $udid${title == null ? '' : ': $title'}${body == null ? '' : ' · $body'}';
+    if (hint != null) {
+      return StructuredResponse(
+        summary: '$sent; $hint',
+        data: {'payload': payload, 'notificationAccess': access},
+        warnings: [hint],
+        nextSteps: notificationAccessSteps(bundleId, access!, ios: true),
+      );
+    }
     return StructuredResponse(
-      summary: 'pushed to $bundleId on $udid${title == null ? '' : ': $title'}${body == null ? '' : ' · $body'}',
-      data: {'payload': payload},
+      summary: sent,
+      data: {'payload': payload, if (access != null) 'notificationAccess': access},
       warnings: [
         inFront
             ? 'the app was in front a moment ago, so iOS hands the push to the app rather than showing a banner; to test the banner, hardware_button home, wait a second, then send'
