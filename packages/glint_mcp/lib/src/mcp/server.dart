@@ -9,7 +9,7 @@ import 'tool.dart';
 
 /// The glint MCP server. Registers every tool in [kDefaultGlintTools]
 /// against a single [GlintSession] held for the connection's lifetime.
-base class GlintMcpServer extends MCPServer with ToolsSupport {
+base class GlintMcpServer extends MCPServer with ToolsSupport, LoggingSupport {
   GlintMcpServer.fromStreamChannel(
     super.channel, {
     GlintSession? session,
@@ -21,6 +21,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
           instructions: kGlintInstructions,
         ) {
     this.session.progressNotifier = notifyProgress;
+    this.session.watches.notifier = (event) => log(LoggingLevel.notice, event, logger: 'glint.watch');
   }
 
   final GlintSession session;
@@ -42,6 +43,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport {
   @override
   Future<void> shutdown() async {
     await session.detachAll();
+    session.watches.close();
     await super.shutdown();
   }
 }

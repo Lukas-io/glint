@@ -12,6 +12,7 @@ import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
 import 'post_action.dart' show ScrollAnchor;
+import 'watch_registry.dart';
 
 export 'app_session.dart' show AppSession, SceneMode, TouchesOutcome;
 export 'capture_ring.dart';
@@ -72,6 +73,9 @@ class GlintSession {
 
   /// The warning for [deviceId] when its last re-attach could not continue the earlier app logs.
   String? takeLogNote(String deviceId) => _logNotes.remove(deviceId);
+
+  /// Conditions the agent asked to be told about while it does something else, written to an events file.
+  late final WatchRegistry watches = WatchRegistry(this);
 
   /// Forwards [ProgressNotification]s to the client; wired by the server.
   void Function(ProgressNotification)? progressNotifier;
@@ -300,6 +304,7 @@ class GlintSession {
 
   Future<void> _drop(AppSession app) async {
     _pool.remove(app.id);
+    watches.appDropped(app);
     _retainLogs(app);
     if (identical(_active, app)) {
       _active = null;
