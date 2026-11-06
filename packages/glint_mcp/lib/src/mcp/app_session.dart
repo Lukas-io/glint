@@ -707,29 +707,71 @@ class AppSession {
     }
     try {
       final state = await rt
-          .evaluateString(
-            'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
-          )
+          .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? "unknown"', rethrowErrors: true)
           .timeout(lifecycleProbeTimeout);
+      _lifecycleChecked();
       sceneMode = (state == null || state == 'resumed') ? SceneMode.flutter : SceneMode.native;
       _onLifecycle(state ?? 'resumed');
     } on TimeoutException {
-      // Slow is not suspended (the first eval also resolves the eval library); only a locked device settles it.
-      bool? locked;
-      try {
-        locked = await backend.lockState();
-      } on Object {
-        locked = null;
-      }
-      if (locked == true) {
-        sceneMode = SceneMode.native;
-        _onLifecycle('paused');
-      }
-    } on Object {
-      // Eval failure means the isolate is paused (native surface active).
-      sceneMode = SceneMode.native;
-      _onLifecycle('paused');
+      await _markPausedIfShown(native);
+    } on RuntimeUnresponsiveError {
+      await _markPausedIfShown(native);
+    } on Object catch (e) {
+      if (await _markPausedIfShown(native)) return;
+      _lifecycleCheckFailed(e);
     }
+  }
+
+  /// Slow is not suspended (the first eval also resolves the eval library); only a locked device or a backgrounded app settles it.
+  Future<bool> _markPausedIfShown(NativeReader native) async {
+    if (!await _pausedShown(native)) return false;
+    _lifecycleChecked();
+    sceneMode = SceneMode.native;
+    _onLifecycle('paused');
+    return true;
+  }
+
+  Future<bool> _pausedShown(NativeReader native) async {
+    if (native is RunnerNativeReader && native.appBackgrounded) return true;
+    try {
+      return await backend.lockState() == true;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Consecutive lifecycle checks that failed with nothing showing the app is paused.
+  int _lifecycleFailures = 0;
+  String? _lifecycleFailure;
+  bool _lifecycleFailureReported = false;
+
+  /// Failed checks in a row before the agent is told the lifecycle may be stale.
+  static const lifecycleFailureLimit = 3;
+
+  void _lifecycleChecked() {
+    _lifecycleFailures = 0;
+    _lifecycleFailure = null;
+    _lifecycleFailureReported = false;
+  }
+
+  void _lifecycleCheckFailed(Object error) {
+    _lifecycleFailures++;
+    final line = '$error'.split('\n').first;
+    _lifecycleFailure = line.length > 160 ? '${line.substring(0, 160)}...' : line;
+  }
+
+  /// The one-time warning for a streak of unexplained lifecycle check failures; null when there is none to report.
+  String? takeLifecycleWarning() {
+    if (_lifecycleFailures < lifecycleFailureLimit || _lifecycleFailureReported) return null;
+    _lifecycleFailureReported = true;
+    return 'lifecycle checks are failing: $_lifecycleFailure; get_scene may be stale';
+  }
+
+  /// Installs the in-app agent in a restarted app's new isolate and re-reads its lifecycle.
+  Future<void> followRestartedIsolate() async {
+    final rt = runtime;
+    if (rt == null || deviceMode || _disposed) return;
+    await _subscribeLifecycle(rt);
   }
 }
 
