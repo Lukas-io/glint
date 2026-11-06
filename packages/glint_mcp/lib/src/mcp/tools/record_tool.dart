@@ -24,6 +24,10 @@ class RecordTool extends GlintTool {
   @override
   bool changesDevice(Map<String, Object?> args) => stepsChangeDevice(args['steps']);
 
+  /// Each step is checked against the app it targets, so the active app's flag alone decides nothing here.
+  @override
+  StructuredResponse? observeRefusal(AppSession? app, Map<String, Object?> args) => null;
+
   @override
   Tool get definition => Tool(
         name: 'record',
@@ -66,6 +70,7 @@ class RecordTool extends GlintTool {
     final parsed = parseBatchSteps(args['steps'], maxSteps: _maxSteps, allowEmpty: true);
     if (parsed.error != null) return parsed.error!;
     final steps = parsed.steps!;
+    if (observeRefusalForSteps(session, steps) case final refused?) return refused;
     if (steps.isEmpty && durationMs == 0) {
       return _bad('nothing to record: pass steps or durationMs > 0');
     }

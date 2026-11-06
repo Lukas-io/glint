@@ -16,6 +16,9 @@ class GetSceneTool extends GlintTool {
   const GetSceneTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
+  @override
   Tool get definition => Tool(
         name: 'get_scene',
         description:
@@ -122,8 +125,9 @@ class GetSceneTool extends GlintTool {
       final app = session.active;
       final errorsFrom = app?.sceneErrorSeq ?? 0;
       final renderErrors = app?.errors.since(errorsFrom) ?? const <FlutterErrorEntry>[];
-      if (app != null && subtree == null) app.sceneErrorSeq = app.errors.lastSeq;
-      final blankScrollables = subtree == null ? await emptyViewportCount(session.runtime) ?? 0 : 0;
+      final errorsThrough = app?.errors.lastSeq ?? 0;
+      final checkViewports = subtree == null && (renderErrors.isNotEmpty || (app?.recheckViewports ?? false));
+      final blankScrollables = checkViewports ? await emptyViewportCount(session.runtime) ?? 0 : 0;
       warnings.addAll([
         for (final e in renderErrors) errorWarning(e, errorsFrom),
         if (blankScrollables > 0) emptyViewportWarning(blankScrollables),
@@ -200,8 +204,9 @@ class GetSceneTool extends GlintTool {
         ...trailerBits,
       ].join(' · ');
 
+      final StructuredResponse reply;
       if (format == 'json') {
-        return StructuredResponse(
+        reply = StructuredResponse(
           summary: rendered,
           warnings: warnings,
           nextSteps: nextSteps,
@@ -219,13 +224,19 @@ class GetSceneTool extends GlintTool {
             ...dataBits,
           },
         );
+      } else {
+        reply = StructuredResponse(
+          summary: '${rendered.trimRight()}\n$trailer',
+          warnings: warnings,
+          nextSteps: nextSteps,
+          textOnly: true,
+        );
       }
-      return StructuredResponse(
-        summary: '${rendered.trimRight()}\n$trailer',
-        warnings: warnings,
-        nextSteps: nextSteps,
-        textOnly: true,
-      );
+      if (app != null && subtree == null) {
+        app.sceneErrorSeq = errorsThrough;
+        app.recheckViewports = false;
+      }
+      return reply;
     });
   }
 

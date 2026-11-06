@@ -1,12 +1,13 @@
 import '../../observability.dart' show FlutterErrorEntry;
 import '../runtime/flutter_runtime.dart';
 
-/// Walks the render tree once and counts on-screen scrollables that hold built children, none of which laid out into a finite size; type names are compared as strings so it compiles in any eval library.
+/// Walks the render tree once and counts on-screen scrollables that hold built children, none of which laid out into a finite size (sliver groups are descended into, only box children count); type names are compared as strings so it compiles in any eval library.
 const _emptyViewportExpr = '(() { var blank = 0; '
     'void kids(dynamic s, List<int> n) { '
     'var c; try { c = s.firstChild; } catch (_) { c = null; } '
-    'if (c != null) { while (c != null) { n[0]++; '
-    'try { if (!c.debugNeedsLayout && c.hasSize && c.size.isFinite) n[1]++; } catch (_) {} '
+    'if (c != null) { while (c != null) { '
+    'if (c.runtimeType.toString().startsWith("RenderSliver")) { kids(c, n); } else { n[0]++; '
+    'try { if (!c.debugNeedsLayout && c.hasSize && c.size.isFinite) n[1]++; } catch (_) {} } '
     'c = s.childAfter(c); } return; } '
     'if (s.runtimeType.toString().startsWith("RenderSliver")) { '
     's.visitChildren((x) { if (x.runtimeType.toString().startsWith("RenderSliver")) kids(x, n); }); } } '

@@ -57,8 +57,8 @@ abstract class GlintTool {
   /// Tools that give `app` their own meaning (attach) opt out of routing.
   bool get routesByApp => true;
 
-  /// Whether a call with [args] acts on the app or its device, which an app attached with observe:true refuses.
-  bool changesDevice(Map<String, Object?> args) => false;
+  /// Whether a call with [args] acts on the app or its device, which an app attached with observe:true refuses; true unless a tool says it only reads.
+  bool changesDevice(Map<String, Object?> args) => true;
 
   /// Whether the call's `op` (or [defaultOp]) is outside [readOps].
   static bool opChangesDevice(Map<String, Object?> args, {required Set<String> readOps, required String defaultOp}) =>

@@ -12,6 +12,10 @@ import '../tool.dart';
 class SessionTool extends GlintTool {
   const SessionTool();
 
+  /// Recorded sessions and detach live in glint, not on the device.
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   /// `app` names the app to detach here, so it must not also bind the call to one.
   @override
   bool get routesByApp => false;

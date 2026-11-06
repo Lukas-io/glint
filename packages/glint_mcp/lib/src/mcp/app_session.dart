@@ -74,6 +74,9 @@ class AppSession {
   /// Error feed seq the last full `get_scene` reported up to.
   int sceneErrorSeq = 0;
 
+  /// Set by a reload or restart: the next full `get_scene` checks for blank scrollables once even with no new error.
+  bool recheckViewports = false;
+
   /// Extension event kind Flutter posts for each framework error when structured errors are on.
   static const structuredErrorKind = 'Flutter.Error';
 

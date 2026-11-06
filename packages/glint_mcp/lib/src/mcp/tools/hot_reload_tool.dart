@@ -63,55 +63,58 @@ class HotReloadTool extends GlintTool {
     var phase = 'reloading';
     final heartbeat = _heartbeat(session, request, watch, () => '$what: $phase');
     try {
-      await service.callMethod(method, isolateId: isolateId).timeout(const Duration(seconds: 90));
-    } on RPCError catch (e) {
-      heartbeat?.cancel();
-      return StructuredResponse.error(
-        summary: '$what failed',
-        errorKind: GlintErrorKind.backendToolError,
-        detail: '${e.message}${e.details == null ? '' : ': ${e.details}'}',
-        nextSteps: const ['fix the reported error (often a compile error), then call hot_reload again'],
+      try {
+        await service.callMethod(method, isolateId: isolateId).timeout(const Duration(seconds: 90));
+      } on RPCError catch (e) {
+        return StructuredResponse.error(
+          summary: '$what failed',
+          errorKind: GlintErrorKind.backendToolError,
+          detail: '${e.message}${e.details == null ? '' : ': ${e.details}'}',
+          nextSteps: const ['fix the reported error (often a compile error), then call hot_reload again'],
+        );
+      } on TimeoutException {
+        return StructuredResponse.error(
+          summary: '$what did not finish within 90s',
+          errorKind: GlintErrorKind.backendToolError,
+          nextSteps: const ['call get_scene to see whether the app came back', 'check the `flutter run` output'],
+        );
+      }
+      final reloadedMs = watch.elapsedMilliseconds;
+      final touches = restart && app != null && app.showTouches ? await app.setShowTouches(true) : null;
+      phase = 'settling and watching for errors';
+      await _awaitAfterglow(session);
+      final errors = app?.errors.since(errorsBefore) ?? const <FlutterErrorEntry>[];
+      app?.recheckViewports = true;
+      final blankScrollables = await _blankScrollables(session);
+      return StructuredResponse(
+        summary: '$what done in ${reloadedMs}ms${touches?.on == true ? ' · touches shown' : ''}'
+            ' · ${errorsHeadline(errors)}',
+        warnings: [
+          if (touches != null && touches.failed) 'touches are not shown after the restart: ${touches.detail}',
+          for (final e in errors) errorWarning(e, errorsBefore),
+          if (blankScrollables > 0) emptyViewportWarning(blankScrollables),
+        ],
+        nextSteps: errors.isEmpty && blankScrollables == 0
+            ? const ['call get_scene to read the updated screen']
+            : [
+                if (errors.map((e) => e.location).whereType<String>().firstOrNull case final where?)
+                  'open $where, fix the widget, then hot_reload again'
+                else
+                  'find the widget behind the error in the source, fix it, then hot_reload again',
+                'call get_scene to see what is on screen',
+              ],
+        data: {
+          'restart': restart,
+          'elapsedMs': reloadedMs,
+          'totalMs': watch.elapsedMilliseconds,
+          'errors': [for (final e in errors) e.toJson(since: errorsBefore)],
+          if (blankScrollables > 0) 'emptyViewports': blankScrollables,
+          if (touches != null) 'touches': touches.toJson(),
+        },
       );
-    } on TimeoutException {
+    } finally {
       heartbeat?.cancel();
-      return StructuredResponse.error(
-        summary: '$what did not finish within 90s',
-        errorKind: GlintErrorKind.backendToolError,
-        nextSteps: const ['call get_scene to see whether the app came back', 'check the `flutter run` output'],
-      );
     }
-    final reloadedMs = watch.elapsedMilliseconds;
-    final touches = restart && app != null && app.showTouches ? await app.setShowTouches(true) : null;
-    phase = 'settling and watching for errors';
-    await _awaitAfterglow(session);
-    heartbeat?.cancel();
-    final errors = app?.errors.since(errorsBefore) ?? const <FlutterErrorEntry>[];
-    final blankScrollables = await _blankScrollables(session);
-    return StructuredResponse(
-      summary: '$what done in ${reloadedMs}ms${touches?.on == true ? ' · touches shown' : ''}'
-          ' · ${errorsHeadline(errors)}',
-      warnings: [
-        if (touches != null && touches.failed) 'touches are not shown after the restart: ${touches.detail}',
-        for (final e in errors) errorWarning(e, errorsBefore),
-        if (blankScrollables > 0) emptyViewportWarning(blankScrollables),
-      ],
-      nextSteps: errors.isEmpty && blankScrollables == 0
-          ? const ['call get_scene to read the updated screen']
-          : [
-              if (errors.map((e) => e.location).whereType<String>().firstOrNull case final where?)
-                'open $where, fix the widget, then hot_reload again'
-              else
-                'find the widget behind the error in the source, fix it, then hot_reload again',
-              'call get_scene to see what is on screen',
-            ],
-      data: {
-        'restart': restart,
-        'elapsedMs': watch.elapsedMilliseconds,
-        'errors': [for (final e in errors) e.toJson(since: errorsBefore)],
-        if (blankScrollables > 0) 'emptyViewports': blankScrollables,
-        if (touches != null) 'touches': touches.toJson(),
-      },
-    );
   }
 
   /// How long errors are still collected after the screen settles.

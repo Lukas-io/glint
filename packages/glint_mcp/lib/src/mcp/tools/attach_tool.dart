@@ -30,6 +30,10 @@ const nativeRunnerPending = 'pending';
 class AttachTool extends GlintTool {
   const AttachTool({this.claims});
 
+  /// Attaching never changes an app already attached, so an observe-only active app may attach another.
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   /// Which devices other glint sessions drive; a fresh [DeviceClaims] when null.
   final DeviceClaims? claims;
 
@@ -129,10 +133,19 @@ class AttachTool extends GlintTool {
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const <String, Object?>{};
     final showTouches = argBool(args, 'showTouches');
+    final observe = argBool(args, 'observe') ?? false;
     var response = await _attach(session, request);
     if (!response.isError && argBool(args, 'dryRun') != true) {
-      response = await _showTouches(session, showTouches, response);
-      if (argBool(args, 'observe') ?? false) response = await _armObserve(session, response);
+      if (observe) {
+        response = await _armObserve(session, response);
+        if (showTouches != null) {
+          response =
+              response.addWarnings(['showTouches is ignored with observe:true: an observed app is never changed']);
+        }
+      } else {
+        response = await _showTouches(session, showTouches, response);
+        response = _disarmObserve(session, response);
+      }
     }
     if (response.isError || session.updateNoticeShown) return response;
     final notice = updateNotice();
@@ -234,6 +247,7 @@ class AttachTool extends GlintTool {
 
     final vmUriArg = args['vmUri'] as String?;
     final launchPath = (args['launch'] as String?)?.trim();
+    if (observe && launchPath != null && launchPath.isNotEmpty) return _observeNeedsRunningApp('launch');
     final avdArg = args['device'] as String?;
     String? avdLead;
     final cameraArg = args['camera'] as String?;
@@ -249,6 +263,7 @@ class AttachTool extends GlintTool {
       if ((await avds.list()).contains(avdArg)) {
         var serial = await avds.runningSerial(avdArg);
         if (serial == null) {
+          if (observe) return _observeNeedsRunningApp('boot $avdArg');
           final exe = avds.emulatorPath;
           final webcam = cameraArg == null || exe == null ? null : builtInWebcam(await listWebcams(exe));
           if (cameraArg != null && webcam == null) {
@@ -374,6 +389,7 @@ class AttachTool extends GlintTool {
     } else if (deviceArg != null) {
       // Nothing running, but a specific device was selected — start its
       // remembered app on it.
+      if (observe) return _observeNeedsRunningApp('start the remembered app on $deviceArg');
       final rec = _historyForDevice(session, deviceArg);
       if (rec?.projectDir == null) {
         return _offerLaunch(session, scan,
@@ -522,7 +538,7 @@ class AttachTool extends GlintTool {
               '${probed.lastError != null ? " (last probe error: ${probed.lastError})" : ""}',
             );
           }
-          androidServer = await _androidServer(deviceId, adbPath, androidInput, warnings);
+          androidServer = observe ? null : await _androidServer(deviceId, adbPath, androidInput, warnings);
           device = AndroidDevice(
             serial: deviceId,
             adbPath: adbPath,
@@ -607,7 +623,7 @@ class AttachTool extends GlintTool {
 
       // ── 7. Hand the resolved target to the session ────────────────────────
       final rebuilt = rebuild?.deviceId == deviceId;
-      await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
+      await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt, observe: observe);
       if (nativeStart != null) {
         if (await _followNativeRunner(session.active!, nativeStart) case final note?) warnings.add(note);
       } else if (device is IosSimulator && device.runner == null) {
@@ -820,6 +836,36 @@ class AttachTool extends GlintTool {
   }
 
   static const _observeLabel = 'observe';
+
+  /// observe:true only reads what already runs, so anything that would start an app or a device is refused.
+  StructuredResponse _observeNeedsRunningApp(String what) => StructuredResponse.error(
+        summary: 'observe:true cannot $what: it only reads an app that is already running',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'start the app yourself, then attach observe:true',
+          'or attach without observe to let glint launch it',
+        ],
+      );
+
+  /// Cancels the errors watch an earlier observe attach armed on the active app, now that it is attached to drive, and says so in the reply.
+  StructuredResponse _disarmObserve(GlintSession session, StructuredResponse response) {
+    final app = session.active;
+    if (app == null) return response;
+    final registry = session.watches;
+    final leftover = registry.active.where((w) => identical(w.app, app) && w.label == _observeLabel).toList();
+    if (leftover.isEmpty) return response;
+    for (final w in leftover) {
+      registry.cancel(w.id);
+    }
+    return response.copyWith(
+      summary: '${response.summary}\nno longer observe only: cancelled the observe errors watch '
+          '${leftover.map((w) => w.id).join(', ')}',
+      nextSteps: [
+        ...response.nextSteps,
+        'for new app errors use hot_reload (reports them) or watch conditions:[{errors:true}]',
+      ],
+    );
+  }
 
   /// Hands the background runner start to [app] and waits a moment for it, so a warm start serves the first read; the warning to show when it is not ready, else null.
   Future<String?> _followNativeRunner(AppSession app, NativeRunnerStart start,
@@ -1251,7 +1297,9 @@ class AttachTool extends GlintTool {
           adbPath: adbPath,
           screenWidth: shot.width?.toDouble(),
           screenHeight: shot.height?.toDouble(),
-          server: await _androidServer(target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
+          server: observe
+              ? null
+              : await _androidServer(target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
         );
     }
 

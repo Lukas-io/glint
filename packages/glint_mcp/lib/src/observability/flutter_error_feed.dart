@@ -73,6 +73,9 @@ class FlutterErrorFeed {
   static const summaryLimit = 160;
   static const _crossChannelWindow = Duration(milliseconds: 1500);
 
+  /// How long console output may stay silent before an unfinished dump or exception counts as complete.
+  static const staleAfter = Duration(seconds: 2);
+
   final int capacity;
   final String? Function()? _projectDir;
   final String? Function()? _packageName;
@@ -98,19 +101,19 @@ class FlutterErrorFeed {
       if (e.stream == AppLogStream.logging) return;
       _logs.add(e.content);
       _idle?.cancel();
-      _idle = Timer(const Duration(milliseconds: 400), flush);
+      _idle = Timer(staleAfter, flush);
     });
   }
 
-  /// Finishes a dump or exception still being read, so everything seen so far is in the feed.
+  /// Finishes a dump or exception still being read, whatever its age.
   void flush() {
     _idle?.cancel();
     _logs.flush();
   }
 
-  /// Errors with an occurrence after [seq], oldest first.
+  /// Errors with an occurrence after [seq], oldest first; a dump still being written counts once it has been silent for [staleAfter].
   List<FlutterErrorEntry> since(int seq) {
-    flush();
+    _logs.flushIfStale(staleAfter);
     return [
       for (final e in _entries.values)
         if (e.seq > seq) e,
@@ -258,16 +261,23 @@ class _Scanner {
   final FlutterErrorChannel _channel;
   final String? libraryHint;
   String _partial = '';
+  DateTime _lastChunkAt = DateTime.now();
   List<String>? _block;
   String? _blockLibrary;
   String? _uncaught;
   List<String> _uncaughtStack = [];
 
   void add(String chunk) {
+    _lastChunkAt = DateTime.now();
     _partial += chunk;
     final lines = _partial.split('\n');
     _partial = lines.removeLast();
     lines.forEach(_line);
+  }
+
+  /// Flushes only when no chunk arrived for [quiet], so a dump still being written is left alone.
+  void flushIfStale(Duration quiet) {
+    if (DateTime.now().difference(_lastChunkAt) >= quiet) flush();
   }
 
   void flush() {
