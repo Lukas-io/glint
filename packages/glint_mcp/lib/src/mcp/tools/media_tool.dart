@@ -17,6 +17,7 @@ import '../../media/mic_audio.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
 import '../../media/picker.dart';
+import '../../perception/native_scene_reader.dart' show NativeReader;
 import '../../perception/runner_native_reader.dart';
 import '../../media/seed_ledger.dart';
 import '../../media/testcard_generator.dart';
@@ -41,6 +42,8 @@ const _generators = {'testcard', 'speech', 'tone'};
 const _maxFramesReturned = 6;
 
 /// `media` puts photos, videos and audio in the device gallery, lists and pulls what the app wrote, and inspects media files (a glint test card decodes to rotation, mirror, scale, frames and audio sync).
+enum _PickerState { closed, open, unreadable }
+
 class MediaTool extends GlintTool {
   const MediaTool();
 
@@ -532,10 +535,9 @@ class MediaTool extends GlintTool {
     final cell = cells[index];
     final dpr = session.device.devicePixelRatio;
     await session.backend.tap(physicalX: (cell.x * dpr).round(), physicalY: (cell.y * dpr).round());
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    await app.refreshSceneMode();
+    var state = await _awaitPickerClosed(app, reader, _pickerCloseWait);
     String? confirmed;
-    if (app.nativeSurfaceName != null) {
+    if (state == _PickerState.open) {
       final confirm = (await reader.readSnapshot())
           .root
           .children
@@ -549,27 +551,49 @@ class MediaTool extends GlintTool {
         await session.backend
             .tap(physicalX: ((f.x + f.w / 2) * dpr).round(), physicalY: ((f.y + f.h / 2) * dpr).round());
         confirmed = confirm.textPreview;
-        await Future<void>.delayed(const Duration(milliseconds: 1200));
-        await app.refreshSceneMode();
+        state = await _awaitPickerClosed(app, reader, _pickerCloseWait);
       }
     }
-    final closed = app.nativeSurfaceName == null;
+    final tapped = 'tapped "${cell.label}"${name == null ? ' (index $index)' : ' (seeded "$name")'}'
+        '${confirmed == null ? '' : ', then $confirmed'}';
+    if (state != _PickerState.closed) {
+      final unread = state == _PickerState.unreadable;
+      return StructuredResponse.error(
+        summary: unread
+            ? '$tapped, but glint cannot tell whether the picker closed or a photo was chosen'
+            : '$tapped, but the picker is still open: no photo was chosen',
+        errorKind: GlintErrorKind.pickIncomplete,
+        detail: unread
+            ? (reader is RunnerNativeReader ? reader.lastReadProblem : null) ?? 'the native surface could not be read'
+            : 'the picker still shows ${cells.length} item${cells.length == 1 ? '' : 's'} after ${_pickerCloseWait.inSeconds}s'
+                '${confirmed == null ? ' and offers no Add or Done button' : ''}',
+        nextSteps: [
+          'get_scene to see what the picker shows now',
+          if (!unread) 'media op:pick again (a different index:<n>), or tap the photo by its glintId from get_scene',
+          'to close the picker without choosing, tap text:"Cancel" (or text:"Close") on it',
+        ],
+      ).mergeData(
+          {'picked': cell.label, 'index': index, 'pickerClosed': false, if (confirmed != null) 'confirmed': confirmed});
+    }
     return StructuredResponse(
-      summary: 'picked "${cell.label}"${name == null ? ' (index $index)' : ' (seeded "$name")'}'
-          '${confirmed == null ? '' : ', then tapped $confirmed'}'
-          '${closed ? '; the picker closed' : '; the picker is still open'}',
-      warnings: [if (!closed) 'the picker did not close: it may want more taps (a multi-select Add, or a crop step)'],
-      nextSteps: [
-        if (closed) 'get_scene to see the picked media in the app',
-        if (!closed) 'get_scene to see the picker, then tap its confirm button',
-      ],
-      data: {
-        'picked': cell.label,
-        'index': index,
-        if (confirmed != null) 'confirmed': confirmed,
-        'pickerClosed': closed
-      },
+      summary: '$tapped; the picker closed',
+      nextSteps: const ['get_scene to see the picked media in the app'],
+      data: {'picked': cell.label, 'index': index, if (confirmed != null) 'confirmed': confirmed, 'pickerClosed': true},
     );
+  }
+
+  static const _pickerCloseWait = Duration(seconds: 6);
+
+  /// Re-reads the native surface until the picker is gone, [limit] runs out, or the runner cannot be read (an unreadable surface is not a closed one).
+  Future<_PickerState> _awaitPickerClosed(AppSession app, NativeReader reader, Duration limit) async {
+    final deadline = DateTime.now().add(limit);
+    while (true) {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await app.refreshSceneMode();
+      final unreadable = reader is RunnerNativeReader && reader.lastReadProblem != null;
+      if (app.nativeSurfaceName == null && !unreadable) return _PickerState.closed;
+      if (DateTime.now().isAfter(deadline)) return unreadable ? _PickerState.unreadable : _PickerState.open;
+    }
   }
 
   Future<StructuredResponse> _permission(GlintSession session, Map<String, Object?> args) async {

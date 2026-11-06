@@ -94,7 +94,7 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect`: follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `pickIncomplete`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';

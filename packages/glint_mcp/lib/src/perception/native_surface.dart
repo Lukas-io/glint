@@ -1,8 +1,9 @@
+import '../media/picker.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
 /// What kind of native surface covers the app.
-enum SurfaceKind { permissionPrompt, alert, otherApp, unknown }
+enum SurfaceKind { permissionPrompt, alert, picker, otherApp, unknown }
 
 /// One tappable choice on a native surface, at its center in logical points.
 typedef SurfaceChoice = ({String text, String id, double x, double y});
@@ -41,6 +42,7 @@ class NativeSurface {
     final name = switch (kind) {
       SurfaceKind.permissionPrompt => 'permission prompt',
       SurfaceKind.alert => 'alert',
+      SurfaceKind.picker => 'photo picker',
       SurfaceKind.otherApp => 'another app${owner == null ? '' : ' ($owner)'}',
       SurfaceKind.unknown => 'native surface',
     };
@@ -122,20 +124,26 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
           y: n.axFrame!.y + n.axFrame!.h / 2,
         ),
   ];
+  final photoCells = pickerCells(nodes);
+  final isPicker = photoCells.isNotEmpty;
+  final cellLabels = {for (final c in photoCells) c.label};
   final texts = [
     for (final n in nodes)
-      if (!choices.any((c) => c.id == n.glintId)) n.textPreview!.trim(),
+      if (!choices.any((c) => c.id == n.glintId) && !(isPicker && cellLabels.contains(n.textPreview)))
+        n.textPreview!.trim(),
   ];
   final question = texts.where(_permissionQuestion.hasMatch).firstOrNull;
   final permissionOwner =
       owner != null && RegExp('permissioncontroller|GrantPermissions', caseSensitive: false).hasMatch(owner);
   final kind = question != null || permissionOwner
       ? SurfaceKind.permissionPrompt
-      : choices.isNotEmpty
-          ? SurfaceKind.alert
-          : owner != null
-              ? SurfaceKind.otherApp
-              : SurfaceKind.unknown;
+      : isPicker
+          ? SurfaceKind.picker
+          : choices.isNotEmpty
+              ? SurfaceKind.alert
+              : owner != null
+                  ? SurfaceKind.otherApp
+                  : SurfaceKind.unknown;
   final title = question ?? texts.where((t) => t.endsWith('?') || t.length > 24).firstOrNull;
   return NativeSurface(
       kind: kind, title: title, choices: choices, texts: texts.where((t) => t != title).toList(), owner: owner);
