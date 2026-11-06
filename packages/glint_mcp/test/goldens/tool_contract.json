@@ -931,7 +931,7 @@
       },
       "gone": {
         "type": "boolean",
-        "description": "Wait until it disappears instead. Default false."
+        "description": "Wait for the text or id to DISAPPEAR instead of appear. Default false."
       },
       "timeoutMs": {
         "type": "integer",

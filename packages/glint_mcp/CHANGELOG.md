@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- **`wait_for` says which way it is waiting and what it matched.** Progress now opens at once with the goal and direction (`waiting for "Welcome Back" to disappear on App; timeout 120 s`), then every 15 s says where it stands (`still on screen after 30 s` or `not on screen yet after 30 s`; a busy app is named too), and the description states that `gone:true` waits for the text to disappear. A text match now reports the text node's own id as `glintId`, and the control around it as `tapTarget` only when it is a real control: a tappable ancestor covering about 70% of the screen or more (a screen-level `GestureDetector`) is no longer offered with `act on it`, and the next step points to `get_scene` instead. (#299)
+
 ### Fixed
 
 - **`attach launch:"<app id>"` brings an app that is already running on an iOS simulator to the front (#300).** It used to refuse with `already running`, so an app sent to the home screen could not be reopened from glint. Now it reactivates the same process, attaches to its VM like any running app, and says in the reply that it was already running and was brought to the front (`data.broughtToFront`). `get_scene` on a backgrounded app and the `appUnresponsive` reply of `attach` now name this command with the app's id.
