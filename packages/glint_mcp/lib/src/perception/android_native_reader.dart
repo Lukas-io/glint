@@ -28,6 +28,9 @@ class AndroidNativeReader extends NativeReader {
   /// Why the last [readSnapshot] could not read the surface, for the reply.
   String? lastReadProblem;
 
+  /// Whether the last [foreignSurface] could not learn which window has focus, so a null answer meant unknown rather than the app.
+  bool lastFocusUnknown = false;
+
   /// `package/activity` of the focused window, or null when adb cannot say.
   Future<String?> focusedComponent() async {
     final viaServer = await _serverFocus();
@@ -58,8 +61,10 @@ class AndroidNativeReader extends NativeReader {
   @override
   Future<String?> foreignSurface() async {
     final app = appPackage;
+    lastFocusUnknown = app == null;
     if (app == null) return null;
     final c = await focusedComponent();
+    lastFocusUnknown = c == null;
     if (c == null || c.startsWith('$app/')) return null;
     return c;
   }
