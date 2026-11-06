@@ -29,16 +29,16 @@ class WatchTool extends GlintTool {
             'Hand the app to a human or a backend and be woken when it reacts (PIN, password, 2FA, sign-in, confirming a real-money or destructive step, a teammate\'s change): register the screen that follows their action, then ask them and end the turn. wait_for blocks one call for 120 s at most and is for what you just caused. '
             'Returns at once; glint appends one JSON line per event to an events file, and you follow it by running the `tail -n0 -F <file>` line from nextSteps as a background shell monitor (clients do not show server notifications to an idle model). '
             'op: add (default; conditions:[…], any one matching fires), list, cancel (id, or all:true), events (sinceSeq, for clients that poll instead of tailing). '
-            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet), {alerts:["error","uncaught","overflow","http","terminated"]} (what the app reports itself, read from the framework and the VM, not its logs: overflow carries amount and edge, http is a 4xx/5xx or transport failure with method, url and status, terminated says the app died and why; disconnected is opt-in and reports a lost VM connection and its return, never counted as terminated). '
+            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet), {alerts:["error","uncaught","overflow","http","terminated"]} (what the app reports itself, read from the framework and the VM, not its logs: overflow carries amount and edge, http is a 4xx/5xx or transport failure with method, url and status, terminated says the app died and why; disconnected is opt-in and reports a lost VM connection and its return, never counted as terminated), {lint:true|[rules]} (UX lint of the live layout, kind lint events: overflow, keyboard (focused field under the keyboard), insets (content under the status bar or home indicator), tapTarget (under minTapTarget, default 44), clippedText, lines (headline past maxHeadlineLines, default 2); each finding has the rule, widget, glintId, file:line and measured numbers, once per problem; checked when the screen changes and has settled, off unless armed; a lintError event with errorKind, detail and nextSteps when the check cannot run: once, then glint retries unless it did not compile). '
             'allApps:true (or app:"*") takes alert conditions only and covers every attached app, apps attached later included; each event names app and device, and one `op:events` drains them all. '
-            'Options: label, once (default true; false for allApps), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
+            'Options: label, once (default true; false for allApps or lint), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
             'A watch ends with an `ended` event on timeout, cancel or detach. errorKind: invalidArgument, flutterModeRequired (device mode), sessionNotAttached.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'add | list | cancel | events. Default add.'),
             'conditions': Schema.list(
               description:
-                  'op=add: up to $_maxConditions, each exactly one of text, glintId, route, overlay, log, errors, alerts (state goes with text or glintId). Any one matching fires the watch.',
+                  'op=add: up to $_maxConditions, each exactly one of text, glintId, route, overlay, log, errors, alerts, lint (state goes with text or glintId). Any one matching fires the watch.',
               items: ObjectSchema(
                 properties: {
                   'text': Schema.string(description: 'Visible text, matched as tap text: does (exact, then contains).'),
@@ -55,6 +55,14 @@ class WatchTool extends GlintTool {
                         'Any of error, uncaught, overflow, http, terminated, disconnected (opt-in). errors:true is error + uncaught + overflow.',
                     items: Schema.string(),
                   ),
+                  'lint': Schema.combined(
+                    description:
+                        'true for every rule, or a list of overflow, keyboard, insets, tapTarget, clippedText, lines. Fires a lint event once per problem and route.',
+                  ),
+                  'minTapTarget':
+                      Schema.num(description: 'With lint: smallest tap target side in logical points. Default 44.'),
+                  'maxHeadlineLines':
+                      Schema.int(description: 'With lint: lines a headline (font size 20+) may wrap to. Default 2.'),
                 },
               ),
             ),
@@ -62,7 +70,8 @@ class WatchTool extends GlintTool {
               description: 'op=add: watch every attached app and every app attached later; alert conditions only.',
             ),
             'label': Schema.string(description: 'op=add: your note on why, echoed in every event.'),
-            'once': Schema.bool(description: 'op=add: end after the first match. Default true, false with allApps.'),
+            'once': Schema.bool(
+                description: 'op=add: end after the first match. Default true, false with allApps or lint.'),
             'timeoutMs': Schema.int(description: 'op=add: 1000-21600000. Default 1800000 (30 min).'),
             'id': Schema.string(description: 'op=cancel: watch id from add or list. op=events: only that watch.'),
             'all': Schema.bool(
@@ -138,7 +147,7 @@ class WatchTool extends GlintTool {
       );
     }
     final label = args['label'] as String?;
-    final once = argBool(args, 'once') ?? !allApps;
+    final once = argBool(args, 'once') ?? !(allApps || parsed.conditions!.any((c) => c is LintCondition));
     final added = await registry.add(
       app,
       conditions: parsed.conditions!,
@@ -174,7 +183,7 @@ class WatchTool extends GlintTool {
         if (over)
           'it already matched and ended: the event is in data.firedNow, nothing to monitor'
         else if (fileError == null)
-          'run `$monitor` as a background monitor; each line is one event (kind match, note or ended)',
+          'run `$monitor` as a background monitor; each line is one event (kind match, lint, note or ended)',
         if (!over) 'or poll: watch op:events sinceSeq:${registry.events.lastSeq}',
         if (!over) 'watch op:cancel id:"${watch.id}" when you no longer need it',
       ],
