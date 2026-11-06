@@ -115,13 +115,13 @@ class HttpFailureMonitor {
   }
 
   Future<void> _baseline(VmService service, String isolateId) async {
-    if (!_baselined.add(isolateId)) return;
     final profile = await service.getHttpProfile(isolateId).timeout(_callLimit);
     _cursors[isolateId] = profile.timestamp;
     for (final r in profile.requests) {
       _seen.add(r.id);
     }
     _trimSeen();
+    _baselined.add(isolateId);
   }
 
   Future<void> _poll() async {
@@ -140,7 +140,7 @@ class HttpFailureMonitor {
       var suppressed = 0;
       for (final id in isolates) {
         try {
-          if (_baselined.add(id)) {
+          if (!_baselined.contains(id)) {
             await _baseline(service, id);
             continue;
           }
@@ -161,6 +161,8 @@ class HttpFailureMonitor {
         } on RPCError {
           _discoveredAt = null;
           _baselined.remove(id);
+        } on TimeoutException {
+          _discoveredAt = null;
         }
       }
       if (suppressed > 0) {

@@ -999,7 +999,7 @@
             },
             "alerts": {
               "type": "array",
-              "description": "Any of error, uncaught, overflow, http, terminated. errors:true is error + uncaught + overflow.",
+              "description": "Any of error, uncaught, overflow, http, terminated, disconnected (opt-in). errors:true is error + uncaught + overflow.",
               "items": {
                 "type": "string"
               }
@@ -1029,7 +1029,7 @@
       },
       "all": {
         "type": "boolean",
-        "description": "op=cancel: cancel every watch (of the targeted app when app is given)."
+        "description": "op=cancel: cancel every watch (those of the named app only when app is given; app:\"*\" cancels all-apps watches too)."
       },
       "sinceSeq": {
         "type": "integer",

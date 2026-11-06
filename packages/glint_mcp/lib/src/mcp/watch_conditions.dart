@@ -73,7 +73,7 @@ final class LogCondition extends WatchCondition {
   Map<String, Object?> toJson() => {'log': pattern.pattern};
 }
 
-/// New alerts of the chosen [kinds]: an app error, uncaught error or overflow once per distinct error, each failed HTTP request, an app that disconnected, came back or ended.
+/// New alerts of the chosen [kinds]: an app error, uncaught error or overflow once per distinct error, each failed HTTP request, an app that ended, and (only when asked for) one that lost its VM connection or came back.
 final class AlertsCondition extends WatchCondition {
   const AlertsCondition(this.kinds) : shorthand = false;
 

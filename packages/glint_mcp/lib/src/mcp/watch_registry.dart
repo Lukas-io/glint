@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../observability.dart';
+import '../media/host_tools.dart' show PhaseReporter;
 import 'session.dart';
 import 'watch_conditions.dart';
 import 'watch_events.dart';
@@ -96,6 +97,7 @@ class WatchRegistry {
     required String? label,
     required bool once,
     required int timeoutMs,
+    void Function(int elapsedSec, String phase)? progress,
   }) async {
     events.open();
     final watch = Watch(
@@ -110,19 +112,28 @@ class WatchRegistry {
     watch.deadline = Timer(Duration(milliseconds: timeoutMs), () {
       end(watch, 'timeout', detail: 'nothing matched within ${_span(Duration(milliseconds: timeoutMs))}');
     });
-    final notes = <String>[];
+    final pending = <Future<String?>>[];
+    var waitsOnHttp = false;
     for (final c in watch.conditions) {
       if (c.spec is LogCondition) {
         c.logSubscription = app!.appLogs.onEntry.listen((entry) => _onLog(watch, c, entry));
       }
-      if (c.spec is AlertsCondition) {
+      if (c.spec case AlertsCondition(:final wantsHttp)) {
+        waitsOnHttp = waitsOnHttp || wantsHttp;
         final targets = app != null ? [app] : _alertable(_session.apps);
         for (final target in targets) {
-          final note = await _listen(watch, c, target);
-          if (note != null) notes.add(note);
+          pending.add(_listen(watch, c, target));
         }
       }
     }
+    final settled = waitsOnHttp
+        ? await PhaseReporter(progress)
+            .during('starting HTTP profiling on ${pending.length} app(s)', () => Future.wait(pending))
+        : await Future.wait(pending);
+    final notes = [
+      for (final note in settled)
+        if (note != null) note,
+    ];
     final fromSeq = events.lastSeq;
     String? note;
     WatchObservation? seen;

@@ -165,8 +165,25 @@ class AppSession {
   /// Identity filled in by `attach` once known; used for routing by name.
   String? package;
   String? displayName;
-  String? bundleId;
+  String? _bundleId;
   String? deviceName;
+  int? _processId;
+
+  String? get bundleId => _bundleId;
+
+  set bundleId(String? id) {
+    _bundleId = id;
+    _recordProcessId();
+  }
+
+  void _recordProcessId() {
+    final dev = device;
+    final id = _bundleId;
+    if (dev is! IosSimulator || id == null) return;
+    unawaited(const SimControl().appPid(dev.udid, id).then((pid) {
+      if (pid != null) _processId = pid;
+    }));
+  }
 
   /// The input setup line `attach` judged (OS, Xcode, macOS, backend and verified status), for issue reports.
   String? inputSetup;
@@ -248,6 +265,8 @@ class AppSession {
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
   StreamSubscription<Event>? _structuredErrorSub;
+  StreamSubscription<Event>? _isolateExitSub;
+  String? _agentIsolate;
   StreamSubscription<Map<String, Object?>>? _agentErrorSub;
   StreamSubscription<String>? _lifecycleSub;
   bool _disposed = false;
@@ -395,6 +414,14 @@ class AppSession {
     await _disconnectSub?.cancel();
     _disconnectSub = rt.onDisconnect.listen((_) => _connectionDropped(runtimeFactory));
 
+    await _isolateExitSub?.cancel();
+    _agentIsolate = rt.flutterIsolateId;
+    _isolateExitSub = rt is VmServiceRuntime
+        ? rt.rawService.onIsolateEvent
+            .where((e) => e.kind == EventKind.kIsolateExit && e.isolate?.id == _agentIsolate)
+            .listen((_) => unawaited(_reinstallAgent(rt)))
+        : null;
+
     await _agentErrorSub?.cancel();
     _agentErrorSub = AppAgent.of(rt)?.errors.listen(errors.addAgentEvent);
 
@@ -503,7 +530,7 @@ class AppSession {
   Future<void> _connectionDropped(FlutterRuntime Function() runtimeFactory) async {
     if (_disposed) return;
     final droppedAt = DateTime.now();
-    _raise(AppAlert(AlertKind.terminated, 'disconnected', '$label lost its VM service connection', {
+    _raise(AppAlert(AlertKind.disconnected, 'disconnected', '$label lost its VM service connection', {
       'reconnecting': true,
     }));
     final first = await _processVerdict();
@@ -514,7 +541,7 @@ class AppSession {
       return;
     }
     if (await _reconnect(runtimeFactory)) {
-      _raise(AppAlert(AlertKind.terminated, 'reconnected', '$label reconnected', {
+      _raise(AppAlert(AlertKind.disconnected, 'reconnected', '$label reconnected', {
         'downMs': DateTime.now().difference(droppedAt).inMilliseconds,
       }));
       return;
@@ -522,8 +549,8 @@ class AppSession {
     if (_disposed) return;
     final last = await _processVerdict();
     if (last.running == true) {
-      _raise(
-          AppAlert(AlertKind.terminated, 'disconnected', '$label is still running but its VM service is unreachable', {
+      _raise(AppAlert(
+          AlertKind.disconnected, 'disconnected', '$label is still running but its VM service is unreachable', {
         'reconnecting': false,
         'processRunning': true,
       }));
@@ -532,7 +559,13 @@ class AppSession {
     await _announceTermination(last, droppedAt);
   }
 
-  Future<AppProcessVerdict> _processVerdict() => const AppProcessProbe().check(device, appId: bundleId ?? package);
+  Future<AppProcessVerdict> _processVerdict() {
+    final dev = device;
+    final reader = nativeReader;
+    final appId =
+        dev is AndroidDevice ? (bundleId ?? (reader is AndroidNativeReader ? reader.appPackage : null)) : bundleId;
+    return const AppProcessProbe().check(device, appId: appId, since: attachedAt, pid: _processId);
+  }
 
   Future<void> _announceTermination(AppProcessVerdict verdict, DateTime droppedAt) async {
     if (_terminationAnnounced || _disposed) return;
@@ -588,6 +621,8 @@ class AppSession {
     _disconnectSub = null;
     await _structuredErrorSub?.cancel();
     _structuredErrorSub = null;
+    await _isolateExitSub?.cancel();
+    _isolateExitSub = null;
     await _agentErrorSub?.cancel();
     _agentErrorSub = null;
     await appLogs.unsubscribe();
@@ -919,6 +954,18 @@ class AppSession {
     if (!_lifecycleFailureSilent) return 'lifecycle checks are failing: $_lifecycleFailure; get_scene may be stale';
     final seconds = DateTime.now().difference(_lifecycleFailingSince ?? DateTime.now()).inSeconds;
     return 'the app has not answered lifecycle checks for $seconds s; get_scene may be stale';
+  }
+
+  Future<void> _reinstallAgent(VmServiceRuntime rt) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_disposed || !identical(runtime, rt)) return;
+    try {
+      await rt.isolateReady();
+      await followRestartedIsolate();
+      _agentIsolate = rt.flutterIsolateId;
+    } on Object {
+      return;
+    }
   }
 
   /// Installs the in-app agent in a restarted app's new isolate and reads its lifecycle; polls instead when that fails.

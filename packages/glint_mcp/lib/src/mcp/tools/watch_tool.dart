@@ -29,7 +29,7 @@ class WatchTool extends GlintTool {
             'Hand the app to a human or a backend and be woken when it reacts (PIN, password, 2FA, sign-in, confirming a real-money or destructive step, a teammate\'s change): register the screen that follows their action, then ask them and end the turn. wait_for blocks one call for 120 s at most and is for what you just caused. '
             'Returns at once; glint appends one JSON line per event to an events file, and you follow it by running the `tail -n0 -F <file>` line from nextSteps as a background shell monitor (clients do not show server notifications to an idle model). '
             'op: add (default; conditions:[…], any one matching fires), list, cancel (id, or all:true), events (sinceSeq, for clients that poll instead of tailing). '
-            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet), {alerts:["error","uncaught","overflow","http","terminated"]} (what the app reports itself, read from the framework and the VM, not its logs: overflow carries amount and edge, http is a 4xx/5xx or transport failure with method, url and status, terminated says the app died and why, with disconnected and reconnected around it). '
+            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet), {alerts:["error","uncaught","overflow","http","terminated"]} (what the app reports itself, read from the framework and the VM, not its logs: overflow carries amount and edge, http is a 4xx/5xx or transport failure with method, url and status, terminated says the app died and why; disconnected is opt-in and reports a lost VM connection and its return, never counted as terminated). '
             'allApps:true (or app:"*") takes alert conditions only and covers every attached app, apps attached later included; each event names app and device, and one `op:events` drains them all. '
             'Options: label, once (default true; false for allApps), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
             'A watch ends with an `ended` event on timeout, cancel or detach. errorKind: invalidArgument, flutterModeRequired (device mode), sessionNotAttached.',
@@ -52,7 +52,7 @@ class WatchTool extends GlintTool {
                       Schema.bool(description: 'true: fire once for each new distinct app error; repeats do not fire.'),
                   'alerts': Schema.list(
                     description:
-                        'Any of error, uncaught, overflow, http, terminated. errors:true is error + uncaught + overflow.',
+                        'Any of error, uncaught, overflow, http, terminated, disconnected (opt-in). errors:true is error + uncaught + overflow.',
                     items: Schema.string(),
                   ),
                 },
@@ -65,7 +65,9 @@ class WatchTool extends GlintTool {
             'once': Schema.bool(description: 'op=add: end after the first match. Default true, false with allApps.'),
             'timeoutMs': Schema.int(description: 'op=add: 1000-21600000. Default 1800000 (30 min).'),
             'id': Schema.string(description: 'op=cancel: watch id from add or list. op=events: only that watch.'),
-            'all': Schema.bool(description: 'op=cancel: cancel every watch (of the targeted app when app is given).'),
+            'all': Schema.bool(
+                description:
+                    'op=cancel: cancel every watch (those of the named app only when app is given; app:"*" cancels all-apps watches too).'),
             'sinceSeq': Schema.int(description: 'op=events: only events after this seq. Default 0.'),
             'limit': Schema.int(description: 'op=events: 1-$_maxEventsLimit. Default 50.'),
           },
@@ -77,7 +79,7 @@ class WatchTool extends GlintTool {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'add';
     return switch (op) {
-      'add' => _add(session, args),
+      'add' => _add(session, args, request),
       'list' => _list(session, request),
       'cancel' => _cancel(session, args, request),
       'events' => _events(session, args),
@@ -89,7 +91,7 @@ class WatchTool extends GlintTool {
     };
   }
 
-  Future<StructuredResponse> _add(GlintSession session, Map<String, Object?> args) async {
+  Future<StructuredResponse> _add(GlintSession session, Map<String, Object?> args, CallToolRequest request) async {
     final parsed = parseWatchConditions(args['conditions'], max: _maxConditions);
     if (parsed.error != null) return parsed.error!;
     final timeoutMs = argInt(args, 'timeoutMs') ?? WatchRegistry.defaultTimeoutMs;
@@ -143,6 +145,7 @@ class WatchTool extends GlintTool {
       label: label,
       timeoutMs: timeoutMs,
       once: once,
+      progress: _progressSink(session, request),
     );
     final watch = added.watch;
     final path = registry.events.path;
@@ -192,11 +195,7 @@ class WatchTool extends GlintTool {
 
   StructuredResponse _list(GlintSession session, CallToolRequest request) {
     final registry = session.watches;
-    final scoped = request.arguments?['app'] != null ? session.active : null;
-    final watches = [
-      for (final w in registry.active)
-        if (scoped == null || identical(w.app, scoped)) w,
-    ];
+    final watches = _listed(session, request);
     return StructuredResponse(
       summary: watches.isEmpty
           ? 'no active watches'
@@ -215,6 +214,25 @@ class WatchTool extends GlintTool {
         'lastSeq': registry.events.lastSeq,
       },
     );
+  }
+
+  void Function(int, String)? _progressSink(GlintSession session, CallToolRequest request) {
+    final token = request.meta?.progressToken;
+    final notifier = session.progressNotifier;
+    if (token == null || notifier == null) return null;
+    return (sec, phase) =>
+        notifier(ProgressNotification(progressToken: token, progress: sec, message: '$phase (${sec}s)'));
+  }
+
+  List<Watch> _listed(GlintSession session, CallToolRequest request) {
+    final requested = request.arguments?['app'];
+    final active = session.watches.active;
+    if (requested == null || requested == '*') return active;
+    final scoped = session.active;
+    return [
+      for (final w in active)
+        if (w.allApps || identical(w.app, scoped)) w,
+    ];
   }
 
   StructuredResponse _cancel(GlintSession session, Map<String, Object?> args, CallToolRequest request) {
@@ -246,7 +264,8 @@ class WatchTool extends GlintTool {
         },
       );
     }
-    final scoped = request.arguments?['app'] != null ? session.active : null;
+    final requested = request.arguments?['app'];
+    final scoped = requested == null || requested == '*' ? null : session.active;
     final ids = [
       for (final w in registry.active)
         if (scoped == null || identical(w.app, scoped)) w.id,

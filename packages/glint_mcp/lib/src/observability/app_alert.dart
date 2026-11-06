@@ -1,10 +1,11 @@
-/// The kinds of alert a watch can ask for; `terminated` also covers the `disconnected` and `reconnected` events around it.
+/// The kinds of alert a watch can ask for; `disconnected` (opt-in) covers the `disconnected` and `reconnected` events around a `terminated`.
 enum AlertKind {
   error,
   uncaught,
   overflow,
   http,
-  terminated;
+  terminated,
+  disconnected;
 
   /// The kinds `{errors:true}` stands for.
   static const errorKinds = {AlertKind.error, AlertKind.uncaught, AlertKind.overflow};

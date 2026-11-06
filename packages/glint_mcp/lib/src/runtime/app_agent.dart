@@ -394,7 +394,7 @@ const String _source = r'''
   var lastReportedError;
   String clipped(String s, int n) => s.length > n ? s.substring(0, n) : s;
   void reportFlutterError(FlutterErrorDetails d) {
-    if (identical(lastReportedError, d)) return;
+    if (d.silent || identical(lastReportedError, d)) return;
     lastReportedError = d;
     var summary = '';
     try { summary = d.summary.toString(); } catch (_) { summary = d.exceptionAsString().split('\n').first; }

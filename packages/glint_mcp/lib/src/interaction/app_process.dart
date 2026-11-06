@@ -34,10 +34,21 @@ class AppProcessProbe {
   static final _exitStatus =
       RegExp(r'(?:exit(?:ed)?(?: with)?(?: code| status)?[: =]+|status[: =]+)(0x[0-9a-fA-F]+|-?\d+)');
 
-  Future<AppProcessVerdict> check(DeviceTarget device, {required String? appId}) async {
+  static const limit = Duration(seconds: 10);
+
+  /// The verdict for [appId]; [since] and [pid] keep a simulator's host log to this process's own lines. Unknown when the device is slower than [limit].
+  Future<AppProcessVerdict> check(DeviceTarget device, {required String? appId, DateTime? since, int? pid}) async {
+    try {
+      return await _check(device, appId, since, pid).timeout(limit);
+    } on TimeoutException {
+      return const AppProcessVerdict(running: null, reason: 'the device did not answer in time');
+    }
+  }
+
+  Future<AppProcessVerdict> _check(DeviceTarget device, String? appId, DateTime? since, int? pid) async {
     switch (device) {
       case IosSimulator():
-        return _simulator(device.udid, appId);
+        return _simulator(device.udid, appId, since, pid);
       case AndroidDevice():
         return _android(device, appId);
       case IosDevice():
@@ -45,7 +56,7 @@ class AppProcessProbe {
     }
   }
 
-  Future<AppProcessVerdict> _simulator(String udid, String? appId) async {
+  Future<AppProcessVerdict> _simulator(String udid, String? appId, DateTime? since, int? pid) async {
     final state = await sim.state(udid);
     if (state != null && state != 'Booted') {
       return AppProcessVerdict(running: false, reason: 'the simulator is $state');
@@ -54,7 +65,7 @@ class AppProcessProbe {
     final running = await sim.isAppRunning(udid, appId);
     if (running == null) return const AppProcessVerdict(running: null, reason: 'the simulator did not answer');
     if (running) return const AppProcessVerdict(running: true);
-    final hostLine = await _simulatorLog(udid, appId);
+    final hostLine = await _simulatorLog(udid, appId, since, pid);
     final reason = hostLine == null ? null : _hostReason.firstMatch(hostLine)?.group(1)?.trim();
     return AppProcessVerdict(
       running: false,
@@ -63,7 +74,13 @@ class AppProcessProbe {
     );
   }
 
-  Future<String?> _simulatorLog(String udid, String appId) async {
+  static String _logTime(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
+  }
+
+  Future<String?> _simulatorLog(String udid, String appId, DateTime? since, int? pid) async {
+    if (since == null) return null;
     final predicate = 'eventMessage CONTAINS "$appId" AND '
         '(eventMessage CONTAINS[c] "terminat" OR eventMessage CONTAINS[c] "jetsam" OR eventMessage CONTAINS[c] "exited")';
     try {
@@ -73,17 +90,22 @@ class AppProcessProbe {
         udid,
         'log',
         'show',
-        '--last',
-        '2m',
+        '--start',
+        _logTime(since.toLocal()),
         '--style',
         'compact',
         '--predicate',
         predicate,
-      ]).timeout(const Duration(seconds: 8));
+      ]).timeout(const Duration(seconds: 3));
       if (r.exitCode != 0) return null;
+      final own = pid == null ? null : RegExp('\\b$pid\\b');
       final lines = [
         for (final l in r.stdout.toString().split('\n'))
-          if (l.trim().isNotEmpty && !l.startsWith('Timestamp') && !l.startsWith('Filtering')) l.trim(),
+          if (l.trim().isNotEmpty &&
+              !l.startsWith('Timestamp') &&
+              !l.startsWith('Filtering') &&
+              (own == null || own.hasMatch(l)))
+            l.trim(),
       ];
       if (lines.isEmpty) return null;
       final last = lines.last;
@@ -97,7 +119,7 @@ class AppProcessProbe {
     if (appId == null) return const AppProcessVerdict(running: null, reason: 'the app package is not known');
     try {
       final r =
-          await run(device.adbPath, ['-s', device.serial, 'shell', 'pidof', appId]).timeout(const Duration(seconds: 6));
+          await run(device.adbPath, ['-s', device.serial, 'shell', 'pidof', appId]).timeout(const Duration(seconds: 4));
       final out = r.stdout.toString().trim();
       if (r.exitCode == 0 && out.isNotEmpty) return const AppProcessVerdict(running: true);
       final err = r.stderr.toString().trim();

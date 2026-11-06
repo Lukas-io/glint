@@ -49,6 +49,9 @@ class VmServiceRuntime implements FlutterRuntime {
   /// The package segment is the app's pubspec name — the surest "which app".
   String? get rootLibraryUri => _vm.flutterIsolate.rootLib?.uri;
 
+  /// Resolves once any re-selection of the Flutter isolate (after a hot restart) has finished.
+  Future<void> isolateReady() => _vm.ready();
+
   @override
   Stream<void> get onDisconnect => _disconnectController.stream;
   final _disconnectController = StreamController<void>.broadcast();

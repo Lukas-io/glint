@@ -91,6 +91,7 @@ class FlutterErrorFeed {
 
   static const summaryLimit = 160;
   static const _crossChannelWindow = Duration(milliseconds: 1500);
+  static const _agentConsoleWindow = Duration(seconds: 5);
 
   /// How long console output may stay silent before an unfinished dump or exception counts as complete.
   static const staleAfter = Duration(seconds: 2);
@@ -222,7 +223,7 @@ class FlutterErrorFeed {
     final now = DateTime.now();
     final existing = _find(summary, location);
     if (existing != null) {
-      if (existing.channel != via && now.difference(existing.lastSeen) < _crossChannelWindow) return;
+      if (existing.channel != via && now.difference(existing.lastSeen) < _windowBetween(existing.channel, via)) return;
       existing._hit(++_seq, now, via);
       if (existing.location == null && location != null) {
         _entries.remove(existing.key);
@@ -245,6 +246,12 @@ class FlutterErrorFeed {
       _entries.remove(_entries.keys.first);
     }
     if (!_new.isClosed) _new.add(entry);
+  }
+
+  /// The console dump of an agent-reported error is flushed after [staleAfter] of silence, so that pair gets a longer window.
+  static Duration _windowBetween(FlutterErrorChannel a, FlutterErrorChannel b) {
+    final agentAndConsole = {a, b}.containsAll({FlutterErrorChannel.agent, FlutterErrorChannel.log});
+    return agentAndConsole ? _agentConsoleWindow : _crossChannelWindow;
   }
 
   FlutterErrorEntry? _find(String summary, String? location) {
