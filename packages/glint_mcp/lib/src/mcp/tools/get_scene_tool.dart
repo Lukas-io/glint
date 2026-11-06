@@ -172,6 +172,7 @@ class GetSceneTool extends GlintTool {
       final ui = await session.uiState();
       final route = semantic.routeStack.isEmpty ? null : semantic.routeStack.first;
       final overlay = semantic.overlayLayers.isEmpty ? null : semantic.overlayLayers.first.kind;
+      final nextSteps = [if (subtree == null && _needsPerson(semantic)) _handoffStep];
       final trailer = [
         'state: ${state.name}',
         if (lifecycle != null && lifecycle != 'resumed') 'lifecycle: $lifecycle',
@@ -189,6 +190,7 @@ class GetSceneTool extends GlintTool {
         return StructuredResponse(
           summary: rendered,
           warnings: warnings,
+          nextSteps: nextSteps,
           data: {
             'format': format,
             'state': state.name,
@@ -207,9 +209,26 @@ class GetSceneTool extends GlintTool {
       return StructuredResponse(
         summary: '${rendered.trimRight()}\n$trailer',
         warnings: warnings,
+        nextSteps: nextSteps,
         textOnly: true,
       );
     });
+  }
+
+  static const _handoffStep =
+      'if a person must enter this (PIN, password, 2FA), hand off with watch: register the next screen, then ask them';
+
+  static final _singleDigit = RegExp(r'^[0-9]$');
+
+  /// A password field, or a PIN pad: buttons labelled with every digit 0-9.
+  static bool _needsPerson(SemanticScene semantic) {
+    final digits = <String>{};
+    for (final n in semantic.allNodes()) {
+      if (n is SemanticInput && n.obscured) return true;
+      final label = n is SemanticButton ? n.label?.trim() : null;
+      if (label != null && _singleDigit.hasMatch(label)) digits.add(label);
+    }
+    return digits.length == 10;
   }
 
   static const _eagerListLabels = {

@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- **Agents are now told when to hand a step to a person with `watch`.** The server instructions have a short hand-off section: when a person or a backend must act first (PIN, password, 2FA, sign-in, a real-money or destructive confirm), register `watch` for the screen after their action plus a failure condition, run the `tail -n0 -F` line as a background monitor, ask them and end the turn, with `wait_for` kept for what the agent just caused. `get_scene` adds a next step with the same advice when the screen has a password field or a PIN pad (buttons for every digit 0-9), the `watch` description now opens with the hand-off use, the attach update notice links to the changelog (`what's new: https://pub.dev/packages/glint_mcp/changelog`), and the package README has a `watch` section with a worked example, condition tips and the `op:events` fallback. (#298)
+
 ### Fixed
 
 - **`attach launch:"<app id>"` brings an app that is already running on an iOS simulator to the front (#300).** It used to refuse with `already running`, so an app sent to the home screen could not be reopened from glint. Now it reactivates the same process, attaches to its VM like any running app, and says in the reply that it was already running and was brought to the front (`data.broughtToFront`). `get_scene` on a backgrounded app and the `appUnresponsive` reply of `attach` now name this command with the app's id.
