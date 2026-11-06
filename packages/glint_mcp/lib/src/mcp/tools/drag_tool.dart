@@ -15,6 +15,9 @@ class DragTool extends GlintTool {
   const DragTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'drag',
         description: 'Drag from one glintId to another, OR pass x1,y1,x2,y2 for raw '

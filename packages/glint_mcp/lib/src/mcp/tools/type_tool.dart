@@ -16,6 +16,9 @@ class TypeTool extends GlintTool {
   const TypeTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'type',
         description:

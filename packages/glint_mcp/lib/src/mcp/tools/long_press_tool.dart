@@ -15,6 +15,9 @@ class LongPressTool extends GlintTool {
   const LongPressTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'long_press',
         description: 'Long-press a node by glintId or visible text, OR pass x,y for raw coordinates '

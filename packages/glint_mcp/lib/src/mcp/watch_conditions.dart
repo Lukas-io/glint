@@ -71,6 +71,17 @@ final class LogCondition extends WatchCondition {
   Map<String, Object?> toJson() => {'log': pattern.pattern};
 }
 
+/// An error the app has not reported before: one hit per distinct summary and location, never for repeats.
+final class ErrorsCondition extends WatchCondition {
+  const ErrorsCondition();
+
+  @override
+  String get describe => 'new app error';
+
+  @override
+  Map<String, Object?> toJson() => {'errors': true};
+}
+
 /// A hit on an [ArmedCondition]: what matched, plus extra event fields.
 typedef ConditionHit = ({String matched, Map<String, Object?> extra});
 
@@ -81,6 +92,7 @@ class ArmedCondition {
   final WatchCondition spec;
   bool? _satisfied;
   StreamSubscription<Object?>? logSubscription;
+  StreamSubscription<Object?>? errorSubscription;
   DateTime? lastLogHit;
   int suppressedLogHits = 0;
 
@@ -101,10 +113,13 @@ class ArmedCondition {
       case OverlayCondition(:final appears):
         if (before == null || before.overlay == now.overlay || now.overlay != appears) return null;
         return (matched: appears ? now.overlayKind ?? 'overlay' : 'overlay dismissed', extra: const {});
-      case LogCondition():
+      case LogCondition() || ErrorsCondition():
         return null;
     }
   }
+
+  /// Whether this condition is decided by reading the screen.
+  bool get readsScene => spec is ShownCondition || spec is RouteCondition || spec is OverlayCondition;
 
   static String _routeKey(String route) {
     final r = route.trim().toLowerCase();
@@ -119,7 +134,7 @@ class ArmedCondition {
         errorKind: GlintErrorKind.invalidArgument,
         detail: detail,
         nextSteps: const [
-          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}]',
+          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}, {errors:true}]',
         ],
       );
 
@@ -127,7 +142,7 @@ class ArmedCondition {
     return (conditions: null, error: bad('watch op:add needs a non-empty conditions list'));
   }
   if (raw.length > max) return (conditions: null, error: bad('at most $max conditions per watch, got ${raw.length}'));
-  const selectors = ['text', 'glintId', 'route', 'overlay', 'log'];
+  const selectors = ['text', 'glintId', 'route', 'overlay', 'log', 'errors'];
   final out = <WatchCondition>[];
   for (var i = 0; i < raw.length; i++) {
     final item = raw[i];
@@ -164,6 +179,11 @@ class ArmedCondition {
       return (conditions: null, error: bad('$where: state must be appears or disappears, got "$state"'));
     }
     final value = item[selector];
+    if (selector == 'errors') {
+      if (value != true) return (conditions: null, error: bad('$where: errors must be true'));
+      out.add(const ErrorsCondition());
+      continue;
+    }
     if (selector == 'overlay') {
       if (value != 'appears' && value != 'dismisses') {
         return (conditions: null, error: bad('$where: overlay must be appears or dismisses, got "$value"'));
