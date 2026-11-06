@@ -12,25 +12,40 @@ const _maxAffordances = 60;
 const replayableTools = {'tap', 'long_press', 'hardware_button'};
 
 class StoredAffordance {
-  StoredAffordance({required this.id, required this.sample, required this.kind, this.label});
+  StoredAffordance({
+    required this.key,
+    required this.sample,
+    required this.kind,
+    this.label,
+    this.isRow = false,
+  });
 
-  factory StoredAffordance.fromJson(Map<String, Object?> j) => StoredAffordance(
-        id: j['id']! as String,
-        sample: (j['sample'] as String?) ?? j['id']! as String,
-        kind: AffordanceKind.values.firstWhere((k) => k.name == j['kind'], orElse: () => AffordanceKind.tap),
-        label: j['label'] as String?,
-      );
+  factory StoredAffordance.fromJson(Map<String, Object?> j) {
+    final key = j['id']! as String;
+    final sample = (j['sample'] as String?) ?? key;
+    return StoredAffordance(
+      key: key,
+      sample: sample,
+      kind: AffordanceKind.values.firstWhere((k) => k.name == j['kind'], orElse: () => AffordanceKind.tap),
+      label: j['label'] as String?,
+      isRow: j['row'] == true || (j['row'] == null && sample != key),
+    );
+  }
 
-  final String id;
+  factory StoredAffordance.of(SketchAffordance a) =>
+      StoredAffordance(key: a.key, sample: a.sample, kind: a.kind, label: a.label, isRow: a.isRow);
+
+  /// The control's identity, see [SketchAffordance.key]; `id` in the saved file.
+  final String key;
   String sample;
   final AffordanceKind kind;
   String? label;
-
-  bool get isRow => sample != id;
+  final bool isRow;
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        if (isRow) 'sample': sample,
+        'id': key,
+        'sample': sample,
+        if (isRow) 'row': true,
         'kind': kind.name,
         if (label != null) 'label': label,
       };
@@ -86,12 +101,12 @@ class ExploreScreen {
 
   void mergeAffordances(Iterable<SketchAffordance> seen) {
     for (final a in seen) {
-      final known = affordances.where((s) => s.id == a.id && s.kind == a.kind).firstOrNull;
+      final known = affordances.where((s) => s.key == a.key && s.kind == a.kind).firstOrNull;
       if (known != null) {
         known.sample = a.sample;
         if (a.label != null) known.label = a.label;
       } else if (affordances.length < _maxAffordances) {
-        affordances.add(StoredAffordance(id: a.id, sample: a.sample, kind: a.kind, label: a.label));
+        affordances.add(StoredAffordance.of(a));
       }
     }
   }
@@ -106,9 +121,9 @@ class ExploreScreen {
     states.addAll(other.states);
     other.byPlatform.forEach((k, v) => byPlatform[k] = math.max(byPlatform[k] ?? 0, v));
     for (final a in other.affordances) {
-      final known = affordances.where((s) => s.id == a.id && s.kind == a.kind).firstOrNull;
+      final known = affordances.where((s) => s.key == a.key && s.kind == a.kind).firstOrNull;
       if (known == null && affordances.length < _maxAffordances) {
-        affordances.add(StoredAffordance(id: a.id, sample: a.sample, kind: a.kind, label: a.label));
+        affordances.add(StoredAffordance(key: a.key, sample: a.sample, kind: a.kind, label: a.label, isRow: a.isRow));
       }
     }
   }
@@ -145,6 +160,7 @@ class ExploreEdge {
     required this.tool,
     required this.args,
     this.errorKind,
+    this.target,
     required this.lastSeen,
   });
 
@@ -154,6 +170,7 @@ class ExploreEdge {
         tool: j['tool']! as String,
         args: ((j['args'] as Map?) ?? const {}).map((k, v) => MapEntry(k as String, v as String)),
         errorKind: j['err'] as String?,
+        target: j['tgt'] as String?,
         lastSeen: DateTime.parse(j['last']! as String),
       )
         ..count = (j['count'] as num?)?.toInt() ?? 1
@@ -170,20 +187,23 @@ class ExploreEdge {
 
   /// Set on a failed attempt; a failure is its own edge, never mixed with a success of the same gesture.
   final String? errorKind;
+
+  /// The affordance key of the control this gesture hit (or its glintId when the screen did not list it), whatever args named it.
+  String? target;
   DateTime lastSeen;
   int count = 0;
   String? changeCategory;
   final Map<String, int> byPlatform = {};
 
-  String get key => edgeKey(from, to, tool, args, errorKind);
+  String get key => edgeKey(from, to, tool, args, errorKind, target);
 
   String? get targetId => args['glintId'] ?? args['focus'] ?? args['fromGlintId'];
 
   String get targetBase => targetId == null ? '' : glintIdBase(targetId!);
 
-  /// The text a tap or long press was aimed at when no glintId was given.
+  /// The text a tap or long press was aimed at when no glintId was given and no control was resolved.
   String? get targetText =>
-      args.containsKey('glintId') || (tool != 'tap' && tool != 'long_press') ? null : args['text'];
+      target != null || args.containsKey('glintId') || (tool != 'tap' && tool != 'long_press') ? null : args['text'];
 
   bool get isSelf => from == to;
 
@@ -216,6 +236,7 @@ class ExploreEdge {
       lastSeen = other.lastSeen;
       changeCategory = other.changeCategory ?? changeCategory;
       args = Map.of(other.args);
+      target = other.target ?? target;
     }
   }
 
@@ -227,15 +248,16 @@ class ExploreEdge {
         'count': count,
         if (changeCategory != null) 'cat': changeCategory,
         if (errorKind != null) 'err': errorKind,
+        if (target != null) 'tgt': target,
         'last': lastSeen.toIso8601String(),
         if (byPlatform.isNotEmpty) 'platforms': byPlatform,
       };
 }
 
-String edgeKey(String from, String to, String tool, Map<String, String> args, String? errorKind) {
+String edgeKey(String from, String to, String tool, Map<String, String> args, String? errorKind, [String? target]) {
   final names = args.keys.toList()..sort();
   final shown = [for (final k in names) '$k=${_idArgs.contains(k) ? glintIdBase(args[k]!) : args[k]}'];
-  return '$from|$to|$tool|${shown.join(',')}|${errorKind ?? ''}';
+  return '$from|$to|$tool|${shown.join(',')}|${errorKind ?? ''}|${target ?? ''}';
 }
 
 /// What was done on each screen, indexed once so asking about every control stays linear.
@@ -244,7 +266,8 @@ class TriedIndex {
     for (final e in edges) {
       if (!e.fired) continue;
       final seen = _byScreen.putIfAbsent(e.from, _Tried.new);
-      if (e.targetBase.isNotEmpty) seen.bases.add(e.targetBase);
+      final hit = e.target ?? e.targetBase;
+      if (hit.isNotEmpty) seen.hits.add(hit);
       if (e.tool.startsWith('scroll') && e.targetId == null) seen.scrolled = true;
       if (e.targetText != null) seen.labels.add(e.targetText!.toLowerCase());
     }
@@ -256,14 +279,15 @@ class TriedIndex {
   bool has(ExploreScreen screen, StoredAffordance a) {
     final seen = _byScreen[screen.id];
     if (seen == null) return false;
-    return seen.bases.contains(a.id) ||
+    return seen.hits.contains(a.key) ||
+        seen.hits.contains(a.sample) ||
         (a.kind == AffordanceKind.scroll && seen.scrolled) ||
         (a.label != null && seen.labels.contains(a.label!.toLowerCase()));
   }
 }
 
 class _Tried {
-  final Set<String> bases = {};
+  final Set<String> hits = {};
   final Set<String> labels = {};
   bool scrolled = false;
 }
@@ -345,16 +369,18 @@ class ExploreGraph {
     required Map<String, String> args,
     String? changeCategory,
     String? errorKind,
+    String? target,
     required String platform,
     required DateTime now,
   }) {
-    final key = edgeKey(from.id, to.id, tool, args, errorKind);
+    final key = edgeKey(from.id, to.id, tool, args, errorKind, target);
     final edge = edges[key] ??= ExploreEdge(
       from: from.id,
       to: to.id,
       tool: tool,
       args: args,
       errorKind: errorKind,
+      target: target,
       lastSeen: now,
     );
     edge
@@ -401,6 +427,7 @@ class ExploreGraph {
         tool: other.tool,
         args: Map.of(other.args),
         errorKind: other.errorKind,
+        target: other.target,
         lastSeen: other.lastSeen,
       )
         ..count = other.count

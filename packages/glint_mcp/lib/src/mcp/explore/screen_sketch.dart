@@ -1,4 +1,4 @@
-import '../../semantic/fold.dart' show glintIdBase;
+import '../../semantic/fold.dart' show detectFoldRun, glintIdBase;
 import '../../semantic/semantic_node.dart';
 import '../../semantic/semantic_scene.dart';
 
@@ -12,16 +12,18 @@ enum AffordanceKind {
   final String marker;
 }
 
-/// One actionable node of a screen; list rows share a [id] (the glintId without its `#hash`) and collapse to one.
+/// One actionable node of a screen; a list row shares its [key] with the rows folded like it, any other control has its own.
 class SketchAffordance {
-  SketchAffordance({required this.id, required this.sample, required this.kind, this.label});
+  SketchAffordance({required this.key, required this.sample, required this.kind, this.label, this.isRow = false});
 
-  final String id;
+  /// What makes this control the same one on the next read: the glintId base for a row, else base plus its label (full id with no label).
+  final String key;
 
-  /// The full glintId last seen for [id], the one to pass to a tool.
+  /// The full glintId last seen for [key], the one to pass to a tool.
   final String sample;
   final AffordanceKind kind;
   final String? label;
+  final bool isRow;
 }
 
 /// What one scene read says about one screen: where it is, its structural fingerprint and what can be acted on.
@@ -32,6 +34,7 @@ class ScreenSketch {
     required this.fingerprint,
     required this.label,
     required this.affordances,
+    this.keyById = const {},
     this.state = 'loaded',
   });
 
@@ -45,11 +48,16 @@ class ScreenSketch {
   final String fingerprint;
   final String label;
   final List<SketchAffordance> affordances;
+
+  /// The affordance key of every actionable glintId seen, even past the affordance cap.
+  final Map<String, String> keyById;
   final String state;
 
   bool get isOverlay => overlayKind != null;
 
-  bool offers(String glintId) => affordances.any((a) => a.id == glintIdBase(glintId));
+  bool offers(String glintId) => keyById.containsKey(glintId);
+
+  String? keyFor(String glintId) => keyById[glintId];
 }
 
 /// The base screen of a scene plus the dialog or sheet covering it, if any.
@@ -69,47 +77,120 @@ const _blockingKinds = {'dialog', 'bottomSheet'};
 /// Sketches [scene]; null when it has nothing to fingerprint.
 SceneSketch? sketchScene(SemanticScene scene, {String state = 'loaded'}) {
   final route = normalizeRoute(scene.routeStack.isEmpty ? '' : scene.routeStack.first.name);
-  final baseNodes = scene.root.walk().toList();
-  if (baseNodes.every((n) => n.glintId == null)) return null;
-  final base = _sketch(baseNodes, route: route, overlayKind: null, state: state);
+  if (scene.root.walk().every((n) => n.glintId == null)) return null;
+  final base = _sketch([scene.root], route: route, overlayKind: null, state: state);
   final layer = scene.overlayLayers.where((l) => _blockingKinds.contains(l.kind)).firstOrNull;
   if (layer == null) return SceneSketch(base: base);
-  final overlayNodes = [for (final n in layer.nodes) ...n.walk()];
-  if (overlayNodes.every((n) => n.glintId == null)) return SceneSketch(base: base);
-  return SceneSketch(base: base, overlay: _sketch(overlayNodes, route: route, overlayKind: layer.kind, state: state));
+  if (layer.nodes.every((r) => r.walk().every((n) => n.glintId == null))) return SceneSketch(base: base);
+  return SceneSketch(base: base, overlay: _sketch(layer.nodes, route: route, overlayKind: layer.kind, state: state));
 }
 
-ScreenSketch _sketch(List<SemanticNode> nodes, {required String route, String? overlayKind, required String state}) {
-  final controls = <String>{
-    for (final n in nodes)
-      if (n.glintId != null && n.role != SemanticRole.marker && n.inert != Inert.hidden)
-        if (_kindOf(n) case final kind?) '${kind.name}:${glintIdBase(n.glintId!)}',
-  }.toList()
-    ..sort();
+ScreenSketch _sketch(List<SemanticNode> roots, {required String route, String? overlayKind, required String state}) {
+  final nodes = _collect(roots);
+  final affordances = _affordancesOf(nodes);
   return ScreenSketch(
     route: route,
     overlayKind: overlayKind,
-    fingerprint: fnv1a(controls.join('\n')),
-    label: _labelOf(nodes, route, overlayKind),
-    affordances: _affordancesOf(nodes),
+    fingerprint: fnv1a(_structure(nodes).join('\n')),
+    label: _labelOf([for (final n in nodes) n.node], route, overlayKind),
+    affordances: affordances.list,
+    keyById: affordances.keyById,
     state: state,
   );
 }
 
-List<SketchAffordance> _affordancesOf(List<SemanticNode> nodes) {
+class _Collected {
+  _Collected(this.node, this.inRow);
+
+  final SemanticNode node;
+  final bool inRow;
+}
+
+/// Every node under [roots], marking those inside a run get_scene folds (4+ siblings of one shape) as list rows.
+List<_Collected> _collect(List<SemanticNode> roots) {
+  final out = <_Collected>[];
+  void visit(SemanticNode n, bool inRow) {
+    out.add(_Collected(n, inRow));
+    var i = 0;
+    while (i < n.children.length) {
+      final run = detectFoldRun(n.children, i);
+      if (run == null) {
+        visit(n.children[i], inRow);
+        i++;
+        continue;
+      }
+      for (var j = run.start; j < run.end; j++) {
+        visit(n.children[j], true);
+      }
+      i = run.end;
+    }
+  }
+
+  for (final r in roots) {
+    visit(r, false);
+  }
+  return out;
+}
+
+/// The actionable shape of a screen: each distinct control once, list rows once per kind and id base, text ignored.
+List<String> _structure(List<_Collected> nodes) {
+  final rows = <String>{};
+  final singles = <String>[];
+  for (final c in nodes) {
+    final n = c.node;
+    if (n.glintId == null || n.role == SemanticRole.marker || n.inert == Inert.hidden) continue;
+    final kind = _kindOf(n);
+    if (kind == null) continue;
+    final entry = '${kind.name}:${glintIdBase(n.glintId!)}';
+    if (c.inRow) {
+      rows.add(entry);
+    } else {
+      singles.add(entry);
+    }
+  }
+  return [...rows, ...singles]..sort();
+}
+
+({List<SketchAffordance> list, Map<String, String> keyById}) _affordancesOf(List<_Collected> nodes) {
   final byKey = <String, SketchAffordance>{};
-  for (final n in nodes) {
+  final keyById = <String, String>{};
+  for (final c in nodes) {
+    final n = c.node;
     final id = n.glintId;
     if (id == null || n.inert == Inert.hidden) continue;
     final kind = _kindOf(n);
     if (kind == null) continue;
-    final base = glintIdBase(id);
-    final key = '${kind.name}:$base';
-    if (byKey.length >= _maxAffordances && !byKey.containsKey(key)) continue;
-    final label = id == base && n is! SemanticInput ? _shorten(n.displayLabel) : null;
-    byKey[key] = SketchAffordance(id: base, sample: id, kind: kind, label: label == base ? null : label);
+    final key = c.inRow ? glintIdBase(id) : _controlKey(n, id);
+    keyById[id] = key;
+    final slot = '${kind.name}:$key';
+    if (byKey.length >= _maxAffordances && !byKey.containsKey(slot)) continue;
+    final label = c.inRow || n is SemanticInput ? null : _shorten(n.displayLabel);
+    byKey[slot] = SketchAffordance(
+      key: key,
+      sample: id,
+      kind: kind,
+      label: label == null || label.isEmpty || label == key ? null : label,
+      isRow: c.inRow,
+    );
   }
-  return byKey.values.toList();
+  return (list: byKey.values.toList(), keyById: keyById);
+}
+
+/// Base id plus normalized visible label, since the `#hash` of a lone control may change between reads.
+String _controlKey(SemanticNode n, String id) {
+  final label = _identityLabel(n);
+  return label == null ? id : '${glintIdBase(id)}|$label';
+}
+
+String? _identityLabel(SemanticNode n) {
+  final raw = switch (n) {
+    SemanticButton b => b.label,
+    SemanticInput i => i.hint,
+    SemanticText t => t.content,
+    _ => n.displayLabel,
+  };
+  final flat = _shorten((raw ?? '').toLowerCase());
+  return flat.isEmpty ? null : flat;
 }
 
 AffordanceKind? _kindOf(SemanticNode n) {

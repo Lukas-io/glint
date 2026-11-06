@@ -39,6 +39,7 @@ class _Pending {
 /// One tool call's own slot for the screens it saw; calls never share it, so overlapping calls cannot swap edges.
 class ExploreCall {
   _Pending? _pending;
+  String? _resolvedId;
 
   /// Runs [body] so that the post-action read inside it is noted on this call.
   Future<T> run<T>(Future<T> Function() body) => runZoned(body, zoneValues: {_callKey: this});
@@ -146,6 +147,12 @@ class ExploreRecorder {
     call._pending = _Pending(keyOf(app), app.id, app.platform.name, before, after);
   }
 
+  /// Notes the glintId a call resolved from visible text, so its edge is keyed by the control it really hit.
+  void noteTarget(String glintId) {
+    final call = Zone.current[_callKey] as ExploreCall?;
+    call?._resolvedId = glintId;
+  }
+
   /// Called when a tool call ends: records the edge its gesture made, or its failure, on [app]'s graph.
   void completeCall(
     AppSession? app,
@@ -155,7 +162,9 @@ class ExploreRecorder {
     StructuredResponse response,
   ) {
     final pending = call?._pending;
+    final resolvedId = call?._resolvedId;
     call?._pending = null;
+    call?._resolvedId = null;
     if (!_edgeTools.contains(tool)) return;
     try {
       final gesture = gestureArgs(tool, args ?? const {});
@@ -175,7 +184,8 @@ class ExploreRecorder {
         return;
       }
       final before = _Arrival(graph, pending.key, pending.deviceId, platform, now, _cursor)..arrive(pending.before);
-      final fromSketch = _sourceSketch(pending.before, gesture);
+      final targetId = gesture['glintId'] ?? gesture['focus'] ?? gesture['fromGlintId'] ?? resolvedId;
+      final fromSketch = _sourceSketch(pending.before, targetId);
       final from = fromSketch.isOverlay ? before.top! : before.base!;
       final sameScreen = _scrollTools.contains(tool) &&
           pending.after.base.route == pending.before.base.route &&
@@ -193,6 +203,7 @@ class ExploreRecorder {
         to: to,
         tool: tool,
         args: gesture,
+        target: targetId == null ? null : fromSketch.keyFor(targetId) ?? targetId,
         changeCategory: response.data?['changeCategory'] as String?,
         platform: platform,
         now: now,
@@ -219,9 +230,8 @@ class ExploreRecorder {
     _markDirty(key);
   }
 
-  ScreenSketch _sourceSketch(SceneSketch before, Map<String, String> gesture) {
+  ScreenSketch _sourceSketch(SceneSketch before, String? glintId) {
     final overlay = before.overlay;
-    final glintId = gesture['glintId'] ?? gesture['focus'] ?? gesture['fromGlintId'];
     if (glintId == null) return before.top;
     if (overlay != null && overlay.offers(glintId)) return overlay;
     if (before.base.offers(glintId)) return before.base;
@@ -352,7 +362,8 @@ class _Arrival {
   void arrive(SceneSketch sketch) {
     final cursorKey = '$key@$deviceId';
     final previous = graph.screens[cursor[cursorKey]];
-    final b = base = graph.upsert(sketch.base, platform: platform, now: now);
+    final covered = sketch.overlay == null ? null : _coveredBase(previous, sketch.base.route);
+    final b = base = covered ?? graph.upsert(sketch.base, platform: platform, now: now);
     var t = b;
     if (sketch.overlay != null) t = graph.upsert(sketch.overlay!, parentId: b.id, platform: platform, now: now);
     top = t;
@@ -360,5 +371,15 @@ class _Arrival {
     if (!stayedOnBase) graph.countVisit(b, platform);
     if (t != b && previous?.id != t.id) graph.countVisit(t, platform);
     cursor[cursorKey] = t.id;
+  }
+
+  /// The screen a dialog or sheet sits on: the one the cursor was on, else the latest known one of the route, never a new one made from the blocked read.
+  ExploreScreen? _coveredBase(ExploreScreen? previous, String route) {
+    final from = previous == null || !previous.isOverlay ? previous : graph.screens[previous.parentId];
+    if (from != null && !from.isOverlay && from.route == route) return from;
+    if (route.isEmpty) return null;
+    final known = graph.screens.values.where((s) => !s.isOverlay && !s.stale && s.route == route).toList()
+      ..sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
+    return known.firstOrNull;
   }
 }
