@@ -258,11 +258,13 @@ class WatchRegistry {
       if (watch.label != null) 'label': watch.label,
       'kind': 'lintError',
       'condition': condition.spec.describe,
-      'matched': 'lint ${problem.retrying ? 'paused' : 'stopped'}: ${problem.detail}',
+      'matched':
+          'lint ${problem.partial ? 'partly blind' : problem.retrying ? 'paused' : 'stopped'}: ${problem.detail}',
       'app': watch.app.label,
       'errorKind': problem.errorKind.name,
       'detail': problem.detail,
       'retrying': problem.retrying,
+      if (problem.partial) 'partial': true,
       'nextSteps': problem.nextSteps,
       if (last) 'final': true,
     });

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import '../../interaction.dart' show GlintErrorKind;
-import '../../perception.dart' show CreationLocation, SceneNode;
+import '../../perception.dart' show SceneNode;
 import '../../semantic.dart' show SemanticScene;
 import '../runtime/flutter_runtime.dart';
 import 'watch_conditions.dart';
@@ -104,22 +104,40 @@ const String _walkTemplate = r'''
   final out = <String>[];
   final counts = <String, int>{};
   final stack = <int>[];
+  var errors = 0;
+  var firstError = '';
   String n(double v) => v.toStringAsFixed(1);
-  String clean(String s) {
+  String clean(String s, [int max = 50]) {
     final t = s.replaceAll('\n', ' ').replaceAll('|', ' ').replaceAll(';', ' ').replaceAll('=', ' ').replaceAll(',', ' ').trim();
-    return t.length > 50 ? t.substring(0, 49) : t;
+    return t.length > max ? t.substring(0, max - 1) : t;
+  }
+  void note(String where, Object e) {
+    errors++;
+    if (firstError.isEmpty) firstError = clean(where + ': ' + e.toString(), 160);
+  }
+  String creation(dynamic el) {
+    final json = el.toDiagnosticsNode().toJsonMap(InspectorSerializationDelegate(service: svc, subtreeDepth: 0)) as Map;
+    final at = json['creationLocation'];
+    if (json['createdByLocalProject'] != true || at == null) return '';
+    return at['file'].toString() + ':' + at['line'].toString();
   }
   void add(String rule, dynamic r, double x, double y, double w, double h, String detail) {
     final c = counts[rule] ?? 0;
     counts[rule] = c + 1;
     if (c >= 15) return;
     final ids = <String>[];
+    var loc = '';
     try {
       final el = (r.debugCreator as dynamic).element;
       ids.add(svc.toId(el, group)!);
-      el.visitAncestorElements((a) { ids.add(svc.toId(a, group)!); return ids.length < 40; });
-    } catch (_) {}
-    out.add('F|' + rule + '|' + r.runtimeType.toString() + '|' + n(x) + ',' + n(y) + ',' + n(w) + ',' + n(h) + '|' + detail + '|' + (stack.length > 4 ? stack.sublist(stack.length - 4) : stack).join('.') + '|' + ids.join(','));
+      loc = creation(el);
+      el.visitAncestorElements((a) {
+        ids.add(svc.toId(a, group)!);
+        if (loc.isEmpty) loc = creation(a);
+        return ids.length < 40;
+      });
+    } catch (e) { note(rule + ' ids', e); }
+    out.add('F|' + rule + '|' + r.runtimeType.toString() + '|' + n(x) + ',' + n(y) + ',' + n(w) + ',' + n(h) + '|' + detail + '|' + (stack.length > 4 ? stack.sublist(stack.length - 4) : stack).join('.') + '|' + ids.join(',') + '|' + loc);
   }
   int lineCount(dynamic r, int length) {
     final boxes = r.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: length)) as List;
@@ -132,7 +150,7 @@ const String _walkTemplate = r'''
     return lines;
   }
   bool scrolling(dynamic r) {
-    try { return RenderAbstractViewport.maybeOf(r) != null; } catch (_) { return false; }
+    try { return RenderAbstractViewport.maybeOf(r) != null; } catch (e) { note('viewport', e); return false; }
   }
   List<double> hitSize(dynamic r, double w, double h) {
     dynamic p = r.parent;
@@ -164,7 +182,7 @@ const String _walkTemplate = r'''
           try {
             final sel = r.selection;
             if (sel != null && sel.isValid) edge = r.localToGlobal(r.getLocalRectForCaret(sel.extent).bottomLeft).dy as double;
-          } catch (_) {}
+          } catch (e) { note('keyboard caret', e); }
         }
         final kbTop = vh - kb;
         if (edge > kbTop + 0.5) add('keyboard', r, x, y, w, h, 'covered=' + n(edge - kbTop) + ';keyboardTop=' + n(kbTop) + ';fieldBottom=' + n(edge));
@@ -199,11 +217,11 @@ const String _walkTemplate = r'''
         if (plain.trim().isEmpty) return;
         text = clean(plain);
         if (rules.contains('clippedText') && r.didExceedMaxLines == true) {
-          add('clippedText', r, x, y, w, h, 'maxLines=' + r.maxLines.toString() + ';overflow=' + (r.overflow.name as String) + ';text=' + text);
+          add('clippedText', r, x, y, w, h, 'maxLines=' + r.maxLines.toString() + ';overflow=' + (r.overflow.toString().split('.').last) + ';text=' + text);
         }
         if (rules.contains('lines')) {
           var fs = 0.0;
-          try { fs = (r.text.style?.fontSize ?? 0.0) as double; } catch (_) {}
+          try { fs = (r.text.style?.fontSize ?? 0.0) as double; } catch (e) { note('fontSize', e); }
           if (fs >= 20.0) {
             final count = lineCount(r, plain.length);
             if (count > maxHeadline) add('lines', r, x, y, w, h, 'lines=' + count.toString() + ';max=' + maxHeadline.toString() + ';fontSize=' + n(fs) + ';text=' + text);
@@ -221,7 +239,7 @@ const String _walkTemplate = r'''
     void walk(dynamic r) {
       final t = r.runtimeType.toString();
       if (hidden(r, t)) return;
-      try { visit(r, t); } catch (_) {}
+      try { visit(r, t); } catch (e) { note(t, e); }
       final c = kids(r);
       for (var i = 0; i < c.length; i++) {
         stack.add(i);
@@ -234,6 +252,7 @@ const String _walkTemplate = r'''
   for (final e in counts.entries) {
     if (e.value > 15) out.add('C|' + e.key + '|' + (e.value - 15).toString());
   }
+  if (errors > 0) out.add('E|' + errors.toString() + '|' + firstError);
   return out.join('\n');
 })()
 ''';
@@ -319,12 +338,16 @@ class LintProblem {
     required this.detail,
     required this.nextSteps,
     required this.retrying,
+    this.partial = false,
   });
 
   final GlintErrorKind errorKind;
   final String detail;
   final List<String> nextSteps;
   final bool retrying;
+
+  /// The check still ran and reported what it could; some node checks threw.
+  final bool partial;
 }
 
 void _nothingToCommit() {}
@@ -372,6 +395,8 @@ class LintWatcher {
   int _pausedTicks = 0;
   bool _reported = false;
   bool _busy = false;
+  String? _route;
+  String? _reportedWalkError;
   final Map<String, Set<String>> _fired = {};
 
   /// Whether the eval failed to compile; the condition then stays quiet.
@@ -384,7 +409,9 @@ class LintWatcher {
     WatchObservation obs,
     Future<String?> probe,
   ) async {
-    if (disabled || _busy) return LintOutcome.none;
+    if (disabled) return LintOutcome.none;
+    _enterRoute(obs.route);
+    if (_busy) return LintOutcome.none;
     if (_pausedTicks > 0) {
       _pausedTicks--;
       return LintOutcome.none;
@@ -413,6 +440,14 @@ class LintWatcher {
     }
   }
 
+  /// Leaving a route forgets what fired on it, so coming back reports its problems again.
+  void _enterRoute(String route) {
+    if (_route == route) return;
+    if (_route != null) _fired.remove(_route);
+    _checkedSignature = null;
+    _route = route;
+  }
+
   Future<LintOutcome> _check(
     FlutterRuntime runtime,
     SemanticScene scene,
@@ -439,10 +474,16 @@ class LintWatcher {
         .timeout(walkLimit);
     if (raw == null) throw _NoReply('the lint walk returned no string');
     final found = parseLintFindings(raw, scene.sourceScene.root, obs.route);
-    return _outcome(found, parseLintHidden(raw), obs.route, signature);
+    return _outcome(found, parseLintHidden(raw), parseLintWalkError(raw), obs.route, signature);
   }
 
-  LintOutcome _outcome(List<LintFinding> found, Map<String, int> hidden, String route, String signature) {
+  LintOutcome _outcome(
+    List<LintFinding> found,
+    Map<String, int> hidden,
+    ({int count, String message})? walkError,
+    String route,
+    String signature,
+  ) {
     final held = _fired[route] ?? <String>{};
     final current = {for (final f in found) f.key};
     final fresh = <LintFinding>[];
@@ -460,10 +501,26 @@ class LintWatcher {
     return LintOutcome(
       fresh: fresh,
       hidden: hidden,
+      problem: _walkProblem(walkError),
       commit: () {
         _fired[route] = {...held.intersection(current), ...emitted};
         if (deferred.isEmpty) _checkedSignature = signature;
       },
+    );
+  }
+
+  LintProblem? _walkProblem(({int count, String message})? error) {
+    if (error == null || error.message == _reportedWalkError) return null;
+    _reportedWalkError = error.message;
+    return LintProblem(
+      errorKind: GlintErrorKind.internal,
+      detail: '${error.count} node checks threw during the lint walk, first: ${error.message}',
+      nextSteps: const [
+        'findings from the nodes that did work still arrive; a rule may be blind on some widgets',
+        'report_issue with this detail and the Flutter version',
+      ],
+      retrying: true,
+      partial: true,
     );
   }
 
@@ -539,6 +596,7 @@ List<LintFinding> parseLintFindings(String raw, SceneNode sceneRoot, String rout
         measured[k] = num.tryParse(v) ?? v;
       }
     }
+    final place = parts.length > 7 ? parts[7] : '';
     SceneNode? node;
     for (final id in parts[6].split(',')) {
       node = byInspector[id];
@@ -549,7 +607,7 @@ List<LintFinding> parseLintFindings(String raw, SceneNode sceneRoot, String rout
       route: route,
       widget: node?.baseLabel ?? parts[2],
       glintId: node?.glintId,
-      location: node?.creationLocation == null ? null : _place(node!.creationLocation!),
+      location: place.isEmpty ? null : _place(place),
       text: text,
       path: parts[5],
       rect: (x: box[0]!, y: box[1]!, w: box[2]!, h: box[3]!),
@@ -571,9 +629,19 @@ Map<String, int> parseLintHidden(String raw) {
   return out;
 }
 
-String _place(CreationLocation l) {
-  var file = l.file;
-  final lib = file.lastIndexOf('/lib/');
-  if (lib >= 0) file = file.substring(lib + 1);
-  return '$file:${l.line}';
+/// A creation `file:line` shortened to start at `lib/` when the file is under one.
+String _place(String fileAndLine) {
+  final lib = fileAndLine.lastIndexOf('/lib/');
+  return lib >= 0 ? fileAndLine.substring(lib + 1) : fileAndLine;
+}
+
+/// How many node checks threw in a lint walk and the first message, or null when none did.
+({int count, String message})? parseLintWalkError(String raw) {
+  for (final line in raw.split('\n')) {
+    final parts = line.split('|');
+    if (parts.length < 3 || parts.first != 'E') continue;
+    final count = int.tryParse(parts[1]);
+    if (count != null) return (count: count, message: parts.sublist(2).join('|'));
+  }
+  return null;
 }
