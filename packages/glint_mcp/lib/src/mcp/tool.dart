@@ -59,6 +59,9 @@ abstract class GlintTool {
   /// Tools that give `app` their own meaning (attach) opt out of routing.
   bool get routesByApp => true;
 
+  /// Whether `app:"*"` means every attached app and reaches [handle] unrouted.
+  bool get acceptsAllApps => false;
+
   /// Whether a call with [args] acts on the app or its device, which an app attached with observe:true refuses; true unless a tool says it only reads.
   bool changesDevice(Map<String, Object?> args) => true;
 
@@ -191,7 +194,8 @@ abstract class GlintTool {
     }
     StructuredResponse response;
     ExploreCall? call;
-    final target = routesByApp ? (request.arguments?['app'] as String?) : null;
+    final requested = routesByApp ? (request.arguments?['app'] as String?) : null;
+    final target = acceptsAllApps && requested == '*' ? null : requested;
     var app = session.active;
     if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {

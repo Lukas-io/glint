@@ -15,7 +15,7 @@ import '../tool.dart';
 import '../tool_args.dart';
 import '../xctest_start.dart';
 import '../update_notice.dart';
-import '../watch_conditions.dart' show ErrorsCondition;
+import '../watch_conditions.dart' show AlertsCondition;
 import '../watch_registry.dart' show WatchRegistry;
 
 /// How long attach waits for a runner start before replying; a warm start is up well inside it.
@@ -816,7 +816,7 @@ class AttachTool extends GlintTool {
     final watch = existing ??
         (await registry.add(
           app,
-          conditions: const [ErrorsCondition()],
+          conditions: const [AlertsCondition.errors()],
           label: _observeLabel,
           once: false,
           timeoutMs: WatchRegistry.maxTimeoutMs,

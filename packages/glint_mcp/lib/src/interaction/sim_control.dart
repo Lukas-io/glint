@@ -79,6 +79,24 @@ class SimControl {
     }
   }
 
+  /// The simulator's boot state (`Booted`, `Shutdown`, ...), null when it is unknown or unreadable.
+  Future<String?> state(String udid) async => (await _deviceEntry(udid.toUpperCase()))?.$1['state'] as String?;
+
+  /// Whether [bundleId] has a live process on [udid]; null when `launchctl` cannot be asked.
+  Future<bool?> isAppRunning(String udid, String bundleId) async {
+    try {
+      final r = await Process.run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']);
+      if (r.exitCode != 0) return null;
+      for (final line in r.stdout.toString().split('\n')) {
+        if (!line.contains('UIKitApplication:$bundleId[')) continue;
+        return int.tryParse(line.trim().split(RegExp(r'\s+')).first) != null;
+      }
+      return false;
+    } on Object {
+      return null;
+    }
+  }
+
   /// SpringBoard's lock state: true locked, false unlocked, null when unreadable.
   Future<bool?> isLocked(String udid) async {
     try {

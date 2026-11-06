@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'app_alert.dart';
 import 'app_log_buffer.dart';
 
 /// One distinct error the app reported, with how often and where.
@@ -33,6 +34,23 @@ class FlutterErrorEntry {
 
   String get key => '$summary|${location ?? ''}';
 
+  /// `overflow` for a RenderFlex or RenderBox overflow, `uncaught` for an error nothing caught, else `error`.
+  AlertKind get kind {
+    if (OverflowInfo.parse(summary) != null) return AlertKind.overflow;
+    return library == 'uncaught' ? AlertKind.uncaught : AlertKind.error;
+  }
+
+  /// The alert this error raises the first time it is seen.
+  AppAlert toAlert() {
+    final overflow = OverflowInfo.parse(summary);
+    return AppAlert(kind, kind.name, line, {
+      'summary': summary,
+      if (location != null) 'location': location,
+      if (library != null) 'library': library,
+      ...?overflow?.toJson(),
+    });
+  }
+
   /// `summary (location)` for replies.
   String get line => location == null ? summary : '$summary ($location)';
 
@@ -50,6 +68,7 @@ class FlutterErrorEntry {
 
   Map<String, Object?> toJson({int? since}) => {
         'summary': summary,
+        'kind': kind.name,
         if (location != null) 'location': location,
         if (library != null) 'library': library,
         'count': since == null ? count : countSince(since),
@@ -59,8 +78,8 @@ class FlutterErrorEntry {
       };
 }
 
-/// Where an occurrence was read from: Flutter's `Flutter.Error` events or the app's console output.
-enum FlutterErrorChannel { structured, log }
+/// Where an occurrence was read from: Flutter's `Flutter.Error` events, glint's in-app error hooks or the app's console output.
+enum FlutterErrorChannel { structured, agent, log }
 
 /// The distinct errors an app reports, read without any app code: Flutter's structured error events when `flutter run` enabled them, else the error dumps in the app's console output.
 class FlutterErrorFeed {
@@ -133,6 +152,43 @@ class FlutterErrorFeed {
     }
     final summary = _summaryNode(data['properties']);
     if (summary != null) _record(summary, null, scanner.libraryHint, FlutterErrorChannel.structured);
+  }
+
+  /// Reads one `glint.error` event the in-app agent posts from the app's own `FlutterError.onError` and `PlatformDispatcher.onError` chain.
+  void addAgentEvent(Map<String, Object?>? data) {
+    if (data == null) return;
+    switch (data['source']) {
+      case 'flutter':
+        _addAgentFlutterError(data);
+      case 'uncaught':
+        _addAgentUncaught(data);
+    }
+  }
+
+  void _addAgentFlutterError(Map<String, Object?> data) {
+    final text = data['text'];
+    final library = data['library'];
+    final hint = library is String && library.isNotEmpty ? library.toLowerCase() : null;
+    final scanner = _Scanner(this, FlutterErrorChannel.agent, libraryHint: hint);
+    if (text is String && _header.hasMatch(text)) {
+      scanner
+        ..add(text)
+        ..flush();
+      return;
+    }
+    final summary = data['summary'];
+    if (summary is! String) return;
+    final lines = text is String ? text.split('\n') : const <String>[];
+    _record(summary, scanner._widgetLocation(lines) ?? scanner._frameLocation(lines), hint, FlutterErrorChannel.agent);
+  }
+
+  void _addAgentUncaught(Map<String, Object?> data) {
+    final summary = data['summary'];
+    if (summary is! String) return;
+    final stack = data['stack'];
+    final lines = stack is String ? stack.split('\n') : const <String>[];
+    final scanner = _Scanner(this, FlutterErrorChannel.agent);
+    _record(summary, scanner._frameLocation(lines), 'uncaught', FlutterErrorChannel.agent);
   }
 
   void dispose() {

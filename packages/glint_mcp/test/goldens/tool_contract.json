@@ -965,7 +965,7 @@
       },
       "conditions": {
         "type": "array",
-        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors (state goes with text or glintId). Any one matching fires the watch.",
+        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors, alerts (state goes with text or glintId). Any one matching fires the watch.",
         "items": {
           "type": "object",
           "properties": {
@@ -996,9 +996,20 @@
             "errors": {
               "type": "boolean",
               "description": "true: fire once for each new distinct app error; repeats do not fire."
+            },
+            "alerts": {
+              "type": "array",
+              "description": "Any of error, uncaught, overflow, http, terminated. errors:true is error + uncaught + overflow.",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
+      },
+      "allApps": {
+        "type": "boolean",
+        "description": "op=add: watch every attached app and every app attached later; alert conditions only."
       },
       "label": {
         "type": "string",
@@ -1006,7 +1017,7 @@
       },
       "once": {
         "type": "boolean",
-        "description": "op=add: end after the first match. Default true."
+        "description": "op=add: end after the first match. Default true, false with allApps."
       },
       "timeoutMs": {
         "type": "integer",
