@@ -11,6 +11,7 @@ import '../interaction/image_size.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
+import 'explore/recorder.dart';
 import 'post_action.dart' show ScrollAnchor;
 import 'watch_registry.dart';
 
@@ -73,6 +74,9 @@ class GlintSession {
 
   /// The warning for [deviceId] when its last re-attach could not continue the earlier app logs.
   String? takeLogNote(String deviceId) => _logNotes.remove(deviceId);
+
+  /// The per-app screen graph built from every scene read and gesture, kept under the data dir.
+  late final ExploreRecorder explore = ExploreRecorder();
 
   /// Conditions the agent asked to be told about while it does something else, written to an events file.
   late final WatchRegistry watches = WatchRegistry(this);
@@ -217,6 +221,7 @@ class GlintSession {
     required Uri vmUri,
     required DeviceTarget device,
     bool rebuild = false,
+    bool observe = false,
   }) async {
     final existing = _pool[device.id];
     if (!rebuild && existing != null && !existing.deviceMode && existing.vmUri == vmUri && existing.isLive) {
@@ -231,7 +236,7 @@ class GlintSession {
       device: device,
       runtimeFactory: _runtimeFactory,
       appLogCapacity: config.appLogCapacity,
-      showTouches: config.showTouches,
+      showTouches: !observe && config.showTouches,
       appLogs: retained?.buffer,
     );
     _retainedLogs.remove(retained);
@@ -256,10 +261,10 @@ class GlintSession {
     return app;
   }
 
-  /// Applies `config.showTouches` to every live Flutter app, and to device-mode Android emulators, which draw touches themselves; other device-mode apps are skipped.
+  /// Applies `config.showTouches` to every live Flutter app that is not observe-only, and to device-mode Android emulators, which draw touches themselves; other device-mode apps are skipped.
   Future<Map<AppSession, TouchesOutcome>> applyShowTouches() async => {
         for (final app in apps)
-          if (app.isLive && (!app.deviceMode || app.device is AndroidDevice))
+          if (app.isLive && !app.observeOnly && (!app.deviceMode || app.device is AndroidDevice))
             app: await app.setShowTouches(config.showTouches),
       };
 
@@ -306,6 +311,7 @@ class GlintSession {
     _pool.remove(app.id);
     watches.appDropped(app);
     _retainLogs(app);
+    explore.flush();
     if (identical(_active, app)) {
       _active = null;
       _orphanLogs = app.appLogs;

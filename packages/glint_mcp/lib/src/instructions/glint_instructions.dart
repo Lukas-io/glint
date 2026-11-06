@@ -44,12 +44,14 @@ const _workflow = '''
 ## Workflow
 
 1. `attach` once, no args — glint finds the app + device; never pass vmUri/iosBridgePath.
-2. `get_scene` to read the screen. A dialog shows first under `--- dialog ---`; the base screen follows under `--- screen (blocked by modal) ---`.
+2. `get_scene` to read the screen. A dialog shows first under `--- dialog ---`, then `--- screen (blocked by modal) ---`.
 3. Act with a `glintId`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static.
-4. Read `changed`; `get_scene` when you need the new layout; `get_scene glintId:<id>` drills into one container.
+4. Read `changed`; `get_scene` for the new layout, `get_scene glintId:<id>` to drill into a container.
 5. Long lists fold: one row in full, then `… N more like it: "label" #hash`. Tap `<base>#hash`, or `get_scene glintId:<list>` for all.
 
 Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>"` on any tool targets one call.
+
+`explore`: the recorded map, untried controls, paths.
 
 Long run in a big conversation? Delegate the driving to a subagent with a self-contained brief; keep irreversible steps.
 ''';
@@ -69,7 +71,7 @@ const _addressing = '''
 const _armedIntent = '''
 ## Armed intent
 
-`awaitReady: true` on any action polls until the target exists and is hittable, then fires: use across screen transitions. It fails fast once the screen stops changing without it.
+`awaitReady: true` polls until the target exists and is hittable, then fires: use across screen transitions. It fails fast once the screen stops changing without it.
 
 `batch steps:[{tool,args},…]` runs a known sequence in one call (targeted steps arm by default) and stops at the first error or `changed:false`.
 ''';
@@ -94,7 +96,7 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `pickIncomplete`: follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly` / `pickIncomplete`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';
@@ -102,14 +104,14 @@ const _recovery = '''
 const _gotchas = '''
 ## Gotchas
 
-- **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it; `key` sends backspace/enter/arrows.
+- **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it.
 - **Scroll is content-relative:** `scroll down` shows what is below (finger swipes up).
 ''';
 
 const _toolSurface = '''
 ## Tool surface
 
-`attach` · `get_scene` · `tap` · `type` · `key` · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `pinch` · `drag` · `batch` · `hardware_button` · `wait_for_settle` · `watch` hand off · `resolve` · `device` · `app_logs` · `session` · `report_issue`
+`attach` · `get_scene` · `tap` · `type` · `key` · `scroll` · `scroll_to_find` · `swipe` · `long_press` · `pinch` · `drag` · `batch` · `hardware_button` · `wait_for_settle` · `watch` hand off · `explore` · `resolve` · `device` · `app_logs` · `session` · `report_issue`
 ''';
 
 const _examples = '''

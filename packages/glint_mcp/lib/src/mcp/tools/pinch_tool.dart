@@ -13,6 +13,9 @@ class PinchTool extends GlintTool {
   const PinchTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'pinch',
         description:

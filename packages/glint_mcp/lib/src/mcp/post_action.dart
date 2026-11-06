@@ -4,6 +4,7 @@ import '../../perception.dart';
 import '../../runtime.dart' show AppAgent;
 import '../../semantic.dart';
 import 'envelope.dart';
+import 'explore/screen_sketch.dart';
 import 'session.dart';
 
 /// The one scene read a gesture needs: the live [scene] the interactor
@@ -68,7 +69,11 @@ class SceneSnapshot {
     required this.contentHash,
     this.paintHash,
     this.pages = const {},
+    this.sketch,
   });
+
+  /// The screen this snapshot saw, for the explore graph.
+  final SceneSketch? sketch;
 
   final String routeName;
   final bool hasOverlay;
@@ -137,7 +142,7 @@ class SceneSnapshot {
 /// [SceneSnapshot.from] plus the on-viewport state of each page in a
 /// PageView / TabBarView (set by [PagedViewportEnricher]), so a tab switch
 /// registers as a change even though the tree is identical before and after.
-SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
+SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash, String? state}) {
   final base = SceneSnapshot.from(semantic);
   var hash = base.contentHash;
   void mix(String s) {
@@ -157,6 +162,7 @@ SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
     contentHash: hash,
     paintHash: paintHash,
     pages: _visiblePages(semantic),
+    sketch: sketchScene(semantic, state: state ?? const StateObserver().observe(semantic).name),
   );
 }
 
@@ -240,7 +246,11 @@ class PostActionState {
     this.note,
     this.lateMs,
     this.snapshot,
+    this.sketch,
   });
+
+  /// The screen the post-action read saw, for the explore graph.
+  final SceneSketch? sketch;
 
   /// The scene snapshot the post-action read compared against; null for a native-surface read.
   final SceneSnapshot? snapshot;
@@ -261,6 +271,7 @@ class PostActionState {
         note: note,
         lateMs: ms,
         snapshot: snapshot,
+        sketch: sketch,
       );
 
   /// The native surface over the app, read as data, when it could be read.
@@ -359,13 +370,19 @@ Future<PostActionState?> readPostActionState(
     }
     Future<PostActionState> readOnce() => session.withScene(
           (semantic) async {
-            final post = snapshotOf(semantic, paintHash: pre?.paintHash == null ? null : await paintSignature(session));
+            final observed = const StateObserver().observe(semantic).name;
+            final post = snapshotOf(
+              semantic,
+              paintHash: pre?.paintHash == null ? null : await paintSignature(session),
+              state: observed,
+            );
             final category = pre != null ? changeCategory(pre, post) : 'unknown';
             return PostActionState(
               snapshot: post,
+              sketch: post.sketch,
               changed: category != 'nothing',
               changeCategory: category,
-              state: const StateObserver().observe(semantic).name,
+              state: observed,
               sceneText: includeSceneText ? const PlainTextSceneRenderer().render(semantic) : null,
               scrolledPx: scrollAnchor == null
                   ? null
@@ -420,6 +437,7 @@ Future<PostActionState?> readPostActionState(
       state = await readOnce();
     }
     if (state.changeCategory == 'nothing' && pre != null) state = await _awaitLateChange(session, state, readOnce);
+    session.explore.noteAction(app, pre?.sketch, state.sketch);
     return state;
   } on Object {
     return null;

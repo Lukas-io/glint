@@ -20,6 +20,9 @@ class TelemetryTool extends GlintTool {
   const TelemetryTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
+  @override
   Tool get definition => Tool(
         name: 'telemetry',
         description: 'Glint telemetry control + transparency. ops: status (default), '

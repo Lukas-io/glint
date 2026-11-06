@@ -61,6 +61,9 @@ enum GlintErrorKind {
   /// A destructive tool was pointed at an app or device this session never attached or launched.
   notOwned,
 
+  /// The app was attached with observe:true, which refuses tools that change the app or its device.
+  observeOnly,
+
   /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
   flutterModeRequired,
 

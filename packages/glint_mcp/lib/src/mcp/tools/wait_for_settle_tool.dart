@@ -12,6 +12,9 @@ class WaitForSettleTool extends GlintTool {
   const WaitForSettleTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
+  @override
   Tool get definition => Tool(
         name: 'wait_for_settle',
         description:

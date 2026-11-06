@@ -13,6 +13,9 @@ import '../tool_args.dart';
 class WaitForTool extends GlintTool {
   const WaitForTool();
 
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   static const _defaultTimeoutMs = 15000;
   static const _maxTimeoutMs = 120000;
   static const _poll = Duration(milliseconds: 400);

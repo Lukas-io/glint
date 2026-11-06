@@ -16,6 +16,10 @@ class MapTool extends GlintTool {
   const MapTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'read'}, defaultOp: 'read');
+
+  @override
   Tool get definition => Tool(
         name: 'map',
         description:

@@ -18,6 +18,9 @@ class TapTool extends GlintTool {
   const TapTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'tap',
         description:

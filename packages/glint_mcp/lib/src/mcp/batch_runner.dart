@@ -3,6 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../interaction.dart';
 import '../../perception.dart' show InspectorReadError;
 import 'envelope.dart';
+import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
 import 'tool.dart';
 import 'tools/drag_tool.dart';
@@ -36,6 +37,35 @@ const Map<String, GlintTool> kBatchStepTools = {
   'wait_for_settle': WaitForSettleTool(),
   'wait_for': WaitForTool(),
 };
+
+/// Whether any step in a raw `steps` list acts on the app, by each step tool's own [GlintTool.changesDevice]; an unknown tool counts as changing.
+bool stepsChangeDevice(Object? raw) {
+  if (raw is! List) return false;
+  return raw.any((s) {
+    if (s is! Map) return false;
+    final tool = kBatchStepTools[s['tool']];
+    final args = (s['args'] as Map?)?.cast<String, Object?>() ?? const <String, Object?>{};
+    return tool == null || tool.changesDevice(args);
+  });
+}
+
+/// The attached app a step with `app: [target]` runs on; null when none or ambiguous.
+AppSession? _stepApp(GlintSession session, String? target) {
+  if (target == null) return session.active;
+  final matches = session.matchApps(target);
+  return matches.length == 1 ? matches.single : null;
+}
+
+/// The refusal for the first step aimed at an observe-only app that would change it; null when every step may run.
+StructuredResponse? observeRefusalForSteps(GlintSession session, List<BatchStep> steps) {
+  for (var i = 0; i < steps.length; i++) {
+    final step = steps[i];
+    final refusal =
+        kBatchStepTools[step.tool]!.observeRefusal(_stepApp(session, step.args['app'] as String?), step.args);
+    if (refusal != null) return refusal.copyWith(summary: 'step ${i + 1}: ${refusal.summary}');
+  }
+  return null;
+}
 
 /// Steps that resolve a glintId: default to awaitReady so a step can target what the previous step reveals.
 const Set<String> kTargetedSteps = {'tap', 'type', 'swipe', 'long_press', 'drag'};
@@ -207,15 +237,20 @@ Future<BatchRun> runBatchSteps(
     final appTarget = step.args['app'] as String?;
     final matches = appTarget == null ? null : session.matchApps(appTarget);
     StructuredResponse r;
+    ExploreCall? call;
+    final app = matches != null && matches.length == 1 ? matches.single : session.active;
     try {
       if (invalid != null) {
         r = invalid;
       } else if (matches == null) {
-        r = await tool.handle(session, request);
+        r = tool.observeRefusal(session.active, stepArgs) ??
+            await (call = ExploreCall()).run(() async => await tool.handle(session, request));
       } else if (matches.length != 1) {
         r = GlintTool.unknownAppResponse(session, appTarget!, matches);
       } else {
-        r = await session.withApp(matches.single, () async => await tool.handle(session, request));
+        r = tool.observeRefusal(matches.single, stepArgs) ??
+            await session.withApp(
+                matches.single, () => (call = ExploreCall()).run(() async => await tool.handle(session, request)));
       }
     } on SessionNotAttachedError {
       rethrow;
@@ -228,7 +263,7 @@ Future<BatchRun> runBatchSteps(
         detail: '$e',
       );
     }
-    tool.logCall(session, request, r, start);
+    tool.logCall(session, request, r, start, app: app, call: call);
     outcomes.add(StepOutcome(
       index: i + 1,
       tool: step.tool,

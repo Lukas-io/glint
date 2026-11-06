@@ -21,6 +21,10 @@ class DeviceTool extends GlintTool {
   const DeviceTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'status', 'screenshot'}, defaultOp: 'status');
+
+  @override
   Tool get definition => Tool(
         name: 'device',
         description:
