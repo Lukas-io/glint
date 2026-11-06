@@ -65,7 +65,7 @@ const String _probeSource = r'''
     void w(dynamic o) {
       final t = o.runtimeType.toString();
       if (hidden(o, t)) return;
-      if (t != 'RenderView' && !t.startsWith('RenderSliver')) {
+      if (!t.endsWith('RenderView') && !t.startsWith('RenderSliver')) {
         try {
           if (o.hasSize) {
             mix((o.size.width * 8).round() as int);
@@ -170,7 +170,7 @@ const String _walkTemplate = r'''
     final kb = fv.viewInsets.bottom / dpr;
     out.add('H|' + n(vw) + '|' + n(vh) + '|' + n(top) + '|' + n(bottom) + '|' + n(kb));
     void visit(dynamic r, String t) {
-      if (t == 'RenderView' || t.startsWith('RenderSliver') || !r.hasSize) return;
+      if (t.endsWith('RenderView') || t.startsWith('RenderSliver') || !r.hasSize) return;
       final o = r.localToGlobal(Offset.zero);
       final x = o.dx as double;
       final y = o.dy as double;

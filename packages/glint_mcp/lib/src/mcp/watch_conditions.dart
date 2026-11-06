@@ -231,7 +231,7 @@ const _conditionExamples =
       if (stray.isNotEmpty) {
         return (
           conditions: null,
-          error: bad('$where: ${stray.join(' and ')} only go with lint',
+          error: bad('$where: ${stray.join(' and ')} only ${stray.length == 1 ? 'goes' : 'go'} with lint',
               detail:
                   '$where has $selector and ${stray.join(' and ')}; ${lintOptions.join(' and ')} tune the lint rules',
               fix: 'move ${stray.join(' and ')} onto a lint condition, e.g. {lint:["tapTarget"], minTapTarget:48}, '

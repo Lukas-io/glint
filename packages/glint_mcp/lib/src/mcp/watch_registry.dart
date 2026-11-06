@@ -240,7 +240,7 @@ class WatchRegistry {
       'kind': 'lint',
       'condition': condition.spec.describe,
       'matched': notListed > 0 ? '${finding.summary} (+$notListed more ${finding.rule} not listed)' : finding.summary,
-      'route': finding.route,
+      if (finding.route.isNotEmpty) 'route': finding.route,
       'app': watch.app.label,
       ...finding.toJson(),
       if (notListed > 0) 'notListed': notListed,
