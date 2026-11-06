@@ -24,7 +24,7 @@ class ExploreTool extends GlintTool {
             'frontier (untried controls nearest first, each as the exact next call, plus stale screens to re-check), '
             'path (to:"<screen id or label>": the shortest known route from where you are, as a ready batch), '
             'reset (forget this app\'s graph). '
-            'A screen is its route plus the set of stable glintIds on it (text and list rows ignored); a dialog or sheet is its own screen over the one it covers; a screen whose ids changed is stale until seen again. '
+            'A screen is its route plus the set of tappable, typeable and scrollable controls on it (list rows count once, text ignored); a dialog or sheet is its own screen over the one it covers; a screen whose controls changed is stale until seen again. Typed text is never stored. '
             'errorKind: sessionNotAttached, targetNotFound (path), invalidArgument.',
         inputSchema: ObjectSchema(
           properties: {
@@ -57,13 +57,15 @@ class ExploreTool extends GlintTool {
       );
     }
     final warning = await _refreshCurrent(session, app);
-    final graph = recorder.graphFor(ExploreRecorder.keyOf(app));
+    final key = ExploreRecorder.keyOf(app);
+    final graph = recorder.graphFor(key);
     final here = recorder.current(app);
     final now = DateTime.now();
+    final warnings = [if (warning != null) warning, ...recorder.takeNotes(key)];
     return switch (op) {
-      'frontier' => _frontier(graph, here, now, warning),
-      'path' => _path(graph, here, (args['to'] as String).trim(), warning),
-      _ => _map(graph, here, now, warning),
+      'frontier' => _frontier(graph, here, now, warnings),
+      'path' => _path(graph, here, (args['to'] as String).trim(), warnings),
+      _ => _map(graph, here, now, warnings),
     };
   }
 
@@ -83,27 +85,26 @@ class ExploreTool extends GlintTool {
     }
   }
 
-  StructuredResponse _map(ExploreGraph graph, ExploreScreen? here, DateTime now, String? warning) {
-    if (graph.isEmpty) return _empty(graph, warning);
+  StructuredResponse _map(ExploreGraph graph, ExploreScreen? here, DateTime now, List<String> warnings) {
+    if (graph.isEmpty) return _empty(graph, warnings);
     final view = renderMap(graph, here, now);
-    final untried = graph.screens.values.fold<int>(0, (n, s) => n + graph.untried(s).length);
     return StructuredResponse(
       summary: view.text,
-      warnings: [if (warning != null) warning],
+      warnings: warnings,
       nextSteps: [
-        if (untried > 0) 'explore op:frontier lists the $untried untried controls nearest first',
+        if (view.untried > 0) 'explore op:frontier lists the ${view.untried} untried controls nearest first',
         'explore op:path to:"<id>" gives the route to any screen above as a batch',
       ],
       data: view.data,
     );
   }
 
-  StructuredResponse _frontier(ExploreGraph graph, ExploreScreen? here, DateTime now, String? warning) {
-    if (graph.isEmpty) return _empty(graph, warning);
+  StructuredResponse _frontier(ExploreGraph graph, ExploreScreen? here, DateTime now, List<String> warnings) {
+    if (graph.isEmpty) return _empty(graph, warnings);
     final view = renderFrontier(graph, here, now);
     return StructuredResponse(
       summary: view.text,
-      warnings: [if (warning != null) warning],
+      warnings: warnings,
       nextSteps: [
         if (view.total > 0) 'run the first call, then explore op:frontier again; it shrinks as you go',
         if (view.total == 0) 'every control on the known screens was tried; navigate somewhere new and the map grows',
@@ -112,7 +113,7 @@ class ExploreTool extends GlintTool {
     );
   }
 
-  StructuredResponse _path(ExploreGraph graph, ExploreScreen? here, String to, String? warning) {
+  StructuredResponse _path(ExploreGraph graph, ExploreScreen? here, String to, List<String> warnings) {
     final matches = _resolve(graph, to);
     if (matches.isEmpty) {
       final names = [
@@ -141,8 +142,8 @@ class ExploreTool extends GlintTool {
         nextSteps: const ['get_scene once, then explore op:path again'],
       );
     }
-    final warnings = [
-      if (warning != null) warning,
+    final notes = [
+      ...warnings,
       if (matches.length > 1)
         '${matches.length} screens match "$to"; using ${target.id} (${matches.map((m) => m.id).join(', ')})',
       if (target.stale)
@@ -151,7 +152,7 @@ class ExploreTool extends GlintTool {
     if (target.id == here.id) {
       return StructuredResponse(
         summary: 'already on ${screenName(target)}',
-        warnings: warnings,
+        warnings: notes,
         nextSteps: const ['explore op:frontier for what is left to try here'],
         data: {'from': here.id, 'to': target.id, 'steps': const <Object?>[]},
       );
@@ -178,7 +179,7 @@ class ExploreTool extends GlintTool {
     ];
     return StructuredResponse(
       summary: lines.join('\n'),
-      warnings: warnings,
+      warnings: notes,
       nextSteps: [batch, 'if a step fails, get_scene and explore op:path again from where the app stopped'],
       data: {'from': here.id, 'to': target.id, 'steps': steps},
     );
@@ -207,15 +208,16 @@ class ExploreTool extends GlintTool {
     return StructuredResponse(
       summary: dropped.screens == 0
           ? 'the map of $name was already empty'
-          : 'forgot the map of $name: ${dropped.screens} screens, ${dropped.edges} edges (file removed)',
+          : 'forgot the map of $name: ${dropped.screens} screens, ${dropped.edges} edges '
+              '(${dropped.fileKept ? 'file kept: it is from a newer glint' : 'file removed'})',
       nextSteps: const ['it starts again from the next scene read or action'],
       data: {'app': name, 'droppedScreens': dropped.screens, 'droppedEdges': dropped.edges},
     );
   }
 
-  StructuredResponse _empty(ExploreGraph graph, String? warning) => StructuredResponse(
+  StructuredResponse _empty(ExploreGraph graph, List<String> warnings) => StructuredResponse(
         summary: 'nothing recorded for ${graph.app} yet',
-        warnings: [if (warning != null) warning],
+        warnings: warnings,
         nextSteps: const ['get_scene and act as usual; every screen and gesture is recorded without calling explore'],
         data: {'app': graph.app, 'screenCount': 0, 'edgeCount': 0},
       );

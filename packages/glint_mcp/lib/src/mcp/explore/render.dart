@@ -22,15 +22,16 @@ String screenName(ExploreScreen s) {
 /// The call that does [a] on its screen.
 String callFor(StoredAffordance a) => switch (a.kind) {
       AffordanceKind.tap => 'tap glintId:"${a.sample}"',
-      AffordanceKind.type => 'type focus:"${a.sample}" text:"…"',
+      AffordanceKind.type => 'type focus:"${a.sample}" text:"$typedTextPlaceholder"',
       AffordanceKind.scroll => 'scroll direction:"down"',
     };
 
 class MapView {
-  MapView(this.text, this.data);
+  MapView(this.text, this.data, this.untried);
 
   final String text;
   final Map<String, Object?> data;
+  final int untried;
 }
 
 MapView renderMap(ExploreGraph g, ExploreScreen? here, DateTime now) {
@@ -45,7 +46,9 @@ MapView renderMap(ExploreGraph g, ExploreScreen? here, DateTime now) {
   final shownIds = {for (final s in shown) s.id};
   final visibleEdges = edges.where((e) => shownIds.contains(e.from) && shownIds.contains(e.to)).toList();
   final shownEdges = visibleEdges.take(_mapEdgeCap).toList();
-  final failed = g.edges.values.where((e) => e.errorKind != null && e.isSelf).toList();
+  final failed = g.edges.values.where((e) => e.errorKind != null).toList()
+    ..sort((a, b) => b.lastSeen.compareTo(a.lastSeen));
+  final untriedBy = g.untriedByScreen();
 
   final buf = StringBuffer()
     ..writeln('${g.app} · ${g.screens.length} screens, ${g.edges.length} edges'
@@ -54,7 +57,7 @@ MapView renderMap(ExploreGraph g, ExploreScreen? here, DateTime now) {
     ..writeln('screens');
   for (final s in shown) {
     final total = s.affordances.length;
-    final done = total - g.untried(s).length;
+    final done = total - untriedBy[s.id]!.length;
     buf.writeln(' ${screenName(s)}${s.isOverlay ? ' (over ${s.parentId})' : ''} ×${s.visits} ${ago(s.lastSeen, now)}'
         ' · $done/$total tried${s.stale ? ' · stale' : ''}'
         '${s.states.contains('error') ? ' · saw error' : ''}'
@@ -71,7 +74,7 @@ MapView renderMap(ExploreGraph g, ExploreScreen? here, DateTime now) {
   }
   if (visibleEdges.length > shownEdges.length) buf.writeln(' +${visibleEdges.length - shownEdges.length} more edges');
   if (failed.isNotEmpty) {
-    buf.writeln('failed');
+    buf.writeln('failed attempts');
     for (final e in failed.take(8)) {
       buf.writeln(' ${e.from} --${e.verb}--> ${e.errorKind} ×${e.count}');
     }
@@ -93,14 +96,16 @@ MapView renderMap(ExploreGraph g, ExploreScreen? here, DateTime now) {
           'visits': s.visits,
           'lastSeen': s.lastSeen.toUtc().toIso8601String(),
           if (s.stale) 'stale': true,
-          'tried': s.affordances.length - g.untried(s).length,
+          'tried': s.affordances.length - untriedBy[s.id]!.length,
           'affordances': s.affordances.length,
           if (platforms.length > 1) 'platforms': s.byPlatform,
         }
     ],
     'edges': [for (final e in shownEdges) _edgeData(e)],
+    if (failed.isNotEmpty) 'failed': [for (final e in failed.take(8)) _edgeData(e)],
   };
-  return MapView(buf.toString().trimRight(), data);
+  final untried = untriedBy.values.fold<int>(0, (n, list) => n + list.length);
+  return MapView(buf.toString().trimRight(), data, untried);
 }
 
 Map<String, Object?> _edgeData(ExploreEdge e) => {
@@ -131,6 +136,7 @@ class FrontierView {
 }
 
 FrontierView renderFrontier(ExploreGraph g, ExploreScreen? here, DateTime now) {
+  final untriedBy = g.untriedByScreen();
   final reach = here == null ? <String, List<ExploreEdge>>{} : g.paths(here.id);
   int? hops(ExploreScreen s) => reach[s.id]?.length;
   int rank(int? h) => h ?? 1 << 20;
@@ -138,7 +144,7 @@ FrontierView renderFrontier(ExploreGraph g, ExploreScreen? here, DateTime now) {
   final items = <FrontierItem>[
     for (final s in g.screens.values)
       if (!s.stale)
-        for (final a in g.untried(s)) FrontierItem(s, a, hops(s)),
+        for (final a in untriedBy[s.id]!) FrontierItem(s, a, hops(s)),
   ]..sort((a, b) {
       final c = rank(a.hops).compareTo(rank(b.hops));
       return c != 0 ? c : b.screen.lastSeen.compareTo(a.screen.lastSeen);

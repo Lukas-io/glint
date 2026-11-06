@@ -142,7 +142,7 @@ class SceneSnapshot {
 /// [SceneSnapshot.from] plus the on-viewport state of each page in a
 /// PageView / TabBarView (set by [PagedViewportEnricher]), so a tab switch
 /// registers as a change even though the tree is identical before and after.
-SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
+SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash, String? state}) {
   final base = SceneSnapshot.from(semantic);
   var hash = base.contentHash;
   void mix(String s) {
@@ -162,7 +162,7 @@ SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
     contentHash: hash,
     paintHash: paintHash,
     pages: _visiblePages(semantic),
-    sketch: sketchScene(semantic),
+    sketch: sketchScene(semantic, state: state ?? const StateObserver().observe(semantic).name),
   );
 }
 
@@ -370,12 +370,16 @@ Future<PostActionState?> readPostActionState(
     }
     Future<PostActionState> readOnce() => session.withScene(
           (semantic) async {
-            final post = snapshotOf(semantic, paintHash: pre?.paintHash == null ? null : await paintSignature(session));
-            final category = pre != null ? changeCategory(pre, post) : 'unknown';
             final observed = const StateObserver().observe(semantic).name;
+            final post = snapshotOf(
+              semantic,
+              paintHash: pre?.paintHash == null ? null : await paintSignature(session),
+              state: observed,
+            );
+            final category = pre != null ? changeCategory(pre, post) : 'unknown';
             return PostActionState(
               snapshot: post,
-              sketch: sketchScene(semantic, state: observed),
+              sketch: post.sketch,
               changed: category != 'nothing',
               changeCategory: category,
               state: observed,

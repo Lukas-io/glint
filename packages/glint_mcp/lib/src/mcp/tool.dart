@@ -7,6 +7,7 @@ import '../../observability.dart';
 import '../../perception.dart' show InspectorReadError, appBusyCause, suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
+import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
 import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
@@ -167,19 +168,22 @@ abstract class GlintTool {
       return invalid.toCallResult();
     }
     StructuredResponse response;
+    ExploreCall? call;
     final target = routesByApp ? (request.arguments?['app'] as String?) : null;
     var app = session.active;
     if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {
       if (target == null) {
-        response = await handle(session, request);
+        final own = call = ExploreCall();
+        response = await own.run(() async => await handle(session, request));
       } else {
         final matches = session.matchApps(target);
         if (matches.length != 1) {
           response = unknownAppResponse(session, target, matches);
         } else {
           app = matches.single;
-          response = await session.withApp(matches.single, () async => await handle(session, request));
+          final own = call = ExploreCall();
+          response = await session.withApp(matches.single, () => own.run(() async => await handle(session, request)));
         }
       }
     } on SessionNotAttachedError catch (e) {
@@ -227,7 +231,7 @@ abstract class GlintTool {
     response = explainMissingBridge(response);
     response = _explainBreakpointPause(session, response);
     response = _warnSharedDevice(app, response);
-    logCall(session, request, response, start);
+    logCall(session, request, response, start, app: app, call: call);
     return response.toCallResult();
   }
 
@@ -482,10 +486,12 @@ abstract class GlintTool {
     GlintSession session,
     CallToolRequest request,
     StructuredResponse response,
-    DateTime start,
-  ) {
+    DateTime start, {
+    AppSession? app,
+    ExploreCall? call,
+  }) {
     final elapsedMs = DateTime.now().difference(start).inMilliseconds;
-    session.explore.completeCall(session.active, definition.name, request.arguments, response);
+    if (call != null) session.explore.completeCall(app, call, definition.name, request.arguments, response);
     final seq = session.actionLog.allocateSequence();
     final argKeys = UsageRecorder.argKeysFrom(request.arguments);
     final resultBytes = _resultBytes(response);

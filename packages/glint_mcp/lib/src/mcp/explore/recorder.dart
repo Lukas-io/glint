@@ -11,6 +11,20 @@ import 'screen_sketch.dart';
 
 const _edgeTools = {'tap', 'long_press', 'swipe', 'drag', 'pinch', 'type', 'key', 'scroll', 'hardware_button'};
 const _scrollTools = {'scroll'};
+const _retryDelay = Duration(seconds: 10);
+const _callKey = #glintExploreCall;
+
+/// Failures about the session or the arguments, not about the screen, so the map does not keep them.
+const _unrecordedFailures = {
+  'sessionNotAttached',
+  'unknownApp',
+  'invalidArgument',
+  'flutterModeRequired',
+  'connectionLost',
+  'deviceGone',
+  'deviceClaimed',
+  'notOwned',
+};
 
 class _Pending {
   _Pending(this.key, this.deviceId, this.platform, this.before, this.after);
@@ -20,6 +34,14 @@ class _Pending {
   final String platform;
   final SceneSketch before;
   final SceneSketch after;
+}
+
+/// One tool call's own slot for the screens it saw; calls never share it, so overlapping calls cannot swap edges.
+class ExploreCall {
+  _Pending? _pending;
+
+  /// Runs [body] so that the post-action read inside it is noted on this call.
+  Future<T> run<T>(Future<T> Function() body) => runZoned(body, zoneValues: {_callKey: this});
 }
 
 /// Keeps one persistent [ExploreGraph] per app, fed by the scenes and action replies glint already produces.
@@ -34,8 +56,10 @@ class ExploreRecorder {
   final Map<String, ExploreGraph> _graphs = {};
   final Map<String, String> _cursor = {};
   final Set<String> _dirty = {};
+  final Set<String> _blocked = {};
+  final Map<String, List<String>> _notes = {};
   Timer? _timer;
-  _Pending? _pending;
+  bool _closed = false;
 
   /// The id an app's graph is stored under: bundle id or package, else its name.
   static String keyOf(AppSession app) => app.bundleId ?? app.package ?? app.displayName ?? app.label;
@@ -44,17 +68,51 @@ class ExploreRecorder {
 
   ExploreGraph graphFor(String key) => _graphs.putIfAbsent(key, () => _load(key));
 
+  /// What to tell the agent once about [key]'s saved map, such as a file set aside or left alone.
+  List<String> takeNotes(String key) => _notes.remove(key) ?? const [];
+
+  void _note(String key, String text) => _notes.putIfAbsent(key, () => []).add(text);
+
   ExploreGraph _load(String key) {
-    final file = File(_file(key));
     try {
-      if (file.existsSync()) {
-        final json = jsonDecode(file.readAsStringSync());
-        if (json is Map && json['v'] == ExploreGraph.version) return ExploreGraph.fromJson(key, json.cast());
-      }
-    } on Object {
+      return _readDisk(key) ?? ExploreGraph(key);
+    } on FileSystemException {
       return ExploreGraph(key);
     }
-    return ExploreGraph(key);
+  }
+
+  /// The saved graph of [key], null when there is none; an unreadable file is set aside, a newer one blocks saving.
+  ExploreGraph? _readDisk(String key) {
+    final file = File(_file(key));
+    if (!file.existsSync()) return null;
+    try {
+      final json = jsonDecode(file.readAsStringSync());
+      if (json is! Map) throw const FormatException('not an object');
+      final version = json['v'];
+      if (version is int && version > ExploreGraph.version) {
+        _blocked.add(key);
+        _note(key,
+            'the saved map of $key was written by a newer glint (v$version), so this session keeps its map in memory and leaves the file alone');
+        return null;
+      }
+      if (version != ExploreGraph.version) throw FormatException('version $version');
+      return ExploreGraph.fromJson(key, json.cast());
+    } on FileSystemException {
+      rethrow;
+    } on Object {
+      _setAside(key, file);
+      return null;
+    }
+  }
+
+  void _setAside(String key, File file) {
+    final aside = '${file.path}.bad-${_clock().millisecondsSinceEpoch}';
+    try {
+      file.renameSync(aside);
+      _note(key, 'the saved map of $key was unreadable and was moved to $aside; a fresh one started');
+    } on Object {
+      _note(key, 'the saved map of $key was unreadable and could not be moved aside');
+    }
   }
 
   /// The screen [app]'s device is on according to the latest read or action, if any.
@@ -79,32 +137,45 @@ class ExploreRecorder {
     }
   }
 
-  /// The pre-action and post-action sketches of the gesture now finishing; [completeCall] turns them into an edge.
+  /// The pre-action and post-action sketches of the gesture now finishing, kept on the call running it.
   void noteAction(AppSession? app, SceneSketch? before, SceneSketch? after) {
-    _pending = null;
+    final call = Zone.current[_callKey] as ExploreCall?;
+    if (call == null) return;
+    call._pending = null;
     if (app == null || app.deviceMode || before == null || after == null || after.top.state == 'loading') return;
-    _pending = _Pending(keyOf(app), app.id, app.platform.name, before, after);
+    call._pending = _Pending(keyOf(app), app.id, app.platform.name, before, after);
   }
 
-  /// Called when a tool call ends: records the edge its gesture made, or its failure, on the graph.
-  void completeCall(AppSession? app, String tool, Map<String, Object?>? args, StructuredResponse response) {
-    final pending = _pending;
-    _pending = null;
+  /// Called when a tool call ends: records the edge its gesture made, or its failure, on [app]'s graph.
+  void completeCall(
+    AppSession? app,
+    ExploreCall? call,
+    String tool,
+    Map<String, Object?>? args,
+    StructuredResponse response,
+  ) {
+    final pending = call?._pending;
+    call?._pending = null;
     if (!_edgeTools.contains(tool)) return;
     try {
-      final target = _targetOf(tool, args ?? const {});
-      if (target == null) return;
-      final errorKind = response.isError ? (response.data?['errorKind'] as String?) : null;
-      final category = response.data?['changeCategory'] as String?;
-      if (pending == null) {
-        if (errorKind != null && app != null) _recordFailure(app, tool, target, errorKind);
+      final gesture = gestureArgs(tool, args ?? const {});
+      if (gesture == null) return;
+      final errorKind = response.isError ? (response.data?['errorKind'] as String?) ?? 'internal' : null;
+      if (errorKind != null) {
+        if (app != null && !_unrecordedFailures.contains(errorKind)) _recordFailure(app, tool, gesture, errorKind);
         return;
       }
+      if (pending == null) return;
       final graph = graphFor(pending.key);
       final platform = pending.platform;
       final now = _clock();
+      if (pending.before.top.state == 'loading') {
+        _Arrival(graph, pending.key, pending.deviceId, platform, now, _cursor).arrive(pending.after);
+        _markDirty(pending.key);
+        return;
+      }
       final before = _Arrival(graph, pending.key, pending.deviceId, platform, now, _cursor)..arrive(pending.before);
-      final fromSketch = _sourceSketch(pending.before, target.glintId);
+      final fromSketch = _sourceSketch(pending.before, gesture);
       final from = fromSketch.isOverlay ? before.top! : before.base!;
       final sameScreen = _scrollTools.contains(tool) &&
           pending.after.base.route == pending.before.base.route &&
@@ -121,11 +192,8 @@ class ExploreRecorder {
         from: from,
         to: to,
         tool: tool,
-        glintId: target.glintId,
-        text: target.text,
-        arg: target.arg,
-        changeCategory: category,
-        errorKind: errorKind,
+        args: gesture,
+        changeCategory: response.data?['changeCategory'] as String?,
         platform: platform,
         now: now,
       );
@@ -135,7 +203,7 @@ class ExploreRecorder {
     }
   }
 
-  void _recordFailure(AppSession app, String tool, _Target target, String errorKind) {
+  void _recordFailure(AppSession app, String tool, Map<String, String> gesture, String errorKind) {
     final screen = current(app);
     if (screen == null) return;
     final key = keyOf(app);
@@ -143,9 +211,7 @@ class ExploreRecorder {
       from: screen,
       to: screen,
       tool: tool,
-      glintId: target.glintId,
-      text: target.text,
-      arg: target.arg,
+      args: gesture,
       errorKind: errorKind,
       platform: app.platform.name,
       now: _clock(),
@@ -153,8 +219,9 @@ class ExploreRecorder {
     _markDirty(key);
   }
 
-  ScreenSketch _sourceSketch(SceneSketch before, String? glintId) {
+  ScreenSketch _sourceSketch(SceneSketch before, Map<String, String> gesture) {
     final overlay = before.overlay;
+    final glintId = gesture['glintId'] ?? gesture['focus'] ?? gesture['fromGlintId'];
     if (glintId == null) return before.top;
     if (overlay != null && overlay.offers(glintId)) return overlay;
     if (before.base.offers(glintId)) return before.base;
@@ -165,14 +232,17 @@ class ExploreRecorder {
     _Arrival(graph, key, app.id, app.platform.name, _clock(), _cursor).arrive(sketch);
   }
 
-  /// Forgets [app]'s graph in memory and on disk; returns what it held.
-  ({int screens, int edges}) reset(AppSession app) {
+  /// Forgets [app]'s graph in memory and on disk (a file from a newer glint is kept); returns what it held.
+  ({int screens, int edges, bool fileKept}) reset(AppSession app) {
     final key = keyOf(app);
     final graph = graphFor(key);
-    final dropped = (screens: graph.screens.length, edges: graph.edges.length);
+    final keep = _blocked.contains(key);
+    final dropped = (screens: graph.screens.length, edges: graph.edges.length, fileKept: keep);
     _graphs[key] = ExploreGraph(key);
     _cursor.removeWhere((k, _) => k.startsWith('$key@'));
     _dirty.remove(key);
+    _notes.remove(key);
+    if (keep) return dropped;
     try {
       final file = File(_file(key));
       if (file.existsSync()) file.deleteSync();
@@ -184,40 +254,48 @@ class ExploreRecorder {
 
   void _markDirty(String key) {
     _dirty.add(key);
-    _timer ??= Timer(debounce, flush);
+    _timer?.cancel();
+    _timer = Timer(debounce, flush);
   }
 
-  /// Writes every changed graph to disk now.
+  /// Writes every changed graph to disk now, merged with whatever another glint saved there meanwhile.
   void flush() {
     _timer?.cancel();
     _timer = null;
     for (final key in _dirty.toList()) {
       final graph = _graphs[key];
-      if (graph == null) continue;
+      if (graph == null || _blocked.contains(key)) {
+        _dirty.remove(key);
+        continue;
+      }
       try {
+        final saved = _readDisk(key);
+        if (_blocked.contains(key)) {
+          _dirty.remove(key);
+          continue;
+        }
+        if (saved != null) graph.mergeFrom(saved);
         final file = File(_file(key));
         file.parent.createSync(recursive: true);
-        final tmp = File('${file.path}.tmp')..writeAsStringSync(jsonEncode(graph.toJson()));
+        final tmp = File('${file.path}.tmp$pid')..writeAsStringSync(jsonEncode(graph.toJson()));
         tmp.renameSync(file.path);
+        _dirty.remove(key);
       } on Object {
         continue;
       }
     }
-    _dirty.clear();
+    if (_dirty.isNotEmpty && !_closed) _timer = Timer(_retryDelay, flush);
   }
 
-  String path(AppSession app) => _file(keyOf(app));
+  /// Saves what is pending and stops the retry timer, for server shutdown.
+  void close() {
+    _closed = true;
+    flush();
+  }
 }
 
-class _Target {
-  _Target({this.glintId, this.text, this.arg});
-
-  final String? glintId;
-  final String? text;
-  final String? arg;
-}
-
-_Target? _targetOf(String tool, Map<String, Object?> args) {
+/// The arguments [tool] takes to repeat a gesture, with typed text swapped for a placeholder; null when it cannot be repeated.
+Map<String, String>? gestureArgs(String tool, Map<String, Object?> args) {
   String? str(String k) {
     final v = args[k];
     return v is String && v.isNotEmpty ? v : null;
@@ -228,26 +306,33 @@ _Target? _targetOf(String tool, Map<String, Object?> args) {
     case 'long_press':
       if (args['sequence'] != null) return null;
       final id = str('glintId');
+      if (id != null) return {'glintId': id};
       final text = str('text');
-      return id == null && text == null ? null : _Target(glintId: id, text: id == null ? text : null);
+      return text == null ? null : {'text': text};
     case 'pinch':
       final id = str('glintId');
-      return id == null ? null : _Target(glintId: id);
+      return id == null ? null : {'glintId': id};
     case 'type':
-      final id = str('focus');
-      return id == null ? null : _Target(glintId: id);
+      final id = str('focus') ?? str('glintId');
+      return id == null ? null : {'focus': id, 'text': typedTextPlaceholder};
     case 'swipe':
     case 'drag':
-      final id = str('fromGlintId');
-      return id == null ? null : _Target(glintId: id);
+      final from = str('fromGlintId');
+      final to = str('toGlintId');
+      final edge = tool == 'swipe' ? str('edge') : null;
+      if (from != null) return {'fromGlintId': from, if (to != null) 'toGlintId': to};
+      return edge == null ? null : {'edge': edge};
     case 'key':
       final key = str('key');
-      return key == null ? null : _Target(arg: key);
+      return key == null ? null : {'key': key};
     case 'scroll':
-      return _Target(arg: str('direction'));
+      final direction = str('direction');
+      if (direction == null) return null;
+      final id = str('glintId');
+      return {'direction': direction, if (id != null) 'glintId': id};
     case 'hardware_button':
       final button = str('button');
-      return button == null ? null : _Target(arg: button);
+      return button == null ? null : {'button': button};
   }
   return null;
 }

@@ -3,6 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../interaction.dart';
 import '../../perception.dart' show InspectorReadError;
 import 'envelope.dart';
+import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
 import 'tool.dart';
 import 'tools/drag_tool.dart';
@@ -207,15 +208,19 @@ Future<BatchRun> runBatchSteps(
     final appTarget = step.args['app'] as String?;
     final matches = appTarget == null ? null : session.matchApps(appTarget);
     StructuredResponse r;
+    ExploreCall? call;
+    final app = matches != null && matches.length == 1 ? matches.single : session.active;
     try {
       if (invalid != null) {
         r = invalid;
       } else if (matches == null) {
-        r = await tool.handle(session, request);
+        final own = call = ExploreCall();
+        r = await own.run(() async => await tool.handle(session, request));
       } else if (matches.length != 1) {
         r = GlintTool.unknownAppResponse(session, appTarget!, matches);
       } else {
-        r = await session.withApp(matches.single, () async => await tool.handle(session, request));
+        final own = call = ExploreCall();
+        r = await session.withApp(matches.single, () => own.run(() async => await tool.handle(session, request)));
       }
     } on SessionNotAttachedError {
       rethrow;
@@ -228,7 +233,7 @@ Future<BatchRun> runBatchSteps(
         detail: '$e',
       );
     }
-    tool.logCall(session, request, r, start);
+    tool.logCall(session, request, r, start, app: app, call: call);
     outcomes.add(StepOutcome(
       index: i + 1,
       tool: step.tool,

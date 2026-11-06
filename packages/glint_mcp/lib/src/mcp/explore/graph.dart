@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math' as math;
 
 import '../../semantic/fold.dart' show glintIdBase;
 import 'screen_sketch.dart';
@@ -71,7 +72,7 @@ class ExploreScreen {
   final String? parentId;
   final String fingerprint;
   String label;
-  final DateTime firstSeen;
+  DateTime firstSeen;
   DateTime lastSeen;
   int visits = 0;
   bool stale = false;
@@ -95,6 +96,23 @@ class ExploreScreen {
     }
   }
 
+  void absorb(ExploreScreen other) {
+    if (other.lastSeen.isAfter(lastSeen)) {
+      lastSeen = other.lastSeen;
+      label = other.label;
+    }
+    if (other.firstSeen.isBefore(firstSeen)) firstSeen = other.firstSeen;
+    visits = math.max(visits, other.visits);
+    states.addAll(other.states);
+    other.byPlatform.forEach((k, v) => byPlatform[k] = math.max(byPlatform[k] ?? 0, v));
+    for (final a in other.affordances) {
+      final known = affordances.where((s) => s.id == a.id && s.kind == a.kind).firstOrNull;
+      if (known == null && affordances.length < _maxAffordances) {
+        affordances.add(StoredAffordance(id: a.id, sample: a.sample, kind: a.kind, label: a.label));
+      }
+    }
+  }
+
   Map<String, Object?> toJson() => {
         'id': id,
         'route': route,
@@ -112,14 +130,21 @@ class ExploreScreen {
       };
 }
 
+/// Stands in for typed text in a recorded `type` edge; the real text is never stored.
+const typedTextPlaceholder = '<text>';
+
+/// Error kinds where the gesture still reached the app, so the control counts as tried.
+const firedErrorKinds = {'inputPartial', 'modalNotDismissible'};
+
+const _idArgs = {'glintId', 'focus', 'fromGlintId', 'toGlintId'};
+
 class ExploreEdge {
   ExploreEdge({
     required this.from,
     required this.to,
     required this.tool,
-    this.glintId,
-    this.text,
-    this.arg,
+    required this.args,
+    this.errorKind,
     required this.lastSeen,
   });
 
@@ -127,61 +152,78 @@ class ExploreEdge {
         from: j['from']! as String,
         to: j['to']! as String,
         tool: j['tool']! as String,
-        glintId: j['glintId'] as String?,
-        text: j['text'] as String?,
-        arg: j['arg'] as String?,
+        args: ((j['args'] as Map?) ?? const {}).map((k, v) => MapEntry(k as String, v as String)),
+        errorKind: j['err'] as String?,
         lastSeen: DateTime.parse(j['last']! as String),
       )
         ..count = (j['count'] as num?)?.toInt() ?? 1
         ..changeCategory = j['cat'] as String?
-        ..errorKind = j['err'] as String?
         ..byPlatform
             .addAll(((j['platforms'] as Map?) ?? const {}).cast<String, num>().map((k, v) => MapEntry(k, v.toInt())));
 
   final String from;
   final String to;
   final String tool;
-  String? glintId;
-  final String? text;
-  final String? arg;
+
+  /// The arguments the tool really takes, with typed text replaced by [typedTextPlaceholder].
+  Map<String, String> args;
+
+  /// Set on a failed attempt; a failure is its own edge, never mixed with a success of the same gesture.
+  final String? errorKind;
   DateTime lastSeen;
   int count = 0;
   String? changeCategory;
-  String? errorKind;
   final Map<String, int> byPlatform = {};
 
-  String get key => edgeKey(from, to, tool, glintId, text, arg);
+  String get key => edgeKey(from, to, tool, args, errorKind);
 
-  String get targetBase => glintId == null ? '' : glintIdBase(glintId!);
+  String? get targetId => args['glintId'] ?? args['focus'] ?? args['fromGlintId'];
+
+  String get targetBase => targetId == null ? '' : glintIdBase(targetId!);
+
+  /// The text a tap or long press was aimed at when no glintId was given.
+  String? get targetText =>
+      args.containsKey('glintId') || (tool != 'tap' && tool != 'long_press') ? null : args['text'];
 
   bool get isSelf => from == to;
 
+  /// Whether the gesture reached the app, so what it targeted counts as tried.
+  bool get fired => errorKind == null || firedErrorKinds.contains(errorKind);
+
   bool get replayable => replayableTools.contains(tool) && errorKind == null;
 
-  String get verb => switch (tool) {
-        'hardware_button' => arg ?? 'button',
-        _ => [tool, if (glintId != null) glintId else if (text != null) '"$text"' else if (arg != null) arg].join(' '),
-      };
+  String get verb {
+    if (tool == 'hardware_button') return args['button'] ?? 'button';
+    final shown = [
+      for (final e in args.entries)
+        if (!(tool == 'type' && e.key == 'text')) e.key == 'text' ? '"${e.value}"' : e.value,
+    ];
+    return [tool, ...shown].join(' ');
+  }
 
-  Map<String, Object?> get stepArgs => {
-        if (glintId != null) 'glintId': glintId,
-        if (glintId == null && text != null) 'text': text,
-        if (tool == 'hardware_button') 'button': arg,
-      };
+  Map<String, Object?> get stepArgs => Map<String, Object?>.from(args);
 
   /// The exact call to repeat this edge.
   String get call {
-    final args = stepArgs.entries.map((e) => '${e.key}:"${e.value}"').join(' ');
-    return args.isEmpty ? tool : '$tool $args';
+    final text = args.entries.map((e) => '${e.key}:"${e.value}"').join(' ');
+    return text.isEmpty ? tool : '$tool $text';
+  }
+
+  void absorb(ExploreEdge other) {
+    count = math.max(count, other.count);
+    other.byPlatform.forEach((k, v) => byPlatform[k] = math.max(byPlatform[k] ?? 0, v));
+    if (other.lastSeen.isAfter(lastSeen)) {
+      lastSeen = other.lastSeen;
+      changeCategory = other.changeCategory ?? changeCategory;
+      args = Map.of(other.args);
+    }
   }
 
   Map<String, Object?> toJson() => {
         'from': from,
         'to': to,
         'tool': tool,
-        if (glintId != null) 'glintId': glintId,
-        if (text != null) 'text': text,
-        if (arg != null) 'arg': arg,
+        'args': args,
         'count': count,
         if (changeCategory != null) 'cat': changeCategory,
         if (errorKind != null) 'err': errorKind,
@@ -190,8 +232,41 @@ class ExploreEdge {
       };
 }
 
-String edgeKey(String from, String to, String tool, String? glintId, String? text, String? arg) =>
-    '$from|$to|$tool|${glintId == null ? '' : glintIdBase(glintId)}|${text ?? ''}|${arg ?? ''}';
+String edgeKey(String from, String to, String tool, Map<String, String> args, String? errorKind) {
+  final names = args.keys.toList()..sort();
+  final shown = [for (final k in names) '$k=${_idArgs.contains(k) ? glintIdBase(args[k]!) : args[k]}'];
+  return '$from|$to|$tool|${shown.join(',')}|${errorKind ?? ''}';
+}
+
+/// What was done on each screen, indexed once so asking about every control stays linear.
+class TriedIndex {
+  TriedIndex(Iterable<ExploreEdge> edges) {
+    for (final e in edges) {
+      if (!e.fired) continue;
+      final seen = _byScreen.putIfAbsent(e.from, _Tried.new);
+      if (e.targetBase.isNotEmpty) seen.bases.add(e.targetBase);
+      if (e.tool.startsWith('scroll') && e.targetId == null) seen.scrolled = true;
+      if (e.targetText != null) seen.labels.add(e.targetText!.toLowerCase());
+    }
+  }
+
+  final Map<String, _Tried> _byScreen = {};
+
+  /// Whether something was done to [a] on [screen], by id or by its label as tap text.
+  bool has(ExploreScreen screen, StoredAffordance a) {
+    final seen = _byScreen[screen.id];
+    if (seen == null) return false;
+    return seen.bases.contains(a.id) ||
+        (a.kind == AffordanceKind.scroll && seen.scrolled) ||
+        (a.label != null && seen.labels.contains(a.label!.toLowerCase()));
+  }
+}
+
+class _Tried {
+  final Set<String> bases = {};
+  final Set<String> labels = {};
+  bool scrolled = false;
+}
 
 /// The persistent map of one app: screens by id, and what happened when something was done on them.
 class ExploreGraph {
@@ -222,14 +297,8 @@ class ExploreGraph {
 
   /// The screen for [sketch] under [parentId], created on first sight. Marks the other fingerprints of its route stale.
   ExploreScreen upsert(ScreenSketch sketch, {String? parentId, required String platform, required DateTime now}) {
-    final existing = screens.values
-        .where((s) =>
-            s.fingerprint == sketch.fingerprint &&
-            s.route == sketch.route &&
-            s.overlayKind == sketch.overlayKind &&
-            s.parentId == parentId)
-        .firstOrNull;
-    final screen = existing ?? _create(sketch, parentId, now);
+    final screen =
+        _find(sketch.fingerprint, sketch.route, sketch.overlayKind, parentId) ?? _create(sketch, parentId, now);
     screen
       ..label = sketch.label
       ..lastSeen = now
@@ -244,6 +313,11 @@ class ExploreGraph {
     _trim(keep: screen.id);
     return screen;
   }
+
+  ExploreScreen? _find(String fingerprint, String route, String? overlayKind, String? parentId) => screens.values
+      .where((s) =>
+          s.fingerprint == fingerprint && s.route == route && s.overlayKind == overlayKind && s.parentId == parentId)
+      .firstOrNull;
 
   ExploreScreen _create(ScreenSketch sketch, String? parentId, DateTime now) {
     final id = 's${nextId++}';
@@ -268,62 +342,118 @@ class ExploreGraph {
     required ExploreScreen from,
     required ExploreScreen to,
     required String tool,
-    String? glintId,
-    String? text,
-    String? arg,
+    required Map<String, String> args,
     String? changeCategory,
     String? errorKind,
     required String platform,
     required DateTime now,
   }) {
-    final key = edgeKey(from.id, to.id, tool, glintId, text, arg);
+    final key = edgeKey(from.id, to.id, tool, args, errorKind);
     final edge = edges[key] ??= ExploreEdge(
       from: from.id,
       to: to.id,
       tool: tool,
-      glintId: glintId,
-      text: text,
-      arg: arg,
+      args: args,
+      errorKind: errorKind,
       lastSeen: now,
     );
     edge
-      ..glintId = glintId ?? edge.glintId
+      ..args = args
       ..count += 1
       ..changeCategory = changeCategory ?? edge.changeCategory
-      ..errorKind = errorKind
       ..lastSeen = now;
     edge.byPlatform[platform] = (edge.byPlatform[platform] ?? 0) + 1;
-    if (edges.length > _maxEdges) {
-      final drop = edges.values.toList()..sort((a, b) => a.lastSeen.compareTo(b.lastSeen));
-      for (final e in drop.take(edges.length - _maxEdges)) {
-        edges.remove(e.key);
-      }
-    }
+    _trimEdges();
     return edge;
   }
 
-  /// Whether something was done to [a] on [screen], by id or by its label as tap text.
-  bool tried(ExploreScreen screen, StoredAffordance a) {
-    for (final e in edges.values) {
-      if (e.from != screen.id) continue;
-      if (e.targetBase == a.id) return true;
-      if (a.kind == AffordanceKind.scroll && e.tool.startsWith('scroll') && e.glintId == null) return true;
-      if (e.glintId == null && e.text != null && a.label != null && e.text!.toLowerCase() == a.label!.toLowerCase()) {
-        return true;
-      }
-    }
-    return false;
+  /// The controls of each screen (by screen id) that nothing was done to yet.
+  Map<String, List<StoredAffordance>> untriedByScreen() {
+    final index = TriedIndex(edges.values);
+    return {
+      for (final s in screens.values)
+        s.id: [
+          for (final a in s.affordances)
+            if (!index.has(s, a)) a
+        ],
+    };
   }
 
-  List<StoredAffordance> untried(ExploreScreen screen) => [
-        for (final a in screen.affordances)
-          if (!tried(screen, a)) a,
-      ];
+  /// Folds another save of this app ([disk]) into this graph, matching screens by what they are rather than by id.
+  void mergeFrom(ExploreGraph disk) {
+    final idMap = <String, String>{};
+    final theirs = disk.screens.values.toList()
+      ..sort((a, b) => (a.parentId == null ? 0 : 1).compareTo(b.parentId == null ? 0 : 1));
+    for (final other in theirs) {
+      final parent = other.parentId == null ? null : idMap[other.parentId];
+      if (other.parentId != null && parent == null) continue;
+      final mine = _find(other.fingerprint, other.route, other.overlayKind, parent) ?? _adopt(other, parent);
+      mine.absorb(other);
+      idMap[other.id] = mine.id;
+    }
+    for (final other in disk.edges.values) {
+      final from = idMap[other.from];
+      final to = idMap[other.to];
+      if (from == null || to == null) continue;
+      final copy = ExploreEdge(
+        from: from,
+        to: to,
+        tool: other.tool,
+        args: Map.of(other.args),
+        errorKind: other.errorKind,
+        lastSeen: other.lastSeen,
+      )
+        ..count = other.count
+        ..changeCategory = other.changeCategory
+        ..byPlatform.addAll(other.byPlatform);
+      final known = edges[copy.key];
+      if (known == null) {
+        edges[copy.key] = copy;
+      } else {
+        known.absorb(copy);
+      }
+    }
+    _refreshStale();
+    _trim(keep: null);
+    _trimEdges();
+  }
 
-  List<ExploreEdge> outgoing(String screenId) => [
-        for (final e in edges.values)
-          if (e.from == screenId && !e.isSelf) e,
-      ];
+  ExploreScreen _adopt(ExploreScreen other, String? parentId) {
+    while (screens.containsKey('s$nextId')) {
+      nextId++;
+    }
+    final id = 's${nextId++}';
+    return screens[id] = ExploreScreen(
+      id: id,
+      route: other.route,
+      overlayKind: other.overlayKind,
+      parentId: parentId,
+      fingerprint: other.fingerprint,
+      label: other.label,
+      firstSeen: other.firstSeen,
+      lastSeen: other.lastSeen,
+    );
+  }
+
+  /// In each route group only the most recently seen screen is current; the rest are stale.
+  void _refreshStale() {
+    final latest = <String, ExploreScreen>{};
+    for (final s in screens.values) {
+      final known = latest[s.groupKey];
+      if (known == null || s.lastSeen.isAfter(known.lastSeen)) latest[s.groupKey] = s;
+    }
+    for (final s in screens.values) {
+      s.stale = s.route.isNotEmpty && !identical(latest[s.groupKey], s);
+    }
+  }
+
+  void _trimEdges() {
+    if (edges.length <= _maxEdges) return;
+    final drop = edges.values.toList()..sort((a, b) => a.lastSeen.compareTo(b.lastSeen));
+    for (final e in drop.take(edges.length - _maxEdges)) {
+      edges.remove(e.key);
+    }
+  }
 
   /// Hops from [start] to every reachable screen over replayable edges, with the edge that led there.
   Map<String, List<ExploreEdge>> paths(String start) {
@@ -347,7 +477,7 @@ class ExploreGraph {
     return found;
   }
 
-  void _trim({required String keep}) {
+  void _trim({required String? keep}) {
     if (screens.length <= _maxScreens) return;
     final order = screens.values.where((s) => s.id != keep).toList()
       ..sort((a, b) {

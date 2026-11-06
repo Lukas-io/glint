@@ -22,8 +22,6 @@ class SketchAffordance {
   final String sample;
   final AffordanceKind kind;
   final String? label;
-
-  bool get isRow => sample != id;
 }
 
 /// What one scene read says about one screen: where it is, its structural fingerprint and what can be acted on.
@@ -42,6 +40,8 @@ class ScreenSketch {
 
   /// `dialog` or `bottomSheet` for an overlay screen, null for a base screen.
   final String? overlayKind;
+
+  /// A hash of the screen's tappable, typeable and scrollable controls (list rows once, text ignored).
   final String fingerprint;
   final String label;
   final List<SketchAffordance> affordances;
@@ -60,22 +60,6 @@ class SceneSketch {
   final ScreenSketch? overlay;
 
   ScreenSketch get top => overlay ?? base;
-
-  SceneSketch withState(String state) => SceneSketch(
-        base: base.copyWith(state: state),
-        overlay: overlay?.copyWith(state: state),
-      );
-}
-
-extension on ScreenSketch {
-  ScreenSketch copyWith({String? state}) => ScreenSketch(
-        route: route,
-        overlayKind: overlayKind,
-        fingerprint: fingerprint,
-        label: label,
-        affordances: affordances,
-        state: state ?? this.state,
-      );
 }
 
 const _maxAffordances = 60;
@@ -96,15 +80,16 @@ SceneSketch? sketchScene(SemanticScene scene, {String state = 'loaded'}) {
 }
 
 ScreenSketch _sketch(List<SemanticNode> nodes, {required String route, String? overlayKind, required String state}) {
-  final ids = <String>{
+  final controls = <String>{
     for (final n in nodes)
-      if (n.glintId != null && n.role != SemanticRole.marker) glintIdBase(n.glintId!),
+      if (n.glintId != null && n.role != SemanticRole.marker && n.inert != Inert.hidden)
+        if (_kindOf(n) case final kind?) '${kind.name}:${glintIdBase(n.glintId!)}',
   }.toList()
     ..sort();
   return ScreenSketch(
     route: route,
     overlayKind: overlayKind,
-    fingerprint: fnv1a(ids.join('\n')),
+    fingerprint: fnv1a(controls.join('\n')),
     label: _labelOf(nodes, route, overlayKind),
     affordances: _affordancesOf(nodes),
     state: state,

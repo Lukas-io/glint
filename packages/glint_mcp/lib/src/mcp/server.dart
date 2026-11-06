@@ -44,6 +44,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport, LoggingSupport {
   Future<void> shutdown() async {
     await session.detachAll();
     session.watches.close();
+    session.explore.close();
     await super.shutdown();
   }
 }
