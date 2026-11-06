@@ -1,8 +1,9 @@
+import 'picker_cells.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
 
 /// What kind of native surface covers the app.
-enum SurfaceKind { permissionPrompt, alert, otherApp, unknown }
+enum SurfaceKind { permissionPrompt, alert, picker, otherApp, unknown }
 
 /// One tappable choice on a native surface, at its center in logical points.
 typedef SurfaceChoice = ({String text, String id, double x, double y});
@@ -41,6 +42,7 @@ class NativeSurface {
     final name = switch (kind) {
       SurfaceKind.permissionPrompt => 'permission prompt',
       SurfaceKind.alert => 'alert',
+      SurfaceKind.picker => 'photo picker',
       SurfaceKind.otherApp => 'another app${owner == null ? '' : ' ($owner)'}',
       SurfaceKind.unknown => 'native surface',
     };
@@ -100,11 +102,32 @@ const _choiceLabels = {
   'dismiss',
 };
 
+/// Labels of the button that commits a multi-select pick.
+const pickerConfirmLabels = {'add', 'done', 'select', 'choose', 'open'};
+
+const _minPickerCells = 3;
+
+final _pickerProcess =
+    RegExp(r'photopicker|providers\.media|documentsui|mobileslideshow|photosui', caseSensitive: false);
+final _androidComponent = RegExp(r'^[\w.]+/');
+
+/// A picker needs several photo cells, or (on Android, where [owner] is `package/window`) a known picker package showing any.
+bool _showsPicker(List<PickerCell> cells, String? owner) {
+  if (owner != null && _androidComponent.hasMatch(owner)) return cells.isNotEmpty && _pickerProcess.hasMatch(owner);
+  return cells.length >= _minPickerCells;
+}
+
 final _permissionQuestion = RegExp(
   r'(would like to|wants to|to find devices|access (your|to)|send you notifications|use your location|'
   r'track your activity|allow [“"]|allow .+ to (access|use|send|record|take|find))',
   caseSensitive: false,
 );
+
+bool _isChoice(SceneNode n, bool isPicker) {
+  final label = n.textPreview!.trim().toLowerCase();
+  if (_choiceLabels.contains(label)) return true;
+  return isPicker && n.isNativeEnabled == true && pickerConfirmLabels.contains(label);
+}
 
 /// Classifies [scene] (a native reader's snapshot) with its foreign [owner] window, when the platform names one.
 NativeSurface classifySurface(Scene scene, {String? owner}) {
@@ -112,9 +135,12 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
     for (final n in _walk(scene.root))
       if (n.axFrame != null && (n.textPreview?.trim().isNotEmpty ?? false)) n,
   ];
+  final photoCells = pickerCells(nodes);
+  final isPicker = _showsPicker(photoCells, owner);
+  final cellLabels = {for (final c in photoCells) c.label};
   final choices = <SurfaceChoice>[
     for (final n in nodes)
-      if (_choiceLabels.contains(n.textPreview!.trim().toLowerCase()))
+      if (_isChoice(n, isPicker))
         (
           text: n.textPreview!.trim(),
           id: n.glintId ?? '',
@@ -124,18 +150,21 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
   ];
   final texts = [
     for (final n in nodes)
-      if (!choices.any((c) => c.id == n.glintId)) n.textPreview!.trim(),
+      if (!choices.any((c) => c.id == n.glintId) && !(isPicker && cellLabels.contains(n.textPreview)))
+        n.textPreview!.trim(),
   ];
   final question = texts.where(_permissionQuestion.hasMatch).firstOrNull;
   final permissionOwner =
       owner != null && RegExp('permissioncontroller|GrantPermissions', caseSensitive: false).hasMatch(owner);
   final kind = question != null || permissionOwner
       ? SurfaceKind.permissionPrompt
-      : choices.isNotEmpty
-          ? SurfaceKind.alert
-          : owner != null
-              ? SurfaceKind.otherApp
-              : SurfaceKind.unknown;
+      : isPicker
+          ? SurfaceKind.picker
+          : choices.isNotEmpty
+              ? SurfaceKind.alert
+              : owner != null
+                  ? SurfaceKind.otherApp
+                  : SurfaceKind.unknown;
   final title = question ?? texts.where((t) => t.endsWith('?') || t.length > 24).firstOrNull;
   return NativeSurface(
       kind: kind, title: title, choices: choices, texts: texts.where((t) => t != title).toList(), owner: owner);

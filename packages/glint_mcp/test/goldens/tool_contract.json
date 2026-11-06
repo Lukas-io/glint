@@ -965,7 +965,7 @@
       },
       "conditions": {
         "type": "array",
-        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors, lint (state goes with text or glintId). Any one matching fires the watch.",
+        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors, alerts, lint (state goes with text or glintId). Any one matching fires the watch.",
         "items": {
           "type": "object",
           "properties": {
@@ -997,6 +997,13 @@
               "type": "boolean",
               "description": "true: fire once for each new distinct app error; repeats do not fire."
             },
+            "alerts": {
+              "type": "array",
+              "description": "Any of error, uncaught, overflow, http, terminated, disconnected (opt-in). errors:true is error + uncaught + overflow.",
+              "items": {
+                "type": "string"
+              }
+            },
             "lint": {
               "description": "true for every rule, or a list of overflow, keyboard, insets, tapTarget, clippedText, lines. Fires a lint event once per problem and route."
             },
@@ -1011,13 +1018,17 @@
           }
         }
       },
+      "allApps": {
+        "type": "boolean",
+        "description": "op=add: watch every attached app and every app attached later; alert conditions only."
+      },
       "label": {
         "type": "string",
         "description": "op=add: your note on why, echoed in every event."
       },
       "once": {
         "type": "boolean",
-        "description": "op=add: end after the first match. Default true."
+        "description": "op=add: end after the first match. Default true, false with allApps or lint."
       },
       "timeoutMs": {
         "type": "integer",
@@ -1029,7 +1040,7 @@
       },
       "all": {
         "type": "boolean",
-        "description": "op=cancel: cancel every watch (of the targeted app when app is given)."
+        "description": "op=cancel: cancel every watch (those of the named app only when app is given; app:\"*\" cancels all-apps watches too)."
       },
       "sinceSeq": {
         "type": "integer",

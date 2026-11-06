@@ -79,6 +79,41 @@ class SimControl {
     }
   }
 
+  /// The simulator's boot state (`Booted`, `Shutdown`, ...), null when it is unknown or unreadable.
+  Future<String?> state(String udid) async {
+    try {
+      final entry = await _deviceEntry(udid.toUpperCase()).timeout(probeLimit);
+      return entry?.$1['state'] as String?;
+    } on Object {
+      return null;
+    }
+  }
+
+  static const probeLimit = Duration(seconds: 3);
+
+  /// Whether [bundleId] has a live process on [udid]; null when `launchctl` cannot be asked within [probeLimit].
+  Future<bool?> isAppRunning(String udid, String bundleId) async {
+    final entry = await _launchEntry(udid, bundleId);
+    return entry == null ? null : entry.pid != null;
+  }
+
+  /// The process id of [bundleId] on [udid], null when it is not running or `launchctl` cannot be asked.
+  Future<int?> appPid(String udid, String bundleId) async => (await _launchEntry(udid, bundleId))?.pid;
+
+  Future<({int? pid})?> _launchEntry(String udid, String bundleId) async {
+    try {
+      final r = await Process.run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']).timeout(probeLimit);
+      if (r.exitCode != 0) return null;
+      for (final line in r.stdout.toString().split('\n')) {
+        if (!line.contains('UIKitApplication:$bundleId[')) continue;
+        return (pid: int.tryParse(line.trim().split(RegExp(r'\s+')).first));
+      }
+      return (pid: null);
+    } on Object {
+      return null;
+    }
+  }
+
   /// SpringBoard's lock state: true locked, false unlocked, null when unreadable.
   Future<bool?> isLocked(String udid) async {
     try {

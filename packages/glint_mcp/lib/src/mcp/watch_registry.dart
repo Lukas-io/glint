@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../observability.dart';
+import '../media/host_tools.dart' show PhaseReporter;
 import '../../semantic.dart' show SemanticScene;
 import 'session.dart';
 import 'ux_lint.dart';
@@ -8,7 +9,7 @@ import 'watch_conditions.dart';
 import 'watch_events.dart';
 import 'watch_observation.dart';
 
-/// One registered watch: conditions on one app, any of which fires it.
+/// One registered watch: conditions on one app, or alert conditions on every attached app, any of which fires it.
 class Watch {
   Watch({
     required this.id,
@@ -21,7 +22,9 @@ class Watch {
 
   final String id;
   final String? label;
-  final AppSession app;
+
+  /// The app watched; null for a watch over every attached app, which takes alert conditions only.
+  final AppSession? app;
   final List<ArmedCondition> conditions;
   final bool once;
   final int timeoutMs;
@@ -30,6 +33,11 @@ class Watch {
   bool ended = false;
   int matches = 0;
 
+  bool get allApps => app == null;
+
+  /// What the watch watches, for replies and events.
+  String get target => app?.label ?? 'all apps';
+
   DateTime get expiresAt => createdAt.add(Duration(milliseconds: timeoutMs));
 
   bool get needsScene => conditions.any((c) => c.readsScene);
@@ -37,7 +45,7 @@ class Watch {
 
 /// What `watch op:add` registered, and what already fired while it was being armed.
 class WatchAdded {
-  WatchAdded(this.watch, this.firedNow, this.observation, this.readNote);
+  WatchAdded(this.watch, this.firedNow, this.observation, this.readNote, [this.alertNotes = const []]);
 
   final Watch watch;
   final List<Map<String, Object?>> firedNow;
@@ -45,6 +53,9 @@ class WatchAdded {
 
   /// Why the first read of the app failed, when it did; the watch keeps trying.
   final String? readNote;
+
+  /// Alert sources that cannot be read, such as HTTP profiling of one app.
+  final List<String> alertNotes;
 }
 
 /// The watches of one glint session: evaluates them in the background and writes each event to [events].
@@ -81,12 +92,14 @@ class WatchRegistry {
   /// The route the last scene read of [app] showed.
   String? routeOf(AppSession app) => _pollers[app]?.last?.route;
 
+  /// Registers a watch on [app], or on every attached app and every app attached later when [app] is null (alert conditions only).
   Future<WatchAdded> add(
-    AppSession app, {
+    AppSession? app, {
     required List<WatchCondition> conditions,
     required String? label,
     required bool once,
     required int timeoutMs,
+    void Function(int elapsedSec, String phase)? progress,
   }) async {
     events.open();
     final watch = Watch(
@@ -101,24 +114,81 @@ class WatchRegistry {
     watch.deadline = Timer(Duration(milliseconds: timeoutMs), () {
       end(watch, 'timeout', detail: 'nothing matched within ${_span(Duration(milliseconds: timeoutMs))}');
     });
+    final pending = <Future<String?>>[];
+    var waitsOnHttp = false;
     for (final c in watch.conditions) {
       if (c.spec is LogCondition) {
-        c.logSubscription = app.appLogs.onEntry.listen((entry) => _onLog(watch, c, entry));
+        c.logSubscription = app!.appLogs.onEntry.listen((entry) => _onLog(watch, c, entry));
       }
-      if (c.spec is ErrorsCondition) {
-        c.errorSubscription = app.errors.onNewError.listen((error) => _onError(watch, c, error));
+      if (c.spec case AlertsCondition(:final wantsHttp)) {
+        waitsOnHttp = waitsOnHttp || wantsHttp;
+        final targets = app != null ? [app] : _alertable(_session.apps);
+        for (final target in targets) {
+          pending.add(_listen(watch, c, target));
+        }
       }
     }
+    final settled = waitsOnHttp
+        ? await PhaseReporter(progress)
+            .during('starting HTTP profiling on ${pending.length} app(s)', () => Future.wait(pending))
+        : await Future.wait(pending);
+    final notes = [
+      for (final note in settled)
+        if (note != null) note,
+    ];
     final fromSeq = events.lastSeq;
     String? note;
     WatchObservation? seen;
     if (watch.needsScene) {
-      final poller = _pollers.putIfAbsent(app, () => _Poller(this, app));
+      final poller = _pollers.putIfAbsent(app!, () => _Poller(this, app));
       await poller.readNow().timeout(_baselineLimit, onTimeout: () {});
       note = poller.holdReason;
       seen = poller.last;
     }
-    return WatchAdded(watch, events.since(fromSeq, watch: watch.id), seen, note);
+    return WatchAdded(watch, events.since(fromSeq, watch: watch.id), seen, note, notes);
+  }
+
+  static List<AppSession> _alertable(Iterable<AppSession> apps) => [
+        for (final a in apps)
+          if (!a.deviceMode) a,
+      ];
+
+  Future<String?> _listen(Watch watch, ArmedCondition condition, AppSession app) async {
+    final spec = condition.spec as AlertsCondition;
+    if (condition.alertSubscriptions.containsKey(app)) return null;
+    condition.alertSubscriptions[app] = app.alerts.listen((alert) => _onAlert(watch, condition, app, alert));
+    if (!spec.wantsHttp) return null;
+    condition.httpHeld.add(app);
+    final note = await app.httpFailures.acquire();
+    return note == null ? null : 'http alerts for ${app.label} are unavailable: $note';
+  }
+
+  void _unlisten(ArmedCondition condition, AppSession app) {
+    condition.alertSubscriptions.remove(app)?.cancel();
+    if (condition.httpHeld.remove(app)) app.httpFailures.release();
+  }
+
+  /// Starts every all-apps alert watch on [app], which was just attached.
+  void appAttached(AppSession app) {
+    if (app.deviceMode) return;
+    for (final watch in _watches.values.toList()) {
+      if (!watch.allApps || watch.ended) continue;
+      for (final c in watch.conditions) {
+        if (c.spec is! AlertsCondition) continue;
+        unawaited(_listen(watch, c, app).then((note) {
+          if (note != null && !watch.ended) {
+            _emit({
+              'watch': watch.id,
+              if (watch.label != null) 'label': watch.label,
+              'kind': 'note',
+              'detail': note,
+              'app': app.label,
+              'device': app.id,
+            });
+          }
+        }));
+      }
+    }
   }
 
   /// Ends [id]; false when no such watch is active.
@@ -140,10 +210,16 @@ class WatchRegistry {
     return targets.length;
   }
 
-  /// Ends every watch on [app], which was detached or replaced.
+  /// Ends every watch on [app], which was detached or replaced; all-apps watches just stop listening to it.
   void appDropped(AppSession app) {
     for (final w in _watches.values.toList()) {
-      if (identical(w.app, app)) end(w, 'detached', detail: '${app.label} was detached');
+      if (identical(w.app, app)) {
+        end(w, 'detached', detail: '${app.label} was detached');
+      } else if (w.allApps) {
+        for (final c in w.conditions) {
+          _unlisten(c, app);
+        }
+      }
     }
   }
 
@@ -165,7 +241,9 @@ class WatchRegistry {
     watch.deadline?.cancel();
     for (final c in watch.conditions) {
       c.logSubscription?.cancel();
-      c.errorSubscription?.cancel();
+      for (final app in c.alertSubscriptions.keys.toList()) {
+        _unlisten(c, app);
+      }
     }
     _watches.remove(watch.id);
     if (announce) {
@@ -176,10 +254,11 @@ class WatchRegistry {
         'reason': reason,
         if (detail != null) 'detail': detail,
         'matches': watch.matches,
-        'app': watch.app.label,
+        'app': watch.target,
+        if (watch.app != null) 'device': watch.app!.id,
       });
     }
-    _retirePoller(watch.app);
+    if (watch.app != null) _retirePoller(watch.app!);
   }
 
   List<Watch> _sceneWatches(AppSession app) => [
@@ -196,14 +275,16 @@ class WatchRegistry {
     Watch watch,
     ArmedCondition condition,
     String matched, {
+    AppSession? app,
     WatchObservation? before,
     WatchObservation? now,
     Map<String, Object?> extra = const {},
   }) {
     if (watch.ended) return;
     watch.matches++;
+    final source = app ?? watch.app!;
     final appeared = now?.appearedSince(before);
-    final route = now?.route ?? routeOf(watch.app);
+    final route = now?.route ?? (watch.allApps ? null : routeOf(source));
     final last = watch.once || watch.matches >= maxEventsPerWatch;
     _emit({
       'watch': watch.id,
@@ -212,7 +293,8 @@ class WatchRegistry {
       'condition': condition.spec.describe,
       'matched': matched,
       if (route != null) 'route': route,
-      'app': watch.app.label,
+      'app': source.label,
+      'device': source.id,
       ...extra,
       if (appeared != null && appeared.texts.isNotEmpty) 'appeared': appeared.texts,
       if (appeared != null && appeared.ids.isNotEmpty) 'appearedIds': appeared.ids,
@@ -241,7 +323,7 @@ class WatchRegistry {
       'condition': condition.spec.describe,
       'matched': notListed > 0 ? '${finding.summary} (+$notListed more ${finding.rule} not listed)' : finding.summary,
       if (finding.route.isNotEmpty) 'route': finding.route,
-      'app': watch.app.label,
+      'app': watch.target,
       ...finding.toJson(),
       if (notListed > 0) 'notListed': notListed,
       if (last) 'final': true,
@@ -260,7 +342,7 @@ class WatchRegistry {
       'condition': condition.spec.describe,
       'matched':
           'lint ${problem.partial ? 'partly blind' : problem.retrying ? 'paused' : 'stopped'}: ${problem.detail}',
-      'app': watch.app.label,
+      'app': watch.target,
       'errorKind': problem.errorKind.name,
       'detail': problem.detail,
       'retrying': problem.retrying,
@@ -301,13 +383,10 @@ class WatchRegistry {
     _fire(watch, condition, _logLine(entry), extra: {if (suppressed > 0) 'suppressed': suppressed});
   }
 
-  void _onError(Watch watch, ArmedCondition condition, FlutterErrorEntry error) {
-    if (watch.ended) return;
-    _fire(watch, condition, error.line, extra: {
-      'summary': error.summary,
-      if (error.location != null) 'location': error.location,
-      if (error.library != null) 'library': error.library,
-    });
+  void _onAlert(Watch watch, ArmedCondition condition, AppSession app, AppAlert alert) {
+    final spec = condition.spec as AlertsCondition;
+    if (watch.ended || !spec.kinds.contains(alert.group)) return;
+    _fire(watch, condition, alert.matched, app: app, extra: {'alert': alert.name, ...alert.fields});
   }
 
   void _evaluate(AppSession app, WatchObservation? before, WatchObservation now) {
