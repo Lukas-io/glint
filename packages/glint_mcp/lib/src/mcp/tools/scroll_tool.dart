@@ -21,6 +21,9 @@ class ScrollTool extends GlintTool {
   const ScrollTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'scroll',
         description:

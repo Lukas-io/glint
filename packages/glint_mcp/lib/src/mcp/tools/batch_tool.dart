@@ -17,6 +17,13 @@ class BatchTool extends GlintTool {
   static const int _maxSteps = 20;
 
   @override
+  bool changesDevice(Map<String, Object?> args) => stepsChangeDevice(args['steps']);
+
+  /// Each step is checked against the app it targets, so the active app's flag alone decides nothing here.
+  @override
+  StructuredResponse? observeRefusal(AppSession? app, Map<String, Object?> args) => null;
+
+  @override
   Tool get definition => Tool(
         name: 'batch',
         description:
@@ -49,6 +56,7 @@ class BatchTool extends GlintTool {
     final parsed = parseBatchSteps(args['steps'], maxSteps: _maxSteps);
     if (parsed.error != null) return parsed.error!;
     final steps = parsed.steps!;
+    if (observeRefusalForSteps(session, steps) case final refused?) return refused;
 
     final run = await runBatchSteps(session, steps, stopOnNoChange: stopOnNoChange, meta: request.meta);
 

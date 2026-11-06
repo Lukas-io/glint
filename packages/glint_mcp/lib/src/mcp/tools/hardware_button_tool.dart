@@ -19,6 +19,9 @@ class HardwareButtonTool extends GlintTool {
   const HardwareButtonTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'hardware_button',
         description: 'Press a physical hardware button. iOS Sim: lock + unlock '

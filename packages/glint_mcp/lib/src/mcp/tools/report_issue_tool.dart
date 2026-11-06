@@ -16,6 +16,9 @@ import '../tool_args.dart';
 class ReportIssueTool extends GlintTool {
   const ReportIssueTool({this.run = Process.run});
 
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   final ProcessRunner run;
 
   @override

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:vm_service/vm_service.dart' show EventKind, SentinelException, VmService;
+import 'package:vm_service/vm_service.dart' show Event, EventKind, SentinelException, VmService;
 
 import '../../interaction.dart';
 import '../../observability.dart';
@@ -10,6 +10,7 @@ import '../../semantic.dart';
 import '../interaction/emulator_control.dart' show EmulatorControl, EmulatorInstance;
 import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
+import '../runtime/vm_service_runtime.dart';
 import 'capture_ring.dart';
 
 /// Whether an app is read through the Flutter VM tree or the native OS AX tree.
@@ -61,7 +62,23 @@ class AppSession {
   })  : sceneMode = deviceMode ? SceneMode.native : SceneMode.flutter,
         attachedAt = DateTime.now() {
     if (backend case final FlutterInputBackend routed) routed.touchLog = touchLog;
+    errors = FlutterErrorFeed(projectDir: () => projectDir, packageName: () => package)..listen(appLogs.onEntry);
   }
+
+  /// The errors this app reported since attach.
+  late final FlutterErrorFeed errors;
+
+  /// Attached for reading only: tools that change the app or its device are refused.
+  bool observeOnly = false;
+
+  /// Error feed seq the last full `get_scene` reported up to.
+  int sceneErrorSeq = 0;
+
+  /// Set by a reload or restart: the next full `get_scene` checks for blank scrollables once even with no new error.
+  bool recheckViewports = false;
+
+  /// Extension event kind Flutter posts for each framework error when structured errors are on.
+  static const structuredErrorKind = 'Flutter.Error';
 
   /// Every touch glint sent to this app's device, for drawing onto recordings.
   final touchLog = TouchLog();
@@ -209,6 +226,7 @@ class AppSession {
   int reconnectCount = 0;
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
+  StreamSubscription<Event>? _structuredErrorSub;
   StreamSubscription<String>? _lifecycleSub;
   bool _disposed = false;
 
@@ -345,6 +363,13 @@ class AppSession {
       // best-effort — app logs stay empty, everything else works
     }
 
+    await _structuredErrorSub?.cancel();
+    _structuredErrorSub = rt is VmServiceRuntime
+        ? rt.extensionEvents
+            .where((e) => e.extensionKind == structuredErrorKind)
+            .listen((e) => errors.addStructured(e.extensionData?.data))
+        : null;
+
     await _disconnectSub?.cancel();
     _disconnectSub = rt.onDisconnect.listen((_) => _reconnect(runtimeFactory));
 
@@ -473,6 +498,8 @@ class AppSession {
     _lifecycleSub = null;
     await _disconnectSub?.cancel();
     _disconnectSub = null;
+    await _structuredErrorSub?.cancel();
+    _structuredErrorSub = null;
     await appLogs.unsubscribe();
     final rt = runtime;
     runtime = null;
@@ -602,6 +629,7 @@ class AppSession {
       }
     }
     await _teardownRuntime();
+    errors.dispose();
     await backend.close();
     captures.clear();
   }

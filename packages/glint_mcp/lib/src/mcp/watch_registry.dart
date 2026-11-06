@@ -30,7 +30,7 @@ class Watch {
 
   DateTime get expiresAt => createdAt.add(Duration(milliseconds: timeoutMs));
 
-  bool get needsScene => conditions.any((c) => c.spec is! LogCondition);
+  bool get needsScene => conditions.any((c) => c.readsScene);
 }
 
 /// What `watch op:add` registered, and what already fired while it was being armed.
@@ -103,6 +103,9 @@ class WatchRegistry {
       if (c.spec is LogCondition) {
         c.logSubscription = app.appLogs.onEntry.listen((entry) => _onLog(watch, c, entry));
       }
+      if (c.spec is ErrorsCondition) {
+        c.errorSubscription = app.errors.onNewError.listen((error) => _onError(watch, c, error));
+      }
     }
     final fromSeq = events.lastSeq;
     String? note;
@@ -160,6 +163,7 @@ class WatchRegistry {
     watch.deadline?.cancel();
     for (final c in watch.conditions) {
       c.logSubscription?.cancel();
+      c.errorSubscription?.cancel();
     }
     _watches.remove(watch.id);
     if (announce) {
@@ -233,6 +237,15 @@ class WatchRegistry {
     final suppressed = condition.suppressedLogHits;
     condition.suppressedLogHits = 0;
     _fire(watch, condition, _logLine(entry), extra: {if (suppressed > 0) 'suppressed': suppressed});
+  }
+
+  void _onError(Watch watch, ArmedCondition condition, FlutterErrorEntry error) {
+    if (watch.ended) return;
+    _fire(watch, condition, error.line, extra: {
+      'summary': error.summary,
+      if (error.location != null) 'location': error.location,
+      if (error.library != null) 'library': error.library,
+    });
   }
 
   void _evaluate(AppSession app, WatchObservation? before, WatchObservation now) {

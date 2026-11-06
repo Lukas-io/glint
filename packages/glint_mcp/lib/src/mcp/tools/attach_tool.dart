@@ -15,6 +15,8 @@ import '../tool.dart';
 import '../tool_args.dart';
 import '../xctest_start.dart';
 import '../update_notice.dart';
+import '../watch_conditions.dart' show ErrorsCondition;
+import '../watch_registry.dart' show WatchRegistry;
 
 /// How long attach waits for a runner start before replying; a warm start is up well inside it.
 const nativeRunnerGrace = Duration(seconds: 3);
@@ -27,6 +29,10 @@ const nativeRunnerPending = 'pending';
 /// capabilities, and screen context in one reply.
 class AttachTool extends GlintTool {
   const AttachTool({this.claims});
+
+  /// Attaching never changes an app already attached, so an observe-only active app may attach another.
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
 
   /// Which devices other glint sessions drive; a fresh [DeviceClaims] when null.
   final DeviceClaims? claims;
@@ -109,6 +115,10 @@ class AttachTool extends GlintTool {
             'awaitSettle': Schema.bool(
               description: 'Wait until the UI settles before returning. Default false.',
             ),
+            'observe': Schema.bool(
+              description:
+                  'Attach for reading only, for an app on a device a person is using: get_scene, logs, screenshots, watch and wait_for work; taps, typing, scrolls, hot_reload and anything else that changes the app are refused (observeOnly). Takes no device claim and arms a watch for new app errors. Default false.',
+            ),
             'showTouches': Schema.bool(
               description:
                   'Draw each touch (dot, trail, release ripple) for people watching or recording: in the Flutter '
@@ -123,9 +133,19 @@ class AttachTool extends GlintTool {
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const <String, Object?>{};
     final showTouches = argBool(args, 'showTouches');
+    final observe = argBool(args, 'observe') ?? false;
     var response = await _attach(session, request);
     if (!response.isError && argBool(args, 'dryRun') != true) {
-      response = await _showTouches(session, showTouches, response);
+      if (observe) {
+        response = await _armObserve(session, response);
+        if (showTouches != null) {
+          response =
+              response.addWarnings(['showTouches is ignored with observe:true: an observed app is never changed']);
+        }
+      } else {
+        response = await _showTouches(session, showTouches, response);
+        response = _disarmObserve(session, response);
+      }
     }
     if (response.isError || session.updateNoticeShown) return response;
     final notice = updateNotice();
@@ -198,6 +218,7 @@ class AttachTool extends GlintTool {
       return _adbMissing();
     }
     final returnScene = argBool(args, 'returnScene') ?? false;
+    final observe = argBool(args, 'observe') ?? false;
     final dryRun = argBool(args, 'dryRun') ?? false;
     final awaitSettle = argBool(args, 'awaitSettle') ?? false;
     final discovery = DeviceDiscovery(adbPath: adbPath);
@@ -226,6 +247,7 @@ class AttachTool extends GlintTool {
 
     final vmUriArg = args['vmUri'] as String?;
     final launchPath = (args['launch'] as String?)?.trim();
+    if (observe && launchPath != null && launchPath.isNotEmpty) return _observeNeedsRunningApp('launch');
     final avdArg = args['device'] as String?;
     String? avdLead;
     final cameraArg = args['camera'] as String?;
@@ -241,6 +263,7 @@ class AttachTool extends GlintTool {
       if ((await avds.list()).contains(avdArg)) {
         var serial = await avds.runningSerial(avdArg);
         if (serial == null) {
+          if (observe) return _observeNeedsRunningApp('boot $avdArg');
           final exe = avds.emulatorPath;
           final webcam = cameraArg == null || exe == null ? null : builtInWebcam(await listWebcams(exe));
           if (cameraArg != null && webcam == null) {
@@ -298,6 +321,7 @@ class AttachTool extends GlintTool {
       final pooled = key == null ? null : session.findApp(key);
       if (pooled != null &&
           pooled.isLive &&
+          pooled.observeOnly == observe &&
           (mode == null || mode == 'auto' || (mode == 'device') == pooled.deviceMode)) {
         final change = _backendChange(pooled, args);
         if (change == null) {
@@ -365,6 +389,7 @@ class AttachTool extends GlintTool {
     } else if (deviceArg != null) {
       // Nothing running, but a specific device was selected — start its
       // remembered app on it.
+      if (observe) return _observeNeedsRunningApp('start the remembered app on $deviceArg');
       final rec = _historyForDevice(session, deviceArg);
       if (rec?.projectDir == null) {
         return _offerLaunch(session, scan,
@@ -483,7 +508,10 @@ class AttachTool extends GlintTool {
       final warnings = <String>[...launchNotes];
       final deviceClaims = claims ?? DeviceClaims();
       final claim = deviceClaims.heldByOther(deviceId);
-      if (claim != null) {
+      if (claim != null && observe) {
+        warnings.add('another glint session is driving $deviceId (${claim.describe}); observe:true only reads, '
+            'so it takes no claim and does not interfere');
+      } else if (claim != null) {
         if (deviceArg == null && !claim.idle) return _claimed(deviceId, claim);
         warnings.add('another glint session is driving $deviceId (${claim.describe}); '
             '${claim.idle ? 'it is idle, so this session drives it' : 'your input and its input will interleave'}');
@@ -510,7 +538,7 @@ class AttachTool extends GlintTool {
               '${probed.lastError != null ? " (last probe error: ${probed.lastError})" : ""}',
             );
           }
-          androidServer = await _androidServer(deviceId, adbPath, androidInput, warnings);
+          androidServer = observe ? null : await _androidServer(deviceId, adbPath, androidInput, warnings);
           device = AndroidDevice(
             serial: deviceId,
             adbPath: adbPath,
@@ -595,7 +623,7 @@ class AttachTool extends GlintTool {
 
       // ── 7. Hand the resolved target to the session ────────────────────────
       final rebuilt = rebuild?.deviceId == deviceId;
-      await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt);
+      await session.attach(vmUri: vmUri, device: device, rebuild: rebuilt, observe: observe);
       if (nativeStart != null) {
         if (await _followNativeRunner(session.active!, nativeStart) case final note?) warnings.add(note);
       } else if (device is IosSimulator && device.runner == null) {
@@ -642,7 +670,11 @@ class AttachTool extends GlintTool {
       final bundleId = link?.bundleId ?? iosInfo?.$1 ?? androidPackage;
       final displayName = link?.displayName ?? iosInfo?.$2;
       final appLabel = displayName ?? package ?? link?.appName;
-      deviceClaims.claim(deviceId, app: appLabel);
+      if (observe) {
+        deviceClaims.release(deviceId);
+      } else {
+        deviceClaims.claim(deviceId, app: appLabel);
+      }
       final app = <String, Object?>{
         if (package != null) 'package': package,
         if (displayName != null) 'name': displayName,
@@ -656,7 +688,8 @@ class AttachTool extends GlintTool {
         ..bundleId = bundleId
         ..deviceName = deviceName
         ..inputSetup = input.line.replaceFirst('setup: ', '')
-        ..projectDir = projectDir;
+        ..projectDir = projectDir
+        ..observeOnly = observe;
       session.markOwnedApp([package, bundleId]);
 
       // Remember this attach so a future cold start can relaunch it.
@@ -722,7 +755,10 @@ class AttachTool extends GlintTool {
         warnings: warnings,
         nextSteps: [
           if (!returnScene) 'call `get_scene` to read the current screen',
-          'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
+          if (observe)
+            'observing only: tap, type, scroll and hot_reload are refused; attach again without observe to drive the app'
+          else
+            'use `tap` / `swipe` / `type` / `hardware_button` to drive the app',
           if (others.isNotEmpty)
             'switch with attach app:"<name>", or target once with app:"<name>" '
                 'on any tool: ${others.map((a) => '"${a.label}"').join(", ")}',
@@ -739,6 +775,7 @@ class AttachTool extends GlintTool {
           if (app.isNotEmpty) 'app': app,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
+          if (observe) 'observe': true,
           if (frontedAppId != null) 'broughtToFront': true,
           if (dartVersion != null && dartVersion.isNotEmpty) 'dartVersion': dartVersion.split(' ').first,
           if (lifecycle != null) 'appState': lifecycle,
@@ -764,6 +801,70 @@ class AttachTool extends GlintTool {
       nativeStart?.listener = null;
       await probe.disconnect();
     }
+  }
+
+  /// Arms an errors watch on the observed app and adds its events file and tail line to the attach reply.
+  Future<StructuredResponse> _armObserve(GlintSession session, StructuredResponse response) async {
+    final app = session.active;
+    if (app == null) return response;
+    if (app.deviceMode) {
+      return response
+          .addWarnings(['device mode has no Flutter VM, so no error watch is armed; screenshots still work']);
+    }
+    final registry = session.watches;
+    final existing = registry.active.where((w) => identical(w.app, app) && w.label == _observeLabel).firstOrNull;
+    final watch = existing ??
+        (await registry.add(
+          app,
+          conditions: const [ErrorsCondition()],
+          label: _observeLabel,
+          once: false,
+          timeoutMs: WatchRegistry.maxTimeoutMs,
+        ))
+            .watch;
+    final path = registry.events.path;
+    final monitor = 'tail -n0 -F $path';
+    return response.copyWith(
+      summary: '${response.summary}\nobserve only: ${watch.id} watches for new app errors, events in $path',
+      nextSteps: [...response.nextSteps, 'run `$monitor` as a background monitor; each line is one new error'],
+      data: {
+        ...?response.data,
+        'observe': true,
+        'errorsWatch': {'watch': watch.id, 'eventsFile': path, 'monitor': monitor},
+      },
+    );
+  }
+
+  static const _observeLabel = 'observe';
+
+  /// observe:true only reads what already runs, so anything that would start an app or a device is refused.
+  StructuredResponse _observeNeedsRunningApp(String what) => StructuredResponse.error(
+        summary: 'observe:true cannot $what: it only reads an app that is already running',
+        errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const [
+          'start the app yourself, then attach observe:true',
+          'or attach without observe to let glint launch it',
+        ],
+      );
+
+  /// Cancels the errors watch an earlier observe attach armed on the active app, now that it is attached to drive, and says so in the reply.
+  StructuredResponse _disarmObserve(GlintSession session, StructuredResponse response) {
+    final app = session.active;
+    if (app == null) return response;
+    final registry = session.watches;
+    final leftover = registry.active.where((w) => identical(w.app, app) && w.label == _observeLabel).toList();
+    if (leftover.isEmpty) return response;
+    for (final w in leftover) {
+      registry.cancel(w.id);
+    }
+    return response.copyWith(
+      summary: '${response.summary}\nno longer observe only: cancelled the observe errors watch '
+          '${leftover.map((w) => w.id).join(', ')}',
+      nextSteps: [
+        ...response.nextSteps,
+        'for new app errors use hot_reload (reports them) or watch conditions:[{errors:true}]',
+      ],
+    );
   }
 
   /// Hands the background runner start to [app] and waits a moment for it, so a warm start serves the first read; the warning to show when it is not ready, else null.
@@ -1092,8 +1193,12 @@ class AttachTool extends GlintTool {
 
     final warnings = <String>[];
     final deviceClaims = claims ?? DeviceClaims();
+    final observe = argBool(args, 'observe') ?? false;
     final claim = deviceClaims.heldByOther(target.id);
-    if (claim != null) {
+    if (claim != null && observe) {
+      warnings.add('another glint session is driving ${target.id} (${claim.describe}); observe:true only reads, '
+          'so it takes no claim and does not interfere');
+    } else if (claim != null) {
       if (args['device'] == null && !claim.idle) return _claimed(target.id, claim);
       warnings.add('another glint session is driving ${target.id} (${claim.describe}); '
           '${claim.idle ? 'it is idle, so this session drives it' : 'your input and its input will interleave'}');
@@ -1192,13 +1297,20 @@ class AttachTool extends GlintTool {
           adbPath: adbPath,
           screenWidth: shot.width?.toDouble(),
           screenHeight: shot.height?.toDouble(),
-          server: await _androidServer(target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
+          server: observe
+              ? null
+              : await _androidServer(target.id, adbPath, (args['androidInput'] as String?) ?? 'auto', warnings),
         );
     }
 
     final bound = await session.attachDevice(device: device);
+    bound.observeOnly = observe;
     unawaited(session.backend.warm());
-    deviceClaims.claim(target.id);
+    if (observe) {
+      deviceClaims.release(target.id);
+    } else {
+      deviceClaims.claim(target.id);
+    }
     if (nativeStart != null) {
       final screenWidth = shot.width!, screenHeight = shot.height!;
       final note = await _followNativeRunner(bound, nativeStart, pixelsPerPoint: (runner) async {
@@ -1223,7 +1335,10 @@ class AttachTool extends GlintTool {
       nextSteps: [
         if (nativeRead) 'call `get_scene` to read the screen and any system alert; tap its items by text or glintId',
         'call `device op:screenshot` to see the screen',
-        'tap / swipe with x,y in screenshot pixels',
+        if (observe)
+          'observing only: tap, swipe and the rest are refused; attach again without observe to drive the device'
+        else
+          'tap / swipe with x,y in screenshot pixels',
         if (target.platform == DevicePlatform.ios && !target.physical && !nativeRead)
           if (!session.config.iosNativeRunner)
             'config op:set key:iosNativeRunner value:true, then attach again, to read and tap system alerts and native screens by text'
@@ -1241,6 +1356,7 @@ class AttachTool extends GlintTool {
         if (simStatus?.state != null) 'state': simStatus!.state,
         if (simStatus?.appearance != null) 'appearance': simStatus!.appearance,
         'mode': 'device',
+        if (observe) 'observe': true,
         'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
         if (device.abilities.gaps.isNotEmpty) 'abilities': {'missing': device.abilities.toJson()},
         if (screen != null) 'screen': screen,

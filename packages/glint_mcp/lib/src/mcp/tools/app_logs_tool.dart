@@ -13,6 +13,9 @@ import '../tool_args.dart';
 class AppLogsTool extends GlintTool {
   const AppLogsTool();
 
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   static const _defaultMaxChars = 600;
   static const _totalCapChars = 20000;
 

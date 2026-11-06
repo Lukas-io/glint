@@ -51,7 +51,7 @@ const _workflow = '''
 
 Several apps: `attach` again pools; `attach app:"<name>"` switches; `app:"<name>"` on any tool targets one call.
 
-`explore`: the recorded map; untried controls, path to any screen.
+`explore`: the recorded map, untried controls, paths.
 
 Long run in a big conversation? Delegate the driving to a subagent with a self-contained brief; keep irreversible steps.
 ''';
@@ -96,7 +96,7 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect`: follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';

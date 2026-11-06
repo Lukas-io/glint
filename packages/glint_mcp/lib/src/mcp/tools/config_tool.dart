@@ -12,6 +12,10 @@ import '../tool.dart';
 class ConfigTool extends GlintTool {
   const ConfigTool();
 
+  /// Settings live in glint; showTouches skips observe-only apps when it fans out.
+  @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
   @override
   Tool get definition => Tool(
         name: 'config',
@@ -95,6 +99,12 @@ class ConfigTool extends GlintTool {
       if (outcomes.isNotEmpty) 'touches': {for (final e in outcomes.entries) e.key.label: e.value.toJson()},
     };
     if (outcomes.isEmpty) {
+      if (session.apps.any((a) => a.observeOnly)) {
+        return StructuredResponse(
+          summary: 'showTouches = $on · observe-only apps are never changed, so no touches were drawn or hidden',
+          data: data,
+        );
+      }
       return StructuredResponse(
         summary: 'showTouches = $on · no Flutter app attached yet; it applies when one is',
         data: data,

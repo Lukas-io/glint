@@ -40,6 +40,10 @@ class LocationTool extends GlintTool {
   const LocationTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'get', 'wait'}, defaultOp: 'get');
+
+  @override
   Tool get definition => Tool(
         name: 'location',
         description: 'Simulated GPS on the iOS simulator, Android emulator or a paired iPhone. op: '

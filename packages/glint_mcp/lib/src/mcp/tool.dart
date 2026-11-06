@@ -59,6 +59,28 @@ abstract class GlintTool {
   /// Tools that give `app` their own meaning (attach) opt out of routing.
   bool get routesByApp => true;
 
+  /// Whether a call with [args] acts on the app or its device, which an app attached with observe:true refuses; true unless a tool says it only reads.
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  /// Whether the call's `op` (or [defaultOp]) is outside [readOps].
+  static bool opChangesDevice(Map<String, Object?> args, {required Set<String> readOps, required String defaultOp}) =>
+      !readOps.contains((args['op'] as String?) ?? defaultOp);
+
+  /// The refusal for a call on an observe-only [app] that would change it; null when the call may run.
+  StructuredResponse? observeRefusal(AppSession? app, Map<String, Object?> args) {
+    if (app == null || !app.observeOnly || !changesDevice(args)) return null;
+    return StructuredResponse.error(
+      summary: '${definition.name} is refused: ${app.label} is attached with observe:true, read only',
+      errorKind: GlintErrorKind.observeOnly,
+      detail: 'the app was attached with observe:true; it allows get_scene, logs, app_logs, screenshots, watch, '
+          'wait_for and resolve, and refuses anything that changes the app or its device',
+      nextSteps: [
+        'to drive it, attach again without observe (attach app:"${app.label}"), once nobody else is using the device',
+        'to keep observing: get_scene, app_logs, watch op:events',
+      ],
+    );
+  }
+
   /// Adds the optional `app` property every routed tool accepts.
   static Tool withAppArg(Tool tool) {
     final raw = tool as Map<String, Object?>;
@@ -174,16 +196,17 @@ abstract class GlintTool {
     if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {
       if (target == null) {
-        final own = call = ExploreCall();
-        response = await own.run(() async => await handle(session, request));
+        response = observeRefusal(app, request.arguments ?? const {}) ??
+            await (call = ExploreCall()).run(() async => await handle(session, request));
       } else {
         final matches = session.matchApps(target);
         if (matches.length != 1) {
           response = unknownAppResponse(session, target, matches);
         } else {
           app = matches.single;
-          final own = call = ExploreCall();
-          response = await session.withApp(matches.single, () => own.run(() async => await handle(session, request)));
+          response = observeRefusal(app, request.arguments ?? const {}) ??
+              await session.withApp(
+                  matches.single, () => (call = ExploreCall()).run(() async => await handle(session, request)));
         }
       }
     } on SessionNotAttachedError catch (e) {

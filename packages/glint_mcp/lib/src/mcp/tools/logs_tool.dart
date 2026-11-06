@@ -12,6 +12,9 @@ class LogsTool extends GlintTool {
   const LogsTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
+  @override
   Tool get definition => Tool(
         name: 'logs',
         description: 'Query the agent action log. Returns the natural-language view by '

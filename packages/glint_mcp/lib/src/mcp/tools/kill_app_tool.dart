@@ -11,6 +11,9 @@ class KillAppTool extends GlintTool {
   const KillAppTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'kill_app',
         description: 'Stop a running Flutter app and detach. With no args, stops the '

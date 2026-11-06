@@ -64,6 +64,9 @@ class ScrollToFindTool extends GlintTool {
   const ScrollToFindTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:

@@ -16,6 +16,10 @@ class BreakpointTool extends GlintTool {
   static const _progressEvery = Duration(seconds: 15);
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'status', 'list', 'wait'}, defaultOp: 'status');
+
+  @override
   Tool get definition => Tool(
         name: 'breakpoint',
         description:

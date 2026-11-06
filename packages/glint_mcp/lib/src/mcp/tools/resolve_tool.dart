@@ -16,6 +16,9 @@ class ResolveTool extends GlintTool {
   const ResolveTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => false;
+
+  @override
   Tool get definition => Tool(
         name: 'resolve',
         description: 'Drill-down geometry for a glintId. Needs a Flutter app (device '
