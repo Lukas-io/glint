@@ -17,6 +17,7 @@ import 'tools/record_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
+import 'tools/explore_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
 import 'tools/hot_reload_tool.dart';
@@ -484,6 +485,7 @@ abstract class GlintTool {
     DateTime start,
   ) {
     final elapsedMs = DateTime.now().difference(start).inMilliseconds;
+    session.explore.completeCall(session.active, definition.name, request.arguments, response);
     final seq = session.actionLog.allocateSequence();
     final argKeys = UsageRecorder.argKeysFrom(request.arguments);
     final resultBytes = _resultBytes(response);
@@ -584,6 +586,7 @@ const List<GlintTool> kDefaultGlintTools = [
   MapTool(),
   ShutdownSimTool(),
   GetSceneTool(),
+  ExploreTool(),
   ResolveTool(),
   TapTool(),
   LongPressTool(),

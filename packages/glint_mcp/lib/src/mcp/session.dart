@@ -11,6 +11,7 @@ import '../interaction/image_size.dart';
 import '../runtime/flutter_runtime.dart';
 import '../runtime/vm_service_runtime.dart';
 import 'app_session.dart';
+import 'explore/recorder.dart';
 import 'post_action.dart' show ScrollAnchor;
 import 'watch_registry.dart';
 
@@ -73,6 +74,9 @@ class GlintSession {
 
   /// The warning for [deviceId] when its last re-attach could not continue the earlier app logs.
   String? takeLogNote(String deviceId) => _logNotes.remove(deviceId);
+
+  /// The per-app screen graph built from every scene read and gesture, kept under the data dir.
+  late final ExploreRecorder explore = ExploreRecorder();
 
   /// Conditions the agent asked to be told about while it does something else, written to an events file.
   late final WatchRegistry watches = WatchRegistry(this);
@@ -306,6 +310,7 @@ class GlintSession {
     _pool.remove(app.id);
     watches.appDropped(app);
     _retainLogs(app);
+    explore.flush();
     if (identical(_active, app)) {
       _active = null;
       _orphanLogs = app.appLogs;

@@ -4,6 +4,7 @@ import '../../perception.dart';
 import '../../runtime.dart' show AppAgent;
 import '../../semantic.dart';
 import 'envelope.dart';
+import 'explore/screen_sketch.dart';
 import 'session.dart';
 
 /// The one scene read a gesture needs: the live [scene] the interactor
@@ -68,7 +69,11 @@ class SceneSnapshot {
     required this.contentHash,
     this.paintHash,
     this.pages = const {},
+    this.sketch,
   });
+
+  /// The screen this snapshot saw, for the explore graph.
+  final SceneSketch? sketch;
 
   final String routeName;
   final bool hasOverlay;
@@ -157,6 +162,7 @@ SceneSnapshot snapshotOf(SemanticScene semantic, {int? paintHash}) {
     contentHash: hash,
     paintHash: paintHash,
     pages: _visiblePages(semantic),
+    sketch: sketchScene(semantic),
   );
 }
 
@@ -240,7 +246,11 @@ class PostActionState {
     this.note,
     this.lateMs,
     this.snapshot,
+    this.sketch,
   });
+
+  /// The screen the post-action read saw, for the explore graph.
+  final SceneSketch? sketch;
 
   /// The scene snapshot the post-action read compared against; null for a native-surface read.
   final SceneSnapshot? snapshot;
@@ -261,6 +271,7 @@ class PostActionState {
         note: note,
         lateMs: ms,
         snapshot: snapshot,
+        sketch: sketch,
       );
 
   /// The native surface over the app, read as data, when it could be read.
@@ -361,11 +372,13 @@ Future<PostActionState?> readPostActionState(
           (semantic) async {
             final post = snapshotOf(semantic, paintHash: pre?.paintHash == null ? null : await paintSignature(session));
             final category = pre != null ? changeCategory(pre, post) : 'unknown';
+            final observed = const StateObserver().observe(semantic).name;
             return PostActionState(
               snapshot: post,
+              sketch: sketchScene(semantic, state: observed),
               changed: category != 'nothing',
               changeCategory: category,
-              state: const StateObserver().observe(semantic).name,
+              state: observed,
               sceneText: includeSceneText ? const PlainTextSceneRenderer().render(semantic) : null,
               scrolledPx: scrollAnchor == null
                   ? null
@@ -420,6 +433,7 @@ Future<PostActionState?> readPostActionState(
       state = await readOnce();
     }
     if (state.changeCategory == 'nothing' && pre != null) state = await _awaitLateChange(session, state, readOnce);
+    session.explore.noteAction(app, pre?.sketch, state.sketch);
     return state;
   } on Object {
     return null;

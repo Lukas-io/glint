@@ -498,6 +498,19 @@
       }
     }
   },
+  "explore": {
+    "type": "object",
+    "properties": {
+      "op": {
+        "type": "string",
+        "description": "map (default) | frontier | path | reset"
+      },
+      "to": {
+        "type": "string",
+        "description": "op=path: a screen id from map (s3) or its label or route."
+      }
+    }
+  },
   "resolve": {
     "type": "object",
     "properties": {
