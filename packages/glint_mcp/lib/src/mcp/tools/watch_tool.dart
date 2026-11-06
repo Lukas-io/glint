@@ -19,8 +19,8 @@ class WatchTool extends GlintTool {
   Tool get definition => Tool(
         name: 'watch',
         description:
-            'Register conditions, return at once, and be woken later: glint appends one JSON line per event to an events file, and you follow it by running the `tail -n0 -F <file>` line from nextSteps as a background shell monitor (clients do not show server notifications to an idle model). '
-            'For handing the app to a human ("sign in, then I take over") or waiting minutes on a backend change; wait_for blocks one call for 120 s at most. '
+            'Hand the app to a human or a backend and be woken when it reacts (PIN, password, 2FA, sign-in, confirming a real-money or destructive step, a teammate\'s change): register the screen that follows their action, then ask them and end the turn. wait_for blocks one call for 120 s at most and is for what you just caused. '
+            'Returns at once; glint appends one JSON line per event to an events file, and you follow it by running the `tail -n0 -F <file>` line from nextSteps as a background shell monitor (clients do not show server notifications to an idle model). '
             'op: add (default; conditions:[…], any one matching fires), list, cancel (id, or all:true), events (sinceSeq, for clients that poll instead of tailing). '
             'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines). '
             'Options: label, once (default true; false keeps firing), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
