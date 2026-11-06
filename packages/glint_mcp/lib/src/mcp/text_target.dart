@@ -32,7 +32,9 @@ Future<({String? glintId, StructuredResponse? error})> readTarget(
       ),
     );
   }
-  return resolveTextTarget(session, text, tool: tool, waitMs: t.awaitReady ? t.readyTimeoutMs : 0);
+  final resolved = await resolveTextTarget(session, text, tool: tool, waitMs: t.awaitReady ? t.readyTimeoutMs : 0);
+  if (resolved.glintId != null) session.explore.noteTarget(resolved.glintId!);
+  return resolved;
 }
 
 /// One node whose visible text matched: [glintId] is the id an action on it should hit, [nodeGlintId] the matching node's own id.

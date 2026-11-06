@@ -7,6 +7,7 @@ import '../../observability.dart';
 import '../../perception.dart' show InspectorReadError, appBusyCause, suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
+import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
 import 'tool_args.dart';
 import 'tools/app_logs_tool.dart';
@@ -17,6 +18,7 @@ import 'tools/record_tool.dart';
 import 'tools/config_tool.dart';
 import 'tools/device_tool.dart';
 import 'tools/drag_tool.dart';
+import 'tools/explore_tool.dart';
 import 'tools/get_scene_tool.dart';
 import 'tools/hardware_button_tool.dart';
 import 'tools/hot_reload_tool.dart';
@@ -188,12 +190,14 @@ abstract class GlintTool {
       return invalid.toCallResult();
     }
     StructuredResponse response;
+    ExploreCall? call;
     final target = routesByApp ? (request.arguments?['app'] as String?) : null;
     var app = session.active;
     if (session.active?.device.id case final id?) DeviceClaims().touch(id);
     try {
       if (target == null) {
-        response = observeRefusal(app, request.arguments ?? const {}) ?? await handle(session, request);
+        response = observeRefusal(app, request.arguments ?? const {}) ??
+            await (call = ExploreCall()).run(() async => await handle(session, request));
       } else {
         final matches = session.matchApps(target);
         if (matches.length != 1) {
@@ -201,7 +205,8 @@ abstract class GlintTool {
         } else {
           app = matches.single;
           response = observeRefusal(app, request.arguments ?? const {}) ??
-              await session.withApp(matches.single, () async => await handle(session, request));
+              await session.withApp(
+                  matches.single, () => (call = ExploreCall()).run(() async => await handle(session, request)));
         }
       }
     } on SessionNotAttachedError catch (e) {
@@ -250,7 +255,7 @@ abstract class GlintTool {
     response = _explainBreakpointPause(session, response);
     response = _warnSharedDevice(app, response);
     response = _warnLifecycleChecks(app, response);
-    logCall(session, request, response, start);
+    logCall(session, request, response, start, app: app, call: call);
     return response.toCallResult();
   }
 
@@ -511,9 +516,12 @@ abstract class GlintTool {
     GlintSession session,
     CallToolRequest request,
     StructuredResponse response,
-    DateTime start,
-  ) {
+    DateTime start, {
+    AppSession? app,
+    ExploreCall? call,
+  }) {
     final elapsedMs = DateTime.now().difference(start).inMilliseconds;
+    if (call != null) session.explore.completeCall(app, call, definition.name, request.arguments, response);
     final seq = session.actionLog.allocateSequence();
     final argKeys = UsageRecorder.argKeysFrom(request.arguments);
     final resultBytes = _resultBytes(response);
@@ -614,6 +622,7 @@ const List<GlintTool> kDefaultGlintTools = [
   MapTool(),
   ShutdownSimTool(),
   GetSceneTool(),
+  ExploreTool(),
   ResolveTool(),
   TapTool(),
   LongPressTool(),

@@ -15,6 +15,7 @@ export 'src/mcp/tools/breakpoint_tool.dart';
 export 'src/mcp/tools/config_tool.dart';
 export 'src/mcp/tools/device_tool.dart';
 export 'src/mcp/tools/drag_tool.dart';
+export 'src/mcp/tools/explore_tool.dart';
 export 'src/mcp/tools/get_scene_tool.dart';
 export 'src/mcp/tools/hardware_button_tool.dart';
 export 'src/mcp/tools/key_tool.dart';

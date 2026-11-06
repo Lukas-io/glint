@@ -104,6 +104,8 @@ class GetSceneTool extends GlintTool {
         }
       }
 
+      if (subtree == null && session.active != null) session.explore.noteScene(session.active!, semantic);
+
       final budget = session.config.sceneLineBudget;
       final trailerBits = <String>[];
       final dataBits = <String, Object?>{};
