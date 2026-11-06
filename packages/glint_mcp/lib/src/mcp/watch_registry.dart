@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../../interaction.dart' show GlintErrorKind;
 import '../../observability.dart';
 import '../../semantic.dart' show SemanticScene;
 import 'session.dart';
@@ -231,7 +230,7 @@ class WatchRegistry {
     }
   }
 
-  void _fireLint(Watch watch, ArmedCondition condition, LintFinding finding) {
+  void _fireLint(Watch watch, ArmedCondition condition, LintFinding finding, {int notListed = 0}) {
     if (watch.ended) return;
     watch.matches++;
     final last = watch.once || watch.matches >= maxEventsPerWatch;
@@ -240,43 +239,48 @@ class WatchRegistry {
       if (watch.label != null) 'label': watch.label,
       'kind': 'lint',
       'condition': condition.spec.describe,
-      'matched': finding.summary,
+      'matched': notListed > 0 ? '${finding.summary} (+$notListed more ${finding.rule} not listed)' : finding.summary,
       'route': finding.route,
       'app': watch.app.label,
       ...finding.toJson(),
+      if (notListed > 0) 'notListed': notListed,
       if (last) 'final': true,
     });
     _endAfterMatch(watch);
   }
 
-  void _fireLintError(Watch watch, ArmedCondition condition, String detail) {
+  void _fireLintError(Watch watch, ArmedCondition condition, LintProblem problem) {
     if (watch.ended) return;
+    watch.matches++;
+    final last = watch.matches >= maxEventsPerWatch;
     _emit({
       'watch': watch.id,
       if (watch.label != null) 'label': watch.label,
       'kind': 'lintError',
       'condition': condition.spec.describe,
-      'matched': 'lint stopped: $detail',
+      'matched': 'lint ${problem.retrying ? 'paused' : 'stopped'}: ${problem.detail}',
       'app': watch.app.label,
-      'errorKind': GlintErrorKind.internal.name,
-      'detail': detail,
-      'nextSteps': const [
-        'the lint expression did not compile in this app or Flutter version; the other conditions keep running',
-        'report_issue with this detail, and use get_scene meanwhile',
-      ],
+      'errorKind': problem.errorKind.name,
+      'detail': problem.detail,
+      'retrying': problem.retrying,
+      'nextSteps': problem.nextSteps,
+      if (last) 'final': true,
     });
+    if (last) _endAfterMatch(watch);
   }
 
   void _emitLint(List<_LintResult> results) {
     for (final r in results) {
-      final error = r.outcome.error;
-      if (error != null) {
-        _fireLintError(r.watch, r.condition, error);
-        continue;
+      final problem = r.outcome.problem;
+      if (problem != null) {
+        _fireLintError(r.watch, r.condition, problem);
       }
+      final lastOfRule = {for (final f in r.outcome.fresh) f.rule: f};
       for (final f in r.outcome.fresh) {
-        _fireLint(r.watch, r.condition, f);
+        final notListed = identical(lastOfRule[f.rule], f) ? r.outcome.hidden[f.rule] ?? 0 : 0;
+        _fireLint(r.watch, r.condition, f, notListed: notListed);
       }
+      r.outcome.commit();
     }
   }
 
@@ -346,6 +350,8 @@ class WatchRegistry {
 
 typedef _LintResult = ({Watch watch, ArmedCondition condition, LintOutcome outcome});
 
+typedef _SceneRead = ({WatchObservation seen, SemanticScene? scene});
+
 /// Reads one app's scene on a timer for every watch on it, backing off while the app cannot answer.
 class _Poller {
   _Poller(this._registry, this.app) {
@@ -353,6 +359,7 @@ class _Poller {
   }
 
   static const _readLimit = Duration(seconds: 20);
+  static const _lintProbeLimit = Duration(seconds: 15);
   static const _maxDelay = Duration(seconds: 30);
 
   final WatchRegistry _registry;
@@ -363,7 +370,7 @@ class _Poller {
   int _failures = 0;
   WatchObservation? last;
   final _lints = Expando<LintWatcher>();
-  final List<_LintResult> _lintResults = [];
+  Future<void>? _lintRunning;
 
   /// Why the last read did not happen or failed; null while reads work.
   String? holdReason;
@@ -409,7 +416,6 @@ class _Poller {
   Future<void> _read() async {
     final watches = _registry._sceneWatches(app);
     if (watches.isEmpty) return;
-    _lintResults.clear();
     final texts = <String>{};
     final ids = <String>{};
     for (final w in watches) {
@@ -420,34 +426,65 @@ class _Poller {
         }
       }
     }
-    final now = await _observe(texts, ids);
-    if (now == null || _stopped) return;
+    final read = await _observe(texts, ids);
+    if (read == null) return;
+    if (_stopped) {
+      await _release(read.scene);
+      return;
+    }
     final before = last;
-    last = now;
-    _registry._evaluate(app, before, now);
-    final lint = _lintResults.toList();
-    _lintResults.clear();
-    _registry._emitLint(lint);
+    last = read.seen;
+    _registry._evaluate(app, before, read.seen);
+    _handOff(read);
   }
 
-  Future<void> _lint(SemanticScene scene, WatchObservation seen) async {
-    for (final w in _registry._sceneWatches(app)) {
-      for (final c in w.conditions) {
-        final spec = c.spec;
-        if (spec is! LintCondition) continue;
-        final watcher = _lints[c] ??= LintWatcher(spec);
-        if (watcher.disabled) continue;
-        try {
-          final outcome = await watcher.tick(_registry._session.runtime, scene, seen);
-          _lintResults.add((watch: w, condition: c, outcome: outcome));
-        } on Object {
-          // a probe that cannot be read this tick is tried again on the next one
-        }
-      }
+  List<({Watch watch, ArmedCondition condition, LintWatcher watcher})> _lintTargets() => [
+        for (final w in _registry._sceneWatches(app))
+          for (final c in w.conditions)
+            if (c.spec case final LintCondition spec)
+              if (!(_lints[c] ??= LintWatcher(spec)).disabled) (watch: w, condition: c, watcher: _lints[c]!),
+      ];
+
+  void _handOff(_SceneRead read) {
+    final scene = read.scene;
+    if (scene == null) return;
+    if (_stopped || _lintRunning != null || _lintTargets().isEmpty) {
+      unawaited(_release(scene));
+      return;
+    }
+    _lintRunning = _lintStep(scene, read.seen).whenComplete(() => _lintRunning = null);
+  }
+
+  Future<void> _release(SemanticScene? scene) async {
+    if (scene == null) return;
+    try {
+      await scene.sourceScene.dispose();
+    } on Object {
+      return;
     }
   }
 
-  Future<WatchObservation?> _observe(Set<String> texts, Set<String> ids) async {
+  Future<void> _lintStep(SemanticScene scene, WatchObservation seen) async {
+    try {
+      final runtime = app.runtime;
+      final targets = _lintTargets();
+      if (runtime == null || targets.isEmpty) return;
+      final probe = runtime.evaluateString(lintProbeExpr, rethrowErrors: true).timeout(_lintProbeLimit);
+      probe.ignore();
+      final results = <_LintResult>[];
+      for (final t in targets) {
+        final outcome = await t.watcher.tick(runtime, scene, seen, probe);
+        results.add((watch: t.watch, condition: t.condition, outcome: outcome));
+      }
+      _registry._emitLint(results);
+    } on Object {
+      return;
+    } finally {
+      await _release(scene);
+    }
+  }
+
+  Future<_SceneRead?> _observe(Set<String> texts, Set<String> ids) async {
     if (!app.isLive) {
       _hold('the connection to ${app.label} is down');
       return null;
@@ -464,30 +501,31 @@ class _Poller {
       }
       holdReason = null;
       _failures = 0;
-      return (last ?? WatchObservation()).withSurface(surface);
+      return (seen: (last ?? WatchObservation()).withSurface(surface), scene: null);
     }
+    final session = _registry._session;
+    final pending = session.withApp(app, () => _readScene(session, texts, ids));
     try {
-      final session = _registry._session;
-      final seen = await session
-          .withApp(
-            app,
-            () => session.withScene(
-              (scene) async {
-                final seen = WatchObservation.read(scene, texts: texts, ids: ids);
-                await _lint(scene, seen);
-                return seen;
-              },
-              detail: SceneDetail.interactive,
-            ),
-          )
-          .timeout(_readLimit);
+      final read = await pending.timeout(_readLimit);
       holdReason = null;
       _failures = 0;
-      return seen;
+      return read;
     } on Object catch (e) {
+      unawaited(pending.then((got) => _release(got.scene), onError: (Object _) {}));
       final text = '$e'.split('\n').first;
       _hold(text.length > 120 ? '${text.substring(0, 119)}…' : text);
       return null;
+    }
+  }
+
+  Future<_SceneRead> _readScene(GlintSession session, Set<String> texts, Set<String> ids) async {
+    final source = await session.reader.readSummary();
+    try {
+      final scene = await session.semanticize(source, detail: SceneDetail.interactive);
+      return (seen: WatchObservation.read(scene, texts: texts, ids: ids), scene: scene);
+    } on Object {
+      await source.dispose();
+      rethrow;
     }
   }
 }

@@ -1,43 +1,101 @@
+import 'dart:async';
+
+import '../../interaction.dart' show GlintErrorKind;
 import '../../perception.dart' show CreationLocation, SceneNode;
 import '../../semantic.dart' show SemanticScene;
 import '../runtime/flutter_runtime.dart';
 import 'watch_conditions.dart';
 import 'watch_observation.dart';
 
-/// Cheap layout signature: insets, view size, a hash of every laid-out box size, and where the focused field sits.
-final String lintProbeExpr = _probeSource.replaceAll('\n', ' ');
+/// Cheap layout signature: insets, view size, box sizes, paragraph count, scroll offsets and a sample of box positions.
+final String lintProbeExpr = _probeSource.replaceAll('@@HELPERS@@', _helpers).replaceAll('\n', ' ');
+
+/// Shared by the probe and the walk: `kids` skips overlay entries covered by an opaque route, `hidden` skips invisible subtrees.
+const String _helpers = r'''
+  List<dynamic> kids(dynamic r) {
+    final out = <dynamic>[];
+    if (r.runtimeType.toString() == '_RenderTheater') {
+      try {
+        var skip = r.skipCount as int;
+        dynamic c = r.firstChild;
+        while (c != null) {
+          final pd = c.parentData as dynamic;
+          if (skip > 0) {
+            skip--;
+          } else {
+            out.add(c);
+            pd.visitOverlayPortalChildrenOnOverlayEntry(out.add);
+          }
+          c = pd.nextSibling;
+        }
+        return out;
+      } catch (_) {
+        out.clear();
+      }
+    }
+    r.visitChildren(out.add);
+    return out;
+  }
+  bool hidden(dynamic r, String t) {
+    if (t == 'RenderOffstage' && r.offstage == true) return true;
+    if (t == 'RenderOpacity' && r.opacity == 0) return true;
+    if (t == 'RenderAnimatedOpacity') {
+      try { if (r.opacity.value == 0) return true; } catch (_) {}
+    }
+    return false;
+  }
+''';
 
 const String _probeSource = r'''
 (() {
+  @@HELPERS@@
   final m = 0x3fffffff;
   var h = 0;
   var s = '';
+  var paragraphs = 0;
+  var boxes = 0;
+  var sampled = 0;
+  void mix(int v) {
+    h = (h * 31 + v) & m;
+  }
   for (final rv in RendererBinding.instance.renderViews) {
     final fv = rv.flutterView;
     final d = fv.devicePixelRatio;
     s += (fv.viewInsets.bottom / d).toStringAsFixed(1) + ',' + (fv.viewPadding.top / d).toStringAsFixed(1) + ',' + (fv.viewPadding.bottom / d).toStringAsFixed(1) + ',' + fv.physicalSize.width.toString() + 'x' + fv.physicalSize.height.toString() + ';';
     void w(dynamic o) {
       final t = o.runtimeType.toString();
-      if (t == 'RenderOffstage' && o.offstage == true) return;
+      if (hidden(o, t)) return;
       if (t != 'RenderView' && !t.startsWith('RenderSliver')) {
         try {
           if (o.hasSize) {
-            h = (h * 31 + ((o.size.width * 8).round() as int)) & m;
-            h = (h * 31 + ((o.size.height * 8).round() as int)) & m;
-            if (t == 'RenderEditable' && o.hasFocus == true) h = (h * 31 + ((o.localToGlobal(Offset.zero).dy * 4).round() as int)) & m;
+            mix((o.size.width * 8).round() as int);
+            mix((o.size.height * 8).round() as int);
+            if (t == 'RenderParagraph') paragraphs++;
+            if (t == 'RenderEditable' && o.hasFocus == true) mix((o.localToGlobal(Offset.zero).dy * 4).round() as int);
+            boxes++;
+            if (boxes % 6 == 0 && sampled < 120) {
+              sampled++;
+              final g = o.localToGlobal(Offset.zero);
+              mix((g.dx * 2).round() as int);
+              mix((g.dy * 2).round() as int);
+            }
           }
+          if (t.endsWith('Viewport')) mix((o.offset.pixels * 2).round() as int);
         } catch (_) {}
       }
-      o.visitChildren(w);
+      for (final c in kids(o)) {
+        w(c);
+      }
     }
     w(rv);
   }
-  return s + h.toString();
+  return s + paragraphs.toString() + ':' + h.toString();
 })()
 ''';
 
 const String _walkTemplate = r'''
 (() {
+  @@HELPERS@@
   final svc = WidgetInspectorService.instance;
   final group = '@@GROUP@@';
   final rules = <String>{@@RULES@@};
@@ -45,6 +103,7 @@ const String _walkTemplate = r'''
   final maxHeadline = @@MAX_LINES@@;
   final out = <String>[];
   final counts = <String, int>{};
+  final stack = <int>[];
   String n(double v) => v.toStringAsFixed(1);
   String clean(String s) {
     final t = s.replaceAll('\n', ' ').replaceAll('|', ' ').replaceAll(';', ' ').replaceAll('=', ' ').replaceAll(',', ' ').trim();
@@ -52,15 +111,15 @@ const String _walkTemplate = r'''
   }
   void add(String rule, dynamic r, double x, double y, double w, double h, String detail) {
     final c = counts[rule] ?? 0;
-    if (c >= 15) return;
     counts[rule] = c + 1;
+    if (c >= 15) return;
     final ids = <String>[];
     try {
       final el = (r.debugCreator as dynamic).element;
       ids.add(svc.toId(el, group)!);
       el.visitAncestorElements((a) { ids.add(svc.toId(a, group)!); return ids.length < 40; });
     } catch (_) {}
-    out.add('F|' + rule + '|' + r.runtimeType.toString() + '|' + n(x) + ',' + n(y) + ',' + n(w) + ',' + n(h) + '|' + detail + '|' + ids.join(','));
+    out.add('F|' + rule + '|' + r.runtimeType.toString() + '|' + n(x) + ',' + n(y) + ',' + n(w) + ',' + n(h) + '|' + detail + '|' + (stack.length > 4 ? stack.sublist(stack.length - 4) : stack).join('.') + '|' + ids.join(','));
   }
   int lineCount(dynamic r, int length) {
     final boxes = r.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: length)) as List;
@@ -161,15 +220,19 @@ const String _walkTemplate = r'''
     }
     void walk(dynamic r) {
       final t = r.runtimeType.toString();
-      if (t == 'RenderOffstage' && r.offstage == true) return;
-      if (t == 'RenderOpacity' && r.opacity == 0) return;
-      if (t == 'RenderAnimatedOpacity') {
-        try { if (r.opacity.value == 0) return; } catch (_) {}
-      }
+      if (hidden(r, t)) return;
       try { visit(r, t); } catch (_) {}
-      r.visitChildren(walk);
+      final c = kids(r);
+      for (var i = 0; i < c.length; i++) {
+        stack.add(i);
+        walk(c[i]);
+        stack.removeLast();
+      }
     }
     walk(rv);
+  }
+  for (final e in counts.entries) {
+    if (e.value > 15) out.add('C|' + e.key + '|' + (e.value - 15).toString());
   }
   return out.join('\n');
 })()
@@ -177,6 +240,7 @@ const String _walkTemplate = r'''
 
 /// The one-walk lint expression for [spec], registering ancestors in inspector group [group].
 String lintWalkExpr(LintCondition spec, String group) => _walkTemplate
+    .replaceAll('@@HELPERS@@', _helpers)
     .replaceAll('\n', ' ')
     .replaceAll('@@GROUP@@', group)
     .replaceAll('@@RULES@@', spec.rules.map((r) => "'$r'").join(','))
@@ -191,6 +255,7 @@ class LintFinding {
     required this.widget,
     required this.rect,
     required this.measured,
+    this.path = '',
     this.glintId,
     this.location,
     this.text,
@@ -202,6 +267,9 @@ class LintFinding {
   final String? glintId;
   final String? location;
   final String? text;
+
+  /// Child indexes of the last few render levels, which tell apart problems under one scene node and survive scrolling.
+  final String path;
   final ({double x, double y, double w, double h}) rect;
   final Map<String, Object?> measured;
 
@@ -211,7 +279,7 @@ class LintFinding {
     final detail = switch (rule) {
       'clippedText' || 'lines' => text ?? '',
       'tapTarget' => '${rect.w.round()}x${rect.h.round()}',
-      _ => '${measured['edge'] ?? ''}',
+      _ => '${measured['edge'] ?? ''}|$path',
     };
     return '$rule|$id|$widget|$detail';
   }
@@ -244,8 +312,45 @@ class LintFinding {
       };
 }
 
-/// What one lint tick produced: findings new since the last check, or why the check cannot run.
-typedef LintOutcome = ({List<LintFinding> fresh, String? error});
+/// Why a lint check could not run: an `errorKind`, the reason and what to do next.
+class LintProblem {
+  const LintProblem({
+    required this.errorKind,
+    required this.detail,
+    required this.nextSteps,
+    required this.retrying,
+  });
+
+  final GlintErrorKind errorKind;
+  final String detail;
+  final List<String> nextSteps;
+  final bool retrying;
+}
+
+void _nothingToCommit() {}
+
+/// What one lint tick produced: findings new since the last check, how many the walk could not list per rule, or why the check cannot run; [commit] records the findings as reported once they are written.
+class LintOutcome {
+  const LintOutcome({
+    this.fresh = const [],
+    this.hidden = const {},
+    this.problem,
+    this.commit = _nothingToCommit,
+  });
+
+  static const none = LintOutcome();
+
+  final List<LintFinding> fresh;
+  final Map<String, int> hidden;
+  final LintProblem? problem;
+  final void Function() commit;
+}
+
+class _NoReply implements Exception {
+  _NoReply(this.what);
+
+  final String what;
+}
 
 /// Runs the lint rules of one `{lint}` condition: waits for the screen to settle, walks the render tree once, and reports only what is new.
 class LintWatcher {
@@ -253,61 +358,159 @@ class LintWatcher {
 
   static const _maxUnsettledTicks = 8;
   static const _maxFreshPerCheck = 12;
+  static const _maxTransient = 5;
+  static const _backoffTicks = 20;
+
+  /// How long one walk may take before the check is given up for this tick.
+  static const walkLimit = Duration(seconds: 20);
 
   final LintCondition spec;
   String? _lastSignature;
   String? _checkedSignature;
   int _unsettled = 0;
+  int _transient = 0;
+  int _pausedTicks = 0;
+  bool _reported = false;
+  bool _busy = false;
   final Map<String, Set<String>> _fired = {};
 
   /// Whether the eval failed to compile; the condition then stays quiet.
   bool disabled = false;
 
-  /// One tick: the first one checks at once, later ones only after the layout signature changed and then held still for a tick.
-  Future<LintOutcome> tick(FlutterRuntime runtime, SemanticScene scene, WatchObservation obs) async {
-    const none = (fresh: <LintFinding>[], error: null);
+  /// One tick: the first one checks at once, later ones only after the layout signature changed and then held still for a tick; [probe] is the app's shared layout probe for this read.
+  Future<LintOutcome> tick(
+    FlutterRuntime runtime,
+    SemanticScene scene,
+    WatchObservation obs,
+    Future<String?> probe,
+  ) async {
+    if (disabled || _busy) return LintOutcome.none;
+    if (_pausedTicks > 0) {
+      _pausedTicks--;
+      return LintOutcome.none;
+    }
+    _busy = true;
     try {
-      final probe = await runtime.evaluateString(lintProbeExpr, rethrowErrors: true);
-      if (probe == null) return (fresh: const <LintFinding>[], error: 'the layout probe returned no string');
-      final signature = '$probe|${obs.route}|${obs.overlay}|${Object.hashAllUnordered(obs.labels)}|'
-          '${Object.hashAllUnordered(obs.tappableIds)}';
-      if (signature == _checkedSignature) {
-        _lastSignature = signature;
-        _unsettled = 0;
-        return none;
-      }
-      final first = _lastSignature == null;
-      if (signature != _lastSignature) {
-        _lastSignature = signature;
-        _unsettled++;
-        if (!first && _unsettled < _maxUnsettledTicks) return none;
-      }
-      _unsettled = 0;
-      final raw = await runtime.evaluateString(lintWalkExpr(spec, scene.sourceScene.groupName), rethrowErrors: true);
-      if (raw == null) return (fresh: const <LintFinding>[], error: 'the lint walk returned no string');
-      _checkedSignature = signature;
-      return (fresh: _fresh(parseLintFindings(raw, scene.sourceScene.root, obs.route), obs.route), error: null);
+      final outcome = await _check(runtime, scene, obs, probe);
+      _transient = 0;
+      _reported = false;
+      return outcome;
+    } on _NoReply catch (e) {
+      return _transientFailure(e.what, GlintErrorKind.appBusy);
     } on RuntimeEvalError catch (e) {
-      disabled = true;
-      return (fresh: const <LintFinding>[], error: e.message);
+      if (_isCompileError(e.message)) return _compileFailure(e.message);
+      return _transientFailure(_firstLine(e.message), GlintErrorKind.appBusy);
+    } on RuntimeConnectionLostError {
+      return _transientFailure('the connection to the app dropped', GlintErrorKind.connectionLost);
+    } on TimeoutException {
+      return _transientFailure('the app did not answer the layout check in time', GlintErrorKind.appBusy);
+    } on RuntimeUnresponsiveError {
+      return _transientFailure('the app did not answer the layout check in time', GlintErrorKind.appBusy);
+    } on Object catch (e) {
+      return _transientFailure(_firstLine('$e'), GlintErrorKind.internal);
+    } finally {
+      _busy = false;
     }
   }
 
-  List<LintFinding> _fresh(List<LintFinding> found, String route) {
+  Future<LintOutcome> _check(
+    FlutterRuntime runtime,
+    SemanticScene scene,
+    WatchObservation obs,
+    Future<String?> probe,
+  ) async {
+    final shape = await probe;
+    if (shape == null) throw _NoReply('the layout probe returned no string');
+    final signature = '$shape|${obs.route}|${obs.overlay}|${Object.hashAllUnordered(obs.tappableIds)}';
+    if (signature == _checkedSignature) {
+      _lastSignature = signature;
+      _unsettled = 0;
+      return LintOutcome.none;
+    }
+    final first = _lastSignature == null;
+    if (signature != _lastSignature) {
+      _lastSignature = signature;
+      _unsettled++;
+      if (!first && _unsettled < _maxUnsettledTicks) return LintOutcome.none;
+    }
+    _unsettled = 0;
+    final raw = await runtime
+        .evaluateString(lintWalkExpr(spec, scene.sourceScene.groupName), rethrowErrors: true)
+        .timeout(walkLimit);
+    if (raw == null) throw _NoReply('the lint walk returned no string');
+    final found = parseLintFindings(raw, scene.sourceScene.root, obs.route);
+    return _outcome(found, parseLintHidden(raw), obs.route, signature);
+  }
+
+  LintOutcome _outcome(List<LintFinding> found, Map<String, int> hidden, String route, String signature) {
     final held = _fired[route] ?? <String>{};
     final current = {for (final f in found) f.key};
     final fresh = <LintFinding>[];
     final emitted = <String>{};
+    final deferred = <String>{};
     for (final f in found) {
-      if (held.contains(f.key) || !emitted.add(f.key)) continue;
+      if (held.contains(f.key) || emitted.contains(f.key) || deferred.contains(f.key)) continue;
       if (fresh.length >= _maxFreshPerCheck) {
-        emitted.remove(f.key);
+        deferred.add(f.key);
         continue;
       }
+      emitted.add(f.key);
       fresh.add(f);
     }
-    _fired[route] = {...held.intersection(current), ...emitted};
-    return fresh;
+    return LintOutcome(
+      fresh: fresh,
+      hidden: hidden,
+      commit: () {
+        _fired[route] = {...held.intersection(current), ...emitted};
+        if (deferred.isEmpty) _checkedSignature = signature;
+      },
+    );
+  }
+
+  LintOutcome _compileFailure(String message) {
+    disabled = true;
+    final text = message.length > 400 ? '${message.substring(0, 399)}…' : message;
+    return LintOutcome(
+      problem: LintProblem(
+        errorKind: GlintErrorKind.internal,
+        detail: 'the lint expression did not compile in this app: $text',
+        nextSteps: const [
+          'lint is off for this watch for good; the other conditions keep running',
+          'report_issue with this detail and the Flutter version, and use get_scene meanwhile',
+        ],
+        retrying: false,
+      ),
+    );
+  }
+
+  LintOutcome _transientFailure(String reason, GlintErrorKind kind) {
+    _transient++;
+    if (_transient < _maxTransient) return LintOutcome.none;
+    _pausedTicks = _backoffTicks;
+    if (_reported) return LintOutcome.none;
+    _reported = true;
+    return LintOutcome(
+      problem: LintProblem(
+        errorKind: kind,
+        detail: '$reason ($_maxTransient checks in a row)',
+        nextSteps: const [
+          'glint keeps retrying about every 30 s and stays quiet until a check works',
+          'get_scene to see whether the app is reloading, locked or busy',
+          'watch op:cancel if you no longer need lint',
+        ],
+        retrying: true,
+      ),
+    );
+  }
+
+  static bool _isCompileError(String message) {
+    final lower = message.toLowerCase();
+    return lower.startsWith('rpcerror(113)') || lower.contains('compilation error');
+  }
+
+  static String _firstLine(String text) {
+    final line = text.split('\n').first;
+    return line.length > 200 ? '${line.substring(0, 199)}…' : line;
   }
 }
 
@@ -320,7 +523,7 @@ List<LintFinding> parseLintFindings(String raw, SceneNode sceneRoot, String rout
   final out = <LintFinding>[];
   for (final line in raw.split('\n')) {
     final parts = line.split('|');
-    if (parts.length < 6 || parts.first != 'F') continue;
+    if (parts.length < 7 || parts.first != 'F') continue;
     final box = parts[3].split(',').map(double.tryParse).toList();
     if (box.length != 4 || box.contains(null)) continue;
     final measured = <String, Object?>{};
@@ -337,7 +540,7 @@ List<LintFinding> parseLintFindings(String raw, SceneNode sceneRoot, String rout
       }
     }
     SceneNode? node;
-    for (final id in parts[5].split(',')) {
+    for (final id in parts[6].split(',')) {
       node = byInspector[id];
       if (node != null) break;
     }
@@ -348,9 +551,22 @@ List<LintFinding> parseLintFindings(String raw, SceneNode sceneRoot, String rout
       glintId: node?.glintId,
       location: node?.creationLocation == null ? null : _place(node!.creationLocation!),
       text: text,
+      path: parts[5],
       rect: (x: box[0]!, y: box[1]!, w: box[2]!, h: box[3]!),
       measured: measured,
     ));
+  }
+  return out;
+}
+
+/// Per rule, how many problems the walk found past its per-rule listing cap.
+Map<String, int> parseLintHidden(String raw) {
+  final out = <String, int>{};
+  for (final line in raw.split('\n')) {
+    final parts = line.split('|');
+    if (parts.length != 3 || parts.first != 'C') continue;
+    final count = int.tryParse(parts[2]);
+    if (count != null) out[parts[1]] = count;
   }
   return out;
 }

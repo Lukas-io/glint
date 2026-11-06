@@ -299,6 +299,11 @@ class VmServiceRuntime implements FlutterRuntime {
     );
   }
 
+  static String _compilerDetail(RPCError e) {
+    final text = e.data?['details']?.toString().trim();
+    return text == null || text.isEmpty ? '' : ': $text';
+  }
+
   @override
   Future<InstanceRef> evaluate(String expression) async {
     final library = await _evalLibrary();
@@ -312,7 +317,7 @@ class VmServiceRuntime implements FlutterRuntime {
     } on RPCError catch (e) {
       // Code 113 = expression compilation error (e.g. platform view context).
       // Wrap as RuntimeEvalError so callers get a typed, structured failure.
-      throw RuntimeEvalError(expression, 'RPCError(${e.code}): ${e.message}');
+      throw RuntimeEvalError(expression, 'RPCError(${e.code}): ${e.message}${_compilerDetail(e)}');
     }
     if (raw is InstanceRef) return raw;
     if (raw is ErrorRef) {
