@@ -20,5 +20,5 @@ String? updateNotice() {
   final latest = cachedPubVersion(_cache);
   if (latest == null || !isNewerVersion(latest, glintVersion)) return null;
   return 'glint $latest is out (this is $glintVersion): tell the user to run `dart pub global activate glint_mcp`, '
-      'then restart the MCP server';
+      'then restart the MCP server · what\'s new: https://pub.dev/packages/glint_mcp/changelog';
 }
