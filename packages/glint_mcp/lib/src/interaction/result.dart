@@ -66,6 +66,9 @@ enum GlintErrorKind {
 
   /// The session is in device mode (no Flutter VM) and the tool needs the widget tree.
   flutterModeRequired,
+
+  /// A pick left the system picker open or unreadable, so no photo is known to be chosen.
+  pickIncomplete,
   // armed-intent failures (§7.3 try/catch)
   targetNeverReady,
   // scroll_to_find specific failures

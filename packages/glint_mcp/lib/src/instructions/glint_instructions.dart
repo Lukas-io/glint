@@ -96,7 +96,7 @@ const _recovery = '''
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly`: follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly` / `pickIncomplete`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';
@@ -104,7 +104,7 @@ const _recovery = '''
 const _gotchas = '''
 ## Gotchas
 
-- **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it; `key` sends backspace/enter/arrows.
+- **`type` needs focus:** `focus:<id>` taps it first; `clear:true` empties it.
 - **Scroll is content-relative:** `scroll down` shows what is below (finger swipes up).
 ''';
 
