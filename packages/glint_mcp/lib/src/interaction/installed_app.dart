@@ -53,8 +53,8 @@ class InstalledAppLauncher {
           ? _openIos(deviceId, appId, timeout, progressEvery, onProgress)
           : _openAndroid(deviceId, appId, timeout, progressEvery, onProgress);
 
-  /// Throws unless [appId] is installed on [deviceId] and not running, so [open] has a fresh process to start.
-  Future<void> requireClosed({
+  /// The pid of [appId] on [deviceId] when it runs, null when closed; throws when it is not installed.
+  Future<int?> runningPid({
     required DevicePlatform platform,
     required String deviceId,
     required String appId,
@@ -65,10 +65,16 @@ class InstalledAppLauncher {
     if (!installed) {
       throw InstalledLaunchError(InstalledLaunchFailure.notInstalled, '$appId is not installed on $deviceId');
     }
-    final running =
-        platform == DevicePlatform.ios ? await _iosPid(deviceId, appId) : await _androidPid(deviceId, appId);
-    if (running != null) {
-      throw InstalledLaunchError(InstalledLaunchFailure.alreadyRunning, '$appId is already running on $deviceId');
+    return platform == DevicePlatform.ios ? _iosPid(deviceId, appId) : _androidPid(deviceId, appId);
+  }
+
+  /// Brings the running [appId] on simulator [udid] to the front; simctl reactivates the same process instead of starting another.
+  Future<void> bringToFront(String udid, String appId) async {
+    final launch = await _run('xcrun', ['simctl', 'launch', udid, appId]);
+    if (launch.exitCode != 0) {
+      throw InstalledLaunchError(
+          InstalledLaunchFailure.toolFailed, 'simctl could not bring $appId to the front on $udid',
+          detail: _firstNonEmpty(launch.stderr, launch.stdout));
     }
   }
 

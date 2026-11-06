@@ -388,6 +388,8 @@ class AppSession {
       tree: tree,
       bundleId: () => bundleId,
       fallback: NativeSceneReader(udid: dev.udid, bridgePath: dev.bridgePath),
+      frontWhenHidden: () async =>
+          runner.frontmost([...await const SimControl().runningApps(dev.udid), 'com.apple.springboard']),
     );
   }
 
@@ -651,12 +653,13 @@ class AppSession {
     }
   }
 
-  /// Whether the runner sees a system surface over the app; the free poll answer rules out a cover, and only a cover it saw (or a [fresh] ask after the app went quiet) costs a runner read.
+  /// Whether the runner sees a system surface over the app, or the app itself in the background; the free poll answer rules out a cover, and only a cover it saw, an app that left `resumed` (or a [fresh] ask after the app went quiet) costs a runner read.
   Future<bool> _systemSurfaceUp(RunnerNativeReader reader, {required bool fresh}) async {
-    if (!fresh && nativeSurfaceName == null) return false;
+    final left = lastLifecycle != null && lastLifecycle != 'resumed';
+    if (!fresh && nativeSurfaceName == null && !left) return false;
     try {
       nativeSurfaceName = await reader.foreignSurface();
-      return nativeSurfaceName != null;
+      return nativeSurfaceName != null || reader.appBackgrounded;
     } on Object {
       return false;
     }

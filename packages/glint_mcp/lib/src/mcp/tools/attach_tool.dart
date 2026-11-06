@@ -64,7 +64,7 @@ class AttachTool extends GlintTool {
             ),
             'launch': Schema.string(
               description:
-                  'Flutter project folder to build and run, or an installed app id (bundle id or package) to reopen in seconds without a rebuild.',
+                  'Flutter project folder to build and run, or an installed app id (bundle id or package) to reopen in seconds without a rebuild; one already running on an iOS simulator is brought to the front and attached.',
             ),
             'iosBridgePath': Schema.string(
               description: 'Path to compiled `glint-iossim` binary. iOS only.',
@@ -329,12 +329,17 @@ class AttachTool extends GlintTool {
     // Set when we launched — pins device resolution past the stale pre-launch scan.
     String? launchedDeviceId;
     String? openedAppId;
+    String? frontedAppId;
     if (launchPath != null && looksLikeAppId(launchPath)) {
       final r = await _openInstalled(session, scan, launchPath, deviceArg, platformArg, adbResolved, onProgress);
       if (r.error != null) return r.error!;
       vmUri = r.vmUri!;
       launchedDeviceId = r.deviceId;
-      openedAppId = launchPath;
+      if (r.reopened) {
+        openedAppId = launchPath;
+      } else {
+        frontedAppId = launchPath;
+      }
     } else if (launchPath != null && launchPath.isNotEmpty) {
       final r = await _launchPath(
           session, scan, launchPath, deviceArg, platformArg, onProgress, launchNotes, args['signingTeam'] as String?);
@@ -710,6 +715,7 @@ class AttachTool extends GlintTool {
             '${projectDir != null ? " from ${_tildePath(projectDir)}" : ""} '
             'at $vmUri'
             '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}'
+            '${frontedAppId != null ? "\n$frontedAppId was already running: brought it to the front and attached to it" : ""}'
             '${openedAppId != null ? "\nopened installed $openedAppId without a rebuild: this is the installed build, not the current source" : ""}'
             '\ninput: ${device.route.name} · ${input.line}'
             '${device.abilities.line == null ? '' : '\nnot on this device: ${device.abilities.line}'}',
@@ -733,6 +739,7 @@ class AttachTool extends GlintTool {
           if (app.isNotEmpty) 'app': app,
           'vmUri': vmUri.toString(),
           'mode': 'flutter',
+          if (frontedAppId != null) 'broughtToFront': true,
           if (dartVersion != null && dartVersion.isNotEmpty) 'dartVersion': dartVersion.split(' ').first,
           if (lifecycle != null) 'appState': lifecycle,
           'hardwareButtons': [for (final b in caps.hardwareButtons) b.name],
@@ -938,8 +945,9 @@ class AttachTool extends GlintTool {
         if (await const SimControl().isLocked(d.id) == true) d,
     ];
     final android = scan.devicesFor(DevicePlatform.android);
-    final front =
-        android.length == 1 ? await DeviceDiscovery(adbPath: adbPath).foregroundPackage(android.single.id) : null;
+    final discovery = DeviceDiscovery(adbPath: adbPath);
+    final front = android.length == 1 ? await discovery.foregroundPackage(android.single.id) : null;
+    final simulatorApp = locked.isEmpty && front == null ? await discovery.correlate(vmUri, DevicePlatform.ios) : null;
     return StructuredResponse.error(
       summary: locked.isNotEmpty
           ? '${locked.map((d) => d.name).join(", ")} is locked, so the app is suspended and cannot be attached'
@@ -956,6 +964,8 @@ class AttachTool extends GlintTool {
           'bring the app back to the foreground (reopen it from the launcher), then attach again',
           'if back closed it on its first screen, relaunch it with attach device:"${android.single.id}"',
         ] else ...[
+          if (simulatorApp?.bundleId case final bundleId?)
+            'if it is in the background, bring it to the front: attach device:"${simulatorApp!.deviceId}" launch:"$bundleId"',
           'attach mode:"device", then device op:screenshot to see what is in front',
           'if a debugger paused the app, resume it, then attach again',
         ],
@@ -1503,7 +1513,7 @@ class AttachTool extends GlintTool {
   }
 
   /// Reopen the installed [appId] without a rebuild and return its VM URI (or a ready error).
-  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error})> _openInstalled(
+  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error, bool reopened})> _openInstalled(
     GlintSession session,
     DiscoveryResult scan,
     String appId,
@@ -1537,10 +1547,11 @@ class AttachTool extends GlintTool {
           errorKind: GlintErrorKind.targetNotFound,
           nextSteps: const ['boot a device, or pass device:"<udid/serial>"'],
         ),
+        reopened: false,
       );
     }
     if (platform == DevicePlatform.android && adbResolved == null) {
-      return (vmUri: null, deviceId: null, error: _adbMissing());
+      return (vmUri: null, deviceId: null, error: _adbMissing(), reopened: false);
     }
 
     List<String> rebuild(String lead) => [
@@ -1550,7 +1561,7 @@ class AttachTool extends GlintTool {
               .take(1))
             '$lead: attach device:"$deviceId" launch:"${r.projectDir}"',
         ];
-    ({Uri? vmUri, String? deviceId, StructuredResponse? error}) failed(
+    ({Uri? vmUri, String? deviceId, StructuredResponse? error, bool reopened}) failed(
       String summary,
       GlintErrorKind kind, {
       String? detail,
@@ -1565,6 +1576,7 @@ class AttachTool extends GlintTool {
             detail: detail,
             nextSteps: nextSteps,
           ),
+          reopened: false,
         );
 
     final launcher = InstalledAppLauncher(adbPath: adbResolved ?? 'adb');
@@ -1589,7 +1601,13 @@ class AttachTool extends GlintTool {
     }
 
     try {
-      await launcher.requireClosed(platform: platform, deviceId: deviceId, appId: appId);
+      final runningPid = await launcher.runningPid(platform: platform, deviceId: deviceId, appId: appId);
+      if (runningPid != null) {
+        if (platform == DevicePlatform.ios) {
+          return await _frontRunning(session, scan, launcher, deviceId, appId, failed);
+        }
+        throw InstalledLaunchError(InstalledLaunchFailure.alreadyRunning, '$appId is already running on $deviceId');
+      }
       final projectDir = session.attachHistory
           .load()
           .where((r) => r.bundleId == appId && r.projectDir != null && flutterAppProblem(r.projectDir!) == null)
@@ -1623,7 +1641,7 @@ class AttachTool extends GlintTool {
         onProgress: onProgress,
       );
       session.registerLaunchedApp(deviceId, tools.process);
-      return (vmUri: tools.uri, deviceId: deviceId, error: null);
+      return (vmUri: tools.uri, deviceId: deviceId, error: null, reopened: true);
     } on LaunchError catch (e) {
       return failed(
         'the app opened, but flutter attach could not pair with it',
@@ -1650,6 +1668,45 @@ class AttachTool extends GlintTool {
               ]),
       };
     }
+  }
+
+  /// An [appId] already running on simulator [deviceId]: brings it to the front and returns the VM it already serves, so attach carries on as for any running app.
+  Future<({Uri? vmUri, String? deviceId, StructuredResponse? error, bool reopened})> _frontRunning(
+    GlintSession session,
+    DiscoveryResult scan,
+    InstalledAppLauncher launcher,
+    String deviceId,
+    String appId,
+    ({Uri? vmUri, String? deviceId, StructuredResponse? error, bool reopened}) Function(
+      String summary,
+      GlintErrorKind kind, {
+      String? detail,
+      List<String> nextSteps,
+    }) failed,
+  ) async {
+    await launcher.bringToFront(deviceId, appId);
+    final pooled = session.findApp(appId);
+    Uri? vmUri = pooled != null && pooled.isLive && pooled.device.id == deviceId ? pooled.vmUri : null;
+    if (vmUri == null) {
+      final running = await DeviceDiscovery(adbPath: launcher.adbPath).describeRunningApps(scan);
+      final onDevice = running.where((r) => r.deviceId == deviceId).toList();
+      final named = onDevice.where((r) => r.bundleId == appId).toList();
+      final hits = named.isNotEmpty ? named : onDevice.where((r) => r.bundleId == null).toList();
+      vmUri = hits.length == 1 ? hits.single.vmUri : null;
+    }
+    if (vmUri == null) {
+      return failed(
+        '$appId is running on $deviceId and is now in front, but glint found no Dart VM service for it',
+        GlintErrorKind.targetNotFound,
+        detail: 'only a debug build run by `flutter run` serves one; a build started another way, or a profile or '
+            'release build, cannot be attached',
+        nextSteps: [
+          'attach device:"$deviceId" if its `flutter run` is still going',
+          'or run it again: attach device:"$deviceId" launch:"<project folder>"',
+        ],
+      );
+    }
+    return (vmUri: vmUri, deviceId: deviceId, error: null, reopened: false);
   }
 
   /// Launch an explicit project path (app not in history), on [deviceArg] or the single booted device.

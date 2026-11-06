@@ -36,16 +36,28 @@ Future<({NativeHit? hit, StructuredResponse? error})?> resolveNativeTarget(Glint
     ].firstOrNull;
   }
   if (found == null && scene.root.glintId == '_native_surface') {
+    final note = session.active?.nativeRunnerNote;
+    final runner = reader is RunnerNativeReader;
+    final app = session.active;
+    final bundleId = session.device is IosSimulator ? app?.bundleId : null;
     return (
       hit: null,
       error: StructuredResponse.error(
         summary: 'glint cannot read the native surface over the app, so it cannot find '
             '${glintId != null ? 'node $glintId' : '"$text"'} on it',
         errorKind: GlintErrorKind.targetNotFound,
-        detail: 'the simulator accessibility read failed (its Simulator window is closed, or the read was refused)',
-        nextSteps: const [
+        detail: note ??
+            (runner
+                ? reader.lastReadProblem ?? 'the XCTest runner found nothing readable in front'
+                : 'the simulator accessibility read failed (its Simulator window is closed, or the read was refused)'),
+        nextSteps: [
+          if (note?.startsWith('the XCTest runner is starting') ?? false)
+            'get_scene again in a few seconds: once the XCTest runner is up it reads this surface'
+          else if (!runner)
+            'attach again so the XCTest runner starts (config iosNativeRunner), which reads system surfaces without a window',
           'take a `device op:screenshot` and tap the button by x,y',
-          'or attach again so the XCTest runner starts (config iosNativeRunner), which reads system surfaces without a window',
+          if (bundleId != null)
+            'if the app went to the background, attach device:"${app!.id}" launch:"$bundleId" brings it back',
         ],
       ),
     );

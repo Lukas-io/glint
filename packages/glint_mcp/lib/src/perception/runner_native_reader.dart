@@ -9,6 +9,7 @@ class RunnerNativeReader extends NativeReader {
     required this.bundleId,
     this.fallback,
     this.frontmost,
+    this.frontWhenHidden,
     this.pixelsPerPoint = 1,
   });
 
@@ -22,6 +23,9 @@ class RunnerNativeReader extends NativeReader {
   /// Device mode: names the app in front when [bundleId] is null; its presence makes the reader return the whole app, not only what covers it.
   final Future<String?> Function()? frontmost;
 
+  /// Flutter mode: names the app in front when [bundleId]'s app is not (home screen, another app), so its screen can be read and tapped.
+  final Future<String?> Function()? frontWhenHidden;
+
   /// Device mode: screenshot pixels per point, so frames come out in the pixels device-mode taps take.
   final double pixelsPerPoint;
 
@@ -31,8 +35,15 @@ class RunnerNativeReader extends NativeReader {
   /// The name of the surface the last read found, or null when it found none.
   String? lastSurfaceName;
 
+  /// The screen in front of the app while the app itself is in the background (e.g. `the home screen`), from the last scene read.
+  String? lastFrontName;
+
   List<Map<String, Object?>> _surface = const [];
   ({double w, double h})? _screen;
+  String? _appState;
+
+  /// Whether the last read found the app itself in the background or suspended (home screen, another app in front).
+  bool get appBackgrounded => _appState == 'background' || _appState == 'suspended';
 
   /// Longest a tree read may take; the runner answers one request at a time, and the app's own tree waits for the app to go idle.
   static const readLimit = Duration(seconds: 3);
@@ -50,12 +61,14 @@ class RunnerNativeReader extends NativeReader {
       lastReadProblem = 'the XCTest runner could not be read: $e';
       lastSurfaceName = null;
       _surface = const [];
+      _appState = null;
       return null;
     }
   }
 
   String? _take(Map<String, Object?> reply, String? app) {
     lastReadProblem = null;
+    _appState = reply['state'] as String?;
     final found = findNativeSurface(reply, wholeApp: frontmost != null, appId: app);
     _surface = found?.roots ?? const [];
     _screen = screenOf(reply);
@@ -76,11 +89,31 @@ class RunnerNativeReader extends NativeReader {
   }
 
   Future<Scene> _scene() async {
-    if (_surface.isEmpty) return await fallback?.readSnapshot() ?? nativeScene(const [], 1);
+    lastFrontName = null;
+    if (_surface.isEmpty) {
+      return await _frontScene() ?? await fallback?.readSnapshot() ?? nativeScene(const [], 1);
+    }
     return nativeScene(
         nativeElements(_surface,
             screen: _screen, scale: pixelsPerPoint, max: frontmost == null ? 40 : _wholeAppElements),
         1);
+  }
+
+  Future<Scene?> _frontScene() async {
+    final hidden = _appState;
+    final whoIsFront = frontWhenHidden;
+    if (whoIsFront == null || hidden == null || hidden == 'foreground') return null;
+    try {
+      final id = await whoIsFront().timeout(readLimit);
+      if (id == null) return null;
+      final reply = await tree(id).timeout(readLimit);
+      final found = findNativeSurface(reply, wholeApp: true, appId: id);
+      if (found == null) return null;
+      lastFrontName = found.name;
+      return nativeScene(nativeElements(found.roots, screen: screenOf(reply), max: _wholeAppElements), 1);
+    } on Object {
+      return null;
+    }
   }
 }
 

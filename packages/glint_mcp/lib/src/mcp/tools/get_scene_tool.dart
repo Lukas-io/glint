@@ -341,7 +341,9 @@ class GetSceneTool extends GlintTool {
     final dpr = session.device.devicePixelRatio;
     final surface = app?.nativeSurfaceName;
     final ocr = nativeReader is OcrNativeReader;
-    final listed = (surface != null || ocr) && !isSentinel && nativeScene.root.children.isNotEmpty;
+    final front = nativeReader is RunnerNativeReader ? nativeReader.lastFrontName : null;
+    final simulatorBundle = session.device is IosSimulator ? app?.bundleId : null;
+    final listed = (surface != null || front != null || ocr) && !isSentinel && nativeScene.root.children.isNotEmpty;
     final read = isSentinel ? null : classifySurface(nativeScene, owner: surface);
     final sent = capture == null || listed ? null : await session.modelImage(capture.path);
     final starved = (surface?.toLowerCase().contains('camera') ?? false) && await _cameraStarved(session);
@@ -357,6 +359,8 @@ class GetSceneTool extends GlintTool {
           '${surface.split('/').last.split('.').last} (${surface.split('/').first}) is in front of your app'
         else if (surface != null)
           '$surface is in front of your app'
+        else if (front != null)
+          '$front is in front of your app, which is in the background (lifecycle: ${lifecycle ?? "unknown"})'
         else if (locked == true)
           'the device is locked, so your app is suspended (lifecycle: ${lifecycle ?? "unknown"})'
         else
@@ -373,7 +377,7 @@ class GetSceneTool extends GlintTool {
         if (starved) emulatorCameraStarvedWarning,
       ],
       nextSteps: [
-        if ((surface != null || ocr) && !isSentinel)
+        if ((surface != null || front != null || ocr) && !isSentinel)
           'tap an element above by its text or glintId (tap text:"Allow"); x,y also works, in logical points',
         if (ocr && !isSentinel) 'these are the text lines read off the screen; a button is the line with its label',
         if (surface != null && nativeReader is AndroidNativeReader) 'hardware_button back closes it without choosing',
@@ -388,7 +392,9 @@ class GetSceneTool extends GlintTool {
         if (!overlay && locked != true && surface == null)
           '`hardware_button home` then reopen the app, or `device op:openurl` its deep link',
         if (!overlay && locked != true && surface == null)
-          'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
+          simulatorBundle != null
+              ? 'attach device:"${app!.id}" launch:"$simulatorBundle" brings the app back to the front, or relaunches it if it was killed'
+              : 'a relaunch via attach device:"${app?.id ?? ""}" brings it back if it was killed',
       ],
       data: {
         'format': format,

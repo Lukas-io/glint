@@ -24,7 +24,7 @@
       },
       "launch": {
         "type": "string",
-        "description": "Flutter project folder to build and run, or an installed app id (bundle id or package) to reopen in seconds without a rebuild."
+        "description": "Flutter project folder to build and run, or an installed app id (bundle id or package) to reopen in seconds without a rebuild; one already running on an iOS simulator is brought to the front and attached."
       },
       "iosBridgePath": {
         "type": "string",
