@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import '../../interaction.dart' show GlintErrorKind;
+import '../../observability.dart' show AlertKind, AppAlert;
+import 'app_session.dart';
 import 'envelope.dart';
 import 'watch_observation.dart';
 
@@ -71,15 +73,29 @@ final class LogCondition extends WatchCondition {
   Map<String, Object?> toJson() => {'log': pattern.pattern};
 }
 
-/// An error the app has not reported before: one hit per distinct summary and location, never for repeats.
-final class ErrorsCondition extends WatchCondition {
-  const ErrorsCondition();
+/// New alerts of the chosen [kinds]: an app error, uncaught error or overflow once per distinct error, each failed HTTP request, an app that ended, and (only when asked for) one that lost its VM connection or came back.
+final class AlertsCondition extends WatchCondition {
+  const AlertsCondition(this.kinds) : shorthand = false;
+
+  /// `{errors:true}`: error, uncaught and overflow.
+  const AlertsCondition.errors()
+      : kinds = AlertKind.errorKinds,
+        shorthand = true;
+
+  final Set<AlertKind> kinds;
+  final bool shorthand;
+
+  bool get wantsHttp => kinds.contains(AlertKind.http);
 
   @override
-  String get describe => 'new app error';
+  String get describe => shorthand ? 'new app error' : 'alerts ${kinds.map((k) => k.name).join(', ')}';
 
   @override
-  Map<String, Object?> toJson() => {'errors': true};
+  Map<String, Object?> toJson() => shorthand
+      ? {'errors': true}
+      : {
+          'alerts': [for (final k in kinds) k.name]
+        };
 }
 
 /// A hit on an [ArmedCondition]: what matched, plus extra event fields.
@@ -92,7 +108,8 @@ class ArmedCondition {
   final WatchCondition spec;
   bool? _satisfied;
   StreamSubscription<Object?>? logSubscription;
-  StreamSubscription<Object?>? errorSubscription;
+  final Map<AppSession, StreamSubscription<AppAlert>> alertSubscriptions = {};
+  final Set<AppSession> httpHeld = {};
   DateTime? lastLogHit;
   int suppressedLogHits = 0;
 
@@ -113,7 +130,7 @@ class ArmedCondition {
       case OverlayCondition(:final appears):
         if (before == null || before.overlay == now.overlay || now.overlay != appears) return null;
         return (matched: appears ? now.overlayKind ?? 'overlay' : 'overlay dismissed', extra: const {});
-      case LogCondition() || ErrorsCondition():
+      case LogCondition() || AlertsCondition():
         return null;
     }
   }
@@ -134,7 +151,7 @@ class ArmedCondition {
         errorKind: GlintErrorKind.invalidArgument,
         detail: detail,
         nextSteps: const [
-          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}, {errors:true}]',
+          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}, {errors:true}, {alerts:["overflow","http","terminated"]}]',
         ],
       );
 
@@ -142,7 +159,7 @@ class ArmedCondition {
     return (conditions: null, error: bad('watch op:add needs a non-empty conditions list'));
   }
   if (raw.length > max) return (conditions: null, error: bad('at most $max conditions per watch, got ${raw.length}'));
-  const selectors = ['text', 'glintId', 'route', 'overlay', 'log', 'errors'];
+  const selectors = ['text', 'glintId', 'route', 'overlay', 'log', 'errors', 'alerts'];
   final out = <WatchCondition>[];
   for (var i = 0; i < raw.length; i++) {
     final item = raw[i];
@@ -181,7 +198,13 @@ class ArmedCondition {
     final value = item[selector];
     if (selector == 'errors') {
       if (value != true) return (conditions: null, error: bad('$where: errors must be true'));
-      out.add(const ErrorsCondition());
+      out.add(const AlertsCondition.errors());
+      continue;
+    }
+    if (selector == 'alerts') {
+      final alerts = _parseAlerts(value);
+      if (alerts.error != null) return (conditions: null, error: bad('$where: ${alerts.error}'));
+      out.add(AlertsCondition(alerts.kinds!));
       continue;
     }
     if (selector == 'overlay') {
@@ -212,4 +235,16 @@ class ArmedCondition {
     }
   }
   return (conditions: out, error: null);
+}
+
+({Set<AlertKind>? kinds, String? error}) _parseAlerts(Object? value) {
+  final accepted = AlertKind.values.map((k) => k.name).join(', ');
+  if (value is! List || value.isEmpty) return (kinds: null, error: 'alerts must be a non-empty list of: $accepted');
+  final kinds = <AlertKind>{};
+  for (final item in value) {
+    final kind = item is String ? AlertKind.named(item) : null;
+    if (kind == null) return (kinds: null, error: 'unknown alert "$item", accepted: $accepted');
+    kinds.add(kind);
+  }
+  return (kinds: kinds, error: null);
 }

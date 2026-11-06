@@ -4,13 +4,16 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent8';
+const String kAgentExtension = 'ext.flutter.glintAgent10';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
 
 /// Lifecycle changes the agent posts on the Extension stream.
 const String kAgentLifecycleEvent = 'glint.lifecycle';
+
+/// Errors the agent's chained `FlutterError.onError` and `PlatformDispatcher.onError` post on the Extension stream.
+const String kAgentErrorEvent = 'glint.error';
 
 /// glint's helper inside the app, installed once per isolate by one eval: input, settle and lifecycle each become one service-extension call with nothing to compile.
 class AppAgent {
@@ -83,6 +86,11 @@ class AppAgent {
   Stream<String> get lifecycle => runtime.extensionEvents
       .where((e) => e.extensionKind == kAgentLifecycleEvent)
       .map((e) => '${e.extensionData?.data['state']}');
+
+  /// Errors the app raised, as posted by the agent's chained error handlers.
+  Stream<Map<String, Object?>> get errors => runtime.extensionEvents
+      .where((e) => e.extensionKind == kAgentErrorEvent)
+      .map((e) => (e.extensionData?.data ?? const <String, Object?>{}).cast<String, Object?>());
 }
 
 /// The agent's source. Returns `installed`, or `present` when this isolate already has it.
@@ -375,7 +383,7 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent8', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent10', callback: handle);
   } catch (e) {
     return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
@@ -383,6 +391,41 @@ const String _source = r'''
   final scheduled = owner.onBuildScheduled;
   owner.onBuildScheduled = () { lastBuild = DateTime.now().millisecondsSinceEpoch; scheduled?.call(); };
   AppLifecycleListener(onStateChange: (s) => b.postEvent('glint.lifecycle', {'state': s.name}));
+  var lastReportedError;
+  String clipped(String s, int n) => s.length > n ? s.substring(0, n) : s;
+  void reportFlutterError(FlutterErrorDetails d) {
+    if (d.silent || identical(lastReportedError, d)) return;
+    lastReportedError = d;
+    var summary = '';
+    try { summary = d.summary.toString(); } catch (_) { summary = d.exceptionAsString().split('\n').first; }
+    var text = '';
+    try { text = clipped(TextTreeRenderer(wrapWidthProperties: FlutterError.wrapWidth, maxDescendentsTruncatableNode: 5).render(d.toDiagnosticsNode(style: DiagnosticsTreeStyle.error)).trimRight(), 6000); } catch (_) {}
+    var stack = '';
+    try { stack = (d.stack ?? StackTrace.empty).toString().split('\n').take(40).join('\n'); } catch (_) {}
+    b.postEvent('glint.error', {'source': 'flutter', 'summary': clipped(summary, 400), 'library': d.library ?? '', 'silent': d.silent, 'text': text, 'stack': stack});
+  }
+  void reportUncaughtError(Object error, StackTrace stack, bool handled) {
+    b.postEvent('glint.error', {'source': 'uncaught', 'summary': clipped(error.toString().split('\n').first, 400), 'type': error.runtimeType.toString(), 'stack': stack.toString().split('\n').take(40).join('\n'), 'handled': handled});
+  }
+  final previousFlutterOnError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails d) {
+    try {
+      previousFlutterOnError?.call(d);
+    } finally {
+      try { reportFlutterError(d); } catch (_) {}
+    }
+  };
+  final dispatcher = b.platformDispatcher;
+  final previousPlatformOnError = dispatcher.onError;
+  dispatcher.onError = (Object error, StackTrace stack) {
+    var handled = false;
+    try {
+      handled = previousPlatformOnError?.call(error, stack) ?? false;
+      return handled;
+    } finally {
+      try { reportUncaughtError(error, stack, handled); } catch (_) {}
+    }
+  };
   return 'installed ' + DateTime.now().millisecondsSinceEpoch.toString();
 })()
 ''';

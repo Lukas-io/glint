@@ -27,6 +27,7 @@ export 'src/interaction/flutter_input.dart';
 export 'src/interaction/input_route.dart';
 export 'src/interaction/image_out.dart';
 export 'src/interaction/ocr.dart';
+export 'src/interaction/app_process.dart';
 export 'src/interaction/installed_app.dart';
 export 'src/interaction/interactor.dart';
 export 'src/interaction/ios_signing.dart';

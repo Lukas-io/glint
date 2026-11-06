@@ -245,6 +245,7 @@ class GlintSession {
     _pool[device.id] = app;
     _ownedDevices.add(device.id);
     _active = app;
+    watches.appAttached(app);
     return app;
   }
 

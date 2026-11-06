@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'app_alert.dart';
 import 'app_log_buffer.dart';
 
 /// One distinct error the app reported, with how often and where.
@@ -30,8 +31,26 @@ class FlutterErrorEntry {
   int seq;
   FlutterErrorChannel channel;
   final List<int> _hits;
+  int _alertedRun = 0;
 
   String get key => '$summary|${location ?? ''}';
+
+  /// `overflow` for a RenderFlex or RenderBox overflow, `uncaught` for an error nothing caught, else `error`.
+  AlertKind get kind {
+    if (OverflowInfo.parse(summary) != null) return AlertKind.overflow;
+    return library == 'uncaught' ? AlertKind.uncaught : AlertKind.error;
+  }
+
+  /// The alert this error raises the first time it is seen.
+  AppAlert toAlert() {
+    final overflow = OverflowInfo.parse(summary);
+    return AppAlert(kind, kind.name, line, {
+      'summary': summary,
+      if (location != null) 'location': location,
+      if (library != null) 'library': library,
+      ...?overflow?.toJson(),
+    });
+  }
 
   /// `summary (location)` for replies.
   String get line => location == null ? summary : '$summary ($location)';
@@ -50,6 +69,7 @@ class FlutterErrorEntry {
 
   Map<String, Object?> toJson({int? since}) => {
         'summary': summary,
+        'kind': kind.name,
         if (location != null) 'location': location,
         if (library != null) 'library': library,
         'count': since == null ? count : countSince(since),
@@ -59,8 +79,8 @@ class FlutterErrorEntry {
       };
 }
 
-/// Where an occurrence was read from: Flutter's `Flutter.Error` events or the app's console output.
-enum FlutterErrorChannel { structured, log }
+/// Where an occurrence was read from: Flutter's `Flutter.Error` events, glint's in-app error hooks or the app's console output.
+enum FlutterErrorChannel { structured, agent, log }
 
 /// The distinct errors an app reports, read without any app code: Flutter's structured error events when `flutter run` enabled them, else the error dumps in the app's console output.
 class FlutterErrorFeed {
@@ -72,6 +92,7 @@ class FlutterErrorFeed {
 
   static const summaryLimit = 160;
   static const _crossChannelWindow = Duration(milliseconds: 1500);
+  static const _agentConsoleWindow = Duration(seconds: 5);
 
   /// How long console output may stay silent before an unfinished dump or exception counts as complete.
   static const staleAfter = Duration(seconds: 2);
@@ -85,12 +106,16 @@ class FlutterErrorFeed {
   StreamSubscription<AppLogEntry>? _logSub;
   Timer? _idle;
   int _seq = 0;
+  int _run = 0;
 
   /// Seq of the latest occurrence of any error; 0 before the first.
   int get lastSeq => _seq;
 
-  /// Fires once for each error not seen before (by summary and location), never for repeats.
+  /// Fires once per app run for each error (by summary and location), and again when one recurs after [startRun].
   Stream<FlutterErrorEntry> get onNewError => _new.stream;
+
+  /// Marks a hot restart: an error seen before it alerts again when it recurs.
+  void startRun() => _run++;
 
   List<FlutterErrorEntry> get all => _entries.values.toList();
 
@@ -135,6 +160,47 @@ class FlutterErrorFeed {
     if (summary != null) _record(summary, null, scanner.libraryHint, FlutterErrorChannel.structured);
   }
 
+  /// Reads one `glint.error` event the in-app agent posts from the app's own `FlutterError.onError` and `PlatformDispatcher.onError` chain.
+  void addAgentEvent(Map<String, Object?>? data) {
+    if (data == null) return;
+    switch (data['source']) {
+      case 'flutter':
+        _addAgentFlutterError(data);
+      case 'uncaught':
+        _addAgentUncaught(data);
+    }
+  }
+
+  void _addAgentFlutterError(Map<String, Object?> data) {
+    final text = data['text'];
+    final library = data['library'];
+    final hint = library is String && library.isNotEmpty ? library.toLowerCase() : null;
+    final scanner = _Scanner(this, FlutterErrorChannel.agent, libraryHint: hint);
+    if (text is String && _header.hasMatch(text)) {
+      scanner
+        ..add(text)
+        ..flush();
+      return;
+    }
+    final summary = data['summary'];
+    if (summary is! String) return;
+    final lines = text is String ? text.split('\n') : const <String>[];
+    final stack = data['stack'];
+    final stackLines = stack is String ? stack.split('\n') : const <String>[];
+    final location =
+        scanner._widgetLocation(lines) ?? scanner._frameLocation(lines) ?? scanner._frameLocation(stackLines);
+    _record(summary, location, hint, FlutterErrorChannel.agent);
+  }
+
+  void _addAgentUncaught(Map<String, Object?> data) {
+    final summary = data['summary'];
+    if (summary is! String) return;
+    final stack = data['stack'];
+    final lines = stack is String ? stack.split('\n') : const <String>[];
+    final scanner = _Scanner(this, FlutterErrorChannel.agent);
+    _record(summary, scanner._frameLocation(lines), 'uncaught', FlutterErrorChannel.agent);
+  }
+
   void dispose() {
     _idle?.cancel();
     _logSub?.cancel();
@@ -166,7 +232,7 @@ class FlutterErrorFeed {
     final now = DateTime.now();
     final existing = _find(summary, location);
     if (existing != null) {
-      if (existing.channel != via && now.difference(existing.lastSeen) < _crossChannelWindow) return;
+      if (existing.channel != via && now.difference(existing.lastSeen) < _windowBetween(existing.channel, via)) return;
       existing._hit(++_seq, now, via);
       if (existing.location == null && location != null) {
         _entries.remove(existing.key);
@@ -174,6 +240,10 @@ class FlutterErrorFeed {
         _entries[existing.key] = existing;
       }
       existing.library ??= library;
+      if (existing._alertedRun != _run) {
+        existing._alertedRun = _run;
+        if (!_new.isClosed) _new.add(existing);
+      }
       return;
     }
     final entry = FlutterErrorEntry(
@@ -183,12 +253,18 @@ class FlutterErrorFeed {
       location: location,
       library: library,
       channel: via,
-    );
+    ).._alertedRun = _run;
     _entries[entry.key] = entry;
     while (_entries.length > capacity) {
       _entries.remove(_entries.keys.first);
     }
     if (!_new.isClosed) _new.add(entry);
+  }
+
+  /// The console dump of an agent-reported error is flushed after [staleAfter] of silence, so that pair gets a longer window.
+  static Duration _windowBetween(FlutterErrorChannel a, FlutterErrorChannel b) {
+    final agentAndConsole = {a, b}.containsAll({FlutterErrorChannel.agent, FlutterErrorChannel.log});
+    return agentAndConsole ? _agentConsoleWindow : _crossChannelWindow;
   }
 
   FlutterErrorEntry? _find(String summary, String? location) {
