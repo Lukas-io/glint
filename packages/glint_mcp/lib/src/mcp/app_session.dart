@@ -415,8 +415,9 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _connectionDropped(runtimeFactory));
 
     await _isolateExitSub?.cancel();
-    _agentIsolate = rt.flutterIsolateId;
-    _isolateExitSub = rt is VmServiceRuntime
+    final followsIsolates = rt is VmServiceRuntime && rt.isAttached;
+    _agentIsolate = followsIsolates ? rt.flutterIsolateId : null;
+    _isolateExitSub = followsIsolates
         ? rt.rawService.onIsolateEvent
             .where((e) => e.kind == EventKind.kIsolateExit && e.isolate?.id == _agentIsolate)
             .listen((_) => unawaited(_reinstallAgent(rt)))
