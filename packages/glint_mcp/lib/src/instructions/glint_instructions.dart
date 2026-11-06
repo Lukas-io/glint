@@ -78,16 +78,16 @@ const _recovery = '''
 - `targetNotFound`: `scroll_to_find` miss; see `detail`.
 - `scrollLimitReached` — stayed unhittable; raise `maxScrolls`.
 - `connectionLost` — VM dropped; re-`attach`.
-- `appUnresponsive` / `appBusy`: locked, paused or busy; unlock or wait, retry.
+- `appUnresponsive` / `appBusy`: locked, backgrounded or busy; unlock, wait, or `attach launch:"<appId>"`.
 - `deviceGone` — device closed; `attach device:"<id>"` relaunches.
 - `deviceClaimed` — another agent's device; pass your own `device:`.
 - `notOwned`: not your app/device; `force:true` only if the user asked.
 - `flutterModeRequired`: device mode; re-attach the app, or use x,y.
-- `unknownApp` — `app:` matched none/several apps; pick from the list.
+- `unknownApp`: `app:` matched none/several; pick one.
 - `sessionNotAttached` — `attach`.
 - `appNotResumed` — native surface on top; dismiss, retry.
 - `geometryResolveError` — eval failed; retry, else re-`attach`.
-- `inputPartial` — part landed (`data.delivered` of `data.of`); re-read, send the rest.
+- `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
 - `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
