@@ -80,6 +80,7 @@ class HotReloadTool extends GlintTool {
         );
       }
       final reloadedMs = watch.elapsedMilliseconds;
+      if (restart) await app?.followRestartedIsolate();
       final touches = restart && app != null && app.showTouches ? await app.setShowTouches(true) : null;
       phase = 'settling and watching for errors';
       await _awaitAfterglow(session);
