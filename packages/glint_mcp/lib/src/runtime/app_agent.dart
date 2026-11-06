@@ -4,7 +4,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent9';
+const String kAgentExtension = 'ext.flutter.glintAgent10';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -383,7 +383,7 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent9', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent10', callback: handle);
   } catch (e) {
     return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
@@ -400,7 +400,9 @@ const String _source = r'''
     try { summary = d.summary.toString(); } catch (_) { summary = d.exceptionAsString().split('\n').first; }
     var text = '';
     try { text = clipped(TextTreeRenderer(wrapWidthProperties: FlutterError.wrapWidth, maxDescendentsTruncatableNode: 5).render(d.toDiagnosticsNode(style: DiagnosticsTreeStyle.error)).trimRight(), 6000); } catch (_) {}
-    b.postEvent('glint.error', {'source': 'flutter', 'summary': clipped(summary, 400), 'library': d.library ?? '', 'silent': d.silent, 'text': text});
+    var stack = '';
+    try { stack = (d.stack ?? StackTrace.empty).toString().split('\n').take(40).join('\n'); } catch (_) {}
+    b.postEvent('glint.error', {'source': 'flutter', 'summary': clipped(summary, 400), 'library': d.library ?? '', 'silent': d.silent, 'text': text, 'stack': stack});
   }
   void reportUncaughtError(Object error, StackTrace stack, bool handled) {
     b.postEvent('glint.error', {'source': 'uncaught', 'summary': clipped(error.toString().split('\n').first, 400), 'type': error.runtimeType.toString(), 'stack': stack.toString().split('\n').take(40).join('\n'), 'handled': handled});

@@ -141,6 +141,7 @@ class HttpFailureMonitor {
       for (final id in isolates) {
         try {
           if (!_baselined.contains(id)) {
+            await _enableLogging(service, id);
             await _baseline(service, id);
             continue;
           }

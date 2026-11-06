@@ -267,6 +267,7 @@ class AppSession {
   StreamSubscription<Event>? _structuredErrorSub;
   StreamSubscription<String>? _isolateExitSub;
   String? _agentIsolate;
+  String? _errorRunIsolate;
   StreamSubscription<Map<String, Object?>>? _agentErrorSub;
   StreamSubscription<String>? _lifecycleSub;
   bool _disposed = false;
@@ -416,6 +417,7 @@ class AppSession {
 
     await _isolateExitSub?.cancel();
     _agentIsolate = rt is VmServiceRuntime ? rt.selectedIsolateId : null;
+    _errorRunIsolate = _agentIsolate;
     _isolateExitSub = rt is VmServiceRuntime
         ? rt.isolateExits.where((id) => id == _agentIsolate).listen((_) => unawaited(_reinstallAgent(rt)))
         : null;
@@ -970,6 +972,11 @@ class AppSession {
   Future<void> followRestartedIsolate() async {
     final rt = runtime;
     if (rt == null || deviceMode || _disposed) return;
+    final isolate = rt is VmServiceRuntime ? rt.selectedIsolateId : null;
+    if (isolate != null && isolate != _errorRunIsolate) {
+      _errorRunIsolate = isolate;
+      errors.startRun();
+    }
     final agent = AppAgent.of(rt);
     if (agent != null && await _readAgentLifecycle(agent)) return;
     final reader = nativeReader;

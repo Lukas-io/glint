@@ -31,6 +31,7 @@ class FlutterErrorEntry {
   int seq;
   FlutterErrorChannel channel;
   final List<int> _hits;
+  int _alertedRun = 0;
 
   String get key => '$summary|${location ?? ''}';
 
@@ -105,12 +106,16 @@ class FlutterErrorFeed {
   StreamSubscription<AppLogEntry>? _logSub;
   Timer? _idle;
   int _seq = 0;
+  int _run = 0;
 
   /// Seq of the latest occurrence of any error; 0 before the first.
   int get lastSeq => _seq;
 
-  /// Fires once for each error not seen before (by summary and location), never for repeats.
+  /// Fires once per app run for each error (by summary and location), and again when one recurs after [startRun].
   Stream<FlutterErrorEntry> get onNewError => _new.stream;
+
+  /// Marks a hot restart: an error seen before it alerts again when it recurs.
+  void startRun() => _run++;
 
   List<FlutterErrorEntry> get all => _entries.values.toList();
 
@@ -180,7 +185,11 @@ class FlutterErrorFeed {
     final summary = data['summary'];
     if (summary is! String) return;
     final lines = text is String ? text.split('\n') : const <String>[];
-    _record(summary, scanner._widgetLocation(lines) ?? scanner._frameLocation(lines), hint, FlutterErrorChannel.agent);
+    final stack = data['stack'];
+    final stackLines = stack is String ? stack.split('\n') : const <String>[];
+    final location =
+        scanner._widgetLocation(lines) ?? scanner._frameLocation(lines) ?? scanner._frameLocation(stackLines);
+    _record(summary, location, hint, FlutterErrorChannel.agent);
   }
 
   void _addAgentUncaught(Map<String, Object?> data) {
@@ -231,6 +240,10 @@ class FlutterErrorFeed {
         _entries[existing.key] = existing;
       }
       existing.library ??= library;
+      if (existing._alertedRun != _run) {
+        existing._alertedRun = _run;
+        if (!_new.isClosed) _new.add(existing);
+      }
       return;
     }
     final entry = FlutterErrorEntry(
@@ -240,7 +253,7 @@ class FlutterErrorFeed {
       location: location,
       library: library,
       channel: via,
-    );
+    ).._alertedRun = _run;
     _entries[entry.key] = entry;
     while (_entries.length > capacity) {
       _entries.remove(_entries.keys.first);

@@ -66,12 +66,39 @@ class AppProcessProbe {
     if (running == null) return const AppProcessVerdict(running: null, reason: 'the simulator did not answer');
     if (running) return const AppProcessVerdict(running: true);
     final hostLine = await _simulatorLog(udid, appId, since, pid);
-    final reason = hostLine == null ? null : _hostReason.firstMatch(hostLine)?.group(1)?.trim();
     return AppProcessVerdict(
       running: false,
-      reason: reason ?? hostLine,
+      reason: hostLine == null ? null : readableReason(hostLine),
       exitStatus: hostLine == null ? null : _exitStatus.firstMatch(hostLine)?.group(1),
     );
+  }
+
+  static final _exitCode = RegExp(r'code:([A-Za-z][\w-]*)\(0x[0-9a-fA-F]+\)');
+  static const _exitCodeNames = {
+    'force-quit': 'force-quit (the app was swiped away or killed from outside)',
+    'crash': 'crashed',
+    'jetsam': 'killed by jetsam (out of memory)',
+  };
+
+  /// A short reason out of a SpringBoard exit line (`code:force-quit(0x..)`), a host line or a runningboardd line.
+  static String readableReason(String line) {
+    final code = _exitCode.firstMatch(line)?.group(1);
+    if (code != null) return _exitCodeNames[code] ?? code;
+    final host = _hostReason.firstMatch(line)?.group(1)?.trim();
+    if (host != null) return host;
+    if (RegExp(r'Removing assertions for terminated process', caseSensitive: false).hasMatch(line)) {
+      return 'the process was terminated';
+    }
+    return line.length > 240 ? '${line.substring(0, 239)}…' : line;
+  }
+
+  static int _lineRank(String line) {
+    if (_exitCode.hasMatch(line) ||
+        RegExp(r'Process exited|jetsam|Termination requested', caseSensitive: false).hasMatch(line)) {
+      return 3;
+    }
+    if (line.contains('SpringBoard[') || line.contains('runningboardd[')) return 2;
+    return 1;
   }
 
   static String _logTime(DateTime t) {
@@ -81,7 +108,7 @@ class AppProcessProbe {
 
   Future<String?> _simulatorLog(String udid, String appId, DateTime? since, int? pid) async {
     if (since == null) return null;
-    final predicate = 'eventMessage CONTAINS "$appId" AND '
+    final predicate = 'process != "log" AND eventMessage CONTAINS "$appId" AND '
         '(eventMessage CONTAINS[c] "terminat" OR eventMessage CONTAINS[c] "jetsam" OR eventMessage CONTAINS[c] "exited")';
     try {
       final r = await run('xcrun', [
@@ -104,12 +131,21 @@ class AppProcessProbe {
           if (l.trim().isNotEmpty &&
               !l.startsWith('Timestamp') &&
               !l.startsWith('Filtering') &&
-              (own == null || own.hasMatch(l)))
+              !l.contains("'log' 'show'") &&
+              !l.contains('log run noninteractively'))
             l.trim(),
       ];
       if (lines.isEmpty) return null;
-      final last = lines.last;
-      return last.length > 240 ? '${last.substring(0, 239)}…' : last;
+      var best = lines.last;
+      var bestScore = -1;
+      for (final l in lines) {
+        final score = _lineRank(l) * 2 + (own != null && own.hasMatch(l) ? 1 : 0);
+        if (score >= bestScore) {
+          best = l;
+          bestScore = score;
+        }
+      }
+      return best;
     } on Object {
       return null;
     }
