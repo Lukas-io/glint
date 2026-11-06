@@ -231,8 +231,15 @@ abstract class GlintTool {
     response = explainMissingBridge(response);
     response = _explainBreakpointPause(session, response);
     response = _warnSharedDevice(app, response);
+    response = _warnLifecycleChecks(app, response);
     logCall(session, request, response, start, app: app, call: call);
     return response.toCallResult();
+  }
+
+  /// Tells the agent once when the lifecycle checks keep failing for no visible reason, since the scene mode may be stale.
+  static StructuredResponse _warnLifecycleChecks(AppSession? app, StructuredResponse response) {
+    final warning = app?.takeLifecycleWarning();
+    return warning == null ? response : response.addWarnings([warning]);
   }
 
   /// A no-change action on a device another live glint process drove recently: say so, since its input may be what the app received.

@@ -65,6 +65,7 @@ class HotReloadTool extends GlintTool {
       );
     }
     final app = session.active;
+    if (restart) await app?.followRestartedIsolate();
     final touches = restart && app != null && app.showTouches ? await app.setShowTouches(true) : null;
     return StructuredResponse(
       summary: '$what done in ${watch.elapsedMilliseconds}ms${touches?.on == true ? ' · touches shown' : ''}',

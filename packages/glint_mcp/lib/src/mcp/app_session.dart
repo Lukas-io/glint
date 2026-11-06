@@ -352,12 +352,15 @@ class AppSession {
     final pushed = await _subscribeLifecycle(rt);
     final polled = nativeReader is RunnerNativeReader ||
         (!pushed && (nativeReader is NativeSceneReader || nativeReader is OcrNativeReader));
-    if (polled) {
-      _lifecyclePollTimer = Timer.periodic(
-        const Duration(milliseconds: 500),
-        (_) => _pollLifecycle(background: true),
-      );
-    }
+    if (polled) _startLifecyclePoll();
+  }
+
+  void _startLifecyclePoll() {
+    _lifecyclePollTimer?.cancel();
+    _lifecyclePollTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _pollLifecycle(background: true),
+    );
   }
 
   void _wireCoveredBySystem() {
@@ -407,12 +410,7 @@ class AppSession {
     nativeRunnerNote = null;
     nativeReader = _runnerReader(runner, dev, pixelsPerPoint);
     _wireCoveredBySystem();
-    if (!deviceMode && runtime != null && !(_lifecyclePollTimer?.isActive ?? false)) {
-      _lifecyclePollTimer = Timer.periodic(
-        const Duration(milliseconds: 500),
-        (_) => _pollLifecycle(background: true),
-      );
-    }
+    if (!deviceMode && runtime != null && !(_lifecyclePollTimer?.isActive ?? false)) _startLifecyclePoll();
   }
 
   /// Back to the bridge's reader, for a runner switched off after an earlier attach.
@@ -431,19 +429,21 @@ class AppSession {
     final agent = AppAgent.of(rt);
     if (agent == null) return false;
     await _lifecycleSub?.cancel();
-    _lifecycleSub = agent.lifecycle.listen((state) {
-      if (nativeReader != null && nativeSurfaceName == null) {
-        sceneMode = state == 'resumed' ? SceneMode.flutter : SceneMode.native;
-      }
-      _onLifecycle(state);
-    });
+    _lifecycleSub = agent.lifecycle.listen(_applyAgentLifecycle);
+    return _readAgentLifecycle(agent);
+  }
+
+  void _applyAgentLifecycle(String state) {
+    if (nativeReader != null && nativeSurfaceName == null) {
+      sceneMode = state == 'resumed' ? SceneMode.flutter : SceneMode.native;
+    }
+    _onLifecycle(state);
+  }
+
+  Future<bool> _readAgentLifecycle(AppAgent agent) async {
     try {
       final now = await agent.call(const {'op': 'lifecycle'}).timeout(lifecycleProbeTimeout);
-      final state = '${now['state']}';
-      if (nativeReader != null && nativeSurfaceName == null) {
-        sceneMode = state == 'resumed' ? SceneMode.flutter : SceneMode.native;
-      }
-      _onLifecycle(state);
+      _applyAgentLifecycle('${now['state']}');
       return true;
     } on Object {
       return false;
@@ -707,29 +707,108 @@ class AppSession {
     }
     try {
       final state = await rt
-          .evaluateString(
-            'WidgetsBinding.instance.lifecycleState?.name ?? "unknown"',
-          )
+          .evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? "unknown"', rethrowErrors: true)
           .timeout(lifecycleProbeTimeout);
+      _lifecycleChecked();
+      _pausedCheckedAt = null;
       sceneMode = (state == null || state == 'resumed') ? SceneMode.flutter : SceneMode.native;
       _onLifecycle(state ?? 'resumed');
-    } on TimeoutException {
-      // Slow is not suspended (the first eval also resolves the eval library); only a locked device settles it.
-      bool? locked;
-      try {
-        locked = await backend.lockState();
-      } on Object {
-        locked = null;
-      }
-      if (locked == true) {
-        sceneMode = SceneMode.native;
-        _onLifecycle('paused');
-      }
-    } on Object {
-      // Eval failure means the isolate is paused (native surface active).
-      sceneMode = SceneMode.native;
-      _onLifecycle('paused');
+    } on RuntimeConnectionLostError {
+      return;
+    } on TimeoutException catch (e) {
+      if (!await _markPausedIfShown(native)) _lifecycleCheckFailed(e, silent: true);
+    } on RuntimeUnresponsiveError catch (e) {
+      if (!await _markPausedIfShown(native)) _lifecycleCheckFailed(e, silent: true);
+    } on Object catch (e) {
+      if (!await _markPausedIfShown(native)) _lifecycleCheckFailed(e, silent: false);
     }
+  }
+
+  /// Slow is not suspended (the first eval also resolves the eval library); only a locked device or a backgrounded app settles it.
+  Future<bool> _markPausedIfShown(NativeReader native) async {
+    if (!await _pausedShown(native)) return false;
+    _lifecycleChecked();
+    sceneMode = SceneMode.native;
+    _onLifecycle('paused');
+    return true;
+  }
+
+  /// Longest a verdict on "is the app shown paused" is reused before the runner and the device are asked again.
+  static const pausedEvidenceInterval = Duration(seconds: 2);
+
+  DateTime? _pausedCheckedAt;
+  bool _pausedEvidence = false;
+
+  Future<bool> _pausedShown(NativeReader native) async {
+    final checked = _pausedCheckedAt;
+    if (checked != null && DateTime.now().difference(checked) < pausedEvidenceInterval) return _pausedEvidence;
+    _pausedCheckedAt = DateTime.now();
+    return _pausedEvidence = await _readPausedEvidence(native);
+  }
+
+  Future<bool> _readPausedEvidence(NativeReader native) async {
+    if (native is RunnerNativeReader) {
+      await native.foreignSurface();
+      if (native.appBackgrounded) return true;
+    }
+    try {
+      return await backend.lockState() == true;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Consecutive lifecycle checks that failed with nothing showing the app is paused.
+  int _lifecycleFailures = 0;
+  DateTime? _lifecycleFailingSince;
+  String? _lifecycleFailure;
+  bool _lifecycleFailureSilent = false;
+  bool _lifecycleFailureReported = false;
+
+  /// Failed checks in a row before the agent is told the lifecycle may be stale.
+  static const lifecycleFailureLimit = 3;
+
+  void _lifecycleChecked() {
+    _lifecycleFailures = 0;
+    _lifecycleFailingSince = null;
+    _lifecycleFailure = null;
+    _lifecycleFailureSilent = false;
+    _lifecycleFailureReported = false;
+  }
+
+  void _lifecycleCheckFailed(Object error, {required bool silent}) {
+    _lifecycleFailures++;
+    _lifecycleFailingSince ??= DateTime.now();
+    _lifecycleFailureSilent = silent;
+    final line = _failureCause(error).split('\n').first;
+    _lifecycleFailure = line.length > 160 ? '${line.substring(0, 160)}...' : line;
+  }
+
+  static String _failureCause(Object error) {
+    if (error is RuntimeEvalError) return error.message;
+    final text = '$error';
+    final type = '${error.runtimeType}';
+    return text.startsWith(type) ? text : '$type: $text';
+  }
+
+  /// The one-time warning for a streak of unexplained lifecycle check failures; null when there is none to report.
+  String? takeLifecycleWarning() {
+    if (_lifecycleFailures < lifecycleFailureLimit || _lifecycleFailureReported) return null;
+    _lifecycleFailureReported = true;
+    if (!_lifecycleFailureSilent) return 'lifecycle checks are failing: $_lifecycleFailure; get_scene may be stale';
+    final seconds = DateTime.now().difference(_lifecycleFailingSince ?? DateTime.now()).inSeconds;
+    return 'the app has not answered lifecycle checks for $seconds s; get_scene may be stale';
+  }
+
+  /// Installs the in-app agent in a restarted app's new isolate and reads its lifecycle; polls instead when that fails.
+  Future<void> followRestartedIsolate() async {
+    final rt = runtime;
+    if (rt == null || deviceMode || _disposed) return;
+    final agent = AppAgent.of(rt);
+    if (agent != null && await _readAgentLifecycle(agent)) return;
+    final reader = nativeReader;
+    final polled = reader is RunnerNativeReader || reader is NativeSceneReader || reader is OcrNativeReader;
+    if (polled && !(_lifecyclePollTimer?.isActive ?? false)) _startLifecyclePoll();
   }
 }
 
