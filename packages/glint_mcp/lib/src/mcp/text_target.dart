@@ -35,8 +35,8 @@ Future<({String? glintId, StructuredResponse? error})> readTarget(
   return resolveTextTarget(session, text, tool: tool, waitMs: t.awaitReady ? t.readyTimeoutMs : 0);
 }
 
-/// One node whose visible text matched, and the id an action on it should hit.
-typedef TextMatch = ({String glintId, String label, Inert? inert});
+/// One node whose visible text matched: [glintId] is the id an action on it should hit, [nodeGlintId] the matching node's own id.
+typedef TextMatch = ({String glintId, String? nodeGlintId, String label, Inert? inert});
 
 /// The glintId behind visible [text], or the error to return: exact matches (case-insensitive) win over contains; the top overlay is searched before the screen. With [waitMs] the scene is re-read until the text appears or the time runs out.
 Future<({String? glintId, StructuredResponse? error})> resolveTextTarget(GlintSession session, String text,
@@ -112,7 +112,7 @@ List<TextMatch> textMatches(SemanticScene scene, String text) {
       final target = here ?? (n.glintId != null ? n : null);
       if (label != null && target != null) {
         final have = _norm(label);
-        final match = (glintId: target.glintId!, label: label, inert: target.inert ?? n.inert);
+        final match = (glintId: target.glintId!, nodeGlintId: n.glintId, label: label, inert: target.inert ?? n.inert);
         if (have == want) {
           exact.add(match);
         } else if (have.contains(want)) {
