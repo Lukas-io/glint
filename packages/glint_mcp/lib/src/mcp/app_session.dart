@@ -265,7 +265,7 @@ class AppSession {
   Timer? _lifecyclePollTimer;
   StreamSubscription<void>? _disconnectSub;
   StreamSubscription<Event>? _structuredErrorSub;
-  StreamSubscription<Event>? _isolateExitSub;
+  StreamSubscription<String>? _isolateExitSub;
   String? _agentIsolate;
   StreamSubscription<Map<String, Object?>>? _agentErrorSub;
   StreamSubscription<String>? _lifecycleSub;
@@ -415,12 +415,9 @@ class AppSession {
     _disconnectSub = rt.onDisconnect.listen((_) => _connectionDropped(runtimeFactory));
 
     await _isolateExitSub?.cancel();
-    final followsIsolates = rt is VmServiceRuntime && rt.isAttached;
-    _agentIsolate = followsIsolates ? rt.flutterIsolateId : null;
-    _isolateExitSub = followsIsolates
-        ? rt.rawService.onIsolateEvent
-            .where((e) => e.kind == EventKind.kIsolateExit && e.isolate?.id == _agentIsolate)
-            .listen((_) => unawaited(_reinstallAgent(rt)))
+    _agentIsolate = rt is VmServiceRuntime ? rt.selectedIsolateId : null;
+    _isolateExitSub = rt is VmServiceRuntime
+        ? rt.isolateExits.where((id) => id == _agentIsolate).listen((_) => unawaited(_reinstallAgent(rt)))
         : null;
 
     await _agentErrorSub?.cancel();
@@ -963,7 +960,7 @@ class AppSession {
     try {
       await rt.isolateReady();
       await followRestartedIsolate();
-      _agentIsolate = rt.flutterIsolateId;
+      _agentIsolate = rt.selectedIsolateId;
     } on Object {
       return;
     }

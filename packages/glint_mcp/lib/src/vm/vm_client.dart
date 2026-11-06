@@ -21,6 +21,9 @@ class VmClient {
 
   String get flutterIsolateId => flutterIsolate.id!;
 
+  /// The selected Flutter isolate's id, or null before one is selected.
+  String? get selectedIsolateId => _flutterIsolate?.id;
+
   Future<void> attach(Uri vmServiceUri) async {
     if (_service != null) await disconnect();
     final svc = await connectVmService(vmServiceUri, connectTimeout: readTimeout);
