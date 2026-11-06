@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import '../../interaction.dart' show GlintErrorKind;
 import '../../observability.dart';
+import '../../semantic.dart' show SemanticScene;
 import 'session.dart';
+import 'ux_lint.dart';
 import 'watch_conditions.dart';
 import 'watch_events.dart';
 import 'watch_observation.dart';
@@ -217,10 +220,63 @@ class WatchRegistry {
       if (appeared != null && appeared.more > 0) 'appearedMore': appeared.more,
       if (last) 'final': true,
     });
+    _endAfterMatch(watch);
+  }
+
+  void _endAfterMatch(Watch watch) {
     if (watch.once) {
       end(watch, 'matched', announce: false);
     } else if (watch.matches >= maxEventsPerWatch) {
       end(watch, 'eventLimit', detail: 'stopped after $maxEventsPerWatch events; add the watch again to keep going');
+    }
+  }
+
+  void _fireLint(Watch watch, ArmedCondition condition, LintFinding finding) {
+    if (watch.ended) return;
+    watch.matches++;
+    final last = watch.once || watch.matches >= maxEventsPerWatch;
+    _emit({
+      'watch': watch.id,
+      if (watch.label != null) 'label': watch.label,
+      'kind': 'lint',
+      'condition': condition.spec.describe,
+      'matched': finding.summary,
+      'route': finding.route,
+      'app': watch.app.label,
+      ...finding.toJson(),
+      if (last) 'final': true,
+    });
+    _endAfterMatch(watch);
+  }
+
+  void _fireLintError(Watch watch, ArmedCondition condition, String detail) {
+    if (watch.ended) return;
+    _emit({
+      'watch': watch.id,
+      if (watch.label != null) 'label': watch.label,
+      'kind': 'lintError',
+      'condition': condition.spec.describe,
+      'matched': 'lint stopped: $detail',
+      'app': watch.app.label,
+      'errorKind': GlintErrorKind.internal.name,
+      'detail': detail,
+      'nextSteps': const [
+        'the lint expression did not compile in this app or Flutter version; the other conditions keep running',
+        'report_issue with this detail, and use get_scene meanwhile',
+      ],
+    });
+  }
+
+  void _emitLint(List<_LintResult> results) {
+    for (final r in results) {
+      final error = r.outcome.error;
+      if (error != null) {
+        _fireLintError(r.watch, r.condition, error);
+        continue;
+      }
+      for (final f in r.outcome.fresh) {
+        _fireLint(r.watch, r.condition, f);
+      }
     }
   }
 
@@ -288,6 +344,8 @@ class WatchRegistry {
   static String span(int timeoutMs) => _span(Duration(milliseconds: timeoutMs));
 }
 
+typedef _LintResult = ({Watch watch, ArmedCondition condition, LintOutcome outcome});
+
 /// Reads one app's scene on a timer for every watch on it, backing off while the app cannot answer.
 class _Poller {
   _Poller(this._registry, this.app) {
@@ -304,6 +362,8 @@ class _Poller {
   bool _stopped = false;
   int _failures = 0;
   WatchObservation? last;
+  final _lints = Expando<LintWatcher>();
+  final List<_LintResult> _lintResults = [];
 
   /// Why the last read did not happen or failed; null while reads work.
   String? holdReason;
@@ -349,6 +409,7 @@ class _Poller {
   Future<void> _read() async {
     final watches = _registry._sceneWatches(app);
     if (watches.isEmpty) return;
+    _lintResults.clear();
     final texts = <String>{};
     final ids = <String>{};
     for (final w in watches) {
@@ -364,6 +425,26 @@ class _Poller {
     final before = last;
     last = now;
     _registry._evaluate(app, before, now);
+    final lint = _lintResults.toList();
+    _lintResults.clear();
+    _registry._emitLint(lint);
+  }
+
+  Future<void> _lint(SemanticScene scene, WatchObservation seen) async {
+    for (final w in _registry._sceneWatches(app)) {
+      for (final c in w.conditions) {
+        final spec = c.spec;
+        if (spec is! LintCondition) continue;
+        final watcher = _lints[c] ??= LintWatcher(spec);
+        if (watcher.disabled) continue;
+        try {
+          final outcome = await watcher.tick(_registry._session.runtime, scene, seen);
+          _lintResults.add((watch: w, condition: c, outcome: outcome));
+        } on Object {
+          // a probe that cannot be read this tick is tried again on the next one
+        }
+      }
+    }
   }
 
   Future<WatchObservation?> _observe(Set<String> texts, Set<String> ids) async {
@@ -391,7 +472,11 @@ class _Poller {
           .withApp(
             app,
             () => session.withScene(
-              (scene) async => WatchObservation.read(scene, texts: texts, ids: ids),
+              (scene) async {
+                final seen = WatchObservation.read(scene, texts: texts, ids: ids);
+                await _lint(scene, seen);
+                return seen;
+              },
               detail: SceneDetail.interactive,
             ),
           )

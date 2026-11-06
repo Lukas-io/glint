@@ -82,6 +82,31 @@ final class ErrorsCondition extends WatchCondition {
   Map<String, Object?> toJson() => {'errors': true};
 }
 
+/// Every rule `{lint:[…]}` accepts.
+const lintRuleNames = ['overflow', 'keyboard', 'insets', 'tapTarget', 'clippedText', 'lines'];
+
+/// UX lint over the live render tree: [rules] to run, with the tap target and headline thresholds.
+final class LintCondition extends WatchCondition {
+  const LintCondition({required this.rules, required this.minTapTarget, required this.maxHeadlineLines});
+
+  static const defaultMinTapTarget = 44.0;
+  static const defaultMaxHeadlineLines = 2;
+
+  final List<String> rules;
+  final double minTapTarget;
+  final int maxHeadlineLines;
+
+  @override
+  String get describe => 'ux lint (${rules.join(', ')})';
+
+  @override
+  Map<String, Object?> toJson() => {
+        'lint': rules,
+        if (rules.contains('tapTarget')) 'minTapTarget': minTapTarget,
+        if (rules.contains('lines')) 'maxHeadlineLines': maxHeadlineLines,
+      };
+}
+
 /// A hit on an [ArmedCondition]: what matched, plus extra event fields.
 typedef ConditionHit = ({String matched, Map<String, Object?> extra});
 
@@ -113,13 +138,14 @@ class ArmedCondition {
       case OverlayCondition(:final appears):
         if (before == null || before.overlay == now.overlay || now.overlay != appears) return null;
         return (matched: appears ? now.overlayKind ?? 'overlay' : 'overlay dismissed', extra: const {});
-      case LogCondition() || ErrorsCondition():
+      case LogCondition() || ErrorsCondition() || LintCondition():
         return null;
     }
   }
 
   /// Whether this condition is decided by reading the screen.
-  bool get readsScene => spec is ShownCondition || spec is RouteCondition || spec is OverlayCondition;
+  bool get readsScene =>
+      spec is ShownCondition || spec is RouteCondition || spec is OverlayCondition || spec is LintCondition;
 
   static String _routeKey(String route) {
     final r = route.trim().toLowerCase();
@@ -134,7 +160,7 @@ class ArmedCondition {
         errorKind: GlintErrorKind.invalidArgument,
         detail: detail,
         nextSteps: const [
-          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}, {errors:true}]',
+          'conditions:[{text:"Welcome back"}, {glintId:"home_tab", state:"disappears"}, {route:"/home"}, {overlay:"appears"}, {log:"payment .* failed"}, {errors:true}, {lint:true}]',
         ],
       );
 
@@ -142,7 +168,8 @@ class ArmedCondition {
     return (conditions: null, error: bad('watch op:add needs a non-empty conditions list'));
   }
   if (raw.length > max) return (conditions: null, error: bad('at most $max conditions per watch, got ${raw.length}'));
-  const selectors = ['text', 'glintId', 'route', 'overlay', 'log', 'errors'];
+  const selectors = ['text', 'glintId', 'route', 'overlay', 'log', 'errors', 'lint'];
+  const lintOptions = ['minTapTarget', 'maxHeadlineLines'];
   final out = <WatchCondition>[];
   for (var i = 0; i < raw.length; i++) {
     final item = raw[i];
@@ -150,13 +177,13 @@ class ArmedCondition {
     if (item is! Map) return (conditions: null, error: bad('$where must be an object'));
     final unknown = [
       for (final k in item.keys)
-        if (!selectors.contains(k) && k != 'state') '$k',
+        if (!selectors.contains(k) && !lintOptions.contains(k) && k != 'state') '$k',
     ];
     if (unknown.isNotEmpty) {
       return (
         conditions: null,
         error: bad('$where: unknown field ${unknown.join(", ")}',
-            detail: 'accepted: ${[...selectors, 'state'].join(", ")}'),
+            detail: 'accepted: ${[...selectors, 'state', ...lintOptions].join(", ")}'),
       );
     }
     final given = [
@@ -172,6 +199,15 @@ class ArmedCondition {
     }
     final state = item['state'];
     final selector = given.single;
+    if (selector != 'lint' && lintOptions.any(item.containsKey)) {
+      return (conditions: null, error: bad('$where: ${lintOptions.join(' and ')} only go with lint'));
+    }
+    if (selector == 'lint') {
+      final lint = _parseLint(item, where);
+      if (lint.error != null) return (conditions: null, error: bad(lint.error!, detail: lint.detail));
+      out.add(lint.condition!);
+      continue;
+    }
     if (state != null && selector != 'text' && selector != 'glintId') {
       return (conditions: null, error: bad('$where: state only goes with text or glintId'));
     }
@@ -212,4 +248,43 @@ class ArmedCondition {
     }
   }
   return (conditions: out, error: null);
+}
+
+({LintCondition? condition, String? error, String? detail}) _parseLint(Map item, String where) {
+  ({LintCondition? condition, String? error, String? detail}) fail(String error, [String? detail]) =>
+      (condition: null, error: '$where: $error', detail: detail);
+
+  if (item['state'] != null) return fail('state does not go with lint');
+  final value = item['lint'];
+  final List<String> rules;
+  if (value == true) {
+    rules = lintRuleNames;
+  } else if (value is List && value.isNotEmpty) {
+    final unknown = [
+      for (final r in value)
+        if (r is! String || !lintRuleNames.contains(r)) '$r',
+    ];
+    if (unknown.isNotEmpty) {
+      return fail('unknown lint rule ${unknown.join(', ')}', 'rules: ${lintRuleNames.join(', ')}');
+    }
+    rules = [
+      for (final r in lintRuleNames)
+        if (value.contains(r)) r,
+    ];
+  } else {
+    return fail('lint must be true or a list of rules', 'rules: ${lintRuleNames.join(', ')}');
+  }
+  final tap = item['minTapTarget'];
+  if (tap != null && (tap is! num || tap < 1 || tap > 200)) return fail('minTapTarget must be 1-200 logical points');
+  final lines = item['maxHeadlineLines'];
+  if (lines != null && (lines is! int || lines < 1 || lines > 10)) return fail('maxHeadlineLines must be 1-10');
+  return (
+    condition: LintCondition(
+      rules: rules,
+      minTapTarget: (tap as num?)?.toDouble() ?? LintCondition.defaultMinTapTarget,
+      maxHeadlineLines: (lines as int?) ?? LintCondition.defaultMaxHeadlineLines,
+    ),
+    error: null,
+    detail: null,
+  );
 }

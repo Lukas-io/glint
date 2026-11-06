@@ -26,15 +26,15 @@ class WatchTool extends GlintTool {
             'Hand the app to a human or a backend and be woken when it reacts (PIN, password, 2FA, sign-in, confirming a real-money or destructive step, a teammate\'s change): register the screen that follows their action, then ask them and end the turn. wait_for blocks one call for 120 s at most and is for what you just caused. '
             'Returns at once; glint appends one JSON line per event to an events file, and you follow it by running the `tail -n0 -F <file>` line from nextSteps as a background shell monitor (clients do not show server notifications to an idle model). '
             'op: add (default; conditions:[…], any one matching fires), list, cancel (id, or all:true), events (sinceSeq, for clients that poll instead of tailing). '
-            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet). '
-            'Options: label, once (default true; false keeps firing), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
+            'Conditions: {text|glintId, state:appears|disappears}, {route:"/home"} (empty = any change), {overlay:appears|dismisses} (dialog, sheet, system surface), {log:"<regex>"} (new app log lines), {errors:true} (each new distinct Flutter error, with its summary and file:line; repeats stay quiet), {lint:true|[rules]} (UX lint of the live layout, kind lint events: overflow, keyboard (focused field under the keyboard), insets (content under the status bar or home indicator), tapTarget (under minTapTarget, default 44), clippedText, lines (headline past maxHeadlineLines, default 2); each finding has the rule, widget, glintId, file:line and measured numbers, once per problem; checked when the screen changes and has settled, off unless armed; a lintError event with errorKind internal and nextSteps when the check cannot run). '
+            'Options: label, once (default true, false with lint; false keeps firing), timeoutMs (default 1800000, max 21600000). Scene conditions are read about every 1.5 s, backing off while the app is locked or unresponsive. '
             'A watch ends with an `ended` event on timeout, cancel or detach. errorKind: invalidArgument, flutterModeRequired (device mode), sessionNotAttached.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(description: 'add | list | cancel | events. Default add.'),
             'conditions': Schema.list(
               description:
-                  'op=add: up to $_maxConditions, each exactly one of text, glintId, route, overlay, log, errors (state goes with text or glintId). Any one matching fires the watch.',
+                  'op=add: up to $_maxConditions, each exactly one of text, glintId, route, overlay, log, errors, lint (state goes with text or glintId). Any one matching fires the watch.',
               items: ObjectSchema(
                 properties: {
                   'text': Schema.string(description: 'Visible text, matched as tap text: does (exact, then contains).'),
@@ -46,6 +46,14 @@ class WatchTool extends GlintTool {
                   'log': Schema.string(description: 'Regex matched against each new app log line.'),
                   'errors':
                       Schema.bool(description: 'true: fire once for each new distinct app error; repeats do not fire.'),
+                  'lint': Schema.combined(
+                    description:
+                        'true for every rule, or a list of overflow, keyboard, insets, tapTarget, clippedText, lines. Fires a lint event once per problem and route.',
+                  ),
+                  'minTapTarget':
+                      Schema.num(description: 'With lint: smallest tap target side in logical points. Default 44.'),
+                  'maxHeadlineLines':
+                      Schema.int(description: 'With lint: lines a headline (font size 20+) may wrap to. Default 2.'),
                 },
               ),
             ),
@@ -107,7 +115,7 @@ class WatchTool extends GlintTool {
       );
     }
     final label = args['label'] as String?;
-    final once = argBool(args, 'once') ?? true;
+    final once = argBool(args, 'once') ?? !parsed.conditions!.any((c) => c is LintCondition);
     final added = await registry.add(
       app,
       conditions: parsed.conditions!,
@@ -137,7 +145,7 @@ class WatchTool extends GlintTool {
         if (over)
           'it already matched and ended: the event is in data.firedNow, nothing to monitor'
         else if (fileError == null)
-          'run `$monitor` as a background monitor; each line is one event (kind match or ended)',
+          'run `$monitor` as a background monitor; each line is one event (kind match, lint or ended)',
         if (!over) 'or poll: watch op:events sinceSeq:${registry.events.lastSeq}',
         if (!over) 'watch op:cancel id:"${watch.id}" when you no longer need it',
       ],

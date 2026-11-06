@@ -965,7 +965,7 @@
       },
       "conditions": {
         "type": "array",
-        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors (state goes with text or glintId). Any one matching fires the watch.",
+        "description": "op=add: up to 10, each exactly one of text, glintId, route, overlay, log, errors, lint (state goes with text or glintId). Any one matching fires the watch.",
         "items": {
           "type": "object",
           "properties": {
@@ -996,6 +996,17 @@
             "errors": {
               "type": "boolean",
               "description": "true: fire once for each new distinct app error; repeats do not fire."
+            },
+            "lint": {
+              "description": "true for every rule, or a list of overflow, keyboard, insets, tapTarget, clippedText, lines. Fires a lint event once per problem and route."
+            },
+            "minTapTarget": {
+              "type": "number",
+              "description": "With lint: smallest tap target side in logical points. Default 44."
+            },
+            "maxHeadlineLines": {
+              "type": "integer",
+              "description": "With lint: lines a headline (font size 20+) may wrap to. Default 2."
             }
           }
         }
