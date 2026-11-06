@@ -11,6 +11,9 @@ class ShutdownSimTool extends GlintTool {
   const ShutdownSimTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'shutdown_sim',
         description: 'Shut down a simulator/emulator. device: the one to stop (defaults '

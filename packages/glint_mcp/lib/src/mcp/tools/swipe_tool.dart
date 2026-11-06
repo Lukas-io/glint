@@ -14,6 +14,9 @@ class SwipeTool extends GlintTool {
   const SwipeTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'swipe',
         description: 'Swipe from one glintId to another, OR pass x1,y1,x2,y2 to swipe '

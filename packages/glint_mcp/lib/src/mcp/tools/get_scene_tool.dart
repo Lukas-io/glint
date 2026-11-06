@@ -5,6 +5,7 @@ import '../../../observability.dart';
 import '../../../perception.dart';
 import '../../../semantic.dart';
 import '../envelope.dart';
+import '../error_report.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -18,7 +19,7 @@ class GetSceneTool extends GlintTool {
   Tool get definition => Tool(
         name: 'get_scene',
         description:
-            'Read the screen as a compact scene, one node per line: `<marker> <role> <glintId> [label]`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static. Pass the glintId to tap/type/scroll. An open dialog comes first under `--- dialog ---`, the blocked screen after it. Long lists fold to the first row plus a digest naming the rest by label and #id. glintId: only that node\'s subtree; depth caps the levels below it. structuredContent: hasOverlay, overlayKind, keyboardVisible, route.name, state (loaded/loading/error, or device/native).',
+            'Read the screen as a compact scene, one node per line: `<marker> <role> <glintId> [label]`. Markers: `*` tappable, `>` typeable, `<>` scrollable, `-` static. Pass the glintId to tap/type/scroll. An open dialog comes first under `--- dialog ---`, the blocked screen after it. Long lists fold to the first row plus a digest naming the rest by label and #id. glintId: only that node\'s subtree; depth caps the levels below it. structuredContent: hasOverlay, overlayKind, keyboardVisible, route.name, state (loaded/loading/error, or device/native). Warnings name each app error since the last read (summary and file:line; format:json adds data.renderErrors) and an emptyViewport when a scrollable holds built children but painted none, which tells a crashed screen from an empty one.',
         inputSchema: ObjectSchema(
           properties: {
             'format': Schema.string(
@@ -118,6 +119,19 @@ class GetSceneTool extends GlintTool {
           'report_issue with the app path.',
         );
       }
+      final app = session.active;
+      final errorsFrom = app?.sceneErrorSeq ?? 0;
+      final renderErrors = app?.errors.since(errorsFrom) ?? const <FlutterErrorEntry>[];
+      if (app != null && subtree == null) app.sceneErrorSeq = app.errors.lastSeq;
+      final blankScrollables = subtree == null ? await emptyViewportCount(session.runtime) ?? 0 : 0;
+      warnings.addAll([
+        for (final e in renderErrors) errorWarning(e, errorsFrom),
+        if (blankScrollables > 0) emptyViewportWarning(blankScrollables),
+      ]);
+      if (renderErrors.isNotEmpty) {
+        dataBits['renderErrors'] = [for (final e in renderErrors) e.toJson(since: errorsFrom)];
+      }
+      if (blankScrollables > 0) dataBits['emptyViewports'] = blankScrollables;
       final String rendered;
       if (subtree != null) {
         rendered = format == 'json'

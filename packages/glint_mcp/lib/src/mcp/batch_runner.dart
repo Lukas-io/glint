@@ -37,6 +37,15 @@ const Map<String, GlintTool> kBatchStepTools = {
   'wait_for': WaitForTool(),
 };
 
+/// Step tools that only read or wait, and so are allowed on an app attached for observing.
+const Set<String> kReadOnlySteps = {'wait_for_settle', 'wait_for'};
+
+/// Whether any step in a raw `steps` list acts on the app.
+bool stepsChangeDevice(Object? raw) {
+  if (raw is! List) return false;
+  return raw.any((s) => s is Map && !kReadOnlySteps.contains(s['tool']));
+}
+
 /// Steps that resolve a glintId: default to awaitReady so a step can target what the previous step reveals.
 const Set<String> kTargetedSteps = {'tap', 'type', 'swipe', 'long_press', 'drag'};
 

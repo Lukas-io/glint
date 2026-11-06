@@ -17,6 +17,9 @@ class BatchTool extends GlintTool {
   static const int _maxSteps = 20;
 
   @override
+  bool changesDevice(Map<String, Object?> args) => stepsChangeDevice(args['steps']);
+
+  @override
   Tool get definition => Tool(
         name: 'batch',
         description:

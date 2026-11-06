@@ -17,6 +17,10 @@ class SensorsTool extends GlintTool {
   static const _maxSteps = 30;
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'read'}, defaultOp: 'read');
+
+  @override
   Tool get definition => Tool(
         name: 'sensors',
         description:

@@ -22,6 +22,9 @@ class KeyTool extends GlintTool {
   };
 
   @override
+  bool changesDevice(Map<String, Object?> args) => true;
+
+  @override
   Tool get definition => Tool(
         name: 'key',
         description: 'Press a non-printing key: backspace, delete, enter, tab, escape, '

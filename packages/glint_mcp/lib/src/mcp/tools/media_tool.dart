@@ -45,6 +45,10 @@ class MediaTool extends GlintTool {
   const MediaTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'files', 'inspect', 'listen'}, defaultOp: 'files');
+
+  @override
   Tool get definition => Tool(
         name: 'media',
         description:

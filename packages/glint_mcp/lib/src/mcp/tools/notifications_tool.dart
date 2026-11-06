@@ -21,6 +21,10 @@ class NotificationsTool extends GlintTool {
   const NotificationsTool();
 
   @override
+  bool changesDevice(Map<String, Object?> args) =>
+      GlintTool.opChangesDevice(args, readOps: const {'list'}, defaultOp: 'list');
+
+  @override
   Tool get definition => Tool(
         name: 'notifications',
         description:

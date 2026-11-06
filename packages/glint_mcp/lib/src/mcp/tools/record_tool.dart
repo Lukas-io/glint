@@ -22,6 +22,9 @@ class RecordTool extends GlintTool {
   static const _coordSteps = {'tap', 'long_press', 'swipe', 'drag'};
 
   @override
+  bool changesDevice(Map<String, Object?> args) => stepsChangeDevice(args['steps']);
+
+  @override
   Tool get definition => Tool(
         name: 'record',
         description:
