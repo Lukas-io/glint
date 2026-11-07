@@ -8,6 +8,7 @@ import '../observability/call_progress.dart';
 import '../observability/telemetry/phase_key.dart';
 import 'shipped_files.dart';
 import 'bounded_process.dart';
+import 'cache_prune.dart' show markHelperUsed;
 import 'process_state.dart';
 import 'result.dart';
 
@@ -187,31 +188,103 @@ class XcTestRunner {
     );
   }
 
-  /// The runner's .xctestrun, building it first when this Xcode has none.
-  Future<String> build({void Function(String phase)? onPhase}) async {
+  /// A build per runner source stamp, so another glint version's runner is never rebuilt over this one.
+  String buildDirFor(String stamp) => '$cacheDir/build-$stamp';
+
+  static final Map<String, _BuildInFlight> _buildsInFlight = {};
+
+  /// Problems met while building that did not stop it, for the attach reply.
+  final List<String> buildWarnings = [];
+
+  /// The runner's .xctestrun, building it first when this Xcode has none for these sources; one build per source stamp at a time, across simulators and glint processes, and a caller that joins one running hears its phases too.
+  Future<String> build({void Function(String phase)? onPhase}) {
     final stamp = sourcesStamp();
-    final existing = findXctestrun('$cacheDir/build/Build/Products');
-    if (existing != null && _builtFrom() == stamp) return existing;
-    // An incremental rebuild kept a changed runner's old code once; a stale build starts clean.
-    final stale = Directory('$cacheDir/build');
-    if (existing != null && stale.existsSync()) stale.deleteSync(recursive: true);
-    const phase = 'building the iOS runner (first run for this Xcode)';
-    onPhase?.call(phase);
-    final r = await CallProgress.during(phase, () => _buildBounded(), key: usageProcessKey('xcodebuild', null));
-    final built = findXctestrun('$cacheDir/build/Build/Products');
-    if (r.exitCode == 0 && built != null) File('$cacheDir/build/.sources').writeAsStringSync(stamp);
-    if (r.exitCode != 0 || built == null) {
-      throw XcTestRunnerError('could not build the XCTest runner',
-          detail: 'xcodebuild exited ${r.exitCode}; ${_buildDigest(r.lines)}',
-          nextSteps: const [
-            'check that Xcode and an iOS Simulator SDK are installed',
-            'or attach again with iosBackend:bridge'
-          ]);
+    final dir = buildDirFor(stamp);
+    final running = _buildsInFlight[dir];
+    if (running != null) {
+      running.join(onPhase);
+      return running.future;
     }
-    return built;
+    final fresh = _BuildInFlight();
+    fresh.join(onPhase);
+    _buildsInFlight[dir] = fresh;
+    fresh.future = _buildLocked(dir, stamp, fresh.announce).whenComplete(() {
+      _buildsInFlight.remove(dir);
+    });
+    return fresh.future;
   }
 
-  Future<({int exitCode, List<String> lines})> _buildBounded() async {
+  String? _reusableBuild(String dir, String stamp) {
+    final existing = findXctestrun('$dir/Build/Products');
+    if (existing == null || _builtFrom(dir) != stamp) return null;
+    markHelperUsed('$dir/.sources');
+    return existing;
+  }
+
+  Future<String> _buildLocked(String dir, String stamp, void Function(String phase) onPhase) async {
+    final ready = _reusableBuild(dir, stamp);
+    if (ready != null) return ready;
+    Directory(cacheDir).createSync(recursive: true);
+    final lock = File('$dir.lock').openSync(mode: FileMode.append);
+    try {
+      await _acquire(lock, onPhase);
+      final builtMeanwhile = _reusableBuild(dir, stamp);
+      if (builtMeanwhile != null) return builtMeanwhile;
+      if (findXctestrun('$dir/Build/Products') != null && Directory(dir).existsSync()) {
+        Directory(dir).deleteSync(recursive: true);
+      }
+      const phase = 'building the iOS runner (kept for the next attach)';
+      onPhase(phase);
+      final r = await CallProgress.during(phase, () => _buildBounded(dir), key: usageProcessKey('xcodebuild', null));
+      final built = findXctestrun('$dir/Build/Products');
+      if (r.exitCode == 0 && built != null) File('$dir/.sources').writeAsStringSync(stamp);
+      if (r.exitCode != 0 || built == null) {
+        throw XcTestRunnerError('could not build the XCTest runner',
+            detail: 'xcodebuild exited ${r.exitCode}; ${_buildDigest(r.lines)}',
+            nextSteps: const [
+              'check that Xcode and an iOS Simulator SDK are installed',
+              'or attach again with iosBackend:bridge'
+            ]);
+      }
+      return built;
+    } finally {
+      lock.closeSync();
+    }
+  }
+
+  static const _lockHeldErrnos = {11, 13, 35};
+
+  /// Takes the build lock, polling while another glint process holds it, for as long as a build may run; any other lock error (a file system without locks) builds without it.
+  Future<void> _acquire(RandomAccessFile lock, void Function(String phase) onPhase) async {
+    final waited = Stopwatch()..start();
+    var announced = false;
+    while (true) {
+      try {
+        lock.lockSync(FileLock.exclusive);
+        return;
+      } on FileSystemException catch (e) {
+        if (!_lockHeldErrnos.contains(e.osError?.errorCode)) {
+          buildWarnings.add(
+              'the iOS runner build could not be locked (${e.osError?.message ?? e.message}), so a second glint building it at once may collide');
+          return;
+        }
+        if (waited.elapsed > buildCeiling + const Duration(seconds: 30)) {
+          throw XcTestRunnerError('another glint process kept building the iOS runner',
+              errorKind: GlintErrorKind.toolTimeout,
+              detail: 'its build lock ${lock.path} was held for ${waited.elapsed.inMinutes} min',
+              nextSteps: const [
+                'retry once; the other build may have finished',
+                'or attach again with iosBackend:bridge',
+              ]);
+        }
+        if (!announced) onPhase('waiting for another glint to finish building the iOS runner');
+        announced = true;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+  }
+
+  Future<({int exitCode, List<String> lines})> _buildBounded(String derivedData) async {
     final lines = <String>[];
     Future<void> collect(Stream<List<int>> stream) =>
         consume(stream.transform(const Utf8Decoder(allowMalformed: true)).transform(const LineSplitter()), (line) {
@@ -231,7 +304,7 @@ class XcTestRunner {
           '-destination',
           'generic/platform=iOS Simulator',
           '-derivedDataPath',
-          '$cacheDir/build',
+          derivedData,
           'CODE_SIGNING_ALLOWED=NO',
         ],
         label: 'xcodebuild build-for-testing for the runner');
@@ -282,8 +355,8 @@ class XcTestRunner {
     return h.toRadixString(16);
   }
 
-  String? _builtFrom() {
-    final f = File('$cacheDir/build/.sources');
+  String? _builtFrom(String dir) {
+    final f = File('$dir/.sources');
     return f.existsSync() ? f.readAsStringSync() : null;
   }
 
@@ -481,4 +554,25 @@ class _RunnerStopped implements Exception {
   const _RunnerStopped();
   @override
   String toString() => 'the runner process is stopped (ps state T)';
+}
+
+/// A runner build running now, with everyone waiting on it hearing its phases.
+class _BuildInFlight {
+  late final Future<String> future;
+  final List<void Function(String phase)> _listeners = [];
+  String? _phase;
+
+  void join(void Function(String phase)? listener) {
+    if (listener == null) return;
+    _listeners.add(listener);
+    final phase = _phase;
+    if (phase != null) listener(phase);
+  }
+
+  void announce(String phase) {
+    _phase = phase;
+    for (final l in _listeners) {
+      l(phase);
+    }
+  }
 }

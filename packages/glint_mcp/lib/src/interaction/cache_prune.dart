@@ -53,7 +53,7 @@ final _semver = RegExp(r'-(\d+\.\d+\.\d+)(\.dex)?$');
 /// Helper families a later glint replaced; no build of them is chosen any more.
 const _retiredHelpers = {'glint-webcam', 'glint-screen'};
 
-/// Removes helper binaries of other glint versions from `~/.glint/bin` and runner builds of Xcode versions that are gone from `~/.glint/xctest`, at most once a day unless [force]; nothing a live process runs, or any helper used in the last [kPruneGrace], is touched.
+/// Removes helper binaries of other glint versions from `~/.glint/bin`, runner builds of Xcode versions that are gone and runner builds beyond the newest three from `~/.glint/xctest`, at most once a day unless [force]; nothing a live process runs, or any helper or build used in the last [kPruneGrace], is touched.
 Future<PruneReport> pruneCaches({bool dryRun = false, bool force = false, String? home, String? version}) async {
   final root = '${home ?? Platform.environment['HOME'] ?? '.'}/.glint';
   final stamp = File('$root/.pruned');
@@ -64,9 +64,11 @@ Future<PruneReport> pruneCaches({bool dryRun = false, bool force = false, String
   final table = await ProcessTable.read();
   final running = table.rows.map((r) => r.command).toList();
   bool inUse(String path) => running.any((c) => c.contains(path));
+  final goneBuilds = await _goneRunnerBuilds('$root/xctest', running);
   final items = [
     ..._oldHelpers('$root/bin', version ?? glintVersion, inUse),
-    ...await _goneRunnerBuilds('$root/xctest', inUse),
+    ...goneBuilds,
+    ..._staleRunnerBuilds('$root/xctest', running, skip: {for (final g in goneBuilds) g.path}),
   ];
   if (!dryRun) {
     for (final item in items) {
@@ -131,7 +133,7 @@ List<PruneItem> _oldHelpers(String binDir, String version, bool Function(String)
 /// A simulator's launch environment may still name this library after glint moved on, and a missing inserted library stops every app launch there.
 bool _injectedLibrary(String path) => path.endsWith('.dylib');
 
-Future<List<PruneItem>> _goneRunnerBuilds(String xctestDir, bool Function(String) inUse) async {
+Future<List<PruneItem>> _goneRunnerBuilds(String xctestDir, List<String> running) async {
   final dir = Directory(xctestDir);
   if (!dir.existsSync()) return const [];
   final installed = await installedXcodeVersions();
@@ -140,10 +142,75 @@ Future<List<PruneItem>> _goneRunnerBuilds(String xctestDir, bool Function(String
   for (final d in dir.listSync().whereType<Directory>()) {
     final name = d.uri.pathSegments.where((s) => s.isNotEmpty).last;
     if (!name.startsWith('xcode-') || name == 'xcode-unknown') continue;
-    if (installed.contains(name.substring('xcode-'.length)) || inUse(d.path)) continue;
+    if (installed.contains(name.substring('xcode-'.length)) || _runsFrom(running, d.path)) continue;
     out.add(PruneItem(d.path, _size(d), 'Xcode ${name.substring('xcode-'.length)} is no longer installed'));
   }
   return out;
+}
+
+const _runnerBuildsKept = 3;
+
+final _runnerBuildName = RegExp(r'^build(-[0-9a-f]+)?$');
+
+/// Whether a running command names a file inside [dir] (the directory as a whole path component).
+bool _runsFrom(List<String> running, String dir) {
+  final inside = RegExp('${RegExp.escape(dir)}(/|\\s|\$)');
+  return running.any(inside.hasMatch);
+}
+
+List<PruneItem> _staleRunnerBuilds(String xctestDir, List<String> running, {required Set<String> skip}) {
+  final dir = Directory(xctestDir);
+  if (!dir.existsSync()) return const [];
+  final out = <PruneItem>[];
+  for (final xcode in dir.listSync().whereType<Directory>().where((x) => !skip.contains(x.path))) {
+    final builds = <({Directory dir, DateTime usedAt})>[];
+    final entries = xcode.listSync();
+    for (final d in entries.whereType<Directory>()) {
+      final name = d.uri.pathSegments.where((s) => s.isNotEmpty).last;
+      if (name == 'build-') {
+        out.add(PruneItem(d.path, _size(d), 'an iOS runner build with no source stamp'));
+        continue;
+      }
+      if (!_runnerBuildName.hasMatch(name)) continue;
+      final marker = File('${d.path}/.sources');
+      builds.add((dir: d, usedAt: (marker.existsSync() ? marker : d).statSync().modified));
+    }
+    builds.sort((a, b) => b.usedAt.compareTo(a.usedAt));
+    for (final b in builds.skip(_runnerBuildsKept)) {
+      if (_runsFrom(running, b.dir.path) || DateTime.now().difference(b.usedAt) < kPruneGrace) continue;
+      const reason = 'an iOS runner build of an older glint version';
+      out.add(PruneItem(b.dir.path, _size(b.dir), reason));
+      if (File('${b.dir.path}.lock').existsSync()) out.add(PruneItem('${b.dir.path}.lock', 0, reason));
+    }
+    for (final f in entries.whereType<File>().where((f) => _runnerBuildLock.hasMatch(f.path))) {
+      final removed = out.any((i) => i.path == f.path);
+      final buildDir = Directory(f.path.substring(0, f.path.length - '.lock'.length));
+      final orphan = !removed && !buildDir.existsSync() && !_lockHeld(f);
+      if (!orphan) continue;
+      out.add(PruneItem(f.path, 0, 'a lock file of an iOS runner build that is gone'));
+    }
+  }
+  return out;
+}
+
+final _runnerBuildLock = RegExp(r'/build(-[0-9a-f]*)?\.lock$');
+
+/// Whether another process holds [lock] now.
+bool _lockHeld(File lock) {
+  final RandomAccessFile handle;
+  try {
+    handle = lock.openSync(mode: FileMode.append);
+  } on FileSystemException {
+    return true;
+  }
+  try {
+    handle.lockSync(FileLock.exclusive);
+    return false;
+  } on FileSystemException {
+    return true;
+  } finally {
+    handle.closeSync();
+  }
 }
 
 int _size(Directory d) {

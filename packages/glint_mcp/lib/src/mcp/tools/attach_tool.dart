@@ -603,6 +603,7 @@ class AttachTool extends GlintTool {
                 await startXcTestRunner(deviceId, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
             if (started.error != null) return started.error!;
             runner = started.runner;
+            warnings.addAll(runner!.buildWarnings);
           }
           // A freshly launched app's inspector lags the VM URI by a few seconds;
           // an already-running app probes on the first try so the ceiling is free.
@@ -1370,7 +1371,8 @@ class AttachTool extends GlintTool {
           final started = await startXcTestRunner(target.id, toolchain, onPhase: (phase) => onProgress?.call(0, phase));
           if (started.error != null) return started.error!;
           runner = started.runner;
-          final points = await runner!.screenPoints();
+          warnings.addAll(runner!.buildWarnings);
+          final points = await runner.screenPoints();
           if (points == null) {
             return StructuredResponse.error(
               summary: 'the XCTest runner did not report the screen size, so pixel taps cannot be mapped to it',
