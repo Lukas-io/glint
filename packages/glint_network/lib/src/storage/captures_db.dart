@@ -2051,6 +2051,16 @@ class CapturesDao {
     return [for (final r in rows) r['host'] as String];
   }
 
+  /// Distinct request hosts captured in any session, busiest first.
+  List<String> capturedHosts({int limit = 500}) {
+    final rows = _db.select(
+      'SELECT host, COUNT(*) AS n FROM http_requests '
+      'WHERE host IS NOT NULL AND host != \'\' GROUP BY host ORDER BY n DESC LIMIT ?',
+      [limit],
+    );
+    return [for (final r in rows) r['host'] as String];
+  }
+
   /// Distinct request paths in [sessionId], most frequent first.
   List<String> distinctPaths(int sessionId, {int limit = 300}) {
     final rows = _db.select(

@@ -4,6 +4,8 @@ about: A capability glint or glint_network doesn't have yet
 labels: enhancement
 ---
 
+> **Please do not name your app, company, hosts or devices.** Describe them generically (for example, "a banking app's PIN screen").
+
 > **Agents are welcome to file these too.** If your user describes a workflow
 > glint can't yet drive (a missing gesture, a sensor we don't expose, a platform
 > not supported), submit a draft and the maintainer will scope it.
