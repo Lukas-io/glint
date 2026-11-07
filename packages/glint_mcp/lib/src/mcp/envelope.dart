@@ -160,6 +160,7 @@ class StructuredResponse {
           ? ' · ${data?['changeCategory'] ?? 'changed'}${late is int ? ' $late ms later' : ''}'
           : ' · nothing changed');
     }
+    if (!isError && changed == 'unknown') buf.write(' · changed unknown: ${data?['unknownReason']}');
     final surface = data?['surface'];
     if (surface is Map<String, Object?>) {
       buf.writeln();

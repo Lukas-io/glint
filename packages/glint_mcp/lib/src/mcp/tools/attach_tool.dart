@@ -438,7 +438,10 @@ class AttachTool extends GlintTool {
 
     try {
       // ── 3. Read the VM once: platform + Dart version ──────────────────────
-      final vm = await probe.rawService.getVM();
+      final vm = await probe.rawService.getVM().timeout(
+            VmServiceRuntime.callTimeout,
+            onTimeout: () => throw RuntimeUnresponsiveError('getVM', VmServiceRuntime.callTimeout),
+          );
       final platform = _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
       if (platform == DevicePlatform.android && adbResolved == null) {
         return _adbMissing();

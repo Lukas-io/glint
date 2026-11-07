@@ -108,7 +108,7 @@ class SettleDetector {
     if (agent == null) return null;
     try {
       final r = await agent.call({'op': 'settle', 'quietMs': '${quietFrames * 33}', 'ceilingMs': '$ceilingMs'},
-          timeout: Duration(milliseconds: ceilingMs + 5000));
+          timeout: Duration(milliseconds: ceilingMs + 2000));
       return r['status'] == 'settled' ? (r['ms'] as num?)?.toInt() : null;
     } on Object {
       return null;

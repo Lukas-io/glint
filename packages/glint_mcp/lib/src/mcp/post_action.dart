@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import '../../interaction.dart' show screensDiffer;
 import '../../observability.dart' show CallProgress, StateObserver;
 import '../../perception.dart';
-import '../../runtime.dart' show AppAgent;
+import '../../runtime.dart' show AppAgent, RuntimeUnresponsiveError, VmServiceRuntime;
 import '../../semantic.dart';
 import 'envelope.dart';
 import 'explore/screen_sketch.dart';
@@ -27,14 +29,17 @@ Future<ActionScene> openActionScene(GlintSession session, {required bool snapsho
   final scene = await session.reader.readSummary();
   if (!snapshot) return ActionScene(scene: scene);
   try {
-    final semantic = await session.semanticize(scene, detail: SceneDetail.interactive);
-    return ActionScene(
-      scene: scene,
-      semantic: semantic,
-      pre: snapshotOf(semantic, paintHash: await paintSignature(session))
-        ..coveredBefore = session.sceneMode == SceneMode.native,
-    );
-  } on Object {
+    return await VmServiceRuntime.withCallLimit(actionReadCallLimit, () async {
+      final semantic = await session.semanticize(scene, detail: SceneDetail.interactive);
+      return ActionScene(
+        scene: scene,
+        semantic: semantic,
+        pre: snapshotOf(semantic, paintHash: await paintSignature(session))
+          ..coveredBefore = session.sceneMode == SceneMode.native,
+      );
+    }, evaluateLimit: () => baselineEvaluateLimit);
+  } on Object catch (e) {
+    if (appBusyCause(e) != null) return ActionScene(scene: scene);
     await scene.dispose();
     rethrow;
   }
@@ -247,7 +252,19 @@ class PostActionState {
     this.lateMs,
     this.snapshot,
     this.sketch,
+    this.unknownReason,
   });
+
+  /// The state of an action whose post-action read ran out of time: [reason] says why nothing is known.
+  factory PostActionState.unknown(String reason) => PostActionState(
+        changed: null,
+        changeCategory: 'unknown',
+        state: 'unknown',
+        unknownReason: reason,
+      );
+
+  /// Why whether the action changed anything is unknown; null when it was read.
+  final String? unknownReason;
 
   /// The screen the post-action read saw, for the explore graph.
   final SceneSketch? sketch;
@@ -303,6 +320,7 @@ class PostActionState {
 
   Map<String, Object?> toData() => {
         if (changed != null) 'changed': changed,
+        if (unknownReason != null) ...{'changed': 'unknown', 'unknownReason': unknownReason},
         'changeCategory': changeCategory,
         if (state != 'loaded') 'state': state,
         if (screenshot != null) 'screenshot': screenshot,
@@ -313,19 +331,32 @@ class PostActionState {
       };
 }
 
-/// Longest the before-action snapshot may take, so a blocked app cannot hold the action back.
+/// Longest a VM call inside an action's reads may take before the app counts as saturated or covered; a tree read gets twice as long.
+const actionReadCallLimit = Duration(seconds: 3);
+
+/// Longest an expression evaluate may take in the optional reads around an action; compiling before the action itself keeps the 10 s guard.
+const baselineEvaluateLimit = Duration(seconds: 2);
+
+/// Backstop for the before-action snapshot; the per-call limit ends a read of an unresponsive app sooner.
 const preSnapshotLimit = Duration(seconds: 4);
 
-/// Snapshot the scene BEFORE an action fires, for [readPostActionState]; null when it cannot be read in time.
+/// Snapshot the scene BEFORE an action fires, for [readPostActionState]; null when the app does not answer in time.
 Future<SceneSnapshot?> snapshotPreAction(GlintSession session) async {
   try {
     final covered = session.sceneMode == SceneMode.native;
-    return await session
-        .withScene(
-          (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session))..coveredBefore = covered,
-          detail: SceneDetail.interactive,
-        )
-        .timeout(preSnapshotLimit);
+    if (covered && session.active?.nativeReader != null) {
+      return SceneSnapshot(routeName: '', hasOverlay: false, contentHash: 0)..coveredBefore = true;
+    }
+    return await VmServiceRuntime.withCallLimit(
+      actionReadCallLimit,
+      () => session
+          .withScene(
+            (semantic) async => snapshotOf(semantic, paintHash: await paintSignature(session))..coveredBefore = covered,
+            detail: SceneDetail.interactive,
+          )
+          .timeout(preSnapshotLimit),
+      evaluateLimit: () => baselineEvaluateLimit,
+    );
   } on Object {
     return null;
   }
@@ -352,21 +383,101 @@ Future<PostActionState?> readPostActionState(
   ScrollAnchor? scrollAnchor,
   bool horizontalScroll = false,
 }) async {
+  final progress = _PostActionProgress();
+  final work = VmServiceRuntime.withCallLimit(
+    actionReadCallLimit,
+    () => _readPostActionState(session, pre, progress,
+        includeSceneText: includeSceneText, scrollAnchor: scrollAnchor, horizontalScroll: horizontalScroll),
+    evaluateLimit: () => progress.evaluateLimit,
+  );
+  try {
+    return await work.timeout(nativePostActionCap + const Duration(seconds: 8));
+  } on TimeoutException {
+    progress.forced = true;
+    return progress.expiredResult();
+  }
+}
+
+String _unansweredReason(Duration limit) => 'the app did not answer a read within ${limit.inSeconds}s after the action '
+    '(busy, animating hard or covered), so whether anything changed is unknown; get_scene shows the screen now';
+
+/// The few-word form of an unknown-change [reason] for batch step lines, where the full sentence would repeat per step.
+String shortUnknownReason(String? reason) {
+  if (reason == null) return 'unread';
+  if (reason.startsWith('the app did not answer a read within')) return 'app busy';
+  if (reason.startsWith('the app did not answer the read before')) return 'no baseline';
+  if (reason.startsWith('the read after the action ran past')) return 'read too slow';
+  return 'unread';
+}
+
+const _noBaselineReason = 'the app did not answer the read before the action, so there is nothing to compare '
+    'the new screen with; get_scene shows it now';
+
+/// Longest the settle, reads and late-change wait after a delivered action may run, checked between steps; each step is held to [actionReadCallLimit].
+const postActionCap = Duration(seconds: 10);
+
+/// The same cap when a native surface covers the app, whose reads wait on screenshots and animations.
+const nativePostActionCap = Duration(seconds: 12);
+
+/// The newest state the post-action read reached, kept so a read that ends early still returns what it learned.
+class _PostActionProgress {
+  PostActionState? latest;
+  var forced = false;
+  var cap = postActionCap;
+  late DateTime _started = DateTime.now();
+
+  void startClock(Duration limit) {
+    cap = limit;
+    _started = DateTime.now();
+  }
+
+  bool get expired => forced || (CallProgress.current?.abandoned ?? false) || DateTime.now().difference(_started) > cap;
+
+  /// What is left of the cap, at most [baselineEvaluateLimit] and at least half a second, for the next expression evaluate.
+  Duration get evaluateLimit {
+    final left = cap - DateTime.now().difference(_started);
+    if (left < const Duration(milliseconds: 500)) return const Duration(milliseconds: 500);
+    return left < baselineEvaluateLimit ? left : baselineEvaluateLimit;
+  }
+
+  /// A read that completed still holds, including one that saw nothing change; with none, the change is unknown.
+  PostActionState expiredResult() {
+    final known = latest;
+    if (known != null && (known.changed != null || known.state == 'native')) return known;
+    return PostActionState.unknown(
+        'the read after the action ran past ${cap.inSeconds}s (the app is busy or animating hard), so whether '
+        'anything changed is unknown; get_scene shows the screen now');
+  }
+}
+
+Future<PostActionState?> _readPostActionState(
+  GlintSession session,
+  SceneSnapshot? pre,
+  _PostActionProgress progress, {
+  bool includeSceneText = false,
+  ScrollAnchor? scrollAnchor,
+  bool horizontalScroll = false,
+}) async {
   final app = session.active;
   final watchesNative = app != null && app.nativeReader != null;
   final wasNative = watchesNative && (pre?.coveredBefore ?? app.sceneMode == SceneMode.native);
+  progress.startClock(wasNative ? nativePostActionCap : postActionCap);
   try {
-    try {
-      // A route push/pop animation starts a frame or two AFTER the tap; poll
-      // too early and settle catches the idle gap before the animation.
-      if (AppAgent.of(session.runtime) == null) await Future<void>.delayed(const Duration(milliseconds: 120));
-      await session.settleDetector.awaitSettle(
-        ceilingMs: session.config.postActionSettleMs,
-        quietFramesNeeded: session.config.settleQuietFrames,
-        checkLoadingAffordances: false,
-      );
-    } on Object {
-      // ignore settle errors — scene read follows regardless
+    if (!wasNative) {
+      try {
+        // A route push/pop animation starts a frame or two AFTER the tap; poll
+        // too early and settle catches the idle gap before the animation.
+        if (AppAgent.of(session.runtime) == null) await Future<void>.delayed(const Duration(milliseconds: 120));
+        await session.settleDetector.awaitSettle(
+          ceilingMs: session.config.postActionSettleMs,
+          quietFramesNeeded: session.config.settleQuietFrames,
+          checkLoadingAffordances: false,
+        );
+      } on RuntimeUnresponsiveError {
+        rethrow;
+      } on Object {
+        // ignore settle errors — scene read follows regardless
+      }
     }
     Future<PostActionState> readOnce() => session.withScene(
           (semantic) async {
@@ -376,12 +487,13 @@ Future<PostActionState?> readPostActionState(
               paintHash: pre?.paintHash == null ? null : await paintSignature(session),
               state: observed,
             );
-            final category = pre != null ? changeCategory(pre, post) : 'unknown';
+            final category = pre == null ? 'unknown' : changeCategory(pre, post);
             return PostActionState(
               snapshot: post,
               sketch: post.sketch,
-              changed: category != 'nothing',
+              changed: pre == null ? null : category != 'nothing',
               changeCategory: category,
+              unknownReason: pre == null ? _noBaselineReason : null,
               state: observed,
               sceneText: includeSceneText ? const PlainTextSceneRenderer().render(semantic) : null,
               scrolledPx: scrollAnchor == null
@@ -394,33 +506,8 @@ Future<PostActionState?> readPostActionState(
     if (watchesNative) {
       await app.refreshSceneMode();
       if (wasNative) await _awaitNativeGone(app);
-      if (app.sceneMode == SceneMode.native) {
-        final before = wasNative ? app.captures.newest?.path : null;
-        // Native sheets and menus animate in while the backgrounded app reports settled at once.
-        if (before != null) await Future<void>.delayed(Duration(milliseconds: session.config.captureSettleMs));
-        var capture = await app.captureNow('action');
-        var differ = before == null || capture == null ? null : await screensDiffer(before, capture.path);
-        if (differ == false) {
-          await Future<void>.delayed(Duration(milliseconds: session.config.captureSettleMs));
-          capture = await app.captureNow('action') ?? capture;
-          differ = capture == null ? null : await screensDiffer(before!, capture.path);
-        }
-        final unchanged = differ == false;
-        final surface = await app.readNativeSurface(shot: capture?.path);
-        return PostActionState(
-          changed: wasNative ? differ : true,
-          changeCategory: unchanged ? 'nothing' : 'nativeSurface',
-          state: 'native',
-          screenshot: capture?.path,
-          nativeSurface: app.nativeSurfaceName,
-          surface: surface,
-          note: unchanged
-              ? 'the native surface looks the same after the action, so the input may not have reached it '
-                  '(system dialogs can refuse injected input). Check the coordinates on the screenshot; '
-                  'if they are right, ask the user to tap it'
-              : null,
-        );
-      }
+      if (progress.expired) return progress.expiredResult();
+      if (app.sceneMode == SceneMode.native) return await _readNativeState(session, app, wasNative, progress);
       if (wasNative) {
         final state = await readOnce();
         return PostActionState(
@@ -431,44 +518,102 @@ Future<PostActionState?> readPostActionState(
         );
       }
     }
-    var state = await readOnce();
+    if (progress.expired) return progress.expiredResult();
+    CallProgress.enter('reading the screen after the action', key: 'read');
+    var state = progress.latest = await readOnce();
     if (state.state == 'loading') {
       await Future<void>.delayed(const Duration(milliseconds: 600));
-      state = await readOnce();
+      if (progress.expired) return progress.expiredResult();
+      state = progress.latest = await readOnce();
     }
-    if (state.changeCategory == 'nothing' && pre != null) state = await _awaitLateChange(session, state, readOnce);
-    session.explore.noteAction(app, pre?.sketch, state.sketch);
+    if (progress.expired) return state;
+    if (state.changeCategory == 'nothing' && pre != null) {
+      state = await _awaitLateChange(session, state, readOnce, progress);
+    }
+    if (!progress.expired) session.explore.noteAction(app, pre?.sketch, state.sketch);
     return state;
-  } on Object {
-    return null;
+  } on Object catch (e) {
+    final known = progress.latest;
+    if (known != null) return known;
+    final busy = appBusyCause(e);
+    if (busy == null) return null;
+    return PostActionState.unknown(pre == null ? _noBaselineReason : _unansweredReason(busy.timeout));
   }
+}
+
+PostActionState _nativeState(AppSession app, bool wasNative,
+    {required Capture? capture, required bool? differ, required NativeSurface? surface}) {
+  final unchanged = differ == false;
+  return PostActionState(
+    changed: wasNative ? differ : true,
+    changeCategory: unchanged ? 'nothing' : 'nativeSurface',
+    state: 'native',
+    screenshot: capture?.path,
+    nativeSurface: app.nativeSurfaceName,
+    surface: surface,
+    note: unchanged
+        ? 'the native surface looks the same after the action, so the input may not have reached it '
+            '(system dialogs can refuse injected input). Check the coordinates on the screenshot; '
+            'if they are right, ask the user to tap it'
+        : null,
+  );
+}
+
+/// Reads the surface in front of the app from screenshots, keeping each stage in [progress] so a cap that ends it early still returns what was seen.
+Future<PostActionState> _readNativeState(
+    GlintSession session, AppSession app, bool wasNative, _PostActionProgress progress) async {
+  CallProgress.enter('reading the surface in front of the app', key: 'read');
+  final before = wasNative ? app.captures.newest?.path : null;
+  final settle = Duration(milliseconds: session.config.captureSettleMs);
+  // Native sheets and menus animate in while the backgrounded app reports settled at once.
+  if (before != null) await Future<void>.delayed(settle);
+  if (progress.expired) return progress.expiredResult();
+  var capture = await app.captureNow('action', cancelled: () => progress.expired);
+  if (progress.expired) return progress.expiredResult();
+  var differ = before == null || capture == null ? null : await screensDiffer(before, capture.path);
+  if (progress.expired) return progress.expiredResult();
+  progress.latest = _nativeState(app, wasNative, capture: capture, differ: differ, surface: null);
+  if (differ == false) {
+    await Future<void>.delayed(settle);
+    if (progress.expired) return progress.expiredResult();
+    capture = await app.captureNow('action', cancelled: () => progress.expired) ?? capture;
+    if (progress.expired) return progress.expiredResult();
+    differ = capture == null ? null : await screensDiffer(before!, capture.path);
+    if (progress.expired) return progress.expiredResult();
+    progress.latest = _nativeState(app, wasNative, capture: capture, differ: differ, surface: null);
+  }
+  final surface = await app.readNativeSurface(shot: capture?.path);
+  if (progress.expired) return progress.expiredResult();
+  return _nativeState(app, wasNative, capture: capture, differ: differ, surface: surface);
 }
 
 /// How long an action that changed nothing waits for a late rebuild, such as a network response's setState.
 const Duration _lateChangeWindow = Duration(milliseconds: 1500);
 
 /// [state], or a re-read when the app rebuilds within [_lateChangeWindow] and the screen did change.
-Future<PostActionState> _awaitLateChange(
-    GlintSession session, PostActionState state, Future<PostActionState> Function() readOnce) async {
+Future<PostActionState> _awaitLateChange(GlintSession session, PostActionState state,
+    Future<PostActionState> Function() readOnce, _PostActionProgress progress) async {
   final agent = AppAgent.of(session.runtime);
   if (agent == null) return state;
-  return CallProgress.during('waiting for a late change', () => _readLateChange(session, state, readOnce, agent),
+  return CallProgress.during(
+      'waiting for a late change after the action', () => _readLateChange(session, state, readOnce, progress, agent),
       key: 'late_change');
 }
 
-Future<PostActionState> _readLateChange(
-    GlintSession session, PostActionState state, Future<PostActionState> Function() readOnce, AppAgent agent) async {
+Future<PostActionState> _readLateChange(GlintSession session, PostActionState state,
+    Future<PostActionState> Function() readOnce, _PostActionProgress progress, AppAgent agent) async {
   try {
     final reply = await agent.call(
       {'op': 'awaitBuild', 'ms': '${_lateChangeWindow.inMilliseconds}'},
       timeout: _lateChangeWindow + const Duration(seconds: 2),
     );
-    if (reply['built'] != true) return state;
+    if (reply['built'] != true || progress.expired) return state;
     await session.settleDetector.awaitSettle(
       ceilingMs: session.config.postActionSettleMs,
       quietFramesNeeded: session.config.settleQuietFrames,
       checkLoadingAffordances: false,
     );
+    if (progress.expired) return state;
     final late = await readOnce();
     return late.changeCategory == 'nothing' ? state : late.changedLate((reply['ms'] as num).toInt());
   } on Object {

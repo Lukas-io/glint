@@ -36,12 +36,9 @@ Future<StructuredResponse> segmentSwipe(
     if (post == null) return response;
     final movedPx = post.scrolledPx;
     final merged = ScrollTool.mergeScrollSignal(post.changeCategory, movedPx);
-    return response.mergeData({
-      ...post.toData(),
-      'changed': merged.changed,
-      'changeCategory': merged.category,
-      if (movedPx != null) 'scrolledPx': movedPx.round(),
-    }).addWarnings([if (post.note != null) post.note!]);
+    return response
+        .mergeData(ScrollTool.scrollSignalData(post, merged, movedPx))
+        .addWarnings([if (post.note != null) post.note!]);
   } finally {
     await action.dispose();
   }
