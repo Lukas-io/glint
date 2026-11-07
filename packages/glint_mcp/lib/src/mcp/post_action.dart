@@ -3,7 +3,7 @@ import 'dart:async';
 import '../../interaction.dart' show screensDiffer;
 import '../../observability.dart' show CallProgress, StateObserver;
 import '../../perception.dart';
-import '../../runtime.dart' show AppAgent, RuntimeUnresponsiveError, VmServiceRuntime;
+import '../../runtime.dart' show AppAgent, PendingWork, RuntimeUnresponsiveError, VmServiceRuntime;
 import '../../semantic.dart';
 import 'envelope.dart';
 import 'explore/screen_sketch.dart';
@@ -431,6 +431,8 @@ class _PostActionProgress {
     _started = DateTime.now();
   }
 
+  Duration get elapsed => DateTime.now().difference(_started);
+
   bool get expired => forced || CallProgress.cancelled || DateTime.now().difference(_started) > cap;
 
   /// What is left of the cap, at most [baselineEvaluateLimit] and at least half a second, for the next expression evaluate.
@@ -519,6 +521,7 @@ Future<PostActionState?> _readPostActionState(
       }
     }
     if (progress.expired) return progress.expiredResult();
+    final mark = await _markBuilds(session);
     CallProgress.enter('reading the screen after the action', key: 'read');
     var state = progress.latest = await readOnce();
     if (state.state == 'loading') {
@@ -528,7 +531,7 @@ Future<PostActionState?> _readPostActionState(
     }
     if (progress.expired) return state;
     if (state.changeCategory == 'nothing' && pre != null) {
-      state = await _awaitLateChange(session, state, readOnce, progress);
+      state = await _awaitLateChange(session, state, readOnce, progress, mark);
     }
     if (!progress.expired) session.explore.noteAction(app, pre?.sketch, state.sketch);
     return state;
@@ -590,35 +593,85 @@ Future<PostActionState> _readNativeState(
 /// How long an action that changed nothing waits for a late rebuild, such as a network response's setState.
 const Duration _lateChangeWindow = Duration(milliseconds: 1500);
 
-/// [state], or a re-read when the app rebuilds within [_lateChangeWindow] and the screen did change.
+/// The longest the wait stretches, counted from the end of the action, while the app has timers or requests pending.
+const Duration _lateChangeCap = Duration(seconds: 4);
+
+/// The agent's build count and, while something animates, tree fingerprint at this moment; null when the app has no agent or does not answer.
+Future<Map<String, Object?>?> _markBuilds(GlintSession session) async {
+  final agent = AppAgent.of(session.runtime);
+  if (agent == null) return null;
+  try {
+    return await agent.call({'op': 'mark'}, timeout: const Duration(seconds: 2));
+  } on Object {
+    return null;
+  }
+}
+
+/// [state], or a re-read when the app rebuilds within the late-change window and the screen did change.
 Future<PostActionState> _awaitLateChange(GlintSession session, PostActionState state,
-    Future<PostActionState> Function() readOnce, _PostActionProgress progress) async {
+    Future<PostActionState> Function() readOnce, _PostActionProgress progress, Map<String, Object?>? mark) async {
   final agent = AppAgent.of(session.runtime);
   if (agent == null) return state;
-  return CallProgress.during(
-      'waiting for a late change after the action', () => _readLateChange(session, state, readOnce, progress, agent),
+  return CallProgress.during('waiting for a late change after the action',
+      () => _readLateChange(session, state, readOnce, progress, agent, mark),
       key: 'late_change');
 }
 
-Future<PostActionState> _readLateChange(GlintSession session, PostActionState state,
-    Future<PostActionState> Function() readOnce, _PostActionProgress progress, AppAgent agent) async {
+Future<PostActionState> _readLateChange(
+    GlintSession session,
+    PostActionState state,
+    Future<PostActionState> Function() readOnce,
+    _PostActionProgress progress,
+    AppAgent agent,
+    Map<String, Object?>? firstMark) async {
   try {
-    final reply = await agent.call(
-      {'op': 'awaitBuild', 'ms': '${_lateChangeWindow.inMilliseconds}'},
-      timeout: _lateChangeWindow + const Duration(seconds: 2),
-    );
-    if (reply['built'] != true || progress.expired) return state;
-    await session.settleDetector.awaitSettle(
-      ceilingMs: session.config.postActionSettleMs,
-      quietFramesNeeded: session.config.settleQuietFrames,
-      checkLoadingAffordances: false,
-    );
-    if (progress.expired) return state;
-    final late = await readOnce();
-    return late.changeCategory == 'nothing' ? state : late.changedLate((reply['ms'] as num).toInt());
+    var mark = firstMark ?? await _markBuilds(session);
+    final firstAt = (mark?['at'] as num?)?.toInt();
+    final deadline = DateTime.now().add(await _lateChangeWindowFor(session, progress, agent));
+    while (mark != null) {
+      final left = deadline.difference(DateTime.now());
+      if (left < const Duration(milliseconds: 100)) break;
+      final reply = await agent.call(
+        {
+          'op': 'awaitBuild',
+          'ms': '${left.inMilliseconds}',
+          'since': '${mark['builds']}',
+          'sig': '${mark['sig']}',
+          'at': '${mark['at']}',
+        },
+        timeout: left + const Duration(seconds: 2),
+      );
+      if (progress.expired) return state;
+      final ms = (reply['ms'] as num).toInt() + ((mark['at'] as num).toInt() - (firstAt ?? 0));
+      if (reply['built'] != true) {
+        if (((reply['builds'] as num?) ?? 0) == 0) return state;
+        final repainted = await readOnce();
+        return repainted.changeCategory == 'nothing' ? state : repainted.changedLate(ms);
+      }
+      mark = await _markBuilds(session);
+      await session.settleDetector.awaitSettle(
+        ceilingMs: session.config.postActionSettleMs,
+        quietFramesNeeded: session.config.settleQuietFrames,
+        checkLoadingAffordances: false,
+      );
+      if (progress.expired) return state;
+      final late = await readOnce();
+      if (late.changeCategory != 'nothing') return late.changedLate(ms);
+    }
+    return state;
   } on Object {
     return state;
   }
+}
+
+/// The default window, stretched toward the [_lateChangeCap] deadline only while the app reports a timer or request born from the action that has not landed yet; what is left of the deadline is counted after that read.
+Future<Duration> _lateChangeWindowFor(GlintSession session, _PostActionProgress progress, AppAgent agent) async {
+  final runtime = session.runtime;
+  if (runtime is! VmServiceRuntime || _lateChangeCap - progress.elapsed <= _lateChangeWindow) return _lateChangeWindow;
+  final pending = await PendingWork.read(runtime, progress.elapsed, appClockOffsetMs: agent.clockOffsetMs);
+  final capLeft = _lateChangeCap - progress.elapsed;
+  final wanted = pending.waitFor(capLeft);
+  return wanted == null || wanted < _lateChangeWindow ? _lateChangeWindow : wanted;
 }
 
 /// A dismissed system dialog animates out before iOS resumes the app: poll the lifecycle briefly so the tap that closed it is reported as such.

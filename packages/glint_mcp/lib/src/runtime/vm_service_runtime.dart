@@ -450,6 +450,14 @@ class VmServiceRuntime implements FlutterRuntime {
       if (rethrowErrors) rethrow;
       return null;
     }
+    return _fullString(raw);
+  }
+
+  /// [evaluateString] in the library whose uri ends with [librarySuffix], for private state such as the timer heap of `dart:isolate`.
+  Future<String?> evaluateStringIn(String expression, {required String librarySuffix}) async =>
+      _fullString(await evaluateIn(expression, librarySuffix: librarySuffix));
+
+  Future<String?> _fullString(InstanceRef raw) async {
     final s = raw.valueAsString;
     if (s == null) return null;
     if (raw.valueAsStringIsTruncated != true) return s;
