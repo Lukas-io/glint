@@ -48,6 +48,9 @@ class ScrollTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => GlintTool.actionCeiling(session, args);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) => perform(session, request);
 
   /// [handle], optionally driving [target] and reporting `sideEffect` in the data when the route or a watched PageView page changed.

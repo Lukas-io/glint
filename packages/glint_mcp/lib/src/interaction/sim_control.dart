@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'backend.dart';
 import 'image_size.dart';
+import 'bounded_process.dart';
 
 /// Read-only snapshot of a booted iOS simulator's state.
 class SimStatus {
@@ -69,7 +70,8 @@ class SimControl {
   /// Bundle ids of the apps running on [udid] right now (backgrounded ones too), empty when the list cannot be read.
   Future<List<String>> runningApps(String udid) async {
     try {
-      final r = await Process.run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']);
+      final r = await runBounded('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'],
+          timeout: const Duration(seconds: 8), phase: 'simctl launchctl list');
       if (r.exitCode != 0) return const [];
       return {
         for (final m in RegExp(r'UIKitApplication:([^\[\s]+)\[').allMatches(r.stdout.toString())) m.group(1)!,
@@ -102,7 +104,9 @@ class SimControl {
 
   Future<({int? pid})?> _launchEntry(String udid, String bundleId) async {
     try {
-      final r = await Process.run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list']).timeout(probeLimit);
+      final r = await runBounded('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'],
+              timeout: const Duration(seconds: 3), phase: 'simctl launchctl list')
+          .timeout(probeLimit);
       if (r.exitCode != 0) return null;
       for (final line in r.stdout.toString().split('\n')) {
         if (!line.contains('UIKitApplication:$bundleId[')) continue;
@@ -117,14 +121,18 @@ class SimControl {
   /// SpringBoard's lock state: true locked, false unlocked, null when unreadable.
   Future<bool?> isLocked(String udid) async {
     try {
-      final res = await Process.run('xcrun', [
-        'simctl',
-        'spawn',
-        udid,
-        'notifyutil',
-        '-g',
-        'com.apple.springboard.lockstate',
-      ]);
+      final res = await runBounded(
+          'xcrun',
+          [
+            'simctl',
+            'spawn',
+            udid,
+            'notifyutil',
+            '-g',
+            'com.apple.springboard.lockstate',
+          ],
+          timeout: const Duration(seconds: 8),
+          phase: 'reading the lock state');
       if (res.exitCode != 0) return null;
       return switch ((res.stdout as String).trim().split(' ').last) {
         '0' => false,
@@ -141,7 +149,8 @@ class SimControl {
   /// The enrolment the Simulator's Features > Face ID menu toggles; null when unreadable.
   Future<bool?> biometricEnrolled(String udid) async {
     try {
-      final res = await Process.run('xcrun', ['simctl', 'spawn', udid, 'notifyutil', '-g', _enrollmentKey]);
+      final res = await runBounded('xcrun', ['simctl', 'spawn', udid, 'notifyutil', '-g', _enrollmentKey],
+          timeout: const Duration(seconds: 8), phase: 'reading Face ID enrollment');
       if (res.exitCode != 0) return null;
       return switch ((res.stdout as String).trim().split(' ').last) {
         '1' => true,
@@ -202,7 +211,8 @@ class SimControl {
   Future<(Map<String, Object?>, String)?> _deviceEntry(String udid) async {
     final ProcessResult res;
     try {
-      res = await Process.run('xcrun', ['simctl', 'list', 'devices', '-j']);
+      res = await runBounded('xcrun', ['simctl', 'list', 'devices', '-j'],
+          timeout: const Duration(seconds: 10), phase: 'simctl list devices');
     } on Object {
       return null;
     }
@@ -231,7 +241,8 @@ class SimControl {
 
   Future<String?> _ui(String udid, String key) async {
     try {
-      final res = await Process.run('xcrun', ['simctl', 'ui', udid, key]);
+      final res = await runBounded('xcrun', ['simctl', 'ui', udid, key],
+          timeout: const Duration(seconds: 10), phase: 'simctl ui');
       if (res.exitCode != 0) return null;
       final out = (res.stdout as String).trim();
       return out.isEmpty ? null : out;
@@ -244,7 +255,7 @@ class SimControl {
   Future<String?> _run(List<String> args) async {
     final ProcessResult res;
     try {
-      res = await Process.run('xcrun', ['simctl', ...args]);
+      res = await runBounded('xcrun', ['simctl', ...args], timeout: const Duration(seconds: 30), phase: 'simctl');
     } on Object catch (e) {
       return 'simctl ${args.first} failed: $e';
     }

@@ -1,4 +1,5 @@
 import '../../perception.dart';
+import '../observability/call_progress.dart';
 import 'action.dart';
 import 'backend.dart';
 import 'ios_toolchain.dart';
@@ -18,6 +19,7 @@ class Interactor {
   bool? refuseNotHittable;
 
   Future<ActionResult> run(Scene scene, Action action) async {
+    CallProgress.enter('delivering ${action.runtimeType}');
     try {
       final result = await _dispatch(scene, action);
       final input = backend.takeInput();

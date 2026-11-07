@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../interaction/bounded_process.dart';
+
 /// One frame the sampler kept: its file and its time from recording start.
 typedef SampledFrame = ({String path, int atMs});
 
@@ -81,7 +83,7 @@ String describeFrames(List<RecordedFrame> frames, int wallMs, {required bool dis
 
 /// Extracts frames from a recorded video with the bridge on macOS, ffmpeg elsewhere.
 class FrameExtractor {
-  FrameExtractor({this.bridgePath, this.ffmpegPath = 'ffmpeg', this.run = Process.run});
+  FrameExtractor({this.bridgePath, this.ffmpegPath = 'ffmpeg', this.run = boundedRun});
   final String? bridgePath;
   final String ffmpegPath;
   final Future<ProcessResult> Function(String, List<String>) run;
@@ -94,7 +96,13 @@ class FrameExtractor {
     required bool distinctOnly,
   }) async {
     if (bridgePath != null && File(bridgePath!).existsSync()) {
-      final r = await run(bridgePath!, ['frames', video, outDir, '$everyMs', '$maxFrames', distinctOnly ? '1' : '0']);
+      final r = await runCapped(
+        run,
+        bridgePath!,
+        ['frames', video, outDir, '$everyMs', '$maxFrames', distinctOnly ? '1' : '0'],
+        timeout: const Duration(seconds: 60),
+        phase: 'bridge frames',
+      );
       if (r.exitCode != 0) {
         return FrameExtraction(
             error: 'bridge frames exited ${r.exitCode}: '
@@ -115,11 +123,17 @@ class FrameExtractor {
     Directory(outDir).createSync(recursive: true);
     final ProcessResult r;
     try {
-      r = await run(ffmpegPath, [
-        '-loglevel', 'error', '-i', video, //
-        '-vf', 'fps=1000/$everyMs', '-vsync', '0',
-        '$outDir/frame-%04d.png',
-      ]);
+      r = await runCapped(
+        run,
+        ffmpegPath,
+        [
+          '-loglevel', 'error', '-i', video, //
+          '-vf', 'fps=1000/$everyMs', '-vsync', '0',
+          '$outDir/frame-%04d.png',
+        ],
+        timeout: const Duration(seconds: 60),
+        phase: 'ffmpeg extracting frames',
+      );
     } on Object catch (e) {
       return FrameExtraction(error: 'no bridge and ffmpeg unavailable ($e); video kept, no frames');
     }

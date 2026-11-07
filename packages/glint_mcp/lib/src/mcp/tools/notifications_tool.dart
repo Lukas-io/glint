@@ -49,6 +49,9 @@ class NotificationsTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => const Duration(minutes: 3);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'list';
@@ -396,8 +399,12 @@ class NotificationsTool extends GlintTool {
     ];
   }
 
-  Future<ProcessResult> _adb(AndroidDevice dev, List<String> args) =>
-      Process.run(dev.adbPath, ['-s', dev.serial, ...args]);
+  Future<ProcessResult> _adb(AndroidDevice dev, List<String> args) => runBounded(
+        dev.adbPath,
+        ['-s', dev.serial, ...args],
+        timeout: const Duration(seconds: 15),
+        phase: 'adb ${args.take(2).join(' ')}',
+      );
 
   Future<StructuredResponse> _send(String udid, String? bundleId, Map<String, Object?> args,
       {required bool inFront}) async {
@@ -421,7 +428,7 @@ class NotificationsTool extends GlintTool {
     if (payload['aps'] is! Map) return _bad('payload needs an aps object', 'see Apple\'s APNs payload keys');
     final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')
       ..writeAsStringSync(jsonEncode(payload));
-    final r = await Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
+    final r = await _simctlPush(udid, bundleId, file.path);
     if (r.exitCode == 0) (_sentPushes[udid] ??= []).add(payload);
     if (r.exitCode != 0) {
       return StructuredResponse.error(
@@ -662,11 +669,25 @@ class NotificationsTool extends GlintTool {
     return null;
   }
 
+  Future<ProcessResult> _simctlPush(String udid, String bundleId, String path) => runBounded(
+        'xcrun',
+        ['simctl', 'push', udid, bundleId, path],
+        timeout: const Duration(seconds: 15),
+        phase: 'simctl push',
+      );
+
   Future<ProcessResult> _push(String udid, String bundleId, Map<String, Object?> payload) {
     final file = File('${Directory.systemTemp.path}/glint-push-${DateTime.now().millisecondsSinceEpoch}.json')
       ..writeAsStringSync(jsonEncode(payload));
-    return Process.run('xcrun', ['simctl', 'push', udid, bundleId, file.path]);
+    return _simctlPush(udid, bundleId, file.path);
   }
+
+  Future<ProcessResult> _simctlScreenshot(String udid, String path) => runBounded(
+        'xcrun',
+        ['simctl', 'io', udid, 'screenshot', path],
+        timeout: const Duration(seconds: 10),
+        phase: 'simctl screenshot',
+      );
 
   /// The banner showing [line], polled for up to 4 s.
   Future<ShownNotification?> _awaitBanner(Future<Map<String, Object?>> Function() tree, String line) async {
@@ -692,7 +713,7 @@ class NotificationsTool extends GlintTool {
   ) async {
     Future<List<OcrLine>?> screenText(String tag) async {
       final shot = '${Directory.systemTemp.path}/glint-notification-$tag-${DateTime.now().millisecondsSinceEpoch}.png';
-      final cap = await Process.run('xcrun', ['simctl', 'io', dev.udid, 'screenshot', shot]);
+      final cap = await _simctlScreenshot(dev.udid, shot);
       return cap.exitCode == 0 ? await readText(shot) : null;
     }
 
@@ -714,7 +735,7 @@ class NotificationsTool extends GlintTool {
         parseSpringboardNotifications(await tree()).where((n) => n.line == banner.line).firstOrNull ?? banner;
     final menuTop = expanded.frame[1] + expanded.frame[3];
     final shot = '${Directory.systemTemp.path}/glint-notification-${DateTime.now().millisecondsSinceEpoch}.png';
-    final cap = await Process.run('xcrun', ['simctl', 'io', dev.udid, 'screenshot', shot]);
+    final cap = await _simctlScreenshot(dev.udid, shot);
     final size = cap.exitCode == 0 ? pngSize(shot) : null;
     if (size == null) {
       return StructuredResponse.error(

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../interaction/bounded_process.dart';
 import '../media/gallery.dart';
 import '../media/permissions.dart';
 
@@ -38,7 +39,12 @@ Future<String?> _iosAccess(String udid, String bundleId) async {
   if (!file.existsSync()) return 'notAsked';
   Future<String?> value(String field) async {
     final key = 'i${bundleId.replaceAll('.', r'\.')}:.$field';
-    final r = await Process.run('plutil', ['-extract', key, 'raw', '-o', '-', file.path]);
+    final r = await runBounded(
+      'plutil',
+      ['-extract', key, 'raw', '-o', '-', file.path],
+      timeout: const Duration(seconds: 5),
+      phase: 'plutil reading location permission',
+    );
     return r.exitCode == 0 ? '${r.stdout}'.trim() : null;
   }
 
@@ -159,8 +165,12 @@ Future<bool?> readBackgroundCapable(MediaDevice device, String appId) async {
   }
   final container = await device.simctl(['get_app_container', device.id, appId, 'app']);
   if (!container.ok) return null;
-  final r = await Process.run(
-      'plutil', ['-extract', 'UIBackgroundModes', 'json', '-o', '-', '${container.text.trim()}/Info.plist']);
+  final r = await runBounded(
+    'plutil',
+    ['-extract', 'UIBackgroundModes', 'json', '-o', '-', '${container.text.trim()}/Info.plist'],
+    timeout: const Duration(seconds: 5),
+    phase: 'plutil reading background modes',
+  );
   if (r.exitCode != 0) return false;
   return '${r.stdout}'.contains('"location"');
 }

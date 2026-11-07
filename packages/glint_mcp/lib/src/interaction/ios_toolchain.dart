@@ -4,6 +4,7 @@ import 'dart:io';
 import 'backend.dart';
 import 'bridge_download.dart';
 import 'bridge_locator.dart';
+import 'bounded_process.dart';
 
 /// Xcode majors the bridge's private CoreSimulator and IndigoHID calls are verified on.
 const Set<int> testedXcodeMajors = {26, 27};
@@ -29,12 +30,20 @@ class XcodeInfo {
 }
 
 /// Reads the selected Xcode's version from `xcode-select -p` and its Info.plist.
-Future<XcodeInfo> detectXcode({ProcessRunner run = Process.run}) async {
+Future<XcodeInfo> detectXcode({ProcessRunner run = boundedRun}) async {
   final ProcessResult selected;
   try {
-    selected = await run('xcode-select', ['-p']);
+    selected = await runCapped(
+      run,
+      'xcode-select',
+      ['-p'],
+      timeout: const Duration(seconds: 10),
+      phase: 'xcode-select',
+    );
   } on ProcessException catch (e) {
     return XcodeInfo(error: 'xcode-select not found: ${e.message}');
+  } on ProcessTimeoutError {
+    return XcodeInfo(error: 'xcode-select -p did not answer in 10s');
   }
   final dir = ((selected.stdout as String?) ?? '').trim();
   if (selected.exitCode != 0 || dir.isEmpty) {
@@ -44,7 +53,13 @@ Future<XcodeInfo> detectXcode({ProcessRunner run = Process.run}) async {
     return XcodeInfo(developerDir: dir, error: 'the selected developer dir is not an Xcode app ($dir)');
   }
   final plist = '${dir.substring(0, dir.lastIndexOf('/'))}/Info.plist';
-  final read = await run('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist]);
+  final read = await runCapped(
+    run,
+    'plutil',
+    ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist],
+    timeout: const Duration(seconds: 10),
+    phase: 'plutil reading the Xcode version',
+  );
   final version = ((read.stdout as String?) ?? '').trim();
   if (read.exitCode != 0 || version.isEmpty) {
     return XcodeInfo(developerDir: dir, error: 'could not read $plist');
@@ -53,9 +68,15 @@ Future<XcodeInfo> detectXcode({ProcessRunner run = Process.run}) async {
 }
 
 /// Asks the bridge for its protocol number; null with [error] when it cannot say.
-Future<({int? protocol, String? error})> bridgeHandshake(String path, {ProcessRunner run = Process.run}) async {
+Future<({int? protocol, String? error})> bridgeHandshake(String path, {ProcessRunner run = boundedRun}) async {
   try {
-    final res = await run(path, ['version']).timeout(const Duration(seconds: 5));
+    final res = await runCapped(
+      run,
+      path,
+      ['version'],
+      timeout: const Duration(seconds: 5),
+      phase: 'bridge version',
+    );
     final m = RegExp(r'glint-iossim (\d+)').firstMatch('${res.stdout}');
     if (res.exitCode == 0 && m != null) {
       return (protocol: int.parse(m.group(1)!), error: null);
@@ -64,6 +85,8 @@ Future<({int? protocol, String? error})> bridgeHandshake(String path, {ProcessRu
   } on ProcessException catch (e) {
     return (protocol: null, error: 'could not run the bridge: ${e.message}');
   } on TimeoutException {
+    return (protocol: null, error: 'the bridge did not answer `version` in 5s');
+  } on ProcessTimeoutError {
     return (protocol: null, error: 'the bridge did not answer `version` in 5s');
   }
 }
@@ -151,7 +174,7 @@ const _retryAfter = Duration(minutes: 10);
 /// Locates (downloading when missing) and handshakes the bridge, and reads Xcode.
 Future<IosToolchain> checkIosToolchain(String? explicitBridge,
     {Map<String, String>? env,
-    ProcessRunner run = Process.run,
+    ProcessRunner run = boundedRun,
     BytesFetcher? fetch,
     void Function(String phase)? onPhase}) async {
   final environment = env ?? Platform.environment;

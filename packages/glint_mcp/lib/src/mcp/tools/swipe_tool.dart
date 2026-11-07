@@ -63,6 +63,10 @@ class SwipeTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.actionCeiling(session, args, extraMs: argInt(args, 'durationMs') ?? 300);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final edgeName = args['edge'] as String?;

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'device.dart';
 import 'launcher.dart';
+import 'bounded_process.dart';
 
 /// What stopped an installed app from opening with a reachable VM service.
 enum InstalledLaunchFailure { notInstalled, alreadyRunning, toolFailed, noVmService }
@@ -210,7 +211,7 @@ class InstalledAppLauncher {
 
   Future<ProcessResult> _run(String exe, List<String> args) async {
     try {
-      return await Process.run(exe, args).timeout(const Duration(seconds: 20));
+      return await runBounded(exe, args, timeout: const Duration(seconds: 20));
     } on Object catch (e) {
       throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, 'could not run $exe', detail: '$e');
     }
@@ -235,7 +236,7 @@ class _IosLogStream {
   static Future<_IosLogStream> start(String udid) async {
     final Process process;
     try {
-      process = await Process.start('xcrun', [
+      process = await startManaged('xcrun', [
         'simctl',
         'spawn',
         udid,

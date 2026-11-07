@@ -39,6 +39,10 @@ class WaitForSettleTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.ceilingFor(argInt(args, 'ceilingMs') ?? argInt(args, 'timeoutMs') ?? 5000);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final ceilingMs = argInt(args, 'ceilingMs') ?? argInt(args, 'timeoutMs') ?? session.config.settleCeilingMs;

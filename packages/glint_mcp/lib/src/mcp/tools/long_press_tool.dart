@@ -61,6 +61,10 @@ class LongPressTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.actionCeiling(session, args, extraMs: argInt(args, 'durationMs') ?? 800);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = argInt(args, 'durationMs') ?? 800;

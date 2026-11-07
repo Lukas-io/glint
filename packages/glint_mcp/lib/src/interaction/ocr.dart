@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'shipped_files.dart';
+import 'bounded_process.dart';
 
 /// One line of text found on a screenshot, with its box in image pixels.
 typedef OcrLine = ({String text, double x, double y, double w, double h});
@@ -21,7 +22,7 @@ class OcrError implements Exception {
 /// Text on [image] read with macOS Vision, through a small helper compiled from [kOcrSource] on first use and cached by source hash.
 Future<List<OcrLine>> readText(String image) async {
   final helper = await _helper();
-  final r = await Process.run(helper, [image]);
+  final r = await runBounded(helper, [image], timeout: const Duration(seconds: 15), phase: 'OCR of the screenshot');
   if (r.exitCode != 0) throw OcrError('the OCR helper failed', '${r.stderr}'.trim());
   return [
     for (final m in (jsonDecode('${r.stdout}') as List).cast<Map<String, Object?>>())
@@ -47,7 +48,8 @@ Future<String> _helper() async {
   final out = '${Platform.environment['HOME'] ?? '.'}/.glint/bin/glint-ocr-${h.toRadixString(16)}';
   if (File(out).existsSync()) return out;
   Directory(File(out).parent.path).createSync(recursive: true);
-  final r = await Process.run('xcrun', ['swiftc', '-O', source, '-o', out]);
+  final r = await runBounded('xcrun', ['swiftc', '-O', source, '-o', out],
+      timeout: const Duration(minutes: 2), phase: 'compiling the OCR helper');
   if (r.exitCode != 0 || !File(out).existsSync()) {
     throw OcrError('could not build the OCR helper with the Xcode toolchain',
         '${r.stderr}'.trim().split('\n').take(3).join(' | '));

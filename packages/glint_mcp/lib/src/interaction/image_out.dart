@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'image_size.dart';
+import 'backend.dart' show ProcessRunner;
+import 'bounded_process.dart';
 
 /// An image prepared for the model: its file, pixel size and media type.
 typedef ModelImage = ({String path, int width, int height, String mimeType});
@@ -13,6 +15,9 @@ typedef ModelImage = ({String path, int width, int height, String mimeType});
   return (width: (width * scale).round(), height: (height * scale).round());
 }
 
+Future<ProcessResult> _runImageTool(ProcessRunner run, String tool, List<String> args) =>
+    runCapped(run, tool, args, timeout: const Duration(seconds: 20), phase: '$tool image conversion');
+
 /// Shrinks and re-encodes [src] for the model (`sips` on macOS, ImageMagick elsewhere); returns the original PNG when no resizer is available or none is needed.
 Future<ModelImage> prepareModelImage(
   String src, {
@@ -21,7 +26,7 @@ Future<ModelImage> prepareModelImage(
   required int maxSize,
   required String format,
   required int quality,
-  Future<ProcessResult> Function(String, List<String>) run = Process.run,
+  Future<ProcessResult> Function(String, List<String>) run = boundedRun,
 }) async {
   final original = (path: src, width: width, height: height, mimeType: 'image/png');
   final size = modelImageSize(width, height, maxSize);
@@ -31,7 +36,7 @@ Future<ModelImage> prepareModelImage(
   final longest = size.width > size.height ? size.width : size.height;
   try {
     final r = Platform.isMacOS
-        ? await run('sips', [
+        ? await _runImageTool(run, 'sips', [
             if (size.width != width) ...['-Z', '$longest'],
             '-s',
             'format',
@@ -41,7 +46,7 @@ Future<ModelImage> prepareModelImage(
             '--out',
             dst,
           ])
-        : await run('convert', [
+        : await _runImageTool(run, 'convert', [
             src,
             if (size.width != width) ...['-resize', '${longest}x$longest'],
             if (jpeg) ...['-quality', '$quality'],
@@ -58,7 +63,7 @@ Future<ModelImage> prepareModelImage(
 Future<bool?> screensDiffer(
   String a,
   String b, {
-  Future<ProcessResult> Function(String, List<String>) run = Process.run,
+  Future<ProcessResult> Function(String, List<String>) run = boundedRun,
 }) async {
   final ta = await _thumbnail(a, run);
   final tb = await _thumbnail(b, run);
@@ -76,8 +81,8 @@ Future<List<int>?> _thumbnail(String src, Future<ProcessResult> Function(String,
   final dst = '${src.replaceAll(RegExp(r'\.png$'), '')}-thumb.bmp';
   try {
     final r = Platform.isMacOS
-        ? await run('sips', ['-z', '64', '32', '-s', 'format', 'bmp', src, '--out', dst])
-        : await run('convert', [src, '-resize', '32x64!', 'BMP3:$dst']);
+        ? await _runImageTool(run, 'sips', ['-z', '64', '32', '-s', 'format', 'bmp', src, '--out', dst])
+        : await _runImageTool(run, 'convert', [src, '-resize', '32x64!', 'BMP3:$dst']);
     if (r.exitCode != 0) return null;
     return _bmpGrey(File(dst).readAsBytesSync());
   } on Object {
@@ -122,15 +127,15 @@ Future<String?> cropImage(
   required int y,
   required int w,
   required int h,
-  Future<ProcessResult> Function(String, List<String>) run = Process.run,
+  Future<ProcessResult> Function(String, List<String>) run = boundedRun,
 }) async {
   final dst = '${src.replaceAll(RegExp(r'\.png$'), '')}-crop-$x-$y-${w}x$h.png';
   final full = pngSize(src);
   final rows = Platform.isMacOS && full != null && y + h >= full.$2 && h > 1 ? h - 1 : h;
   try {
     final r = Platform.isMacOS
-        ? await run('sips', ['-c', '$rows', '$w', '--cropOffset', '$y', '$x', src, '--out', dst])
-        : await run('convert', [src, '-crop', '${w}x$h+$x+$y', '+repage', dst]);
+        ? await _runImageTool(run, 'sips', ['-c', '$rows', '$w', '--cropOffset', '$y', '$x', src, '--out', dst])
+        : await _runImageTool(run, 'convert', [src, '-crop', '${w}x$h+$x+$y', '+repage', dst]);
     return r.exitCode == 0 && File(dst).existsSync() ? dst : null;
   } on Object {
     return null;
@@ -143,11 +148,11 @@ Future<String?> composeSideBySide(
   String dst, {
   required int height,
   int gap = 16,
-  Future<ProcessResult> Function(String, List<String>) run = Process.run,
+  Future<ProcessResult> Function(String, List<String>) run = boundedRun,
 }) async {
   try {
     if (!Platform.isMacOS) {
-      final r = await run('convert', [
+      final r = await _runImageTool(run, 'convert', [
         ...srcs,
         '-resize',
         'x$height',
@@ -163,7 +168,8 @@ Future<String?> composeSideBySide(
     final parts = <({int width, int height, List<int> rgb})>[];
     for (final (i, src) in srcs.indexed) {
       final bmp = '$dst-part$i.bmp';
-      final r = await run('sips', ['--resampleHeight', '$height', '-s', 'format', 'bmp', src, '--out', bmp]);
+      final r =
+          await _runImageTool(run, 'sips', ['--resampleHeight', '$height', '-s', 'format', 'bmp', src, '--out', bmp]);
       if (r.exitCode != 0) return null;
       final part = _bmpRgb(File(bmp).readAsBytesSync());
       File(bmp).deleteSync();
@@ -183,7 +189,7 @@ Future<String?> composeSideBySide(
     }
     final bmp = '$dst.bmp';
     File(bmp).writeAsBytesSync(_bmpEncode(wide, tall, canvas));
-    final r = await run('sips', ['-s', 'format', 'png', bmp, '--out', dst]);
+    final r = await _runImageTool(run, 'sips', ['-s', 'format', 'png', bmp, '--out', dst]);
     File(bmp).deleteSync();
     return r.exitCode == 0 && File(dst).existsSync() ? dst : null;
   } on Object {

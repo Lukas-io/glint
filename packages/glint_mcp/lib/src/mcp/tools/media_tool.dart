@@ -134,6 +134,9 @@ class MediaTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => const Duration(minutes: 11);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = args['op'] as String?;
@@ -855,7 +858,12 @@ class MediaTool extends GlintTool {
     }
     final seconds = (argNum(args, 'durationSec') ?? 60).clamp(1, 600);
     const remote = '/data/local/tmp/glint-mic.pcm';
-    final push = await Process.run(dev.adbPath, ['-s', dev.serial, 'push', audio.pcm.path, remote]);
+    final push = await runBounded(
+      dev.adbPath,
+      ['-s', dev.serial, 'push', audio.pcm.path, remote],
+      timeout: const Duration(seconds: 30),
+      phase: 'adb push of the mic audio',
+    );
     if (push.exitCode != 0) {
       return StructuredResponse.error(
           summary: 'could not push the audio to ${dev.serial}',

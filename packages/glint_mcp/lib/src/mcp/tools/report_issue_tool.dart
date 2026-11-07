@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dart_mcp/server.dart';
 import 'package:glint_core/glint_core.dart'
     show capDeepLinkBody, composeIssueDeepLink, fileWithGh, issueLabels, issueRepo, kDeepLinkBodyMax, saveFullIssueBody;
@@ -14,7 +12,7 @@ import '../tool_args.dart';
 
 /// Files a bug / UX / feature note into glint's public GitHub repo via the local `gh` CLI, or a pre-filled deep link; everything is path- and secret-redacted first.
 class ReportIssueTool extends GlintTool {
-  const ReportIssueTool({this.run = Process.run});
+  const ReportIssueTool({this.run = boundedRun});
 
   @override
   bool changesDevice(Map<String, Object?> args) => false;
@@ -76,6 +74,9 @@ class ReportIssueTool extends GlintTool {
           required: ['type', 'title'],
         ),
       );
+
+  @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => const Duration(seconds: 90);
 
   @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {

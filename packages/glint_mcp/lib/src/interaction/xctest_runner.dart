@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'shipped_files.dart';
+import 'bounded_process.dart';
 
 /// Must equal `runnerProtocol` in native/ios_xctest_runner/UITests/Router.swift.
 const int expectedRunnerProtocol = 5;
@@ -134,18 +135,22 @@ class XcTestRunner {
     final stale = Directory('$cacheDir/build');
     if (existing != null && stale.existsSync()) stale.deleteSync(recursive: true);
     onPhase?.call('building the XCTest runner (first use on this Xcode, about a minute)');
-    final r = await Process.run('xcodebuild', [
-      'build-for-testing',
-      '-project',
-      projectPath,
-      '-scheme',
-      'GlintRunner',
-      '-destination',
-      'generic/platform=iOS Simulator',
-      '-derivedDataPath',
-      '$cacheDir/build',
-      'CODE_SIGNING_ALLOWED=NO',
-    ]);
+    final r = await runBounded(
+        'xcodebuild',
+        [
+          'build-for-testing',
+          '-project',
+          projectPath,
+          '-scheme',
+          'GlintRunner',
+          '-destination',
+          'generic/platform=iOS Simulator',
+          '-derivedDataPath',
+          '$cacheDir/build',
+          'CODE_SIGNING_ALLOWED=NO',
+        ],
+        timeout: const Duration(minutes: 5),
+        phase: 'xcodebuild build-for-testing for the runner');
     final built = findXctestrun('$cacheDir/build/Build/Products');
     if (r.exitCode == 0 && built != null) File('$cacheDir/build/.sources').writeAsStringSync(stamp);
     if (r.exitCode != 0 || built == null) {

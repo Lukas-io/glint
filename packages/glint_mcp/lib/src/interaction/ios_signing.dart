@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'backend.dart';
+import 'bounded_process.dart';
 
 /// The team glint signs a phone build with, and why it chose it.
 typedef SigningChoice = ({String team, String why, List<String> others});
@@ -39,7 +40,7 @@ void rememberTeam(String team) {
 }
 
 /// The team ids of the Apple Development certificates in this Mac's keychain.
-Future<List<String>> localTeams({ProcessRunner run = Process.run}) async {
+Future<List<String>> localTeams({ProcessRunner run = boundedRun}) async {
   final ids = await run('security', ['find-identity', '-v', '-p', 'codesigning']);
   final names = RegExp(r'"(Apple Development: [^"]+)"').allMatches('${ids.stdout}').map((m) => m.group(1)!).toSet();
   final teams = <String>{};
@@ -71,7 +72,7 @@ String? projectBundleId(String projectDir) {
 }
 
 /// Teams with an unexpired provisioning profile for [bundleId] that lists the phone [udid].
-Future<List<String>> teamsWithProfile(String udid, String bundleId, {ProcessRunner run = Process.run}) async {
+Future<List<String>> teamsWithProfile(String udid, String bundleId, {ProcessRunner run = boundedRun}) async {
   final dir = Directory('${Platform.environment['HOME']}/Library/Developer/Xcode/UserData/Provisioning Profiles');
   if (!dir.existsSync()) return const [];
   final teams = <String>{};
@@ -93,7 +94,7 @@ Future<List<String>> teamsWithProfile(String udid, String bundleId, {ProcessRunn
 
 /// Picks the team to sign [projectDir] for phone [udid]: [requested], the project's own team, the one remembered here, the only one, or the one already provisioned for this app; throws [SigningUndecided] otherwise.
 Future<SigningChoice> pickSigningTeam(String projectDir, String udid,
-    {String? requested, ProcessRunner run = Process.run}) async {
+    {String? requested, ProcessRunner run = boundedRun}) async {
   final local = await localTeams(run: run);
   final own = projectTeam(projectDir);
   List<String> others(String team) => [

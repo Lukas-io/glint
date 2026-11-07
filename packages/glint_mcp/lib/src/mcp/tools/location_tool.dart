@@ -104,6 +104,11 @@ class LocationTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => args['op'] == 'wait'
+      ? GlintTool.ceilingFor(((argNum(args, 'timeoutSec') ?? 120) * 1000).round())
+      : const Duration(seconds: 90);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = args['op'] as String?;

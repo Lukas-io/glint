@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'backend.dart';
+import 'bounded_process.dart';
 
 /// One native crash of the app, summarized: what killed it and the top of the crashing thread.
 class NativeCrash {
@@ -101,10 +102,16 @@ Future<List<NativeCrash>> androidCrashes({
   required String adbPath,
   required String package,
   required DateTime since,
-  ProcessRunner run = Process.run,
+  ProcessRunner run = boundedRun,
 }) async {
   try {
-    final r = await run(adbPath, ['-s', serial, 'logcat', '-b', 'crash', '-d', '-v', 'year']);
+    final r = await runCapped(
+      run,
+      adbPath,
+      ['-s', serial, 'logcat', '-b', 'crash', '-d', '-v', 'year'],
+      timeout: const Duration(seconds: 10),
+      phase: 'adb logcat crash buffer',
+    );
     if (r.exitCode != 0) return const [];
     return parseAndroidCrashes(r.stdout as String, package: package).where((c) => !c.time.isBefore(since)).toList()
       ..sort((a, b) => b.time.compareTo(a.time));
@@ -188,19 +195,24 @@ Future<List<NativeCrash>> phoneCrashes(
   final tmp = await Directory.systemTemp.createTemp('glint-crashes-');
   try {
     final list = '${tmp.path}/files.json';
-    await Process.run('xcrun', [
-      'devicectl',
-      'device',
-      'info',
-      'files',
-      '--device',
-      udid,
-      '--domain-type',
-      'systemCrashLogs',
-      '--json-output',
-      list,
-      '-q'
-    ]);
+    await runBounded(
+      'xcrun',
+      [
+        'devicectl',
+        'device',
+        'info',
+        'files',
+        '--device',
+        udid,
+        '--domain-type',
+        'systemCrashLogs',
+        '--json-output',
+        list,
+        '-q'
+      ],
+      timeout: const Duration(seconds: 30),
+      phase: 'devicectl listing crash logs',
+    );
     final files = ((jsonDecode(File(list).readAsStringSync()) as Map)['result']?['files'] as List?) ?? const [];
     final out = <NativeCrash>[];
     for (final f in files.cast<Map>()) {
@@ -208,21 +220,26 @@ Future<List<NativeCrash>> phoneCrashes(
       final modified = DateTime.tryParse('${(f['metadata'] as Map?)?['lastModDate']}');
       if (!name.endsWith('.ips') || modified == null || modified.isBefore(since)) continue;
       final local = '${tmp.path}/${name.replaceAll('/', '_')}';
-      await Process.run('xcrun', [
-        'devicectl',
-        'device',
-        'copy',
-        'from',
-        '--device',
-        udid,
-        '--domain-type',
-        'systemCrashLogs',
-        '--source',
-        name,
-        '--destination',
-        local,
-        '-q'
-      ]);
+      await runBounded(
+        'xcrun',
+        [
+          'devicectl',
+          'device',
+          'copy',
+          'from',
+          '--device',
+          udid,
+          '--domain-type',
+          'systemCrashLogs',
+          '--source',
+          name,
+          '--destination',
+          local,
+          '-q'
+        ],
+        timeout: const Duration(seconds: 30),
+        phase: 'devicectl copying a crash log',
+      );
       final file = File(local);
       if (!file.existsSync()) continue;
       final crash = parseIpsCrash(file.readAsStringSync(), bundleId: bundleId, path: 'iPhone:$name');

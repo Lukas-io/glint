@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../interaction/bounded_process.dart';
 import '../media/gallery.dart';
 import '../media/permissions.dart';
 
@@ -33,18 +35,38 @@ Future<String?> _iosAccess(String udid, String bundleId) async {
       '${Platform.environment['HOME']}/Library/Developer/CoreSimulator/Devices/$udid/data/Library/BulletinBoard/VersionedSectionInfo.plist');
   if (!file.existsSync()) return null;
   final key = 'sectionInfo.${bundleId.replaceAll('.', r'\.')}';
-  final entry = await Process.run('plutil', ['-extract', key, 'raw', '-o', '-', file.path]);
+  final ProcessResult entry;
+  try {
+    entry = await runBounded(
+      'plutil',
+      ['-extract', key, 'raw', '-o', '-', file.path],
+      timeout: const Duration(seconds: 10),
+      phase: 'plutil reading notification access',
+    );
+  } on ProcessTimeoutError {
+    return null;
+  }
   if (entry.exitCode != 0) return 'notAsked';
   final Process archive;
   try {
-    archive = await Process.start('plutil', ['-p', '-']);
+    archive = await startManaged('plutil', ['-p', '-']);
     archive.stdin.add(base64.decode('${entry.stdout}'.trim()));
     await archive.stdin.close();
   } on Object {
     return null;
   }
-  final printed = await utf8.decodeStream(archive.stdout);
-  await archive.exitCode;
+  final String printed;
+  try {
+    printed = await (() async {
+      final text = await utf8.decodeStream(archive.stdout);
+      await archive.exitCode;
+      return text;
+    })()
+        .timeout(const Duration(seconds: 10));
+  } on TimeoutException {
+    await killProcessTree(archive);
+    return null;
+  }
   return switch (RegExp(r'"authorizationStatus" => (\d+)').firstMatch(printed)?.group(1)) {
     '0' => 'notAsked',
     '1' => 'denied',

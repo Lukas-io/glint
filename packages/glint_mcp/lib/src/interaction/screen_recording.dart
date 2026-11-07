@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'backend.dart';
+import 'bounded_process.dart';
 
 /// A running display recording; [stop] finalises it and returns the local video path.
 abstract class ScreenRecording {
@@ -25,7 +26,7 @@ class SimctlRecording implements ScreenRecording {
     required String path,
     Duration startTimeout = const Duration(seconds: 5),
   }) async {
-    final proc = await Process.start('xcrun', [
+    final proc = await startManaged('xcrun', [
       'simctl',
       'io',
       udid,
@@ -116,8 +117,9 @@ class AdbRecording implements ScreenRecording {
     required String localPath,
     Duration startTimeout = const Duration(seconds: 5),
   }) async {
-    await Process.run(adbPath, removeArgs(serial));
-    final proc = await Process.start(adbPath, startArgs(serial));
+    await runBounded(adbPath, removeArgs(serial),
+        timeout: const Duration(seconds: 10), phase: 'adb clearing the old recording');
+    final proc = await startManaged(adbPath, startArgs(serial), label: 'adb screenrecord');
     final deadline = DateTime.now().add(startTimeout);
     while (DateTime.now().isBefore(deadline)) {
       if ((await proc.exitCode.timeout(const Duration(milliseconds: 1), onTimeout: () => -999)) != -999) {
@@ -128,7 +130,8 @@ class AdbRecording implements ScreenRecording {
           stderr: 'screenrecord exited before recording started',
         );
       }
-      final ls = await Process.run(adbPath, existsArgs(serial));
+      final ls = await runBounded(adbPath, existsArgs(serial),
+          timeout: const Duration(seconds: 5), phase: 'adb checking the recording started');
       if (ls.exitCode == 0 && !(ls.stdout as String).contains('No such file')) {
         return AdbRecording._(proc, adbPath, serial, localPath, DateTime.now());
       }
@@ -146,14 +149,17 @@ class AdbRecording implements ScreenRecording {
 
   @override
   Future<String> stop() async {
-    await Process.run(_adbPath, stopArgs(_serial));
+    await runBounded(_adbPath, stopArgs(_serial),
+        timeout: const Duration(seconds: 10), phase: 'adb stopping screenrecord');
     try {
       await _process.exitCode.timeout(const Duration(seconds: 10));
     } on TimeoutException {
       _process.kill(ProcessSignal.sigkill);
     }
-    final pull = await Process.run(_adbPath, pullArgs(_serial, path));
-    await Process.run(_adbPath, removeArgs(_serial));
+    final pull = await runBounded(_adbPath, pullArgs(_serial, path),
+        timeout: const Duration(seconds: 60), phase: 'adb pulling the recording');
+    await runBounded(_adbPath, removeArgs(_serial),
+        timeout: const Duration(seconds: 10), phase: 'adb removing the recording');
     if (pull.exitCode != 0 || !File(path).existsSync()) {
       throw BackendToolError(
         backend: 'adb($_serial)',

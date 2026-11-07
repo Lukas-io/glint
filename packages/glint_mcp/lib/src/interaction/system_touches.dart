@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'emulator_control.dart';
 import 'touch_path.dart';
+import 'bounded_process.dart';
 
 /// Real touches through an Android emulator's own virtual touchscreen, which Android's `show_touches` draws everywhere: in the app, over permission dialogs and the shade, and in screen recordings.
 class EmulatorTouches {
@@ -98,8 +99,8 @@ class ShowTouchesSetting {
   }
 
   Future<String> _settings(List<String> args) async {
-    final r =
-        await Process.run(adbPath, ['-s', serial, 'shell', 'settings', ...args]).timeout(const Duration(seconds: 10));
+    final r = await runBounded(adbPath, ['-s', serial, 'shell', 'settings', ...args],
+        timeout: const Duration(seconds: 10), phase: 'adb settings');
     if (r.exitCode != 0) throw ProcessException(adbPath, args, '${r.stderr}'.trim(), r.exitCode);
     return '${r.stdout}'.trim();
   }

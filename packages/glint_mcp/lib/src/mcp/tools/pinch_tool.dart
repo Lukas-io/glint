@@ -41,6 +41,10 @@ class PinchTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.actionCeiling(session, args, extraMs: argInt(args, 'durationMs') ?? 400);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final scale = (args['scale'] as num?)?.toDouble();

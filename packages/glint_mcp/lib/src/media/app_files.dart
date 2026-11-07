@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import '../interaction/bounded_process.dart';
 import 'gallery.dart';
 import 'host_tools.dart';
 import 'seed_ledger.dart';
@@ -154,10 +156,20 @@ class AppFiles {
         return out;
       }
       final process =
-          await Process.start(device.adbPath, ['-s', device.id, 'exec-out', 'run-as', appId, 'cat', relative]);
+          await startManaged(device.adbPath, ['-s', device.id, 'exec-out', 'run-as', appId, 'cat', relative]);
       final sink = out.openWrite();
-      await process.stdout.pipe(sink);
-      final code = await process.exitCode;
+      final int code;
+      try {
+        code = await (() async {
+          await process.stdout.pipe(sink);
+          return process.exitCode;
+        })()
+            .timeout(const Duration(seconds: 60));
+      } on TimeoutException {
+        await killProcessTree(process);
+        if (out.existsSync()) out.deleteSync();
+        throw GalleryError('reading $relative from the app sandbox timed out', 'adb exec-out did not finish in 60s');
+      }
       if (code != 0 || out.lengthSync() == 0) {
         if (out.existsSync()) out.deleteSync();
         throw GalleryError('could not read $relative from the app sandbox',

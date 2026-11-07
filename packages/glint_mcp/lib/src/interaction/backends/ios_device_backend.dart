@@ -10,6 +10,7 @@ import '../phone_status.dart';
 import '../result.dart';
 import '../screen_recording.dart';
 import '../touch_path.dart';
+import '../bounded_process.dart';
 
 /// A paired physical iPhone driven like a hand would: real touches, keys and buttons through Xcode's Device Hub service, screenshots through `devicectl`.
 class IosDeviceBackend extends InteractionBackend {
@@ -19,7 +20,7 @@ class IosDeviceBackend extends InteractionBackend {
     required this.pixelWidth,
     required this.pixelHeight,
     DeviceHid? hid,
-    this.run = Process.run,
+    this.run = boundedRun,
   }) : hid = hid ?? DeviceHid(udid: udid);
 
   final String udid;
@@ -232,8 +233,13 @@ class IosDeviceBackend extends InteractionBackend {
     }
     final ProcessResult r;
     try {
-      r = await run(
-          'xcrun', ['devicectl', 'device', 'capture', 'screenshot', '--device', udid, '--destination', path, '-q']);
+      r = await runCapped(
+        run,
+        'xcrun',
+        ['devicectl', 'device', 'capture', 'screenshot', '--device', udid, '--destination', path, '-q'],
+        timeout: const Duration(seconds: 15),
+        phase: 'devicectl screenshot',
+      );
     } on Object catch (e) {
       return ScreenshotResult(error: 'could not run devicectl: $e');
     }
@@ -264,8 +270,13 @@ class _DeviceHubRecording implements ScreenRecording {
     final frames = (r['frames'] as num?)?.toInt() ?? 0;
     final seconds = (r['seconds'] as num?)?.toDouble() ?? 0;
     final fps = seconds <= 0 || frames == 0 ? 30.0 : (frames / seconds).clamp(1, 120).toDouble();
-    final mux = await run(
-        'ffmpeg', ['-v', 'error', '-y', '-r', fps.toStringAsFixed(2), '-i', raw, '-c', 'copy', '-tag:v', 'hvc1', path]);
+    final mux = await runCapped(
+      run,
+      'ffmpeg',
+      ['-v', 'error', '-y', '-r', fps.toStringAsFixed(2), '-i', raw, '-c', 'copy', '-tag:v', 'hvc1', path],
+      timeout: const Duration(seconds: 60),
+      phase: 'ffmpeg wrapping the recording',
+    );
     if (mux.exitCode != 0) return raw;
     try {
       File(raw).deleteSync();

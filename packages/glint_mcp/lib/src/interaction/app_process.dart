@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'backend.dart' show ProcessRunner;
 import 'device.dart';
 import 'native_crashes.dart';
 import 'sim_control.dart';
+import 'bounded_process.dart';
 
 /// What is known about an app's process after its VM connection dropped.
 class AppProcessVerdict {
@@ -23,7 +23,7 @@ class AppProcessVerdict {
 
 /// Finds out whether an app's process still runs and why it ended, from the host's side of the device.
 class AppProcessProbe {
-  const AppProcessProbe({this.run = Process.run, this.sim = const SimControl()});
+  const AppProcessProbe({this.run = boundedRun, this.sim = const SimControl()});
 
   final ProcessRunner run;
   final SimControl sim;
@@ -111,19 +111,24 @@ class AppProcessProbe {
     final predicate = 'process != "log" AND eventMessage CONTAINS "$appId" AND '
         '(eventMessage CONTAINS[c] "terminat" OR eventMessage CONTAINS[c] "jetsam" OR eventMessage CONTAINS[c] "exited")';
     try {
-      final r = await run('xcrun', [
-        'simctl',
-        'spawn',
-        udid,
-        'log',
-        'show',
-        '--start',
-        _logTime(since.toLocal()),
-        '--style',
-        'compact',
-        '--predicate',
-        predicate,
-      ]).timeout(const Duration(seconds: 3));
+      final r = await runCapped(
+          run,
+          'xcrun',
+          [
+            'simctl',
+            'spawn',
+            udid,
+            'log',
+            'show',
+            '--start',
+            _logTime(since.toLocal()),
+            '--style',
+            'compact',
+            '--predicate',
+            predicate,
+          ],
+          timeout: const Duration(seconds: 3),
+          phase: 'simctl log show');
       if (r.exitCode != 0) return null;
       final own = pid == null ? null : RegExp('\\b$pid\\b');
       final lines = [
@@ -154,8 +159,13 @@ class AppProcessProbe {
   Future<AppProcessVerdict> _android(AndroidDevice device, String? appId) async {
     if (appId == null) return const AppProcessVerdict(running: null, reason: 'the app package is not known');
     try {
-      final r =
-          await run(device.adbPath, ['-s', device.serial, 'shell', 'pidof', appId]).timeout(const Duration(seconds: 4));
+      final r = await runCapped(
+        run,
+        device.adbPath,
+        ['-s', device.serial, 'shell', 'pidof', appId],
+        timeout: const Duration(seconds: 4),
+        phase: 'adb pidof',
+      );
       final out = r.stdout.toString().trim();
       if (r.exitCode == 0 && out.isNotEmpty) return const AppProcessVerdict(running: true);
       final err = r.stderr.toString().trim();

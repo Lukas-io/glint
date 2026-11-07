@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../observability/call_progress.dart';
 import 'device.dart';
 import 'phone_apps.dart';
+import 'bounded_process.dart';
 
 /// Raised when a launch can't complete; [logTail] holds the last `flutter run` lines.
 class LaunchError implements Exception {
@@ -30,7 +32,7 @@ String? flutterAppProblem(String dir) {
 
 /// Other `flutter run` processes debugging [deviceId], with their project folders; a phone runs one Xcode debug session at a time.
 Future<List<({int pid, String dir})>> flutterRunsOn(String deviceId, {Set<int> except = const {}}) async {
-  final ps = await Process.run('ps', ['-Ao', 'pid=,command=']);
+  final ps = await runBounded('ps', ['-Ao', 'pid=,command='], timeout: const Duration(seconds: 5), phase: 'ps');
   final runs = <({int pid, String dir})>[];
   for (final line in '${ps.stdout}'.split('\n')) {
     final m = RegExp(r'^\s*(\d+)\s+.*flutter_tools\.snapshot (?:run|attach) .*-d ' + RegExp.escape(deviceId))
@@ -38,7 +40,8 @@ Future<List<({int pid, String dir})>> flutterRunsOn(String deviceId, {Set<int> e
     if (m == null) continue;
     final pid = int.parse(m.group(1)!);
     if (except.contains(pid)) continue;
-    final cwd = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
+    final cwd = await runBounded('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn'],
+        timeout: const Duration(seconds: 5), phase: 'lsof');
     final dir =
         '${cwd.stdout}'.split('\n').where((l) => l.startsWith('n')).map((l) => l.substring(1)).firstOrNull ?? '?';
     runs.add((pid: pid, dir: dir));
@@ -57,7 +60,8 @@ class AppLauncher {
     if (platform != DevicePlatform.ios) return null; // android boot deferred
     final ProcessResult boot;
     try {
-      boot = await Process.run('xcrun', ['simctl', 'boot', deviceId]);
+      boot = await runBounded('xcrun', ['simctl', 'boot', deviceId],
+          timeout: const Duration(seconds: 30), phase: 'simctl boot');
     } on Object catch (e) {
       return 'could not run simctl boot: $e';
     }
@@ -66,9 +70,10 @@ class AppLauncher {
     if (boot.exitCode != 0 && !alreadyBooted) {
       return 'simctl boot failed: ${stderr.trim()}';
     }
-    await Process.run('open', ['-a', 'Simulator']);
+    await runBounded('open', ['-a', 'Simulator'], timeout: const Duration(seconds: 10), phase: 'opening Simulator');
     try {
-      await Process.run('xcrun', ['simctl', 'bootstatus', deviceId, '-b']);
+      await runBounded('xcrun', ['simctl', 'bootstatus', deviceId, '-b'],
+          timeout: const Duration(minutes: 3), phase: 'waiting for the simulator to finish booting');
     } on Object {
       // bootstatus just waits; proceed if unavailable.
     }
@@ -90,7 +95,7 @@ class AppLauncher {
     final verb = attachTo == null ? 'run' : 'attach';
     final Process proc;
     try {
-      proc = await Process.start(
+      proc = await startManaged(
         flutterPath,
         [
           verb,
@@ -98,6 +103,7 @@ class AppLauncher {
           deviceId,
           if (attachTo != null) ...['--debug-url', '$attachTo']
         ],
+        label: 'flutter $verb',
         workingDirectory: projectDir,
         environment: environment,
       );
@@ -113,37 +119,45 @@ class AppLauncher {
     proc.stdout.transform(utf8.decoder).listen(out.add);
     proc.stderr.transform(utf8.decoder).listen(out.add);
 
-    final start = DateTime.now();
-    final deadline = start.add(timeout);
-    var nextUpdate = start.add(progressEvery);
-    while (DateTime.now().isBefore(deadline)) {
-      await Future<void>.delayed(poll);
-      final text = out.text;
-      final uri = vmUriPattern.firstMatch(text)?.group(0);
-      if (uri != null) {
-        final parsed = Uri.tryParse(uri);
-        if (parsed != null) return (uri: parsed, process: proc);
-      }
-      if (exited || _looksFailed(text)) {
+    return CallProgress.during(
+      attachTo == null ? 'flutter run: building and launching the app' : 'flutter attach: connecting to the app',
+      () async {
+        final start = DateTime.now();
+        final deadline = start.add(timeout);
+        var nextUpdate = start.add(progressEvery);
+        while (DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(poll);
+          CallProgress.checkAlive();
+          final text = out.text;
+          final uri = vmUriPattern.firstMatch(text)?.group(0);
+          if (uri != null) {
+            final parsed = Uri.tryParse(uri);
+            if (parsed != null) return (uri: parsed, process: proc);
+          }
+          if (exited || _looksFailed(text)) {
+            proc.kill();
+            throw LaunchError(
+                'flutter $verb failed: ${failureLine(text) ?? 'see the log tail for what flutter reported'}',
+                logTail: _tail(text),
+                signing: _signingFailed(text));
+          }
+          if (whileWaiting != null && text.contains('Installing and launching')) await whileWaiting();
+          final now = DateTime.now();
+          if (onProgress != null && now.isAfter(nextUpdate)) {
+            onProgress(now.difference(start).inSeconds, _phase(text));
+            nextUpdate = now.add(progressEvery);
+          }
+        }
         proc.kill();
-        throw LaunchError('flutter $verb failed: ${failureLine(text) ?? 'see the log tail for what flutter reported'}',
-            logTail: _tail(text), signing: _signingFailed(text));
-      }
-      if (whileWaiting != null && text.contains('Installing and launching')) await whileWaiting();
-      final now = DateTime.now();
-      if (onProgress != null && now.isAfter(nextUpdate)) {
-        onProgress(now.difference(start).inSeconds, _phase(text));
-        nextUpdate = now.add(progressEvery);
-      }
-    }
-    proc.kill();
-    final phase = _phase(out.text);
-    final reported = failureLine(out.text);
-    throw LaunchError(
-      'timed out after ${timeout.inSeconds}s waiting for the VM service'
-      '${phase == null ? "" : " (last: $phase)"}'
-      '${reported == null ? "" : "; flutter reported: $reported"}',
-      logTail: _tail(out.text),
+        final phase = _phase(out.text);
+        final reported = failureLine(out.text);
+        throw LaunchError(
+          'timed out after ${timeout.inSeconds}s waiting for the VM service'
+          '${phase == null ? "" : " (last: $phase)"}'
+          '${reported == null ? "" : "; flutter reported: $reported"}',
+          logTail: _tail(out.text),
+        );
+      },
     );
   }
 
@@ -176,8 +190,10 @@ class AppLauncher {
     }
     try {
       final r = platform == DevicePlatform.ios
-          ? await Process.run('xcrun', ['simctl', 'terminate', deviceId, appId])
-          : await Process.run(adbPath, ['-s', deviceId, 'shell', 'am', 'force-stop', appId]);
+          ? await runBounded('xcrun', ['simctl', 'terminate', deviceId, appId],
+              timeout: const Duration(seconds: 15), phase: 'simctl terminate')
+          : await runBounded(adbPath, ['-s', deviceId, 'shell', 'am', 'force-stop', appId],
+              timeout: const Duration(seconds: 10), phase: 'adb force-stop');
       if (r.exitCode != 0) {
         final err = ((r.stderr as String?) ?? '').trim();
         return err.isEmpty ? 'exit ${r.exitCode}' : err;
@@ -192,8 +208,10 @@ class AppLauncher {
   Future<String?> shutdown(DevicePlatform platform, String deviceId, {String adbPath = 'adb'}) async {
     try {
       final r = platform == DevicePlatform.ios
-          ? await Process.run('xcrun', ['simctl', 'shutdown', deviceId])
-          : await Process.run(adbPath, ['-s', deviceId, 'emu', 'kill']);
+          ? await runBounded('xcrun', ['simctl', 'shutdown', deviceId],
+              timeout: const Duration(seconds: 60), phase: 'simctl shutdown')
+          : await runBounded(adbPath, ['-s', deviceId, 'emu', 'kill'],
+              timeout: const Duration(seconds: 10), phase: 'adb emu kill');
       if (r.exitCode != 0) {
         final err = ((r.stderr as String?) ?? '').trim();
         if (err.contains('current state: Shutdown')) return null; // already off

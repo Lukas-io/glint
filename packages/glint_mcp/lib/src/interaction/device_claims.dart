@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../observability/call_progress.dart';
+
 /// Another glint process driving a device.
 class DeviceClaim {
   const DeviceClaim({required this.pid, required this.since, this.app, DateTime? last}) : _last = last;
@@ -38,6 +40,7 @@ class DeviceClaims {
 
   /// Marks [deviceId] as driven by this process, unless another live session holds it (that claim stays theirs); best effort, since a claim only guards against accidents.
   void claim(String deviceId, {String? app}) {
+    CallProgress.checkAlive();
     if (heldByOther(deviceId) != null) return;
     try {
       Directory(dir).createSync(recursive: true);
