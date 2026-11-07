@@ -6,4 +6,5 @@ library;
 
 export 'src/runtime/app_agent.dart';
 export 'src/runtime/flutter_runtime.dart';
+export 'src/runtime/pending_work.dart';
 export 'src/runtime/vm_service_runtime.dart';

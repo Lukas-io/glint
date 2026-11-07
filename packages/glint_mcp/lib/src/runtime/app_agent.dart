@@ -4,7 +4,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent10';
+const String kAgentExtension = 'ext.flutter.glintAgent11';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -30,6 +30,9 @@ class AppAgent {
 
   /// The app's clock minus glint's, from the time the install reply carries; null when it carried none.
   int? _clockOffsetMs;
+
+  /// The app's clock minus glint's in milliseconds, or null before the first install reply.
+  int? get clockOffsetMs => _clockOffsetMs;
 
   /// Whether the app draws each touch; put back whenever the agent installs into a fresh isolate (attach, hot restart).
   bool showTouches = false;
@@ -99,6 +102,7 @@ const String _source = r'''
 (() {
   final b = WidgetsBinding.instance;
   var lastBuild = DateTime.now().millisecondsSinceEpoch;
+  var buildCount = 0;
   bool routeMoving() {
     var moving = false;
     void visit(Element e) {
@@ -114,6 +118,30 @@ const String _source = r'''
     }
     b.rootElement?.visitChildren(visit);
     return moving;
+  }
+  int signature() {
+    var h = 0;
+    void mix(Object? v) { h = (h * 31 + v.hashCode) & 0x3fffffff; }
+    void visit(Element e) {
+      mix(e.widget.runtimeType);
+      if (e is RenderObjectElement) {
+        final ro = e.renderObject;
+        if (ro is RenderParagraph) mix(ro.text.toPlainText());
+        try {
+          final c = SemanticsConfiguration();
+          ro.describeSemanticsConfiguration(c);
+          mix(c.label);
+          mix(c.value);
+          mix(c.isChecked);
+          mix(c.isToggled);
+          mix(c.isSelected);
+          mix(c.isEnabled);
+        } catch (_) {}
+      }
+      e.debugVisitOnstageChildren(visit);
+    }
+    b.rootElement?.debugVisitOnstageChildren(visit);
+    return h;
   }
   bool covered() { final l = b.lifecycleState; return l != null && l != AppLifecycleState.resumed; }
   EditableTextState? field() => FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
@@ -342,14 +370,50 @@ const String _source = r'''
       repaint();
       return {'on': touchesOn};
     }
+    if (op == 'mark') {
+      final animating = b.transientCallbackCount > 0;
+      final timer = Stopwatch()..start();
+      final sig = animating ? signature() : -1;
+      return {'builds': buildCount, 'sig': sig, 'at': DateTime.now().millisecondsSinceEpoch, 'walkMs': timer.elapsedMicroseconds / 1000};
+    }
     if (op == 'awaitBuild') {
       final windowMs = int.parse(p['ms'] ?? '1500');
+      final since = int.parse(p['since'] ?? '$buildCount');
+      final given = int.parse(p['sig'] ?? '-1');
+      final baseline = given == -1 ? signature() : given;
+      final base = int.parse(p['at'] ?? '${DateTime.now().millisecondsSinceEpoch}');
       final start = DateTime.now().millisecondsSinceEpoch;
+      var seen = since;
+      var dirty = buildCount > since;
+      var firstDirtyAt = dirty ? base : 0;
+      var lastWalkAt = 0;
+      var walkEvery = 250;
+      var walks = 0;
+      Map<String, Object?> changed(int at) => {'built': true, 'ms': at - base, 'builds': buildCount - since};
+      if (dirty && b.transientCallbackCount == 0) return changed(base);
+      bool walkChanged() {
+        final timer = Stopwatch()..start();
+        final differs = signature() != baseline;
+        if (timer.elapsedMicroseconds > 8000) walkEvery *= 2;
+        return differs;
+      }
       while (DateTime.now().millisecondsSinceEpoch - start < windowMs) {
-        if (lastBuild > start) return {'built': true, 'ms': lastBuild - start};
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (buildCount > seen) {
+          seen = buildCount;
+          if (!dirty) { dirty = true; firstDirtyAt = now; }
+          if (b.transientCallbackCount == 0) return changed(now);
+        }
+        if (dirty && walks < 16 && now - lastWalkAt >= walkEvery && now - firstDirtyAt >= 40) {
+          lastWalkAt = now;
+          walks++;
+          if (walkChanged()) return changed(firstDirtyAt);
+          dirty = false;
+        }
         await Future<void>.delayed(const Duration(milliseconds: 16));
       }
-      return {'built': false, 'ms': windowMs};
+      if (dirty && walkChanged()) return changed(firstDirtyAt);
+      return {'built': false, 'ms': lastBuild - base, 'builds': buildCount - since};
     }
     final miss = editable();
     if (miss != null) return {'status': miss};
@@ -384,13 +448,13 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent10', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent11', callback: handle);
   } catch (e) {
     return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
   final owner = b.buildOwner!;
   final scheduled = owner.onBuildScheduled;
-  owner.onBuildScheduled = () { lastBuild = DateTime.now().millisecondsSinceEpoch; scheduled?.call(); };
+  owner.onBuildScheduled = () { lastBuild = DateTime.now().millisecondsSinceEpoch; buildCount++; scheduled?.call(); };
   AppLifecycleListener(onStateChange: (s) => b.postEvent('glint.lifecycle', {'state': s.name}));
   var lastReportedError;
   String clipped(String s, int n) => s.length > n ? s.substring(0, n) : s;
