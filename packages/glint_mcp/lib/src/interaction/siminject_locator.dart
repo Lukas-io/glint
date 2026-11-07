@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../media/host_tools.dart';
+import 'bounded_process.dart';
 import '../version.dart';
 import 'bridge_locator.dart';
 import 'shipped_files.dart';
@@ -61,7 +62,8 @@ Future<String> buildSimInjectFromSource({PhaseReporter? phases, Map<String, Stri
   final dest = cachedSimInjectPath(env: env);
   Future<ProcessResult> compile() async {
     try {
-      final tool = await Process.run('xcrun', ['--sdk', 'iphonesimulator', '--find', 'clang']);
+      final tool = await runBounded('xcrun', ['--sdk', 'iphonesimulator', '--find', 'clang'],
+          timeout: const Duration(seconds: 30), phase: 'finding the iOS simulator compiler');
       if (tool.exitCode != 0) {
         throw SimInjectError('the Xcode iOS simulator toolchain is missing', '${tool.stderr}'.trim(), [
           'Install Xcode and run: xcode-select --install',
@@ -75,7 +77,8 @@ Future<String> buildSimInjectFromSource({PhaseReporter? phases, Map<String, Stri
       ]);
     }
     await Directory(File(dest).parent.path).create(recursive: true);
-    return Process.run('sh', ['$dir/build.sh', dest]);
+    return runBounded('sh', ['$dir/build.sh', dest],
+        timeout: const Duration(minutes: 5), phase: 'compiling the glint sim-injection library');
   }
 
   final phase = 'compiling the glint sim-injection library for glint $glintVersion';

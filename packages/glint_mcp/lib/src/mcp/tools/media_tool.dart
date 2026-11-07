@@ -13,6 +13,8 @@ import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorI
 import '../../media/emulator_audio.dart';
 import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
+import '../../media/sim_camera.dart';
+import '../../interaction/siminject.dart';
 import '../../media/mic_audio.dart';
 import '../../media/media_inspect.dart';
 import '../../media/permissions.dart';
@@ -71,14 +73,28 @@ class MediaTool extends GlintTool {
             'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
             'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
             'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS), '
-            'camera (Android emulator: what both cameras see now, an image, video or testcard; setup:true once). '
+            'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation with no app change; Android needs setup:true once). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
                 description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
             'stop': Schema.bool(
-                description: 'listen: end the recording and report it. mic: stop feeding and report what was fed.'),
+                description:
+                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed.'),
+            'lens': Schema.string(description: 'camera (iOS): front | back | both. Default both.'),
+            'fit': Schema.string(
+                description:
+                    'camera (iOS): contain (whole picture, black bars) | cover (fills the frame, crops). Default contain.'),
+            'zoom': Schema.num(
+                description:
+                    'camera (iOS): size of the picture inside the frame, 0.1 to 1 (0.75 leaves a margin, as a card held a little back). Default 1.'),
+            'force': Schema.bool(
+                description:
+                    'camera (iOS): take the camera over from another glint that holds it (changes or stops its feed).'),
+            'relaunch': Schema.bool(
+                description:
+                    'camera (iOS): restart an app that started before glint could load into it. Its state is lost.'),
             'setup': Schema.bool(
                 description:
                     'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
@@ -95,7 +111,7 @@ class MediaTool extends GlintTool {
                     'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
             'source': Schema.string(
                 description:
-                    'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file.'),
+                    'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). mic: tone (default), speech, or a host audio file.'),
             'name': Schema.string(
                 description:
                     'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
@@ -930,15 +946,14 @@ class MediaTool extends GlintTool {
   Future<StructuredResponse> _camera(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
     final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
     if (id == null) return _bad('no device: attach first, or pass device:"emulator-5554"');
+    if (MediaDevice.platformOf(id) == DevicePlatform.ios) return _simCamera(session, id, args, phases);
     if (!id.startsWith('emulator-')) {
       return StructuredResponse.error(
-        summary: 'camera feeds work on Android emulators only',
+        summary: 'camera feeds work on simulators and emulators only',
         errorKind: GlintErrorKind.unsupportedBackendAction,
-        detail: MediaDevice.platformOf(id) == DevicePlatform.ios
-            ? 'the iOS simulator has no camera at all'
-            : 'a physical phone films what is in front of it',
+        detail: 'a physical phone films what is in front of it',
         nextSteps: const [
-          'run the camera flow on an Android emulator',
+          'run the camera flow on an iOS simulator or an Android emulator',
           'or `media op:seed` a photo and pick it from the gallery instead'
         ],
       );
@@ -957,7 +972,7 @@ class MediaTool extends GlintTool {
     final restart =
         emulator.grpc == null ? emulator.controlSteps : const ['restart the emulator once (close it, start it again)'];
     final cam = EmulatorCamera(avdDir: avdDir, avdName: avdName);
-    final setup = argBool(args, 'setup');
+    final setup = argBool(args, 'stop') == true ? false : argBool(args, 'setup');
     if (setup == true) {
       final already = cam.configured('back') && cam.live('back');
       await phases.during('letting glint feed the $avdName cameras', cam.setup);
@@ -1041,6 +1056,121 @@ class MediaTool extends GlintTool {
       );
     } finally {
       await control.close();
+    }
+  }
+
+  Future<StructuredResponse> _simCamera(
+      GlintSession session, String id, Map<String, Object?> args, PhaseReporter phases) async {
+    if (!await const SimControl().isBooted(id)) {
+      return StructuredResponse.error(
+        summary: 'simulator $id is not booted',
+        errorKind: GlintErrorKind.deviceGone,
+        nextSteps: ['attach device:"$id" boots it', 'or xcrun simctl boot $id'],
+      );
+    }
+    final lens = (args['lens'] as String?) ?? 'both';
+    if (!simCameraLenses.contains(lens)) return _bad('lens must be front, back or both, got "$lens"');
+    final fit = (args['fit'] as String?) ?? 'contain';
+    if (fit != 'contain' && fit != 'cover') return _bad('fit must be contain or cover, got "$fit"');
+    final zoom = argNum(args, 'zoom') ?? 1;
+    if (zoom < 0.1 || zoom > 1) return _bad('zoom must be between 0.1 and 1, got $zoom');
+    final injector = SimInjector(id, progress: phases);
+    final camera = SimCamera(injector);
+    final holder = camera.otherHolder();
+    if (holder != null && argBool(args, 'force') == true) camera.takeOver();
+    if (holder != null && argBool(args, 'force') != true) {
+      return StructuredResponse.error(
+        summary: 'another glint holds the camera of $id',
+        errorKind: GlintErrorKind.deviceBusy,
+        detail:
+            'glint process ${holder.pid} has held it since ${holder.since.toIso8601String()}${holder.app == null || holder.app!.isEmpty ? '' : ' and shows ${holder.app}'}',
+        nextSteps: const [
+          'use another simulator for this feed',
+          'or repeat the call with force:true to take the camera over (the other agent loses its feed)',
+        ],
+      );
+    }
+    try {
+      if (argBool(args, 'stop') == true) {
+        final was = await camera.stop();
+        final holding = [for (final a in injector.loaded()) a.bundleId];
+        final clean = holding.isEmpty
+            ? 'no app holds the glint library'
+            : '${holding.join(', ')} still holds the dormant glint library (nothing runs); restart it to unload it';
+        return StructuredResponse(
+          summary: was
+              ? 'the simulator cameras are off again; apps lose them the next time they look for a camera; $clean'
+              : 'the simulator cameras were already off; $clean',
+          nextSteps: const ['`media op:camera source:"<file>"` turns them on again'],
+          data: {'device': id, 'cameras': const <String, Object?>{}, 'stillLoaded': holding},
+        );
+      }
+      final source = (args['source'] as String?) ?? 'testcard';
+      final LensFeed feed;
+      if (source == 'webcam') {
+        feed = (kind: 'webcam', path: camera.webcamFrames, label: 'the Mac camera', fit: fit, zoom: zoom);
+      } else if (source == 'testcard') {
+        final file = await generateTestCardVideo(
+            const TestCardSpec(width: 720, height: 1280, durationSec: 10, fps: 30), 'glint-camera-testcard',
+            phases: phases);
+        feed = (kind: 'video', path: file.path, label: 'the glint test card', fit: fit, zoom: zoom);
+      } else {
+        final file = File(source);
+        if (!file.existsSync()) {
+          return _bad('camera source must be testcard, webcam or an image or video path; "$source" does not exist');
+        }
+        feed = (
+          kind: isImagePath(file.path) ? 'image' : 'video',
+          path: file.absolute.path,
+          label: file.uri.pathSegments.last,
+          fit: fit,
+          zoom: zoom
+        );
+      }
+      final appId = _appId(session, MediaDevice(DevicePlatform.ios, id), args);
+      final previous = camera.current();
+      await camera.feed(lens, feed);
+      final InjectReport report;
+      try {
+        report = await injector.ensure(appId: appId, relaunch: argBool(args, 'relaunch') == true);
+        if (feed.kind == 'webcam') await camera.startWebcam(phases);
+      } on Object {
+        await camera.restore(previous);
+        rethrow;
+      }
+      final cameras = camera.current();
+      final shown = lens == 'both' ? 'both cameras show' : 'the $lens camera shows';
+      final relaunched = report.relaunched.isEmpty ? '' : ' ${report.relaunched.join(', ')} was restarted to load it.';
+      final waiting = report.waiting.isEmpty ? '' : '; start the app to see it';
+      final loaded = report.load == InjectLoad.already ? 'already loaded' : report.load.name;
+      return StructuredResponse(
+        summary: '$shown ${feed.label} (${feed.fit})$waiting. injected: camera, $loaded.$relaunched',
+        warnings: [
+          if (report.load == InjectLoad.lateLoad)
+            'the app was already running, so only a camera it opens from now on sees the feed; a list it read earlier stays empty until it asks again',
+        ],
+        nextSteps: [
+          if (report.waiting.isNotEmpty)
+            'launch ${report.waiting.join(', ')} (attach launch:"${report.waiting.first}"), then open its camera screen',
+          if (report.relaunched.isNotEmpty) 'attach again: the app restarted',
+          if (report.waiting.isEmpty && report.relaunched.isEmpty)
+            'open the camera screen: the preview shows it already',
+          'take the photo or record, then `media op:files since:"lastAction"`',
+          '`media op:camera lens:"front" source:"<other file>"` changes one lens; `stop:true` removes the feed',
+        ],
+        data: {
+          'device': id,
+          'cameras': {
+            for (final e in cameras.entries)
+              e.key: {'kind': e.value.kind, 'source': e.value.label, 'fit': e.value.fit, 'zoom': e.value.zoom},
+          },
+          'injected': report.toJson(modules: const ['camera']),
+        },
+      );
+    } on SimInjectFailure catch (e) {
+      return StructuredResponse.error(summary: e.message, errorKind: e.kind, detail: e.detail, nextSteps: e.nextSteps);
+    } on MissingHostTool catch (e) {
+      return _missingTool(e, 'camera');
     }
   }
 
