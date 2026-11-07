@@ -52,6 +52,10 @@ class RecordTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.ceilingFor(argInt(args, 'durationMs') ?? 400, slackSec: 120) + stepsCeiling(session, args['steps']);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final durationMs = argInt(args, 'durationMs') ?? 400;
@@ -268,7 +272,12 @@ class RecordTool extends GlintTool {
         ],
       }));
     final out = '${dir.path}/video-touches.mp4';
-    final r = await Process.run(bridge, ['overlay-touches', video, json.path, out]).timeout(const Duration(minutes: 2));
+    final r = await runBounded(
+      bridge,
+      ['overlay-touches', video, json.path, out],
+      timeout: const Duration(minutes: 2),
+      phase: 'drawing touches onto the video',
+    );
     if (r.exitCode != 0) {
       final why = '${r.stderr}'.trim();
       return (

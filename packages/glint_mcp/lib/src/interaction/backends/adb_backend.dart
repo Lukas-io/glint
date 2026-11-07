@@ -8,6 +8,7 @@ import '../image_size.dart';
 import '../key_codes.dart';
 import '../screen_recording.dart';
 import '../system_touches.dart';
+import '../bounded_process.dart';
 
 /// Android KEYCODE_* values for glint's [HardwareButton]. `unlock` is null —
 /// no stock biometric-match equivalent and per-OEM lock-screen behaviour; surfaced as [UnsupportedBackendAction] until v1.
@@ -28,7 +29,7 @@ class AdbBackend implements InteractionBackend {
   AdbBackend({
     required this.deviceSerial,
     this.adbPath = 'adb',
-    this.run = Process.run,
+    this.run = boundedRun,
     this.server,
   });
 
@@ -101,7 +102,7 @@ class AdbBackend implements InteractionBackend {
       '$physicalX',
       '$physicalY',
       '$durationMs',
-    ]);
+    ], timeout: Duration(seconds: 10, milliseconds: durationMs));
   }
 
   @override
@@ -136,7 +137,7 @@ class AdbBackend implements InteractionBackend {
       '$physicalX2',
       '$physicalY2',
       '${durationMs + holdMs}',
-    ]);
+    ], timeout: Duration(seconds: 10, milliseconds: durationMs + holdMs));
   }
 
   @override
@@ -171,7 +172,10 @@ class AdbBackend implements InteractionBackend {
 
   Future<void> _inputText(String text) async {
     for (final chunk in splitLiteralPercentS(text)) {
-      await _shell(['input', 'text', quoteForDeviceShell(chunk.replaceAll(' ', '%s'))]);
+      await _shell(
+        ['input', 'text', quoteForDeviceShell(chunk.replaceAll(' ', '%s'))],
+        timeout: Duration(seconds: 5, milliseconds: 50 * chunk.length),
+      );
     }
   }
 
@@ -251,9 +255,11 @@ class AdbBackend implements InteractionBackend {
     // `exec-out screencap -p` streams raw PNG bytes to stdout.
     final ProcessResult res;
     try {
-      res = await Process.run(
+      res = await runBounded(
         adbPath,
         ['-s', deviceSerial, 'exec-out', 'screencap', '-p'],
+        timeout: const Duration(seconds: 15),
+        phase: 'adb screencap',
         stdoutEncoding: null, // keep stdout as raw bytes
       );
     } on Object catch (e) {
@@ -275,10 +281,13 @@ class AdbBackend implements InteractionBackend {
     return ScreenshotResult(path: path, width: size?.$1, height: size?.$2);
   }
 
-  Future<void> _shell(List<String> shellArgs) async {
-    final result = await run(
+  Future<void> _shell(List<String> shellArgs, {Duration timeout = const Duration(seconds: 10)}) async {
+    final result = await runCapped(
+      run,
       adbPath,
       ['-s', deviceSerial, 'shell', ...shellArgs],
+      timeout: timeout,
+      phase: 'adb shell ${shellArgs.take(2).join(' ')}',
     );
     if (result.exitCode != 0) {
       throw BackendToolError(

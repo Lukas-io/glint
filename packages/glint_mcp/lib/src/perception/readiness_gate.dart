@@ -1,3 +1,4 @@
+import '../observability/call_progress.dart';
 import '../runtime/flutter_runtime.dart' show RuntimeUnresponsiveError;
 import 'geometry.dart';
 import 'id_suggest.dart';
@@ -35,7 +36,9 @@ class ReadinessGate {
     var suggestions = const <String>[];
     RuntimeUnresponsiveError? busy;
 
+    CallProgress.enter('waiting for the target to be ready and hittable');
     while (true) {
+      CallProgress.checkAlive();
       attempts++;
       busy = null;
       final Scene scene;

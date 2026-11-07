@@ -4,6 +4,7 @@ import 'dart:io';
 import 'adb_versions.dart';
 import 'emulator_control.dart';
 import 'result.dart';
+import 'bounded_process.dart';
 
 /// Booting an AVD failed; [detail] holds the emulator's last log lines when it left any, [errorKind] and [nextSteps] replace the generic ones when set.
 class AvdBootError implements Exception {
@@ -45,7 +46,8 @@ class Avds {
     final exe = emulatorPath;
     if (exe == null) return const [];
     try {
-      final r = await Process.run(exe, ['-list-avds']).timeout(const Duration(seconds: 20));
+      final r =
+          await runBounded(exe, ['-list-avds'], timeout: const Duration(seconds: 20), phase: 'listing emulator AVDs');
       return [
         for (final line in '${r.stdout}'.split('\n'))
           if (line.trim().isNotEmpty && !line.contains('|')) line.trim(),
@@ -57,7 +59,7 @@ class Avds {
 
   Future<List<String>> runningSerials() async {
     try {
-      final r = await Process.run(adbPath, ['devices']).timeout(const Duration(seconds: 10));
+      final r = await runBounded(adbPath, ['devices'], timeout: const Duration(seconds: 10), phase: 'adb devices');
       return [
         for (final line in '${r.stdout}'.split('\n'))
           if (RegExp(r'^emulator-\d+\s').hasMatch(line)) line.split(RegExp(r'\s+')).first,
@@ -273,7 +275,7 @@ class Avds {
   /// The adb state of [serial] (`device`, `offline`, `unauthorized`), or null when adb does not list it.
   Future<String?> _adbState(String serial) async {
     try {
-      final r = await Process.run(adbPath, ['devices']).timeout(const Duration(seconds: 10));
+      final r = await runBounded(adbPath, ['devices'], timeout: const Duration(seconds: 10), phase: 'adb devices');
       for (final line in '${r.stdout}'.split('\n')) {
         final parts = line.trim().split(RegExp(r'\s+'));
         if (parts.length >= 2 && parts.first == serial) return parts[1];
@@ -286,8 +288,8 @@ class Avds {
 
   Future<_Boot> _booted(String serial) async {
     try {
-      final r = await Process.run(adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'])
-          .timeout(const Duration(seconds: 10));
+      final r = await runBounded(adbPath, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'],
+          timeout: const Duration(seconds: 10), phase: 'adb getprop boot_completed');
       if ('${r.stdout}'.trim() == '1') return _Boot.ready;
       return '${r.stderr}'.contains('offline') ? _Boot.offline : _Boot.notYet;
     } on Object {

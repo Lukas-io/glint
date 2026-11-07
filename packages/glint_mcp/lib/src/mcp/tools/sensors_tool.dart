@@ -48,6 +48,18 @@ class SensorsTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) {
+    final raw = args['steps'];
+    var waitMs = 0;
+    if (raw is List) {
+      for (final step in raw) {
+        if (step is Map && step['waitMs'] is num) waitMs += (step['waitMs'] as num).toInt();
+      }
+    }
+    return GlintTool.ceilingFor(waitMs, slackSec: 90);
+  }
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'read';
@@ -255,7 +267,12 @@ class _AndroidMotion extends _Motion {
 
   bool get _emulator => dev.serial.startsWith('emulator-');
 
-  Future<ProcessResult> _adb(List<String> args) => Process.run(dev.adbPath, ['-s', dev.serial, ...args]);
+  Future<ProcessResult> _adb(List<String> args) => runBounded(
+        dev.adbPath,
+        ['-s', dev.serial, ...args],
+        timeout: const Duration(seconds: 10),
+        phase: 'adb ${args.take(2).join(' ')}',
+      );
 
   @override
   Future<_MotionState> read(GlintSession session) async {

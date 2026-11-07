@@ -82,12 +82,24 @@ class GlintSession {
   late final WatchRegistry watches = WatchRegistry(this);
 
   /// Forwards [ProgressNotification]s to the client; wired by the server.
-  void Function(ProgressNotification)? progressNotifier;
+  void Function(ProgressNotification)? rawProgressNotifier;
+
+  /// The progress sender for the running call: it keeps progress values growing and counts as a heartbeat.
+  void Function(ProgressNotification)? get progressNotifier {
+    final raw = rawProgressNotifier;
+    final call = CallProgress.current;
+    if (raw == null || call == null) return raw;
+    return call.forward;
+  }
+
+  set progressNotifier(void Function(ProgressNotification)? notifier) => rawProgressNotifier = notifier;
 
   /// `flutter run` processes glint started, keyed by device id, for `kill_app`.
   final Map<String, Process> _launchedApps = {};
 
   void registerLaunchedApp(String deviceId, Process process) {
+    CallProgress.checkAlive();
+    CallProgress.release(process);
     _launchedApps[deviceId] = process;
     _ownedDevices.add(deviceId);
   }
@@ -228,6 +240,7 @@ class GlintSession {
       _active = existing;
       return existing;
     }
+    CallProgress.checkAlive();
     if (existing != null) await _drop(existing);
     final key = _vmKey(vmUri);
     final retained = _retainedLogs.where((r) => r.key == key).firstOrNull;
@@ -239,6 +252,10 @@ class GlintSession {
       showTouches: !observe && config.showTouches,
       appLogs: retained?.buffer,
     );
+    if (CallProgress.current?.abandoned ?? false) {
+      await app.dispose();
+      CallProgress.checkAlive();
+    }
     _retainedLogs.remove(retained);
     _noteLostLogs(device.id, vmUri);
     app.captureSettleMs = config.captureSettleMs;
@@ -254,6 +271,7 @@ class GlintSession {
   /// resolver, interactor) is not. Drive via screenshots + coordinate taps.
   Future<AppSession> attachDevice({required DeviceTarget device}) async {
     final existing = _pool[device.id];
+    CallProgress.checkAlive();
     if (existing != null) await _drop(existing);
     final app = AppSession.bindDevice(device: device);
     _pool[device.id] = app;
@@ -327,6 +345,7 @@ class GlintSession {
     Future<T> Function(SemanticScene scene) use, {
     SceneDetail detail = SceneDetail.full,
   }) async {
+    CallProgress.enter('reading the scene');
     final scene = await reader.readSummary();
     try {
       return await use(await semanticize(scene, detail: detail));

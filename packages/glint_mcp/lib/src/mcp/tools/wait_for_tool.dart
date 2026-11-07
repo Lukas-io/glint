@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart' show GlintErrorKind;
+import '../../../observability.dart' show CallProgress;
 import '../../../perception.dart' show appBusyCause;
 import '../../../semantic.dart' show Inert, SemanticScene;
 import '../envelope.dart';
@@ -40,6 +41,10 @@ class WaitForTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.ceilingFor(argInt(args, 'timeoutMs') ?? _defaultTimeoutMs);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final text = args['text'] as String?;
@@ -70,6 +75,7 @@ class WaitForTool extends GlintTool {
     var lastProgress = start;
     var visible = const <String>[];
     while (true) {
+      CallProgress.checkAlive();
       _Seen? seen;
       try {
         seen = await session.withScene((scene) async {

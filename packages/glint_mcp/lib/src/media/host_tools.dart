@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../interaction/bounded_process.dart';
+
 /// A host binary the request needs is not installed.
 class MissingHostTool implements Exception {
   MissingHostTool(this.binary, {this.reason});
@@ -47,7 +49,7 @@ String requireHostBinary(String name) => findHostBinary(name) ?? (throw MissingH
 
 /// Runs [exe] with [args] (no shell); kills it and reports exit 124 after [timeout].
 Future<HostRun> runHost(String exe, List<String> args, {Duration timeout = const Duration(minutes: 5)}) async {
-  final process = await Process.start(exe, args);
+  final process = await startManaged(exe, args);
   final out = <int>[];
   final err = StringBuffer();
   final outDone = process.stdout.forEach(out.addAll);
@@ -56,11 +58,11 @@ Future<HostRun> runHost(String exe, List<String> args, {Duration timeout = const
   var timedOut = false;
   final timer = Timer(timeout, () {
     timedOut = true;
-    process.kill();
+    killProcessTree(process).ignore();
   });
   final code = await process.exitCode;
   timer.cancel();
-  await Future.wait([outDone, errDone]);
+  await Future.wait([outDone, errDone]).timeout(const Duration(seconds: 3), onTimeout: () => const []);
   return HostRun(timedOut ? 124 : code, out, timedOut ? '$err\ntimed out after ${timeout.inSeconds}s' : '$err');
 }
 

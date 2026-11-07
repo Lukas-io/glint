@@ -37,6 +37,9 @@ class ShutdownSimTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => const Duration(minutes: 2);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final all = argBool(args, 'all') ?? false;

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'native_scene_reader.dart';
 import 'scene_node.dart';
 import 'scene_reader.dart';
+import '../interaction/bounded_process.dart';
 
 /// Android native surfaces: the window manager says whose window has focus, and `uiautomator dump` reads it.
 class AndroidNativeReader extends NativeReader {
@@ -10,7 +11,7 @@ class AndroidNativeReader extends NativeReader {
     required this.serial,
     required this.adbPath,
     required this.devicePixelRatio,
-    this.run = Process.run,
+    this.run = boundedRun,
     this.serverCall,
   });
 
@@ -36,7 +37,13 @@ class AndroidNativeReader extends NativeReader {
     final viaServer = await _serverFocus();
     if (viaServer != null) return viaServer;
     try {
-      final r = await run(adbPath, ['-s', serial, 'shell', 'dumpsys', 'window', 'displays']);
+      final r = await runCapped(
+        run,
+        adbPath,
+        ['-s', serial, 'shell', 'dumpsys', 'window', 'displays'],
+        timeout: const Duration(seconds: 10),
+        phase: 'adb dumpsys window',
+      );
       if (r.exitCode != 0) return null;
       return parseFocusedComponent(r.stdout as String);
     } on Object {
@@ -76,7 +83,13 @@ class AndroidNativeReader extends NativeReader {
     if (r != null && r['ok'] == true) return sceneFromServerWindows(r, devicePixelRatio());
     try {
       const path = '/data/local/tmp/glint_ui.xml';
-      final dump = await run(adbPath, ['-s', serial, 'shell', 'uiautomator', 'dump', path]);
+      final dump = await runCapped(
+        run,
+        adbPath,
+        ['-s', serial, 'shell', 'uiautomator', 'dump', path],
+        timeout: const Duration(seconds: 15),
+        phase: 'uiautomator dump',
+      );
       if (dump.exitCode != 0) {
         final others = await otherDeviceServers(serial, adbPath, run: run);
         lastReadProblem = dump.exitCode == 137
@@ -85,7 +98,13 @@ class AndroidNativeReader extends NativeReader {
             : 'uiautomator dump failed (exit ${dump.exitCode})';
         return _sentinel();
       }
-      final xml = await run(adbPath, ['-s', serial, 'exec-out', 'cat', path]);
+      final xml = await runCapped(
+        run,
+        adbPath,
+        ['-s', serial, 'exec-out', 'cat', path],
+        timeout: const Duration(seconds: 15),
+        phase: 'reading the uiautomator dump',
+      );
       return sceneFromUiDump(xml.stdout as String, devicePixelRatio());
     } on Object catch (e) {
       lastReadProblem = 'uiautomator dump failed: $e';
@@ -107,9 +126,15 @@ class AndroidNativeReader extends NativeReader {
 
 /// Automation servers other tools left running on the device (`app_process` mains such as mobile-mcp's DeviceServer or scrcpy); they hold the accessibility and screen-capture connections glint needs.
 Future<List<String>> otherDeviceServers(String serial, String adbPath,
-    {Future<ProcessResult> Function(String, List<String>) run = Process.run}) async {
+    {Future<ProcessResult> Function(String, List<String>) run = boundedRun}) async {
   try {
-    final r = await run(adbPath, ['-s', serial, 'shell', 'ps', '-A', '-o', 'ARGS']);
+    final r = await runCapped(
+      run,
+      adbPath,
+      ['-s', serial, 'shell', 'ps', '-A', '-o', 'ARGS'],
+      timeout: const Duration(seconds: 10),
+      phase: 'adb ps',
+    );
     return parseDeviceServers(r.stdout as String);
   } on Object {
     return const [];

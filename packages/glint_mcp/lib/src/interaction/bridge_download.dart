@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import '../version.dart';
+import 'bounded_process.dart';
 
 /// Env var that stops glint fetching the prebuilt bridge.
 const String noBridgeDownloadEnv = 'GLINT_NO_BRIDGE_DOWNLOAD';
@@ -52,7 +53,12 @@ Future<void> downloadReleaseAsset(String asset, String dest, {bool executable = 
   await partial.parent.create(recursive: true);
   await partial.writeAsBytes(bytes, flush: true);
   if (executable) {
-    final chmod = await Process.run('chmod', ['755', partial.path]);
+    final chmod = await runBounded(
+      'chmod',
+      ['755', partial.path],
+      timeout: const Duration(seconds: 5),
+      phase: 'chmod of the downloaded bridge',
+    );
     if (chmod.exitCode != 0) {
       await partial.delete();
       throw BridgeDownloadError('chmod failed: ${chmod.stderr}');

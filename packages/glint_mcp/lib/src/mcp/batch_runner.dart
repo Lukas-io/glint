@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
+import '../../observability.dart' show CallAbandoned, CallProgress;
 import '../../perception.dart' show InspectorReadError;
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
@@ -37,6 +38,23 @@ const Map<String, GlintTool> kBatchStepTools = {
   'wait_for_settle': WaitForSettleTool(),
   'wait_for': WaitForTool(),
 };
+
+/// The time the steps in a raw `steps` list may take: each step tool's own ceiling, summed.
+Duration stepsCeiling(GlintSession session, Object? raw) {
+  if (raw is! List) return Duration.zero;
+  var total = Duration.zero;
+  for (final step in raw) {
+    if (step is! Map) continue;
+    final stepArgs = (step['args'] as Map?)?.cast<String, Object?>() ?? const <String, Object?>{};
+    final tool = kBatchStepTools[step['tool']];
+    try {
+      total += tool?.callCeiling(session, stepArgs) ?? kDefaultCallCeiling;
+    } on Object {
+      total += kDefaultCallCeiling;
+    }
+  }
+  return total;
+}
 
 /// Whether any step in a raw `steps` list acts on the app, by each step tool's own [GlintTool.changesDevice]; an unknown tool counts as changing.
 bool stepsChangeDevice(Object? raw) {
@@ -213,6 +231,7 @@ Future<BatchRun> runBatchSteps(
   String? reason;
   int? stoppedAt;
   for (var i = 0; i < steps.length; i++) {
+    CallProgress.enter('batch step ${i + 1} of ${steps.length}: ${steps[i].tool}');
     final step = steps[i];
     onStepStart?.call(i + 1, step.tool);
     final tool = kBatchStepTools[step.tool]!;
@@ -254,6 +273,10 @@ Future<BatchRun> runBatchSteps(
       }
     } on SessionNotAttachedError {
       rethrow;
+    } on CallAbandoned {
+      rethrow;
+    } on ProcessTimeoutError catch (e) {
+      r = StructuredResponse.backendError('${step.tool}: ${e.phase} timed out', e);
     } on InspectorReadError catch (e) {
       r = await tool.noFrameResponse(session, e);
     } on Object catch (e) {

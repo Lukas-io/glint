@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'bounded_process.dart';
+
 /// One adb binary and the version it reports.
 class AdbBinary {
   const AdbBinary(this.path, this.version);
@@ -43,7 +45,7 @@ String? mismatchedAdbsDetail(List<AdbBinary> adbs) => adbs.isEmpty
 
 Future<List<String>> _onPath() async {
   try {
-    final r = await Process.run('which', ['-a', 'adb']).timeout(const Duration(seconds: 5));
+    final r = await runBounded('which', ['-a', 'adb'], timeout: const Duration(seconds: 5), phase: 'which adb');
     return [
       for (final line in '${r.stdout}'.split('\n'))
         if (line.trim().startsWith('/')) line.trim(),
@@ -76,7 +78,7 @@ String? _real(String path) {
 
 Future<String> _version(String adb) async {
   try {
-    final r = await Process.run(adb, ['version']).timeout(const Duration(seconds: 5));
+    final r = await runBounded(adb, ['version'], timeout: const Duration(seconds: 5), phase: 'adb version');
     final text = '${r.stdout}';
     final version = RegExp(r'^Version (\S+)', multiLine: true).firstMatch(text)?.group(1);
     return version ?? text.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => 'unknown').trim();

@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'backend.dart';
 import 'ios_toolchain.dart';
+import 'bounded_process.dart';
 
 /// How far glint has proven one device setup.
 enum SetupStatus { verified, partial, untested }
@@ -241,11 +241,17 @@ typedef DeviceSetup = ({
 
 /// iOS runtime of simulator [udid] and the Mac's macOS major; [transport] is the bridge's input path.
 Future<DeviceSetup> readIosSetup(String udid, int? xcodeMajor,
-    {String transport = 'indigo', ProcessRunner run = Process.run}) async {
+    {String transport = 'indigo', ProcessRunner run = boundedRun}) async {
   String? runtime;
   int? runtimeMajor;
   try {
-    final r = await run('xcrun', ['simctl', 'list', 'devices', '-j']);
+    final r = await runCapped(
+      run,
+      'xcrun',
+      ['simctl', 'list', 'devices', '-j'],
+      timeout: const Duration(seconds: 10),
+      phase: 'simctl list devices',
+    );
     final devices = (jsonDecode(r.stdout as String) as Map)['devices'] as Map;
     for (final entry in devices.entries) {
       if ((entry.value as List).any((d) => d is Map && d['udid'] == udid)) {
@@ -270,7 +276,7 @@ Future<DeviceSetup> readIosSetup(String udid, int? xcodeMajor,
 }
 
 /// The setup of a paired physical iPhone on [osVersion] (e.g. "iOS 27.0"), judged on its own `device` backend.
-Future<DeviceSetup> readIosDeviceSetup(String? osVersion, {ProcessRunner run = Process.run}) async {
+Future<DeviceSetup> readIosDeviceSetup(String? osVersion, {ProcessRunner run = boundedRun}) async {
   final major = osVersion == null ? null : int.tryParse(osVersion.replaceFirst('iOS ', '').split('.').first);
   return (
     platform: 'ios',
@@ -285,13 +291,19 @@ Future<DeviceSetup> readIosDeviceSetup(String? osVersion, {ProcessRunner run = P
 /// The input transport glint-iossim opens for [udid] under [mode]; [fallback] says why `auto` settled for indigo.
 Future<({String? transport, String? fallback, String? error})> readIosTransport(
     String bridgePath, String udid, String mode,
-    {ProcessRunner run = Process.run}) async {
+    {ProcessRunner run = boundedRun}) async {
   try {
-    final r = await run(bridgePath, [
-      if (mode != 'auto') ...['--hid', mode],
-      'hid',
-      udid
-    ]).timeout(const Duration(seconds: 30));
+    final r = await runCapped(
+      run,
+      bridgePath,
+      [
+        if (mode != 'auto') ...['--hid', mode],
+        'hid',
+        udid
+      ],
+      timeout: const Duration(seconds: 30),
+      phase: 'bridge hid',
+    );
     final m = RegExp(r'^hid (\w+) coresimulator \S+(?: \(dtuhid unavailable: (.*)\))?$', multiLine: true)
         .firstMatch('${r.stdout}');
     if (r.exitCode == 0 && m != null) {
@@ -306,10 +318,16 @@ Future<({String? transport, String? fallback, String? error})> readIosTransport(
 
 /// Android API level of [serial].
 Future<DeviceSetup> readAndroidSetup(String serial, String adbPath,
-    {String transport = 'adb', ProcessRunner run = Process.run}) async {
+    {String transport = 'adb', ProcessRunner run = boundedRun}) async {
   int? api;
   try {
-    final r = await run(adbPath, ['-s', serial, 'shell', 'getprop', 'ro.build.version.sdk']);
+    final r = await runCapped(
+      run,
+      adbPath,
+      ['-s', serial, 'shell', 'getprop', 'ro.build.version.sdk'],
+      timeout: const Duration(seconds: 10),
+      phase: 'adb getprop',
+    );
     api = int.tryParse((r.stdout as String).trim());
   } on Object {
     // unknown API: judged as untested
@@ -326,7 +344,13 @@ Future<DeviceSetup> readAndroidSetup(String serial, String adbPath,
 
 Future<int?> _hostMajor(ProcessRunner run) async {
   try {
-    final r = await run('sw_vers', ['-productVersion']);
+    final r = await runCapped(
+      run,
+      'sw_vers',
+      ['-productVersion'],
+      timeout: const Duration(seconds: 10),
+      phase: 'sw_vers',
+    );
     return int.tryParse((r.stdout as String).trim().split('.').first);
   } on Object {
     return null;

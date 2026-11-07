@@ -77,6 +77,9 @@ enum GlintErrorKind {
 
   /// A scroll moved something outside the list being searched (the route, or another PageView's page); `data.sideEffect`.
   scrollSideEffect,
+
+  /// A tool call or one of its commands ran past its time ceiling and was cancelled; `data.phase` names where it stood, `data.elapsedMs` how long.
+  toolTimeout,
   // bug bucket — should never happen; if it does, it's on us
   internal,
 }

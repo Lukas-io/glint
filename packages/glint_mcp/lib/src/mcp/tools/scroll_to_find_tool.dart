@@ -1,6 +1,7 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
+import '../../../observability.dart' show CallProgress;
 import '../../../perception.dart';
 import '../../../semantic.dart' show kPagedLabels;
 import '../envelope.dart';
@@ -102,6 +103,10 @@ class ScrollToFindTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      Duration(seconds: (30 + 8 * (argInt(args, 'maxScrolls') ?? 8)).clamp(60, 600));
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final targetGlintId = args['targetGlintId'] as String?;
@@ -146,6 +151,7 @@ class ScrollToFindTool extends GlintTool {
     StructuredResponse? foundReply;
     for (var i = 0; i <= maxScrolls; i++) {
       last = i;
+      CallProgress.enter('scroll_to_find: reading the scene before scroll ${i + 1}');
       final scene = await session.reader.readSummary();
       try {
         lastTexts = _visibleTexts(scene.root);

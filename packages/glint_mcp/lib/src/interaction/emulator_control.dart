@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:grpc/grpc.dart';
 
+import 'bounded_process.dart';
+
 /// The gRPC endpoint every running Android emulator serves, read from its `pid_<n>.ini` in the AVD running directory.
 class EmulatorEndpoint {
   const EmulatorEndpoint({required this.port, required this.token, this.avdDir, this.avdName});
@@ -60,7 +62,8 @@ class EmulatorEndpoint {
 /// Runs one emulator console command through `adb emu` and returns its answer lines without the closing OK; null when the console refuses or adb fails.
 Future<List<String>?> emulatorConsole(String adbPath, String serial, List<String> command) async {
   try {
-    final r = await Process.run(adbPath, ['-s', serial, 'emu', ...command]).timeout(const Duration(seconds: 10));
+    final r = await runBounded(adbPath, ['-s', serial, 'emu', ...command],
+        timeout: const Duration(seconds: 10), phase: 'adb emu console');
     final lines = '${r.stdout}'.split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     if (r.exitCode != 0 || lines.isEmpty || lines.last != 'OK') return null;
     return lines.sublist(0, lines.length - 1);

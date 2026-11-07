@@ -43,6 +43,10 @@ class BreakpointTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      args['op'] == 'wait' ? GlintTool.ceilingFor(argInt(args, 'timeoutMs') ?? _defaultTimeoutMs) : kDefaultCallCeiling;
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final app = session.active;

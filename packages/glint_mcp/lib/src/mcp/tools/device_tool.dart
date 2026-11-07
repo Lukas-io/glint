@@ -99,6 +99,10 @@ class DeviceTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      GlintTool.ceilingFor((argInt(args, 'afterMs') ?? 0) + (args['waitFor'] == null ? 0 : 15000), slackSec: 60);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final op = (args['op'] as String?) ?? 'status';

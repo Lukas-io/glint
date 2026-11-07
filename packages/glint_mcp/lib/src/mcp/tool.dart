@@ -175,6 +175,94 @@ abstract class GlintTool {
     CallToolRequest request,
   );
 
+  /// How long a call with [args] may run before glint cancels it and answers `toolTimeout`; tools that wait on request raise it.
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => kDefaultCallCeiling;
+
+  /// A ceiling for a call that waits up to [waitMs] on request, plus [slackSec] for the work around the wait.
+  static Duration ceilingFor(int waitMs, {int slackSec = 30}) {
+    final ceiling = Duration(milliseconds: waitMs + slackSec * 1000);
+    return ceiling < kDefaultCallCeiling ? kDefaultCallCeiling : ceiling;
+  }
+
+  /// A ceiling for a gesture or typing call: the ready wait it may do plus [extraMs] of its own work.
+  static Duration actionCeiling(GlintSession session, Map<String, Object?> args, {int extraMs = 0}) =>
+      ceilingFor((argInt(args, 'readyTimeoutMs') ?? session.config.readyTimeoutMs) + extraMs, slackSec: 45);
+
+  /// How often a running call tells the client what it is doing.
+  static const Duration heartbeatEvery = Duration(seconds: 10);
+
+  Duration _safeCeiling(GlintSession session, Map<String, Object?> args) {
+    try {
+      return callCeiling(session, args);
+    } on Object {
+      return kDefaultCallCeiling;
+    }
+  }
+
+  /// Runs [handle] under a time ceiling and a progress heartbeat; a call that outlives its ceiling is cancelled and answered with `toolTimeout`.
+  Future<CallToolResult> invoke(
+    GlintSession session,
+    CallToolRequest request,
+  ) async {
+    final call = CallProgress(
+      tool: definition.name,
+      token: request.meta?.progressToken,
+      send: session.rawProgressNotifier,
+    );
+    final ceiling = _safeCeiling(session, request.arguments ?? const {});
+    final answer = Completer<CallToolResult>();
+    final start = DateTime.now();
+    unawaited(call.run(() => _invoke(session, request)).then((result) {
+      if (!answer.isCompleted) answer.complete(result);
+    }, onError: (Object e, StackTrace st) {
+      if (!answer.isCompleted) answer.completeError(e, st);
+    }));
+    call.watch(
+      ceiling: ceiling,
+      heartbeatEvery: heartbeatEvery,
+      onCeiling: () {
+        if (answer.isCompleted) return;
+        final response = _timeoutResponse(call, ceiling, request.arguments ?? const {});
+        call.run(() => logCall(session, request, response, start));
+        call.abandon();
+        answer.complete(response.toCallResult());
+      },
+    );
+    try {
+      return await answer.future;
+    } finally {
+      call.stop();
+    }
+  }
+
+  /// The reply for a call cancelled at its [ceiling]: where it was stuck, how long, and what to do.
+  StructuredResponse _timeoutResponse(CallProgress call, Duration ceiling, Map<String, Object?> args) {
+    final elapsedMs = call.clock.elapsedMilliseconds;
+    final stuck = call.phase;
+    final stopped = call.runningProcesses;
+    return StructuredResponse.error(
+      summary: '${definition.name} did not finish within ${ceiling.inSeconds}s; stuck in "$stuck" for '
+          '${(call.phaseMs / 1000).toStringAsFixed(1)}s',
+      errorKind: GlintErrorKind.toolTimeout,
+      detail: '${definition.name} ran ${(elapsedMs / 1000).toStringAsFixed(1)}s of awake time against a '
+          '${ceiling.inSeconds}s ceiling and was cancelled; phases: ${call.trail.join(' > ')}; '
+          '${stopped.isEmpty ? 'no subprocess was running' : 'stopped: ${stopped.join(', ')}'}',
+      nextSteps: [
+        if (changesDevice(args))
+          'the action may already have landed: `get_scene` shows the current state before you act again',
+        'toolTimeout: nothing new starts for this call, but input already delivered to the app or device is not undone',
+        'retry once; the session stays usable',
+        'if it repeats, `device op:screenshot` shows whether the device or simulator is frozen; reboot it or `attach` again',
+      ],
+    ).mergeData({
+      'phase': stuck,
+      'elapsedMs': elapsedMs,
+      'ceilingMs': ceiling.inMilliseconds,
+      'scope': 'tool',
+      'phases': call.trail,
+    });
+  }
+
   /// Error-bubbling contract:
   ///   - [SessionNotAttachedError] → structured `sessionNotAttached` envelope.
   ///   - Any other throw from [handle] (including [RPCError] from a dropped
@@ -182,7 +270,7 @@ abstract class GlintTool {
   /// Nothing escapes; the wire-level RPC error is reserved for true
   /// protocol failures (unknown tool, server doesn't support tools, etc.)
   /// and is handled by dart_mcp's [ToolsSupport.callTool].
-  Future<CallToolResult> invoke(
+  Future<CallToolResult> _invoke(
     GlintSession session,
     CallToolRequest request,
   ) async {
@@ -230,6 +318,14 @@ abstract class GlintTool {
                       for (final a in pooled) 'attach app:"${a.label}"  (${a.deviceName ?? a.id})',
                     ],
             );
+    } on ProcessTimeoutError catch (e) {
+      response = StructuredResponse.backendError('${definition.name}: ${e.phase} timed out', e);
+    } on CallAbandoned {
+      response = StructuredResponse.error(
+        summary: '${definition.name} was cancelled at its time ceiling',
+        errorKind: GlintErrorKind.toolTimeout,
+        nextSteps: const ['retry once; `get_scene` shows the current state'],
+      );
     } on RuntimeConnectionLostError catch (e) {
       response = await _connectionLostResponse(session, e);
     } on RuntimeUnresponsiveError catch (e) {
@@ -259,8 +355,18 @@ abstract class GlintTool {
     response = _explainBreakpointPause(session, response);
     response = _warnSharedDevice(app, response);
     response = _warnLifecycleChecks(app, response);
+    response = _warnSlept(start, response);
     logCall(session, request, response, start, app: app, call: call);
     return response.toCallResult();
+  }
+
+  /// Says so when the machine slept during the call, since the wall-clock time is then not the call's own.
+  static StructuredResponse _warnSlept(DateTime start, StructuredResponse response) {
+    final slept = CallProgress.current?.sleptSince(start) ?? 0;
+    if (slept < 3000) return response;
+    return response.addWarnings([
+      'the machine slept for about ${(slept / 1000).round()}s during this call; the call itself did not take that long'
+    ]);
   }
 
   /// Tells the agent once when the lifecycle checks keep failing for no visible reason, since the scene mode may be stale.
@@ -524,7 +630,9 @@ abstract class GlintTool {
     AppSession? app,
     ExploreCall? call,
   }) {
-    final elapsedMs = DateTime.now().difference(start).inMilliseconds;
+    if (CallProgress.current?.abandoned ?? false) return;
+    final slept = CallProgress.current?.sleptSince(start) ?? 0;
+    final elapsedMs = DateTime.now().difference(start).inMilliseconds - slept;
     if (call != null) session.explore.completeCall(app, call, definition.name, request.arguments, response);
     final seq = session.actionLog.allocateSequence();
     final argKeys = UsageRecorder.argKeysFrom(request.arguments);
@@ -612,6 +720,9 @@ abstract class GlintTool {
     };
   }
 }
+
+/// The time a call may run before glint cancels it, unless its tool raises the ceiling for a wait the agent asked for.
+const Duration kDefaultCallCeiling = Duration(seconds: 60);
 
 /// The P4 v0 default tool set. Pass a different list to
 /// [GlintMcpServer.fromStreamChannel] to plug in custom tools while

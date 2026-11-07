@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'scene_node.dart';
 import 'scene_reader.dart';
+import '../interaction/bounded_process.dart';
 
 /// Reads whatever native UI covers the app.
 abstract class NativeReader {
@@ -27,7 +27,12 @@ class NativeSceneReader extends NativeReader {
   @override
   Future<Scene> readSnapshot() async {
     try {
-      final result = await Process.run(bridgePath, ['ax-snapshot', udid]);
+      final result = await runBounded(
+        bridgePath,
+        ['ax-snapshot', udid],
+        timeout: const Duration(seconds: 8),
+        phase: 'bridge ax-snapshot',
+      );
       if (result.exitCode != 0) return _nativeSentinel();
       final jsonStr = (result.stdout as String).trim();
       if (jsonStr.isEmpty || jsonStr.startsWith('ax-snapshot:')) {

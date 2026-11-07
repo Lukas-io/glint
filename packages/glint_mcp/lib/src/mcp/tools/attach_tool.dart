@@ -130,6 +130,10 @@ class AttachTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
+      Duration(milliseconds: session.config.launchTimeoutMs) + const Duration(minutes: 8);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const <String, Object?>{};
     final showTouches = argBool(args, 'showTouches');

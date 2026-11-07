@@ -48,6 +48,14 @@ class BatchTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) {
+    final total = stepsCeiling(session, args['steps']);
+    return total < kDefaultCallCeiling ? kDefaultCallCeiling : (total > _maxCeiling ? _maxCeiling : total);
+  }
+
+  static const Duration _maxCeiling = Duration(minutes: 10);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final stopOnNoChange = argBool(args, 'stopOnNoChange') ?? true;

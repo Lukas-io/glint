@@ -37,6 +37,9 @@ class HotReloadTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) => const Duration(seconds: 150);
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final restart = argBool(request.arguments ?? const {}, 'restart') ?? false;
     final what = restart ? 'hot restart' : 'hot reload';

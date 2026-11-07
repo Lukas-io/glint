@@ -216,7 +216,7 @@ List<String> issueNudges(String type, IssueFields f, ActionLog log) {
 }
 
 /// The environment block appended to every issue: glint, host, device, input setup, mode and any other glint process on the device.
-Future<String> renderEnvironment(GlintSession session, {ProcessRunner run = Process.run}) async {
+Future<String> renderEnvironment(GlintSession session, {ProcessRunner run = boundedRun}) async {
   final lines = <String>[];
   final commit = await glintCommit(run: run);
   lines.add('- glint: $glintVersion${commit == null ? '' : ' (commit $commit)'}');
@@ -242,7 +242,13 @@ Future<String> renderEnvironment(GlintSession session, {ProcessRunner run = Proc
 Future<String> _hostLine(ProcessRunner run) async {
   if (!Platform.isMacOS) return '${Platform.operatingSystem} ${Platform.operatingSystemVersion}';
   try {
-    final r = await run('sw_vers', ['-productVersion']).timeout(const Duration(seconds: 3));
+    final r = await runCapped(
+      run,
+      'sw_vers',
+      ['-productVersion'],
+      timeout: const Duration(seconds: 3),
+      phase: 'sw_vers',
+    );
     final v = '${r.stdout}'.trim();
     if (r.exitCode == 0 && v.isNotEmpty) return 'macOS $v';
   } on Object {
@@ -255,16 +261,28 @@ String? _commit;
 bool _commitRead = false;
 
 /// Short git commit this glint runs from when it runs from a checkout of the glint repo; null for an installed package.
-Future<String?> glintCommit({ProcessRunner run = Process.run}) async {
+Future<String?> glintCommit({ProcessRunner run = boundedRun}) async {
   if (_commitRead) return _commit;
   _commitRead = true;
   try {
     final dir = File(Platform.script.toFilePath()).parent.path;
-    final top = await run('git', ['-C', dir, 'rev-parse', '--show-toplevel']).timeout(const Duration(seconds: 3));
+    final top = await runCapped(
+      run,
+      'git',
+      ['-C', dir, 'rev-parse', '--show-toplevel'],
+      timeout: const Duration(seconds: 3),
+      phase: 'git rev-parse',
+    );
     if (top.exitCode != 0) return null;
     final root = '${top.stdout}'.trim();
     if (!File('$root/packages/glint_mcp/pubspec.yaml').existsSync()) return null;
-    final head = await run('git', ['-C', root, 'rev-parse', '--short', 'HEAD']).timeout(const Duration(seconds: 3));
+    final head = await runCapped(
+      run,
+      'git',
+      ['-C', root, 'rev-parse', '--short', 'HEAD'],
+      timeout: const Duration(seconds: 3),
+      phase: 'git rev-parse',
+    );
     final sha = '${head.stdout}'.trim();
     if (head.exitCode == 0 && sha.isNotEmpty) _commit = sha;
   } on Object {

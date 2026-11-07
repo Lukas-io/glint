@@ -1,16 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'bounded_process.dart';
+
 /// What `devicectl` reports about a paired iPhone: name, model, iOS, connection, developer readiness and passcode state; null when the phone does not answer.
 Future<Map<String, Object?>?> phoneStatus(String udid) async {
   final tmp = await Directory.systemTemp.createTemp('glint-phone-');
   try {
     final details = '${tmp.path}/details.json';
     final lock = '${tmp.path}/lock.json';
-    await Process.run(
-        'xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
-    await Process.run(
-        'xcrun', ['devicectl', 'device', 'info', 'lockState', '--device', udid, '--json-output', lock, '-q']);
+    await runBounded(
+      'xcrun',
+      ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q'],
+      timeout: const Duration(seconds: 30),
+      phase: 'devicectl device details',
+    );
+    await runBounded(
+      'xcrun',
+      ['devicectl', 'device', 'info', 'lockState', '--device', udid, '--json-output', lock, '-q'],
+      timeout: const Duration(seconds: 30),
+      phase: 'devicectl lock state',
+    );
     final d = ((jsonDecode(File(details).readAsStringSync()) as Map)['result'] as Map?)?.cast<String, Object?>();
     if (d == null) return null;
     Map<String, Object?> part(String key) => (d[key] as Map?)?.cast<String, Object?>() ?? const {};
@@ -47,8 +57,12 @@ Future<String?> phoneTransport(String udid) async {
   final tmp = await Directory.systemTemp.createTemp('glint-phone-');
   try {
     final details = '${tmp.path}/details.json';
-    await Process.run(
-        'xcrun', ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q']);
+    await runBounded(
+      'xcrun',
+      ['devicectl', 'device', 'info', 'details', '--device', udid, '--json-output', details, '-q'],
+      timeout: const Duration(seconds: 30),
+      phase: 'devicectl device details',
+    );
     final d = (jsonDecode(File(details).readAsStringSync()) as Map)['result'] as Map?;
     return (d?['connectionProperties'] as Map?)?['transportType'] as String?;
   } on Object {

@@ -80,6 +80,12 @@ class TapTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) {
+    final taps = args['sequence'] is List ? (args['sequence'] as List).length : 1;
+    return GlintTool.actionCeiling(session, args, extraMs: taps * (argInt(args, 'intervalMs') ?? 120));
+  }
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final t = readTargetedArgs(args, session.config);

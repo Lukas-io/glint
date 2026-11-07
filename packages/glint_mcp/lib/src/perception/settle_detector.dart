@@ -1,3 +1,4 @@
+import '../observability/call_progress.dart';
 import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
 import 'scene_reader.dart';
@@ -41,6 +42,7 @@ class SettleDetector {
       if (!checkLoadingAffordances) return SettleResult.settled(elapsedMs: quick);
       if ((await _findLoadingAffordances()).isEmpty) return SettleResult.settled(elapsedMs: quick);
     }
+    CallProgress.enter('waiting for the screen to settle');
     final start = DateTime.now();
     var consecutiveQuiet = 0;
     var stabilityChecked = false;
@@ -48,6 +50,7 @@ class SettleDetector {
     final graceMs = quietGraceMs.clamp(0, ceilingMs);
 
     while (true) {
+      CallProgress.checkAlive();
       final idle = await _isIdle();
       if (idle) {
         consecutiveQuiet++;

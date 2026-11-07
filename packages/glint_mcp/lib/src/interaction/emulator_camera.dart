@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'bounded_process.dart';
 
 /// A Mac camera the Android emulator can pass through, as `-webcam-list` names it.
 typedef Webcam = ({String id, String name});
@@ -6,7 +6,8 @@ typedef Webcam = ({String id, String name});
 /// The Mac cameras the emulator at [emulatorPath] sees.
 Future<List<Webcam>> listWebcams(String emulatorPath) async {
   try {
-    final r = await Process.run(emulatorPath, ['-webcam-list']).timeout(const Duration(seconds: 20));
+    final r = await runBounded(emulatorPath, ['-webcam-list'],
+        timeout: const Duration(seconds: 20), phase: 'emulator -webcam-list');
     return [
       for (final m in RegExp(r"Camera '(webcam\d+)' is connected to device '([^']*)'").allMatches('${r.stdout}'))
         (id: m.group(1)!, name: m.group(2)!),
@@ -27,11 +28,12 @@ Webcam? builtInWebcam(List<Webcam> cams) {
 Future<bool> emulatorCameraStarved(String adbPath, String serial,
     {Duration within = const Duration(seconds: 20)}) async {
   try {
-    final now = await Process.run(adbPath, ['-s', serial, 'shell', 'date', '+%s']).timeout(const Duration(seconds: 5));
+    final now = await runBounded(adbPath, ['-s', serial, 'shell', 'date', '+%s'],
+        timeout: const Duration(seconds: 5), phase: 'adb date');
     final deviceNow = int.tryParse('${now.stdout}'.trim());
     if (deviceNow == null) return false;
-    final log = await Process.run(adbPath, ['-s', serial, 'logcat', '-d', '-v', 'epoch', '-t', '400'])
-        .timeout(const Duration(seconds: 5));
+    final log = await runBounded(adbPath, ['-s', serial, 'logcat', '-d', '-v', 'epoch', '-t', '400'],
+        timeout: const Duration(seconds: 5), phase: 'adb logcat');
     final ages = [
       for (final line in '${log.stdout}'.split('\n'))
         if (line.contains('Unable to obtain video frame'))

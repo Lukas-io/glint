@@ -59,6 +59,12 @@ class TypeTool extends GlintTool {
       );
 
   @override
+  Duration callCeiling(GlintSession session, Map<String, Object?> args) {
+    final length = (args['text'] as String?)?.runes.length ?? 0;
+    return GlintTool.actionCeiling(session, args, extraMs: length * (40 + (argInt(args, 'keyDelayMs') ?? 0)));
+  }
+
+  @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
     final text = args['text']! as String;

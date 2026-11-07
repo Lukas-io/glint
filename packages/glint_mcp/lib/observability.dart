@@ -4,6 +4,7 @@ library;
 export 'src/observability/action_log.dart';
 export 'src/observability/app_alert.dart';
 export 'src/observability/app_log_buffer.dart';
+export 'src/observability/call_progress.dart';
 export 'src/observability/flutter_error_feed.dart';
 export 'src/observability/http_failure_monitor.dart';
 export 'src/observability/log_breakpoints.dart';

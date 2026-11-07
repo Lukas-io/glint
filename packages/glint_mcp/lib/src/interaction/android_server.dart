@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../version.dart';
+import '../observability/call_progress.dart';
+import 'bounded_process.dart';
 
 /// Must equal `PROTOCOL` in native/android_server/src/dev/glint/server/Server.java.
 const int expectedAndroidServerProtocol = 2;
@@ -43,12 +45,14 @@ class AndroidServer {
 
   /// Pushes the dex, starts the server, and connects; throws [AndroidServerError] naming the step that failed.
   Future<void> start({Duration timeout = const Duration(seconds: 15)}) async {
-    final push = await Process.run(adbPath, ['-s', serial, 'push', dexPath, _deviceDex]);
+    final push = await runBounded(adbPath, ['-s', serial, 'push', dexPath, _deviceDex],
+        timeout: const Duration(seconds: 20), phase: 'adb push of the Android server');
     if (push.exitCode != 0) {
       throw AndroidServerError('adb push of the server failed: ${'${push.stderr}'.trim()}');
     }
-    await Process.run(adbPath, ['-s', serial, 'shell', 'pkill', '-f', _socketName]);
-    final process = await Process.start(adbPath, [
+    await runBounded(adbPath, ['-s', serial, 'shell', 'pkill', '-f', _socketName],
+        timeout: const Duration(seconds: 10), phase: 'adb pkill of the old server');
+    final process = await startManaged(adbPath, [
       '-s',
       serial,
       'shell',
@@ -79,7 +83,8 @@ class AndroidServer {
       await stop();
       throw AndroidServerError('the server speaks protocol $protocol, glint expects $expectedAndroidServerProtocol');
     }
-    final fwd = await Process.run(adbPath, ['-s', serial, 'forward', 'tcp:0', 'localabstract:$_socketName']);
+    final fwd = await runBounded(adbPath, ['-s', serial, 'forward', 'tcp:0', 'localabstract:$_socketName'],
+        timeout: const Duration(seconds: 10), phase: 'adb forward');
     _port = int.tryParse('${fwd.stdout}'.trim());
     if (fwd.exitCode != 0 || _port == null) {
       await stop();
@@ -88,6 +93,7 @@ class AndroidServer {
     final socket = await Socket.connect('127.0.0.1', _port!, timeout: timeout);
     _socket = socket;
     _lines = StreamIterator(socket.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter()));
+    CallProgress.release(process);
   }
 
   /// Sends [request] and returns the server's reply; calls run one at a time.
@@ -126,9 +132,14 @@ class AndroidServer {
     socket?.destroy();
     _process?.kill();
     _process = null;
-    if (_port != null) {
-      await Process.run(adbPath, ['-s', serial, 'forward', '--remove', 'tcp:$_port']);
-      _port = null;
+    final port = _port;
+    _port = null;
+    if (port == null) return;
+    try {
+      await runBounded(adbPath, ['-s', serial, 'forward', '--remove', 'tcp:$port'],
+          timeout: const Duration(seconds: 10), phase: 'adb forward remove');
+    } on ProcessTimeoutError {
+      return;
     }
   }
 }
@@ -220,7 +231,8 @@ Future<String> buildAndroidServerDex(String dest, {String? adbPath, Map<String, 
         if (f.path.endsWith('.java')) f.path
     ];
     final classes = Directory('${work.path}/classes')..createSync();
-    final compiled = await Process.run(javac, ['--release', '11', '-cp', jar, '-d', classes.path, ...sources]);
+    final compiled = await runBounded(javac, ['--release', '11', '-cp', jar, '-d', classes.path, ...sources],
+        timeout: const Duration(minutes: 2), phase: 'javac of the Android server');
     if (compiled.exitCode != 0) {
       throw AndroidServerError('javac failed: ${'${compiled.stderr}'.trim().split('\n').take(3).join(' ')}');
     }
@@ -228,7 +240,8 @@ Future<String> buildAndroidServerDex(String dest, {String? adbPath, Map<String, 
       for (final f in classes.listSync(recursive: true))
         if (f.path.endsWith('.class')) f.path
     ];
-    final dexed = await Process.run(d8, ['--min-api', '26', '--lib', jar, '--output', work.path, ...classFiles]);
+    final dexed = await runBounded(d8, ['--min-api', '26', '--lib', jar, '--output', work.path, ...classFiles],
+        timeout: const Duration(minutes: 2), phase: 'd8 of the Android server');
     if (dexed.exitCode != 0) {
       throw AndroidServerError('d8 failed: ${'${dexed.stderr}'.trim().split('\n').take(3).join(' ')}');
     }

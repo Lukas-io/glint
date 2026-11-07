@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import '../action.dart';
 import '../backend.dart';
 import '../input_route.dart';
@@ -7,6 +5,7 @@ import '../image_size.dart';
 import '../ios_toolchain.dart';
 import '../key_codes.dart';
 import '../screen_recording.dart';
+import '../bounded_process.dart';
 
 /// iOS Simulator backend over the `glint-iossim` Swift helper (`native/ios_sim_bridge/`),
 /// which speaks LOGICAL device points — so we undo the physical→logical conversion here.
@@ -19,7 +18,7 @@ class IosSimBackend implements InteractionBackend {
     required this.binaryPath,
     this.toolchain,
     this.hidMode = 'auto',
-    this.run = Process.run,
+    this.run = boundedRun,
   });
 
   final ProcessRunner run;
@@ -70,17 +69,21 @@ class IosSimBackend implements InteractionBackend {
 
   @override
   Future<void> tapSequence(List<({int x, int y})> points, {required int intervalMs}) {
-    return _run(_BridgeCommand.taps, [
-      udid,
-      '$deviceLogicalWidth',
-      '$deviceLogicalHeight',
-      '$intervalMs',
-      for (final pt in points)
-        ...() {
-          final p = _logical(pt.x, pt.y);
-          return ['${p.x}', '${p.y}'];
-        }(),
-    ]);
+    return _run(
+      _BridgeCommand.taps,
+      [
+        udid,
+        '$deviceLogicalWidth',
+        '$deviceLogicalHeight',
+        '$intervalMs',
+        for (final pt in points)
+          ...() {
+            final p = _logical(pt.x, pt.y);
+            return ['${p.x}', '${p.y}'];
+          }(),
+      ],
+      work: Duration(milliseconds: intervalMs * points.length),
+    );
   }
 
   @override
@@ -90,14 +93,18 @@ class IosSimBackend implements InteractionBackend {
     required int durationMs,
   }) {
     final p = _logical(physicalX, physicalY);
-    return _run(_BridgeCommand.longPress, [
-      udid,
-      '$deviceLogicalWidth',
-      '$deviceLogicalHeight',
-      '${p.x}',
-      '${p.y}',
-      '$durationMs',
-    ]);
+    return _run(
+      _BridgeCommand.longPress,
+      [
+        udid,
+        '$deviceLogicalWidth',
+        '$deviceLogicalHeight',
+        '${p.x}',
+        '${p.y}',
+        '$durationMs',
+      ],
+      work: Duration(milliseconds: durationMs),
+    );
   }
 
   @override
@@ -111,22 +118,29 @@ class IosSimBackend implements InteractionBackend {
   }) {
     final from = _logical(physicalX1, physicalY1);
     final to = _logical(physicalX2, physicalY2);
-    return _run(_BridgeCommand.swipe, [
-      udid,
-      '$deviceLogicalWidth',
-      '$deviceLogicalHeight',
-      '${from.x}',
-      '${from.y}',
-      '${to.x}',
-      '${to.y}',
-      '$durationMs',
-      if (holdMs > 0) '$holdMs',
-    ]);
+    return _run(
+      _BridgeCommand.swipe,
+      [
+        udid,
+        '$deviceLogicalWidth',
+        '$deviceLogicalHeight',
+        '${from.x}',
+        '${from.y}',
+        '${to.x}',
+        '${to.y}',
+        '$durationMs',
+        if (holdMs > 0) '$holdMs',
+      ],
+      work: Duration(milliseconds: durationMs + holdMs),
+    );
   }
 
   @override
-  Future<void> typeText(String text, {int? keyDelayMs}) =>
-      _run(_BridgeCommand.type, [udid, text, if (keyDelayMs != null) '$keyDelayMs']);
+  Future<void> typeText(String text, {int? keyDelayMs}) => _run(
+        _BridgeCommand.type,
+        [udid, text, if (keyDelayMs != null) '$keyDelayMs'],
+        work: Duration(milliseconds: text.runes.length * (40 + (keyDelayMs ?? 0))),
+      );
 
   @override
   Future<void> pressKey(KeyName key, {int count = 1, Set<KeyModifier> modifiers = const {}}) =>
@@ -139,9 +153,11 @@ class IosSimBackend implements InteractionBackend {
 
   @override
   Future<ScreenshotResult> screenshot(String path) async {
-    final res = await Process.run(
+    final res = await runBounded(
       'xcrun',
       ['simctl', 'io', udid, 'screenshot', path],
+      timeout: const Duration(seconds: 10),
+      phase: 'simctl screenshot',
     );
     if (res.exitCode != 0) {
       return ScreenshotResult(
@@ -258,9 +274,11 @@ class IosSimBackend implements InteractionBackend {
   }
 
   Future<void> _postFaceIdMatch() async {
-    final result = await Process.run(
+    final result = await runBounded(
       'notifyutil',
       ['-p', 'com.apple.BiometricKit_Sim.pearl.match'],
+      timeout: const Duration(seconds: 10),
+      phase: 'posting the Face ID match',
     );
     if (result.exitCode != 0) {
       throw BackendToolError(
@@ -296,14 +314,12 @@ class IosSimBackend implements InteractionBackend {
 
   /// Reads `com.apple.springboard.<name>` inside the simulator: true when non-zero, null when unreadable.
   Future<bool?> _springboardFlag(String name) async {
-    final result = await Process.run('xcrun', [
-      'simctl',
-      'spawn',
-      udid,
-      'notifyutil',
-      '-g',
-      'com.apple.springboard.$name',
-    ]);
+    final result = await runBounded(
+      'xcrun',
+      ['simctl', 'spawn', udid, 'notifyutil', '-g', 'com.apple.springboard.$name'],
+      timeout: const Duration(seconds: 10),
+      phase: 'reading the SpringBoard $name flag',
+    );
     if (result.exitCode != 0) return null;
     final m = RegExp('$name\\s+(\\d+)').firstMatch((result.stdout as String?) ?? '');
     return m == null ? null : m.group(1) != '0';
@@ -326,7 +342,7 @@ class IosSimBackend implements InteractionBackend {
         y: physicalY / devicePixelRatio,
       );
 
-  Future<void> _run(_BridgeCommand cmd, List<String> args) async {
+  Future<void> _run(_BridgeCommand cmd, List<String> args, {Duration work = Duration.zero}) async {
     final blocker = toolchain?.blocker;
     if (blocker != null) {
       throw IosToolchainBlocked(label, blocker, toolchain!.nextSteps);
@@ -336,7 +352,7 @@ class IosSimBackend implements InteractionBackend {
       cmd.cliName,
       ...args
     ];
-    final result = await run(binaryPath, argv);
+    final result = await runCapped(run, binaryPath, argv, timeout: _bridgeBase + work, phase: 'bridge ${cmd.cliName}');
     if (result.exitCode != 0) {
       throw BackendToolError(
         backend: label,
@@ -346,6 +362,8 @@ class IosSimBackend implements InteractionBackend {
       );
     }
   }
+
+  static const Duration _bridgeBase = Duration(seconds: 10);
 
   static String _shortPath(String s) {
     final last = s.split('/').last;

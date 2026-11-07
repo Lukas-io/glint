@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'device.dart';
 import 'launcher.dart' show flutterAppProblem;
+import 'bounded_process.dart';
 
 /// A simulator / emulator that is currently booted and drivable.
 class BootedDevice {
@@ -155,8 +156,8 @@ class DeviceDiscovery {
   /// The package in front on Android device [serial] (e.g. the launcher), or null when adb cannot tell.
   Future<String?> foregroundPackage(String serial) async {
     try {
-      final res = await Process.run(adbPath, ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'])
-          .timeout(const Duration(seconds: 3));
+      final res = await runBounded(adbPath, ['-s', serial, 'shell', 'dumpsys', 'activity', 'activities'],
+          timeout: const Duration(seconds: 3), phase: 'adb dumpsys activity');
       final m = RegExp(r'topResumedActivity=ActivityRecord\{\S+ \S+ ([\w.]+)/').firstMatch(res.stdout as String);
       return m?.group(1);
     } on Object {
@@ -167,8 +168,8 @@ class DeviceDiscovery {
   /// The Android package whose process is [pid] on [serial], or null when adb cannot tell.
   Future<String?> androidPackageForPid(String serial, int pid) async {
     try {
-      final res = await Process.run(adbPath, ['-s', serial, 'shell', 'cat', '/proc/$pid/cmdline'])
-          .timeout(const Duration(seconds: 3));
+      final res = await runBounded(adbPath, ['-s', serial, 'shell', 'cat', '/proc/$pid/cmdline'],
+          timeout: const Duration(seconds: 3), phase: 'adb cmdline');
       final name = (res.stdout as String).replaceAll('\u0000', '').trim().split(':').first;
       return RegExp(r'^[A-Za-z][\w]*(\.\w+)+$').hasMatch(name) ? name : null;
     } on Object {
@@ -213,7 +214,7 @@ class DeviceDiscovery {
   /// Serial to adb state from `adb devices`, or null when adb did not answer.
   Future<Map<String, String>?> _adbStates() async {
     try {
-      final res = await Process.run(adbPath, ['devices']).timeout(const Duration(seconds: 3));
+      final res = await runBounded(adbPath, ['devices'], timeout: const Duration(seconds: 3), phase: 'adb devices');
       if (res.exitCode != 0) return null;
       final out = <String, String>{};
       for (final line in (res.stdout as String).split('\n').skip(1)) {
@@ -229,7 +230,8 @@ class DeviceDiscovery {
   /// UDID to simulator state from `simctl list devices -j`, or null when simctl did not answer.
   Future<Map<String, String>?> _simStates() async {
     try {
-      final res = await Process.run('xcrun', ['simctl', 'list', 'devices', '-j']).timeout(const Duration(seconds: 3));
+      final res = await runBounded('xcrun', ['simctl', 'list', 'devices', '-j'],
+          timeout: const Duration(seconds: 3), phase: 'simctl list devices');
       if (res.exitCode != 0) return null;
       final devices = (jsonDecode(res.stdout as String) as Map)['devices'];
       if (devices is! Map) return null;
@@ -261,7 +263,7 @@ class DeviceDiscovery {
   Future<List<Uri>> _scanVmUris() async {
     final ProcessResult res;
     try {
-      res = await Process.run('ps', ['-Axww', '-o', 'args=']);
+      res = await runBounded('ps', ['-Axww', '-o', 'args='], timeout: const Duration(seconds: 5), phase: 'ps');
     } on Object {
       return const [];
     }
@@ -292,8 +294,8 @@ class DeviceDiscovery {
   Future<List<BootedDevice>> _connectedIPhones() async {
     final out = File('${Directory.systemTemp.path}/glint-devicectl-$pid.json');
     try {
-      final res = await Process.run('xcrun', ['devicectl', 'list', 'devices', '-q', '-j', out.path])
-          .timeout(const Duration(seconds: 15));
+      final res = await runBounded('xcrun', ['devicectl', 'list', 'devices', '-q', '-j', out.path],
+          timeout: const Duration(seconds: 15), phase: 'devicectl list devices');
       if (res.exitCode != 0 || !out.existsSync()) return const [];
       return parseConnectedIPhones(out.readAsStringSync());
     } on Object {
@@ -310,10 +312,8 @@ class DeviceDiscovery {
   Future<List<BootedDevice>> _bootedIosSims() async {
     final ProcessResult res;
     try {
-      res = await Process.run(
-        'xcrun',
-        ['simctl', 'list', 'devices', 'booted', '-j'],
-      );
+      res = await runBounded('xcrun', ['simctl', 'list', 'devices', 'booted', '-j'],
+          timeout: const Duration(seconds: 10), phase: 'simctl list booted devices');
     } on Object {
       return const [];
     }
@@ -420,7 +420,8 @@ class DeviceDiscovery {
     for (var hop = 0; pid != null && hop < 4; hop++) {
       final ProcessResult ps;
       try {
-        ps = await Process.run('ps', ['-o', 'ppid=,command=', '-p', '$pid']);
+        ps = await runBounded('ps', ['-o', 'ppid=,command=', '-p', '$pid'],
+            timeout: const Duration(seconds: 5), phase: 'ps');
       } on Object {
         return null;
       }
@@ -475,10 +476,8 @@ class DeviceDiscovery {
   /// Info.plist, via `plutil`. Null if unreadable.
   Future<(String?, String?)?> _readBundleInfo(String appPath) async {
     try {
-      final r = await Process.run(
-        'plutil',
-        ['-convert', 'json', '-o', '-', '$appPath/Info.plist'],
-      );
+      final r = await runBounded('plutil', ['-convert', 'json', '-o', '-', '$appPath/Info.plist'],
+          timeout: const Duration(seconds: 10), phase: 'plutil reading app info');
       if (r.exitCode != 0) return null;
       final j = jsonDecode(r.stdout as String);
       if (j is! Map) return null;
@@ -494,7 +493,8 @@ class DeviceDiscovery {
   Future<AppDeviceLink?> _correlateAndroid(int port) async {
     final ProcessResult res;
     try {
-      res = await Process.run(adbPath, ['forward', '--list']);
+      res = await runBounded(adbPath, ['forward', '--list'],
+          timeout: const Duration(seconds: 5), phase: 'adb forward list');
     } on Object {
       return null;
     }
@@ -514,7 +514,8 @@ class DeviceDiscovery {
   Future<List<int>> _listeningPids(int port) async {
     final ProcessResult res;
     try {
-      res = await Process.run('lsof', ['-nP', '-iTCP:$port', '-sTCP:LISTEN']);
+      res = await runBounded('lsof', ['-nP', '-iTCP:$port', '-sTCP:LISTEN'],
+          timeout: const Duration(seconds: 5), phase: 'lsof');
     } on Object {
       return const [];
     }
@@ -550,7 +551,7 @@ class DeviceDiscovery {
   Future<List<int>> _ddsPidsFronting(int vmPort) async {
     final ProcessResult res;
     try {
-      res = await Process.run('ps', ['-eo', 'pid=,command=']);
+      res = await runBounded('ps', ['-eo', 'pid=,command='], timeout: const Duration(seconds: 5), phase: 'ps');
     } on Object {
       return const [];
     }
@@ -566,7 +567,7 @@ class DeviceDiscovery {
 
   Future<int?> _parentOf(int pid) async {
     try {
-      final r = await Process.run('ps', ['-o', 'ppid=', '-p', '$pid']);
+      final r = await runBounded('ps', ['-o', 'ppid=', '-p', '$pid'], timeout: const Duration(seconds: 5), phase: 'ps');
       return r.exitCode == 0 ? int.tryParse((r.stdout as String).trim()) : null;
     } on Object {
       return null;
@@ -576,7 +577,8 @@ class DeviceDiscovery {
   Future<String?> _cwdOf(int pid) async {
     final ProcessResult res;
     try {
-      res = await Process.run('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn']);
+      res = await runBounded('lsof', ['-a', '-p', '$pid', '-d', 'cwd', '-Fn'],
+          timeout: const Duration(seconds: 5), phase: 'lsof');
     } on Object {
       return null;
     }
@@ -615,7 +617,7 @@ class DeviceDiscovery {
   Future<(String?, String?)?> appInfoForDevice(String udid) async {
     final ProcessResult ps;
     try {
-      ps = await Process.run('ps', ['-Axww', '-o', 'command=']);
+      ps = await runBounded('ps', ['-Axww', '-o', 'command='], timeout: const Duration(seconds: 5), phase: 'ps');
     } on Object {
       return null;
     }
@@ -652,7 +654,7 @@ class DeviceDiscovery {
   Future<List<BootedDevice>> _adbDevices() async {
     final ProcessResult res;
     try {
-      res = await Process.run(adbPath, ['devices', '-l']);
+      res = await runBounded(adbPath, ['devices', '-l'], timeout: const Duration(seconds: 5), phase: 'adb devices');
     } on Object {
       return const []; // adb not installed → no Android targets
     }

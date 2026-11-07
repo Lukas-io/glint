@@ -4,7 +4,9 @@ import 'dart:typed_data';
 
 import 'package:grpc/grpc.dart';
 
+import '../interaction/bounded_process.dart';
 import '../interaction/emulator_control.dart';
+import '../observability/call_progress.dart';
 import 'geo.dart';
 
 /// One position glint feeds a device; [speed] in m/s and [heading] in degrees from north, when known.
@@ -51,7 +53,7 @@ sealed class LocationBackend {
 Future<void> _run(String exe, List<String> args, String what) async {
   final ProcessResult r;
   try {
-    r = await Process.run(exe, args).timeout(const Duration(seconds: 20));
+    r = await runBounded(exe, args, timeout: const Duration(seconds: 20), phase: 'setting the location');
   } on Object catch (e) {
     throw LocationFailed('could not run $exe for $what', '$e');
   }
@@ -91,7 +93,7 @@ class IosSimulatorLocation extends LocationBackend {
   Future<void> drive(List<LatLng> points, {required double speed, required Duration interval}) async {
     final Process process;
     try {
-      process = await Process.start('xcrun', [
+      process = await startManaged('xcrun', [
         'simctl',
         'location',
         udid,
@@ -105,11 +107,15 @@ class IosSimulatorLocation extends LocationBackend {
     }
     process.stdin.writeln(points.map((p) => '${_n(p.lat)},${_n(p.lng)}').join('\n'));
     await process.stdin.close();
-    final err = await process.stderr.transform(const SystemEncoding().decoder).join();
-    final code = await process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () {
-      process.kill();
-      return -1;
-    });
+    final errText = process.stderr.transform(const SystemEncoding().decoder).join();
+    final code = await CallProgress.during(
+      'simctl location: driving the route',
+      () => process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () async {
+        await killProcessTree(process);
+        return -1;
+      }),
+    );
+    final err = await errText.timeout(const Duration(seconds: 3), onTimeout: () => '');
     if (code != 0) throw LocationFailed('the simulator refused the route', err.trim());
   }
 }
@@ -191,7 +197,12 @@ class AndroidEmulatorLocation extends LocationBackend {
   Future<LocationSignals> signals(String? app) async {
     Future<String?> shell(List<String> args) async {
       try {
-        final r = await Process.run(adbPath, ['-s', serial, 'shell', ...args]).timeout(const Duration(seconds: 10));
+        final r = await runBounded(
+          adbPath,
+          ['-s', serial, 'shell', ...args],
+          timeout: const Duration(seconds: 10),
+          phase: 'reading location signals',
+        );
         return r.exitCode == 0 ? '${r.stdout}' : null;
       } on Object {
         return null;
