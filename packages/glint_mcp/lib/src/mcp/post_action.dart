@@ -431,7 +431,7 @@ class _PostActionProgress {
     _started = DateTime.now();
   }
 
-  bool get expired => forced || (CallProgress.current?.abandoned ?? false) || DateTime.now().difference(_started) > cap;
+  bool get expired => forced || CallProgress.cancelled || DateTime.now().difference(_started) > cap;
 
   /// What is left of the cap, at most [baselineEvaluateLimit] and at least half a second, for the next expression evaluate.
   Duration get evaluateLimit {
@@ -634,12 +634,24 @@ Future<void> _awaitNativeGone(AppSession app) async {
 /// no longer resolvable (e.g. scrolled off a lazy list — the tree-hash
 /// detector catches that case instead).
 Future<double?> _anchorDisplacement(
-    GlintSession session, SemanticScene semantic, ScrollAnchor anchor, bool horizontal) async {
-  final scene = semantic.sourceScene;
+        GlintSession session, SemanticScene semantic, ScrollAnchor anchor, bool horizontal) =>
+    scrollDisplacement(session, semantic.sourceScene, anchor, horizontal);
+
+/// How far [anchor] sits from where it was, along the scroll axis; with [restSamples] above 1 it samples [restEvery] apart until the position holds within a pixel, so a list still settling is not read mid-motion.
+Future<double?> scrollDisplacement(GlintSession session, Scene scene, ScrollAnchor anchor, bool horizontal,
+    {int restSamples = 1, Duration restEvery = const Duration(milliseconds: 120)}) async {
   if (scene.findByGlintId(anchor.glintId) == null) return null;
   try {
-    final c = await session.resolver.resolve(scene, anchor.glintId);
-    return horizontal ? (c.logicalCenter.x - anchor.x).abs() : (c.logicalCenter.y - anchor.y).abs();
+    double? previous;
+    var position = 0.0;
+    for (var sample = 0; sample < restSamples; sample++) {
+      final c = await session.resolver.resolve(scene, anchor.glintId);
+      position = horizontal ? c.logicalCenter.x : c.logicalCenter.y;
+      if (previous != null && (position - previous).abs() < 1) break;
+      previous = position;
+      if (sample + 1 < restSamples) await Future<void>.delayed(restEvery);
+    }
+    return (position - (horizontal ? anchor.x : anchor.y)).abs();
   } on Object {
     return null;
   }

@@ -1,10 +1,11 @@
 import 'package:dart_mcp/server.dart';
 
 import '../../../interaction.dart';
-import '../../../observability.dart' show CallProgress;
+import '../../../observability.dart' show CallProgress, SceneState, StateObserver;
 import '../../../perception.dart';
-import '../../../semantic.dart' show kPagedLabels;
+import '../../../semantic.dart' show SemanticScene, kPagedLabels;
 import '../envelope.dart';
+import '../post_action.dart' show ScrollAnchor, SceneSnapshot, scrollDisplacement, sideEffectOf, snapshotOf;
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -71,7 +72,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8, amountFraction 0.6. Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8 (cap 20, a larger value is clamped and the reply says so), amountFraction 0.6; progress every 10 s. It stops early when the list stops moving (end reached). Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen; detail says where it sat), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -89,7 +90,7 @@ class ScrollToFindTool extends GlintTool {
               description: 'One of: up, down, left, right. Default down.',
             ),
             'maxScrolls': Schema.int(
-              description: 'Attempt ceiling. Default 8.',
+              description: 'Scroll ceiling, 0-20. Default 8.',
             ),
             'amountFraction': Schema.num(
               description: 'Scroll size per step. Default 0.6.',
@@ -102,17 +103,52 @@ class ScrollToFindTool extends GlintTool {
         ),
       );
 
+  static const _maxScrollsCap = 20;
+  static const _maxDuration = Duration(seconds: 90);
+  static const _stallsForEnd = 2;
+  static const _restSamples = 3;
+  static const _iterationAllowance = Duration(seconds: 20);
+  static const _replyMargin = Duration(seconds: 20);
+  static const _stalledShare = 0.25;
+  static const _stalledMaxPx = 40.0;
+  static const _settleAfterSwipeMs = 500;
+
   @override
   Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
-      Duration(seconds: (30 + 8 * (argInt(args, 'maxScrolls') ?? 8)).clamp(60, 600));
+      _maxDuration + _iterationAllowance + _replyMargin;
+
+  static ({int used, int? asked}) _scrollBudget(GlintSession session, Map<String, Object?> args) {
+    final int? asked;
+    try {
+      asked = argInt(args, 'maxScrolls');
+    } on ArgTypeError {
+      return (used: session.config.scrollMaxScrolls.clamp(0, _maxScrollsCap), asked: null);
+    }
+    final wanted = asked ?? session.config.scrollMaxScrolls;
+    final used = wanted.clamp(0, _maxScrollsCap);
+    return (used: used, asked: asked != null && asked != used ? asked : null);
+  }
 
   @override
   Future<StructuredResponse> handle(GlintSession session, CallToolRequest request) async {
     final args = request.arguments ?? const {};
+    final budget = _scrollBudget(session, args);
+    final StructuredResponse reply;
+    try {
+      reply = await _search(session, args, budget.used);
+    } finally {
+      CallProgress.note(null);
+    }
+    return reply.addWarnings([
+      if (budget.asked != null)
+        'maxScrolls ${budget.asked} is ${budget.asked! < 0 ? 'below the minimum of 0' : 'above the cap of $_maxScrollsCap'}; scrolled at most ${budget.used} time(s)',
+    ]);
+  }
+
+  Future<StructuredResponse> _search(GlintSession session, Map<String, Object?> args, int maxScrolls) async {
     final targetGlintId = args['targetGlintId'] as String?;
     final targetText = (args['targetTextContent'] as String?) ?? (args['text'] as String?);
     final dirName = (args['direction'] as String?) ?? 'down';
-    final maxScrolls = argInt(args, 'maxScrolls') ?? session.config.scrollMaxScrolls;
     final amount = (argNum(args, 'amountFraction') ?? session.config.scrollAmountFraction).toDouble();
     final tap = argBool(args, 'tap') ?? false;
 
@@ -120,6 +156,7 @@ class ScrollToFindTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'exactly one of targetGlintId or targetTextContent is required',
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: const ['pass targetGlintId:"<id>" or targetTextContent:"<visible text>"'],
       );
     }
 
@@ -128,45 +165,69 @@ class ScrollToFindTool extends GlintTool {
       return StructuredResponse.error(
         summary: 'unknown scroll direction: $dirName',
         errorKind: GlintErrorKind.invalidArgument,
+        nextSteps: ['use one of: ${ScrollDirection.values.map((d) => d.name).join(', ')}'],
       );
     }
+    final horizontal = dir == ScrollDirection.left || dir == ScrollDirection.right;
 
     final scrollArgs = CallToolRequest(name: 'scroll', arguments: {
       'direction': dir.name,
       'amountFraction': amount,
+      'returnScene': false,
     });
+    final scrollArgsWithReason =
+        CallToolRequest(name: 'scroll', arguments: {...scrollArgs.arguments!, 'returnScene': true});
     final scroller = const ScrollTool();
     final criterion = targetGlintId != null ? 'glintId=$targetGlintId' : 'text~"$targetText"';
+    final clock = Stopwatch()..start();
 
-    var seenInTree = false; // target appeared in scene at least once
-    var seenInOverlay = false; // target found in overlay (not in scrollable content)
+    var seenInTree = false;
+    var seenInOverlay = false;
     var lastTexts = const <String>[];
     var lastIds = const <String>[];
+    var stalls = 0;
+    String? blockedDetail;
     ScrollTarget target = (anchor: null, watchedPagedIds: const <String>{});
-    ResolvedCoord? covered; // on screen but covered (tap only)
-    int? coveredAt; // the attempt that first saw it covered
+    ScrollAnchor? swiped;
+    ScrollAnchor? firstAnchor;
+    final swipes = <String>[];
+    var worstIteration = Duration.zero;
+    SceneSnapshot? previous;
+    ResolvedCoord? covered;
+    ResolvedCoord? lastSeen;
+    int? coveredAt;
     var last = 0;
+    var endReached = false;
+    var outOfTime = false;
 
     String? tapId;
     StructuredResponse? foundReply;
     for (var i = 0; i <= maxScrolls; i++) {
       last = i;
+      final iterationClock = Stopwatch()..start();
       CallProgress.enter('scroll_to_find: reading the scene before scroll ${i + 1}', key: 'read');
       final scene = await session.reader.readSummary();
       try {
         lastTexts = _visibleTexts(scene.root);
         lastIds = scene.glintIds;
+        SemanticScene? readSemantic;
+        SceneSnapshot? readSnapshot;
+        if (i > 0) {
+          readSemantic = await session.semanticize(scene, detail: SceneDetail.structural);
+          readSnapshot = snapshotOf(readSemantic);
+          final sideEffect = sideEffectOf(previous, readSnapshot, target.watchedPagedIds);
+          if (sideEffect != null) return _sideEffectReply(criterion, i, sideEffect, target);
+        }
+        CallProgress.note('scroll $i/$maxScrolls, last seen: ${lastTexts.take(6).map((t) => '"$t"').join(', ')}');
         final hit = targetGlintId != null ? scene.findByGlintId(targetGlintId) : _findTextNode(scene.root, targetText!);
         if (hit != null && hit.glintId != null) {
           seenInTree = true;
-          // Check if it's in the overlay layer rather than the scrollable base.
           if (targetGlintId != null && scene.isInOverlay(targetGlintId)) {
             seenInOverlay = true;
           }
           try {
             final coord = await session.resolver.resolve(scene, hit.glintId!);
-            // On-viewport is required: a hittable-but-scrolled-out target
-            // would send the agent straight back into an offViewport refusal.
+            lastSeen = coord;
             final verdict = findVerdict(coord, tap: tap);
             if (verdict == FindVerdict.covered) {
               covered = coord;
@@ -177,6 +238,8 @@ class ScrollToFindTool extends GlintTool {
                 summary: 'found $criterion after $i scroll(s)',
                 data: {
                   'attempts': i,
+                  'elapsedMs': clock.elapsedMilliseconds,
+                  'swipes': swipes,
                   'glintId': hit.glintId,
                   'hittable': coord.hittable,
                   'painted': coord.painted,
@@ -193,27 +256,67 @@ class ScrollToFindTool extends GlintTool {
               break;
             }
           } on Exception {
-            // resolve can fail mid-scroll if the node was just replaced;
-            // fall through and try another scroll.
+            lastSeen = null;
           }
-          target = await scrollTargetFor(session, scene, hit, dir);
+        }
+        if (i < maxScrolls) {
+          final semantic = readSemantic ?? await session.semanticize(scene, detail: SceneDetail.structural);
+          final snapshot = readSnapshot ?? snapshotOf(semantic);
+          final loading = const StateObserver().observe(semantic) == SceneState.loading;
+          Future<void> measureStall() async {
+            if (i == 0 || i == maxScrolls) return;
+            final before = swiped;
+            final moved = before == null
+                ? null
+                : await scrollDisplacement(session, scene, before, horizontal, restSamples: _restSamples);
+            final still = moved != null && !loading && moved <= _stalledBelow(before!, amount, horizontal);
+            stalls = still ? stalls + 1 : 0;
+            endReached = stalls >= _stallsForEnd;
+          }
+
+          previous = snapshot;
+          await measureStall();
+          target = hit != null && hit.glintId != null
+              ? await scrollTargetFor(session, scene, hit, dir)
+              : (anchor: await session.scrollAnchorIn(scene, semantic), watchedPagedIds: const <String>{});
+          swiped = target.anchor;
+          firstAnchor ??= swiped;
+          final fixed = firstAnchor?.clip;
+          final fresh = target.anchor;
+          if (fresh != null && fixed != null && fresh.clip != fixed) {
+            target = (
+              anchor: (glintId: fresh.glintId, x: fresh.x, y: fresh.y, clip: fixed),
+              watchedPagedIds: target.watchedPagedIds
+            );
+          } else if (fresh == null && firstAnchor != null) {
+            target = (anchor: firstAnchor, watchedPagedIds: target.watchedPagedIds);
+          }
         }
       } finally {
         await scene.dispose();
       }
 
-      // A covered target gets one more scroll (a bar along the edge may hide it), then the search stops.
-      if (tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt)) break;
-      final step = await scroller.perform(session, scrollArgs, target: target);
+      final spent = iterationClock.elapsed;
+      if (spent > worstIteration) worstIteration = spent;
+      outOfTime = clock.elapsed + worstIteration > _maxDuration;
+      if (tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt) || endReached || outOfTime) break;
+      final verify = stalls > 0;
+      if (!verify) blockedDetail = null;
+      final step = await scroller.perform(session, verify ? scrollArgsWithReason : scrollArgs, target: target);
+      swipes.add(step.summary.split(';').first);
+      if (verify && step.data?['reason'] == 'blocked') blockedDetail = step.summary;
       if (step.isError) {
         return StructuredResponse.error(
           summary: 'scroll step $i failed; aborting scroll_to_find',
           errorKind: GlintErrorKind.internal,
           detail: step.summary,
+          nextSteps: const [
+            'get_scene to see the screen',
+            'retry once; if it repeats, swipe x1,y1,x2,y2 inside the list'
+          ],
         );
       }
-      final sideEffect = step.data?['sideEffect'] as String?;
-      if (sideEffect != null) return _sideEffectReply(criterion, i + 1, sideEffect, target);
+      await _letScrollRest(session);
     }
 
     if (tapId != null && foundReply != null) {
@@ -221,7 +324,25 @@ class ScrollToFindTool extends GlintTool {
       return tapped.copyWith(summary: '${foundReply.summary}, ${tapped.summary}').mergeData({'found': foundReply.data});
     }
 
-    // Return a diagnostic failure message that distinguishes the root cause.
+    if (endReached && blockedDetail != null && !seenInTree) {
+      return StructuredResponse.error(
+        summary: '$criterion was not found: the list can still move, but the swipe did not reach it',
+        errorKind: GlintErrorKind.scrollLimitReached,
+        detail: blockedDetail,
+        nextSteps: const [
+          'get_scene shows what sits over the list (a dialog, the keyboard or a bar); dismiss it, then retry',
+          'or swipe x1,y1,x2,y2 inside the list',
+        ],
+      ).mergeData({'reason': 'blocked', 'attempts': last, 'elapsedMs': clock.elapsedMilliseconds});
+    }
+    final stopped = _whyStopped(endReached: endReached, outOfTime: outOfTime, scrolls: last, maxScrolls: maxScrolls);
+    final progress = {
+      'attempts': last,
+      'elapsedMs': clock.elapsedMilliseconds,
+      'swipes': swipes,
+      if (endReached) 'endReached': true,
+    };
+
     if (covered != null) {
       return StructuredResponse.error(
         summary: '$criterion was on screen but covered: a tap at its centre would land on ${_cover(covered)}',
@@ -234,7 +355,7 @@ class ScrollToFindTool extends GlintTool {
           'to only see it, call scroll_to_find without tap:true',
           'tap glintId:"${covered.glintId}" refuseNotHittable:false taps it anyway',
         ],
-      ).mergeData({'glintId': covered.glintId, if (covered.hitBy != null) 'coveredBy': covered.hitBy});
+      ).mergeData({'glintId': covered.glintId, if (covered.hitBy != null) 'coveredBy': covered.hitBy, ...progress});
     }
     if (seenInOverlay) {
       return StructuredResponse.error(
@@ -249,21 +370,20 @@ class ScrollToFindTool extends GlintTool {
     }
     if (seenInTree) {
       return StructuredResponse.error(
-        summary: '$criterion appeared in the tree during scrolling but was never '
-            'on-screen${tap ? ' and hittable' : ''} within $maxScrolls scroll(s) in $dirName — '
-            'scroll limit hit',
+        summary: '$criterion appeared in the tree but was never on screen${tap ? ' and hittable' : ''}: $stopped',
         errorKind: GlintErrorKind.scrollLimitReached,
+        detail: lastSeen == null ? 'it was in the tree but could not be measured' : _whereItSat(lastSeen, dir),
         nextSteps: [
-          'increase `maxScrolls` (currently $maxScrolls)',
+          if (!endReached && !outOfTime && last >= maxScrolls && maxScrolls < _maxScrollsCap)
+            'raise maxScrolls (currently $maxScrolls, cap $_maxScrollsCap)',
           'try the opposite direction in case content scrolled past the target',
-          'use `get_scene` to check if a barrier or overlay is covering it',
+          'get_scene shows whether a barrier, overlay or another scrollable holds it',
         ],
-      );
+      ).mergeData({if (lastSeen != null) 'glintId': lastSeen.glintId, ...progress});
     }
     final hint = targetGlintId != null ? didYouMean(suggestIds(lastIds, targetGlintId)) : null;
     return StructuredResponse.error(
-      summary: '$criterion was not found in any scene during $maxScrolls scroll(s) '
-          'in $dirName — target is not in this list',
+      summary: '$criterion was not found in any scene: $stopped',
       errorKind: GlintErrorKind.targetNotFound,
       detail: lastTexts.isEmpty
           ? 'the screen shows no text at all'
@@ -275,7 +395,54 @@ class ScrollToFindTool extends GlintTool {
             'screen or tab — navigate there first',
         'use `get_scene` to confirm the correct glintId or text content',
       ],
-    );
+    ).mergeData(progress);
+  }
+
+  static String _whyStopped({
+    required bool endReached,
+    required bool outOfTime,
+    required int scrolls,
+    required int maxScrolls,
+  }) {
+    if (endReached) return 'the list stopped moving after $scrolls scroll(s), so it has reached its end';
+    if (outOfTime) return 'stopped after $scrolls scroll(s) because the search used its ${_maxDuration.inSeconds} s';
+    return 'it did not appear within $maxScrolls scroll(s)';
+  }
+
+  /// Where a target that is in the tree but not usable sat at the last read, in words.
+  static String _whereItSat(ResolvedCoord c, ScrollDirection dir) {
+    final view = c.logicalViewSize;
+    final x = c.logicalCenter.x.round(), y = c.logicalCenter.y.round();
+    final where = [
+      if (c.logicalCenter.y >= view.h) '${(c.logicalCenter.y - view.h).round()} px below the screen',
+      if (c.logicalCenter.y < 0) '${(-c.logicalCenter.y).round()} px above the screen',
+      if (c.logicalCenter.x >= view.w) '${(c.logicalCenter.x - view.w).round()} px right of the screen',
+      if (c.logicalCenter.x < 0) '${(-c.logicalCenter.x).round()} px left of the screen',
+    ];
+    if (where.isNotEmpty) return 'at the last read its centre was at ($x, $y), ${where.join(' and ')}';
+    if (!c.painted) {
+      return 'at ($x, $y) on screen but not painted (hidden, clipped or faded); a tap there would reach ${_cover(c)}';
+    }
+    return 'at ($x, $y) inside its scrollable but clipped out of view; a tap there would reach ${_cover(c)}';
+  }
+
+  /// Travel under which a swipe counts as not having moved the list: a rubber-band overshoot at the end moves it a little, a real step far more.
+  static double _stalledBelow(ScrollAnchor anchor, double amount, bool horizontal) {
+    final clip = anchor.clip;
+    final span = clip == null ? 600.0 : (horizontal ? clip.w : clip.h);
+    return (span * amount * _stalledShare).clamp(2.0, _stalledMaxPx);
+  }
+
+  Future<void> _letScrollRest(GlintSession session) async {
+    try {
+      await session.settleDetector.awaitSettle(
+        ceilingMs: _settleAfterSwipeMs,
+        quietFramesNeeded: 2,
+        checkLoadingAffordances: false,
+      );
+    } on Object {
+      return;
+    }
   }
 
   static StructuredResponse _sideEffectReply(String criterion, int scrolls, String sideEffect, ScrollTarget target) =>

@@ -24,7 +24,7 @@ On iOS the server drives the simulator through the `glint-iossim` bridge in `nat
 
 Use `watch` whenever someone else must act before you can continue: a person enters a PIN, password or 2FA code, signs in, or confirms a real-money or destructive step, or a teammate or backend changes something the app reacts to minutes later. `watch` registers conditions, returns at once, and wakes the agent when one matches. Without it the agent ends its turn with "tell me when you're done" and waits.
 
-`wait_for` is for what the agent itself just caused and blocks one call for up to 120 s. `watch` is for a person or a backend, and lasts up to 6 h (`timeoutMs`, default 30 min).
+`wait_for` is for what the agent itself just caused and blocks one call for up to 60 s. `watch` is for a person or a backend, and lasts up to 6 h (`timeoutMs`, default 30 min).
 
 Example:
 

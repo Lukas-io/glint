@@ -7,6 +7,7 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart' show InspectorReadError, SurfaceReplyLine, appBusyCause, suggestIds;
 import '../../runtime.dart';
+import 'arg_aliases.dart';
 import 'call_diagnostics.dart';
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
@@ -102,9 +103,10 @@ abstract class GlintTool {
   }
 
   /// Coerces numeric and true/false strings in typed top-level fields in place, then checks top-level fields against [tool]'s schema (nested shapes are the tool's own to explain); null when valid.
-  static StructuredResponse? checkArguments(Tool tool, CallToolRequest request) {
+  static StructuredResponse? checkArguments(Tool tool, CallToolRequest request, {List<String>? warnings}) {
     final args = request.arguments;
     final props = tool.inputSchema.properties ?? const {};
+    if (args != null) warnings?.addAll(applyArgAliases(tool.name, args, props.keys.toSet()).warnings);
     if (args != null) {
       for (final MapEntry(:key, value: schema) in props.entries) {
         final raw = args[key];
@@ -130,7 +132,10 @@ abstract class GlintTool {
         errorKind: GlintErrorKind.invalidArgument,
         nextSteps: [
           for (final k in unknown)
-            if (closestArgName(k, props.keys) case final near?) 'use $near instead of $k',
+            if (argHint(tool.name, k) case final hint?)
+              hint
+            else if (closestArgName(k, props.keys) case final near?)
+              'use $near instead of $k',
           'accepted fields: ${props.keys.join(", ")}',
         ],
       );
@@ -279,7 +284,8 @@ abstract class GlintTool {
     final start = DateTime.now();
     Object? failure;
     final helpersBefore = ProcessRegistry.instance.startedCount;
-    final invalid = checkArguments(registeredDefinition, request);
+    final aliasWarnings = <String>[];
+    final invalid = checkArguments(registeredDefinition, request, warnings: aliasWarnings);
     if (invalid != null) {
       logCall(session, request, invalid, start);
       return invalid.toCallResult();
@@ -355,6 +361,7 @@ abstract class GlintTool {
               detail: '$e\n$st',
             );
     }
+    response = response.addWarnings(aliasWarnings);
     response = await _checkDeviceGone(session, app, response);
     response = explainMissingBridge(response);
     response = _explainBreakpointPause(session, response);

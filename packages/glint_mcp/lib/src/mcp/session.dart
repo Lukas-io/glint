@@ -250,7 +250,7 @@ class GlintSession {
       showTouches: !observe && config.showTouches,
       appLogs: retained?.buffer,
     );
-    if (CallProgress.current?.abandoned ?? false) {
+    if (CallProgress.cancelled) {
       await app.dispose();
       CallProgress.checkAlive();
     }

@@ -14,6 +14,43 @@ class CallAbandoned implements Exception {
   String toString() => 'CallAbandoned($tool): the call hit its time ceiling and was cancelled';
 }
 
+/// Thrown by [CallProgress.timeboxed] when its body outlived its limit; says where the body had got to.
+class CallTimeboxExceeded implements Exception {
+  const CallTimeboxExceeded(this.limit,
+      {this.elapsedMs = 0, this.phase = 'starting', this.trail = const [], this.unwound = true});
+  final Duration limit;
+
+  /// Whether the cancelled body had stopped by the time this was thrown; false when it was still inside a call that cannot be cut short.
+  final bool unwound;
+  final int elapsedMs;
+  final String phase;
+  final List<String> trail;
+  @override
+  String toString() => 'CallTimeboxExceeded(${limit.inMilliseconds} ms)';
+}
+
+class _Timebox {
+  bool expired = false;
+  final Stopwatch clock = Stopwatch()..start();
+  final Map<Process, String> processes = {};
+  final List<({String phase, int ms})> trail = [];
+  String phase = 'starting';
+  int phaseAtMs = 0;
+
+  void phaseChanged(String next) {
+    final now = clock.elapsedMilliseconds;
+    trail.add((phase: phase, ms: now - phaseAtMs));
+    if (trail.length > 8) trail.removeAt(0);
+    phase = next;
+    phaseAtMs = now;
+  }
+
+  List<String> get trailText => [
+        for (final t in trail) '${t.phase} (${(t.ms / 1000).toStringAsFixed(1)}s)',
+        '$phase (${((clock.elapsedMilliseconds - phaseAtMs) / 1000).toStringAsFixed(1)}s, still running)',
+      ];
+}
+
 /// Where a call's counters stood at one moment; the difference between two marks is what happened in between.
 class CallMark {
   const CallMark({this.atMs = 0, this.phases = const {}, this.vmTimeouts = 0, this.vmRetries = 0});
@@ -38,11 +75,14 @@ class CallProgress {
   final Stopwatch clock = Stopwatch()..start();
 
   static const _zoneKey = #glintCallProgress;
+  static const _boxKey = #glintCallTimebox;
   static const _trailMax = 8;
 
   static int _inFlight = 0;
 
   String _phase = 'starting';
+  String? _note;
+  String? _label;
   String _baseKey = 'start';
   int _baseAtMs = 0;
   final Map<String, int> _phaseMs = {};
@@ -114,10 +154,53 @@ class CallProgress {
     return CallMark(atMs: now, phases: phases, vmTimeouts: _vmTimeouts, vmRetries: _vmRetries);
   }
 
-  /// Throws [CallAbandoned] when the running call was cancelled.
+  /// Throws [CallAbandoned] when the running call, or the [timeboxed] part it is in, was cancelled.
   static void checkAlive() {
-    final call = current;
-    if (call != null && call._abandoned) throw CallAbandoned(call.tool);
+    if (cancelled) throw CallAbandoned(current?.tool ?? 'step');
+  }
+
+  /// Whether the running call, or the [timeboxed] part it is in, was cancelled.
+  static bool get cancelled =>
+      (current?._abandoned ?? false) || ((Zone.current[_boxKey] as _Timebox?)?.expired ?? false);
+
+  /// Sets what the heartbeat adds after the phase, such as what a wait last saw; null clears it. No-op outside a tool call.
+  static void note(String? text) => current?._note = text;
+
+  /// Sets which step of a longer call this is, shown after the phase in the heartbeat; null clears it.
+  static void stepLabel(String? text) => current?._label = text;
+
+  /// Runs [body] for at most [limit]. Past it the part is cancelled: its next [checkAlive] throws, the subprocesses it started are stopped, and after at most [unwind] for the body to finish this throws [CallTimeboxExceeded].
+  static Future<T> timeboxed<T>(Duration limit, Future<T> Function() body,
+      {Duration unwind = const Duration(seconds: 1)}) {
+    final box = _Timebox();
+    final done = Completer<T>();
+    final finished = Completer<void>();
+    final timer = Timer(limit, () async {
+      box.expired = true;
+      for (final p in box.processes.keys.toList()) {
+        unawaited(killProcessTree(p));
+      }
+      box.processes.clear();
+      await finished.future.timeout(unwind, onTimeout: () {});
+      if (!done.isCompleted) {
+        done.completeError(CallTimeboxExceeded(limit,
+            elapsedMs: box.clock.elapsedMilliseconds,
+            phase: box.phase,
+            trail: box.trailText,
+            unwound: finished.isCompleted));
+      }
+    });
+    runZoned(() async {
+      try {
+        final value = await body();
+        if (!done.isCompleted) done.complete(value);
+      } on Object catch (e, st) {
+        if (!done.isCompleted && !(box.expired && e is CallAbandoned)) done.completeError(e, st);
+      } finally {
+        if (!finished.isCompleted) finished.complete();
+      }
+    }, zoneValues: {_boxKey: box});
+    return done.future.whenComplete(timer.cancel);
   }
 
   String get phase => _phase;
@@ -134,6 +217,7 @@ class CallProgress {
 
   void _set(String phase) {
     if (phase == _phase) return;
+    (Zone.current[_boxKey] as _Timebox?)?.phaseChanged(phase);
     final now = clock.elapsedMilliseconds;
     _trail.add((phase: _phase, ms: now - _phaseAtMs));
     if (_trail.length > _trailMax) _trail.removeAt(0);
@@ -159,8 +243,15 @@ class CallProgress {
   /// Runs [body] with this call as the current one for everything it starts.
   T run<T>(T Function() body) => runZoned(body, zoneValues: {_zoneKey: this});
 
-  void registerProcess(Process process, String label) => _processes[process] = label;
-  void unregisterProcess(Process process) => _processes.remove(process);
+  void registerProcess(Process process, String label) {
+    final box = Zone.current[_boxKey] as _Timebox?;
+    (box?.processes ?? _processes)[process] = label;
+  }
+
+  void unregisterProcess(Process process) {
+    _processes.remove(process);
+    (Zone.current[_boxKey] as _Timebox?)?.processes.remove(process);
+  }
 
   /// Hands [process] over to outlive the running call, so abandoning the call leaves it running.
   static void release(Process process) => current?.unregisterProcess(process);
@@ -212,7 +303,8 @@ class CallProgress {
     final tok = token;
     if (tok == null) return;
     final sec = (clock.elapsedMilliseconds / 1000).round();
-    forward(ProgressNotification(progressToken: tok, progress: sec, message: '$tool: $_phase (${sec}s)'));
+    final parts = [_phase, if (_label != null) _label, if (_note != null) _note];
+    forward(ProgressNotification(progressToken: tok, progress: sec, message: '$tool: ${parts.join(' · ')} (${sec}s)'));
   }
 
   /// Sends [n] to the client with a progress value that only grows; a no-op without a client token or sender.
