@@ -13,6 +13,7 @@ import '../../interaction/emulator_control.dart' show EmulatorControl, EmulatorI
 import '../../media/emulator_audio.dart';
 import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
+import '../../media/sim_calls.dart';
 import '../../media/sim_camera.dart';
 import '../../interaction/siminject.dart';
 import '../../media/mic_audio.dart';
@@ -72,7 +73,7 @@ class MediaTool extends GlintTool {
             'permission (set camera, microphone or photos access for the app: grant, deny, reset, limited), '
             'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
             'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
-            'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS), '
+            'event (Android emulator: rotate, light, proximity, SMS; calls on Android and iOS simulators: call rings, answerCall, declineCall, endCall; iOS also callkit, which lets an app\'s own CallKit calls ring with an Answer/Decline overlay; replies say synthetic:true; stop:true removes the stand-in), '
             'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation and the system camera picker (image_picker) with no app change; Android needs setup:true once). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
@@ -81,7 +82,7 @@ class MediaTool extends GlintTool {
                 description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
             'stop': Schema.bool(
                 description:
-                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed.'),
+                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in.'),
             'lens': Schema.string(description: 'camera (iOS): front | back | both. Default both.'),
             'fit': Schema.string(
                 description:
@@ -94,21 +95,24 @@ class MediaTool extends GlintTool {
                     'camera (iOS): take the camera over from another glint that holds it (changes or stops its feed).'),
             'relaunch': Schema.bool(
                 description:
-                    'camera (iOS): restart an app that started before glint could load into it. Its state is lost.'),
+                    'camera, event call (iOS): restart an app that started before glint could load into it. Its state is lost.'),
             'setup': Schema.bool(
                 description:
                     'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
             'value': Schema.string(
                 description:
                     'event rotate: portrait | landscape | reversePortrait | reverseLandscape | auto. light: lux. proximity: near | far.'),
-            'number': Schema.string(description: 'event call, endCall, sms: the caller. Default 5551234.'),
+            'number': Schema.string(
+              description:
+                  'event call, sms: the caller. Default 5551234. answerCall, declineCall, endCall: the number of the last call on that device (Android: the last one rung), else 5551234.',
+            ),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
             'action': Schema.string(
                 description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(
                 description:
-                    'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms.'),
+                    'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | answerCall | declineCall | endCall | callkit (iOS) | sms.'),
             'source': Schema.string(
                 description:
                     'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). mic: tone (default), speech, or a host audio file.'),
@@ -126,7 +130,9 @@ class MediaTool extends GlintTool {
             'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
             'rotation':
                 Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
-            'text': Schema.string(description: 'speech: what to say. event sms: the message.'),
+            'text': Schema.string(
+                description:
+                    'speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number).'),
             'voice': Schema.string(description: 'speech: a macOS voice name.'),
             'hz': Schema.num(description: 'tone: frequency. Default 440 (mic: 1000).'),
             'since':
@@ -166,7 +172,7 @@ class MediaTool extends GlintTool {
         'permission' => await _permission(session, args),
         'listen' => await _listen(session, args),
         'mic' => await _mic(session, args, phases),
-        'event' => await _event(session, args),
+        'event' => await _event(session, args, phases),
         'camera' => await _camera(session, args, phases),
         _ => _bad('op must be seed, files, inspect, pick, permission, listen, event or camera, got ${op ?? 'nothing'}'),
       };
@@ -906,17 +912,34 @@ class MediaTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _event(GlintSession session, Map<String, Object?> args) async {
+  Future<StructuredResponse> _event(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
     final kind = args['kind'] as String?;
     if (!eventKinds.contains(kind)) return _bad('event needs kind: ${eventKinds.join(' | ')}');
     final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
     if (id == null) return _bad('no device: attach first, or pass device:"emulator-5554"');
+    if (simCallKinds.contains(kind)) {
+      final simulator = MediaDevice.platformOf(id) == DevicePlatform.ios && await const SimControl().status(id) != null;
+      if (simulator) return _simCall(session, id, kind!, args, phases);
+      if (kind == 'callkit' || MediaDevice.platformOf(id) == DevicePlatform.ios || isPhysicalIosUdid(id)) {
+        return _bad(
+          '$kind works on an iOS simulator only',
+          detail: id.startsWith('emulator-')
+              ? 'an Android emulator has no CallKit; `kind:"call"`, `answerCall`, `declineCall` and `endCall` ring it with gsm'
+              : isPhysicalIosUdid(id)
+                  ? 'a physical iPhone takes real calls and has its own CallKit, so glint injects nothing there'
+                  : '$id is not an iOS simulator on this Mac',
+          nextSteps: const [
+            'pass the UDID of an iOS simulator (attach lists them), or use an Android emulator for `kind:"call"`'
+          ],
+        );
+      }
+    }
     if (!id.startsWith('emulator-')) {
       return StructuredResponse.error(
         summary: 'events go to Android emulators only',
         errorKind: GlintErrorKind.unsupportedBackendAction,
         detail: MediaDevice.platformOf(id) == DevicePlatform.ios
-            ? 'the iOS simulator has no way to rotate, set sensors, ring or text from outside'
+            ? 'the iOS simulator has no way to rotate, set sensors or text from outside; calls work there (kind call, answerCall, declineCall, endCall, callkit)'
             : 'a physical phone takes no injected sensor, call or SMS events',
         nextSteps: const ['run this flow on an Android emulator', 'or ask the user to do it on the device'],
       );
@@ -941,6 +964,281 @@ class MediaTool extends GlintTool {
         nextSteps: [if (!e.invalid) 'check the emulator is running (adb devices), then retry'],
       );
     }
+  }
+
+  Future<StructuredResponse?> _simBooted(String id) async {
+    if (await const SimControl().isBooted(id)) return null;
+    return StructuredResponse.error(
+      summary: 'simulator $id is not booted',
+      errorKind: GlintErrorKind.deviceGone,
+      nextSteps: ['attach device:"$id" boots it', 'or xcrun simctl boot $id'],
+    );
+  }
+
+  String _dormantLibraryNote(SimInjector injector) {
+    final holding = [for (final a in injector.loaded()) a.bundleId];
+    return holding.isEmpty
+        ? 'no app holds the glint library'
+        : '${holding.join(', ')} still holds the dormant glint library (nothing runs); restart it to unload it';
+  }
+
+  Future<StructuredResponse> _simCall(
+    GlintSession session,
+    String id,
+    String kind,
+    Map<String, Object?> args,
+    PhaseReporter phases,
+  ) async {
+    final down = await _simBooted(id);
+    if (down != null) return down;
+    final injector = SimInjector(id, progress: phases);
+    final calls = SimCalls(injector);
+    final wasOn = calls.on;
+    var enabledHere = false;
+    Future<String> undo() async {
+      if (!enabledHere) return '';
+      enabledHere = false;
+      await calls.stop();
+      return 'glint turned the call stand-in on for this call and has turned it off again, so nothing is left running';
+    }
+
+    try {
+      if (argBool(args, 'stop') == true) {
+        final was = await calls.stop();
+        final clean = _dormantLibraryNote(injector);
+        return StructuredResponse(
+          summary: was
+              ? 'the call stand-in is off: any call ended, the overlay is gone and CallKit is the app\'s own again; $clean'
+              : 'the call stand-in was already off; $clean',
+          nextSteps: const ['`media op:event kind:"call"` rings the phone again'],
+          data: {
+            'device': id,
+            'kind': kind,
+            'synthetic': true,
+            'stillLoaded': [for (final a in injector.loaded()) a.bundleId],
+          },
+        );
+      }
+      final before = wasOn ? calls.apps() : const <CallsApp>[];
+      final primary = _appId(session, MediaDevice(DevicePlatform.ios, id), args);
+      bool hasRinging(List<CallsApp> a) => a.any((x) => x.calls.any((c) => c.state == 'ringing'));
+      int count(List<CallsApp> a, bool Function(SimCall) test) => a.fold(0, (n, x) => n + x.calls.where(test).length);
+      List<CallsApp> front(List<CallsApp> a) {
+        final named = a.where((x) => primary != null && x.bundleId == primary).toList();
+        return named.isNotEmpty ? named : a.where((x) => x.foreground).toList();
+      }
+
+      bool hasLive(List<CallsApp> a) => a.any((x) => x.calls.isNotEmpty);
+      final connectedBefore = count(front(before), (c) => c.state == 'connected');
+      final ringingBefore = count(front(before), (c) => c.state == 'ringing');
+      final liveBefore = count(front(before), (_) => true);
+      bool overlayUp(List<CallsApp> a) => a.every((x) => x.overlay);
+      InjectReport? report;
+      if (kind == 'call' || kind == 'callkit') {
+        if (kind == 'call' && before.any((a) => a.has('cellular', 'ringing') || a.has('cellular', 'connected'))) {
+          return _bad(
+            'a call is already in progress',
+            detail: 'one call at a time, as on a phone',
+            nextSteps: const ['`media op:event kind:"endCall"` hangs it up, then ring again'],
+          );
+        }
+        await calls.enable();
+        enabledHere = !wasOn;
+        report = await injector.ensure(
+          appId: primary,
+          relaunch: argBool(args, 'relaunch') == true,
+          module: 'calls',
+        );
+        if (report.waiting.isNotEmpty) {
+          throw SimInjectFailure(
+            GlintErrorKind.appNotResumed,
+            'no app is running to take the call',
+            '${report.waiting.join(', ')} is not running on $id',
+            ['attach launch:"${report.waiting.first}", then repeat the call'],
+          );
+        }
+      } else if (!wasOn) {
+        return _bad(
+          'no call to $kind',
+          detail: 'the call stand-in is off, so no call is ringing',
+          nextSteps: const ['`media op:event kind:"call"` rings the phone first'],
+        );
+      }
+      final CallsOutcome outcome;
+      switch (kind) {
+        case 'call':
+          outcome = await calls.send(
+            'ring',
+            number: (args['number'] as String?) ?? '5551234',
+            name: args['text'] as String?,
+            primary: primary,
+            phases: phases,
+            until: hasRinging,
+            settle: overlayUp,
+          );
+        case 'callkit':
+          outcome = await calls.reported(primary: primary, phases: phases);
+        case 'answerCall':
+          if (!hasRinging(before)) {
+            return _bad(
+              'no ringing call to answer',
+              detail: hasLive(before) ? 'the call is already answered' : 'no call is ringing',
+              nextSteps: const ['`media op:event kind:"call"` rings the phone, or an app reports a CallKit call'],
+            );
+          }
+          outcome = await calls.send(
+            'answer',
+            primary: primary,
+            phases: phases,
+            until: (a) => count(a, (c) => c.state == 'connected') > connectedBefore,
+          );
+        case 'declineCall':
+          if (!hasRinging(before)) {
+            return _bad(
+              'no ringing call to decline',
+              detail: hasLive(before) ? 'the call is already answered, so `endCall` ends it' : 'no call is ringing',
+              nextSteps: const ['`media op:event kind:"call"` rings the phone, or an app reports a CallKit call'],
+            );
+          }
+          outcome = await calls.send(
+            'decline',
+            primary: primary,
+            phases: phases,
+            until: (a) => count(a, (c) => c.state == 'ringing') < ringingBefore,
+          );
+        default:
+          if (!hasLive(before)) {
+            return _bad(
+              'no call to end',
+              detail: 'no call is ringing or connected',
+              nextSteps: const ['`media op:event kind:"call"` rings the phone'],
+            );
+          }
+          outcome = await calls.send(
+            'end',
+            primary: primary,
+            phases: phases,
+            until: (a) => count(a, (_) => true) < liveBefore,
+          );
+      }
+      if (!outcome.held) {
+        final note = await undo();
+        final saw = [for (final a in outcome.required) ...a.calls.map((c) => '${c.kind} ${c.state}')];
+        return StructuredResponse.error(
+          summary: switch (kind) {
+            'call' => 'the call did not ring in the app in front',
+            'answerCall' => 'the call was not answered',
+            'declineCall' => 'the call was not declined',
+            _ => 'the call did not end',
+          },
+          errorKind: GlintErrorKind.targetNeverReady,
+          detail:
+              'the app in front applied the command but reports ${saw.isEmpty ? 'no call' : saw.join(', ')}${note.isEmpty ? '' : '; $note'}',
+          nextSteps: const [
+            'get_scene to see the screen, then repeat the call',
+            '`media op:event kind:"callkit" stop:true` clears the stand-in if it is stuck',
+          ],
+        );
+      }
+      return _callReply(id, kind, args, outcome, report);
+    } on SimInjectFailure catch (e) {
+      final note = await undo();
+      return StructuredResponse.error(
+        summary: e.message,
+        errorKind: e.kind,
+        detail: note.isEmpty ? e.detail : '${e.detail}; $note',
+        nextSteps: e.nextSteps,
+      );
+    } on MissingHostTool catch (e) {
+      await undo();
+      return _missingTool(e, 'event');
+    } on Object {
+      await undo();
+      rethrow;
+    }
+  }
+
+  StructuredResponse _callReply(
+    String id,
+    String kind,
+    Map<String, Object?> args,
+    CallsOutcome outcome,
+    InjectReport? report,
+  ) {
+    final apps = outcome.apps;
+    final who = apps.map((a) => a.bundleId).join(', ');
+    final observers = apps.fold<int>(0, (n, a) => n + a.observers);
+    final providers = apps.fold<int>(0, (n, a) => n + a.providers);
+    final live = [for (final a in apps) ...a.calls];
+    final overlay = apps.any((a) => a.overlay);
+    final interruption = kind == 'callkit'
+        ? 'none'
+        : apps.map((a) => a.interruption).firstWhere((i) => i != 'none', orElse: () => 'none');
+    final delivered = [
+      if (interruption != 'none') 'AVAudioSession interruption $interruption',
+      if (observers > 0) 'CXCallObserver told ($observers)',
+      if (overlay) 'Answer/Decline overlay on screen',
+    ];
+    final number = (args['number'] as String?) ?? '5551234';
+    final summary = switch (kind) {
+      'call' => 'a synthetic incoming call from $number is ringing in $who',
+      'answerCall' => 'the synthetic call is answered in $who',
+      'declineCall' => 'the call was declined in $who',
+      'endCall' => 'the call ended in $who',
+      _ =>
+        'the call stand-in is on in $who: ${live.isEmpty ? 'no call yet' : live.map((c) => '${c.kind} ${c.state}').join(', ')}',
+    };
+    final ringing = live.any((c) => c.state == 'ringing');
+    final linked = apps.any((a) => a.callkitLinked);
+    final gaps = [
+      if (kind == 'call' && linked && observers == 0) 'CXCallObserver',
+      if (kind == 'callkit' && linked && providers == 0) 'CXProvider',
+    ];
+    final loadedFirst = report != null && (report.load == InjectLoad.launch || report.load == InjectLoad.relaunch);
+    return StructuredResponse(
+      summary: '$summary${delivered.isEmpty ? '' : ' (${delivered.join(', ')})'}. synthetic:true',
+      warnings: [
+        if (kind == 'call' || kind == 'callkit')
+          'synthetic: there is no telephony on a simulator, so the audio session is not really taken from the app; an app that must stop its own audio has to do it on the interruption',
+        if (apps.any((a) => a.observerPath == 'unavailable'))
+          'CXCall has no usable private API on this iOS, so CXCallObservers were not told; the interruption and the overlay still work',
+        if (gaps.isNotEmpty)
+          loadedFirst
+              ? 'the app made no ${gaps.join(' or ')} (glint loaded before it started), so nothing reached that API'
+              : 'glint sees no ${gaps.join(' or ')} in the app: one made before glint loaded is not reachable; repeat with relaunch:true so glint loads before the app starts',
+        if (kind == 'callkit' && report != null && !linked)
+          'the app does not load CallKit, so there is nothing to stand in for',
+        if (kind == 'call' && !overlay && apps.any((a) => !a.foreground))
+          'the app is in the background: the overlay shows when it returns to the foreground',
+        if (outcome.silent.isNotEmpty)
+          'not reached (in the background or not answering): ${outcome.silent.join(', ')}; the command stays pending, so one that loads or resumes before the next command applies it',
+      ],
+      nextSteps: [
+        if (ringing)
+          'tap text:"Answer" or tap text:"Decline" in the overlay, or `kind:"answerCall"` / `kind:"declineCall"`',
+        if (live.any((c) => c.state == 'connected')) 'tap text:"End call", or `kind:"endCall"`',
+        if (live.isEmpty && kind != 'call')
+          '`kind:"call"` rings the phone; `kind:"callkit" stop:true` removes the stand-in',
+        'get_scene to see how the app reacted',
+      ],
+      data: {
+        'device': id,
+        'kind': kind,
+        'synthetic': true,
+        'delivered': {
+          'interruption': interruption,
+          'callObservers': observers,
+          'callkitProviders': providers,
+          'overlay': overlay,
+        },
+        'calls': [
+          for (final c in live) {'kind': c.kind, 'name': c.name, 'state': c.state, if (c.onHold) 'onHold': true},
+        ],
+        'apps': [for (final a in apps) a.toJson()],
+        if (outcome.silent.isNotEmpty) 'notReached': outcome.silent,
+        if (report != null) 'injected': report.toJson(modules: const ['calls']),
+      },
+    );
   }
 
   Future<StructuredResponse> _camera(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
@@ -1061,13 +1359,8 @@ class MediaTool extends GlintTool {
 
   Future<StructuredResponse> _simCamera(
       GlintSession session, String id, Map<String, Object?> args, PhaseReporter phases) async {
-    if (!await const SimControl().isBooted(id)) {
-      return StructuredResponse.error(
-        summary: 'simulator $id is not booted',
-        errorKind: GlintErrorKind.deviceGone,
-        nextSteps: ['attach device:"$id" boots it', 'or xcrun simctl boot $id'],
-      );
-    }
+    final down = await _simBooted(id);
+    if (down != null) return down;
     final lens = (args['lens'] as String?) ?? 'both';
     if (!simCameraLenses.contains(lens)) return _bad('lens must be front, back or both, got "$lens"');
     final fit = (args['fit'] as String?) ?? 'contain';
@@ -1093,16 +1386,17 @@ class MediaTool extends GlintTool {
     try {
       if (argBool(args, 'stop') == true) {
         final was = await camera.stop();
-        final holding = [for (final a in injector.loaded()) a.bundleId];
-        final clean = holding.isEmpty
-            ? 'no app holds the glint library'
-            : '${holding.join(', ')} still holds the dormant glint library (nothing runs); restart it to unload it';
+        final clean = _dormantLibraryNote(injector);
         return StructuredResponse(
           summary: was
               ? 'the simulator cameras are off again; apps lose them the next time they look for a camera; $clean'
               : 'the simulator cameras were already off; $clean',
           nextSteps: const ['`media op:camera source:"<file>"` turns them on again'],
-          data: {'device': id, 'cameras': const <String, Object?>{}, 'stillLoaded': holding},
+          data: {
+            'device': id,
+            'cameras': const <String, Object?>{},
+            'stillLoaded': [for (final a in injector.loaded()) a.bundleId],
+          },
         );
       }
       final source = (args['source'] as String?) ?? 'testcard';
@@ -1132,7 +1426,7 @@ class MediaTool extends GlintTool {
       await camera.feed(lens, feed);
       final InjectReport report;
       try {
-        report = await injector.ensure(appId: appId, relaunch: argBool(args, 'relaunch') == true);
+        report = await injector.ensure(appId: appId, relaunch: argBool(args, 'relaunch') == true, module: 'camera');
         if (feed.kind == 'webcam') await camera.startWebcam(phases);
       } on Object {
         await camera.restore(previous);

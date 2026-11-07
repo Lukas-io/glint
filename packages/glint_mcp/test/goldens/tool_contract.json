@@ -197,7 +197,7 @@
       },
       "stop": {
         "type": "boolean",
-        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed."
+        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in."
       },
       "lens": {
         "type": "string",
@@ -217,7 +217,7 @@
       },
       "relaunch": {
         "type": "boolean",
-        "description": "camera (iOS): restart an app that started before glint could load into it. Its state is lost."
+        "description": "camera, event call (iOS): restart an app that started before glint could load into it. Its state is lost."
       },
       "setup": {
         "type": "boolean",
@@ -229,7 +229,7 @@
       },
       "number": {
         "type": "string",
-        "description": "event call, endCall, sms: the caller. Default 5551234."
+        "description": "event call, sms: the caller. Default 5551234. answerCall, declineCall, endCall: the number of the last call on that device (Android: the last one rung), else 5551234."
       },
       "permission": {
         "type": "string",
@@ -245,7 +245,7 @@
       },
       "kind": {
         "type": "string",
-        "description": "seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | endCall | sms."
+        "description": "seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | answerCall | declineCall | endCall | callkit (iOS) | sms."
       },
       "source": {
         "type": "string",
@@ -285,7 +285,7 @@
       },
       "text": {
         "type": "string",
-        "description": "speech: what to say. event sms: the message."
+        "description": "speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number)."
       },
       "voice": {
         "type": "string",

@@ -1,7 +1,10 @@
 import 'gallery.dart';
 
 /// The events `media op:event` sends to an Android emulator.
-const eventKinds = {'rotate', 'light', 'proximity', 'call', 'endCall', 'sms'};
+const eventKinds = {'rotate', 'light', 'proximity', 'call', 'answerCall', 'declineCall', 'endCall', 'callkit', 'sms'};
+
+/// The caller of the last `call` per emulator, which answerCall, declineCall and endCall use when no number is given.
+final _lastCallNumber = <String, String>{};
 
 const _rotations = {'portrait': 0, 'landscape': 1, 'reversePortrait': 2, 'reverseLandscape': 3};
 
@@ -28,7 +31,7 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
 
   Future<String> shell(List<String> args) async => (await device.adb(['shell', ...args])).text.trim();
 
-  final phone = number ?? '5551234';
+  final phone = number ?? (kind == 'call' || kind == 'sms' ? null : _lastCallNumber[device.id]) ?? '5551234';
   switch (kind) {
     case 'rotate':
       if (value == 'auto') {
@@ -67,16 +70,36 @@ Future<String> sendEvent(MediaDevice device, String kind, {String? value, String
       return 'the $kind sensor reads ${got.split('\n').first.replaceAll(RegExp(r'\s*OK$'), '').trim()}';
     case 'call':
       await emu(['gsm', 'call', phone]);
+      _lastCallNumber[device.id] = phone;
       await Future<void>.delayed(const Duration(seconds: 1));
       final state = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
       if (state != '1') throw EventFailed('the phone did not ring', 'call state reads ${state ?? '?'}');
       return 'an incoming call from $phone is ringing; `kind:"endCall"` hangs it up';
+    case 'answerCall':
+      await emu(['gsm', 'accept', phone]);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final state = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
+      if (state != '2') throw EventFailed('the call was not answered', 'call state reads ${state ?? '?'}');
+      return 'the call from $phone is answered; `kind:"endCall"` hangs it up';
+    case 'declineCall':
+      await shell(['input', 'keyevent', 'KEYCODE_ENDCALL']);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      var after = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
+      if (after == '0') {
+        return 'the call from $phone was rejected as the phone\'s user would (the end-call key), so the app sees a local rejection';
+      }
+      await emu(['gsm', 'cancel', phone]);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      after = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
+      return after == '0'
+          ? 'the end-call key did not reject the call from $phone, so the caller hung up instead (gsm cancel): the app sees a remote hang-up'
+          : 'asked to decline the call from $phone; the call state reads ${after ?? '?'}';
     case 'endCall':
       await emu(['gsm', 'cancel', phone]);
       await Future<void>.delayed(const Duration(seconds: 1));
       final state = RegExp(r'mCallState=(\d)').firstMatch(await shell(['dumpsys', 'telephony.registry']))?.group(1);
       return state == '0'
-          ? 'the call from $phone ended'
+          ? 'the call from $phone ended (the caller hung up)'
           : 'asked to end the call from $phone; the call state reads ${state ?? '?'}';
     case 'sms':
       if (text == null || text.isEmpty) {
