@@ -222,7 +222,7 @@ class AppSession {
     if (rt == null || !rt.isAttached) return true;
     try {
       final isolate = await rt.rawService.getIsolate(rt.flutterIsolateId).timeout(const Duration(seconds: 5));
-      return _pauseKinds.contains(isolate.pauseEvent?.kind);
+      return pauseKinds.contains(isolate.pauseEvent?.kind);
     } on SentinelException {
       return false;
     } on Object {
@@ -230,7 +230,8 @@ class AppSession {
     }
   }
 
-  static const _pauseKinds = {
+  /// The VM pause kinds that mean the isolate runs no code until resumed.
+  static const pauseKinds = {
     EventKind.kPauseStart,
     EventKind.kPauseExit,
     EventKind.kPauseBreakpoint,

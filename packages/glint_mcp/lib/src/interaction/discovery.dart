@@ -4,6 +4,7 @@ import 'dart:io';
 import 'device.dart';
 import 'launcher.dart' show flutterAppProblem;
 import 'bounded_process.dart';
+import 'process_state.dart';
 
 /// A simulator / emulator that is currently booted and drivable.
 class BootedDevice {
@@ -509,35 +510,14 @@ class DeviceDiscovery {
     return null;
   }
 
-  Future<int?> _listeningPid(int port) async => (await _listeningPids(port)).firstOrNull;
-
-  Future<List<int>> _listeningPids(int port) async {
-    final ProcessResult res;
-    try {
-      res = await runBounded('lsof', ['-nP', '-iTCP:$port', '-sTCP:LISTEN'],
-          timeout: const Duration(seconds: 5), phase: 'lsof');
-    } on Object {
-      return const [];
-    }
-    if (res.exitCode != 0) return const [];
-    final pids = <int>[];
-    for (final line in (res.stdout as String).split('\n')) {
-      if (line.startsWith('COMMAND')) continue;
-      final parts = line.split(RegExp(r'\s+'));
-      if (parts.length >= 2) {
-        final pid = int.tryParse(parts[1]);
-        if (pid != null && !pids.contains(pid)) pids.add(pid);
-      }
-    }
-    return pids;
-  }
+  Future<int?> _listeningPid(int port) async => (await portOwners(port)).pids.firstOrNull;
 
   // ── project dir (for relaunch) ───────────────────────────────────────────
   /// Flutter project root behind a running app: the cwd of the DDS serving [vmUri] (its listener, or the DDS fronting that raw VM port) or of its `flutter run` parent, when that folder is a Flutter app.
   Future<String?> projectDirForVm(Uri vmUri) async {
     final port = vmUri.port;
     if (port == 0) return null;
-    for (final start in [...await _listeningPids(port), ...await _ddsPidsFronting(port)]) {
+    for (final start in [...(await portOwners(port)).pids, ...await _ddsPidsFronting(port)]) {
       int? pid = start;
       for (var hop = 0; pid != null && pid > 1 && hop < 3; hop++) {
         final cwd = await _cwdOf(pid);

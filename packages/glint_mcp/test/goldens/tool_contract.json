@@ -1390,6 +1390,10 @@
       "timeoutMs": {
         "type": "integer",
         "description": "op=wait: 100-120000. Default 60000."
+      },
+      "force": {
+        "type": "boolean",
+        "description": "op=resume: also resume a pause glint did not cause (a debugger, --start-paused). Only when the user asked."
       }
     }
   },

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' show min;
 
 import 'package:dart_mcp/server.dart';
+import 'package:vm_service/vm_service.dart' show VM;
 
 import '../../../interaction.dart';
 import '../../../observability.dart';
@@ -438,10 +439,16 @@ class AttachTool extends GlintTool {
 
     try {
       // ── 3. Read the VM once: platform + Dart version ──────────────────────
-      final vm = await probe.rawService.getVM().timeout(
-            VmServiceRuntime.callTimeout,
-            onTimeout: () => throw RuntimeUnresponsiveError('getVM', VmServiceRuntime.callTimeout),
-          );
+      final VM vm;
+      try {
+        vm = await probe.rawService.getVM().timeout(
+              VmServiceRuntime.callTimeout,
+              onTimeout: () => throw RuntimeUnresponsiveError('getVM', VmServiceRuntime.callTimeout),
+            );
+      } on RuntimeUnresponsiveError catch (e) {
+        return await _unresponsiveApp(scan, vmUri, e, adbPath);
+      }
+      final pausedAt = await _pausedIsolate(probe);
       final platform = _platformFromArg(platformArg) ?? _platformFromOs(vm.operatingSystem);
       if (platform == DevicePlatform.android && adbResolved == null) {
         return _adbMissing();
@@ -512,7 +519,13 @@ class AttachTool extends GlintTool {
       }
 
       // ── 6. Build the device target (+ iOS bridge preflight, viewport) ─────
-      final warnings = <String>[...launchNotes];
+      final warnings = <String>[
+        ...launchNotes,
+        if (pausedAt != null)
+          session.apps.any((a) => a.vmUri == vmUri && a.breakpoints.isPaused)
+              ? 'the UI isolate is paused ($pausedAt) at a glint breakpoint; `breakpoint op:resume` resumes it'
+              : 'the UI isolate is paused ($pausedAt) in a debugger; resume it there (or `breakpoint op:resume force:true` if the user asked)',
+      ];
       final deviceClaims = claims ?? DeviceClaims();
       final claim = deviceClaims.heldByOther(deviceId);
       if (claim != null && observe) {
@@ -1062,17 +1075,89 @@ class AttachTool extends GlintTool {
     );
   }
 
+  /// The pause event kind when the Flutter isolate is stopped (breakpoint, exception, interrupt); null when it runs or cannot be asked.
+  Future<String?> _pausedIsolate(VmServiceRuntime probe) async {
+    try {
+      final isolate = await probe.rawService.getIsolate(probe.flutterIsolateId).timeout(const Duration(seconds: 2));
+      final kind = isolate.pauseEvent?.kind;
+      return AppSession.pauseKinds.contains(kind) ? kind : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  StructuredResponse _stoppedApp(Uri vmUri, int pid, String state, AppDeviceLink? link, String command) {
+    final deviceId =
+        link?.deviceId ?? RegExp(r'CoreSimulator/Devices/([0-9A-Fa-f-]{36})').firstMatch(command)?.group(1);
+    return StructuredResponse.error(
+      summary: 'the app at $vmUri is stopped (process $pid, state $state), so it cannot answer',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail: 'ps shows pid $pid in state $state while the simulator is unlocked: a debugger or a stop signal froze '
+          'the process, so the VM behind $vmUri gets no turns',
+      nextSteps: [
+        'resume it: continue in the debugger, or `kill -CONT $pid`, then attach again',
+        if (link?.bundleId case final bundleId? when deviceId != null)
+          'or relaunch it: attach device:"$deviceId" launch:"$bundleId"'
+        else
+          'or relaunch it with attach launch:"<project path>"',
+      ],
+    ).mergeData({'cause': 'processStopped', 'pid': pid, 'processState': state});
+  }
+
+  StructuredResponse _stoppedOwner(Uri vmUri, int pid, String state, String command) {
+    final tool = command.contains('flutter') || command.contains('development-service');
+    return StructuredResponse.error(
+      summary: 'the ${tool ? '`flutter run` process' : 'process serving the VM service'} (pid $pid, state $state) is '
+          'stopped, so the app at $vmUri cannot answer',
+      errorKind: GlintErrorKind.appUnresponsive,
+      detail:
+          'ps shows pid $pid in state $state: it is connected to the VM service at $vmUri and was suspended (Ctrl+Z '
+          'in its terminal) or stopped by a signal, so nothing reaches the app through it',
+      nextSteps: [
+        'resume it: `fg` in the terminal where it was suspended, or `kill -CONT $pid`, then attach again',
+        'or start the app again with attach launch:"<project path>"',
+      ],
+    ).mergeData(
+        {'cause': 'processStopped', 'pid': pid, 'processState': state, 'process': tool ? 'flutterRun' : 'vmOwner'});
+  }
+
+  /// The most the diagnosis lookups after a failed attach may take together.
+  static const _diagnosisLimit = Duration(seconds: 5);
+
   /// The VM took the connection but the app never answered: most often a locked simulator keeping it suspended.
   Future<StructuredResponse> _unresponsiveApp(
       DiscoveryResult scan, Uri vmUri, RuntimeUnresponsiveError e, String adbPath) async {
-    final locked = <BootedDevice>[
-      for (final d in scan.devicesFor(DevicePlatform.ios))
-        if (await const SimControl().isLocked(d.id) == true) d,
-    ];
+    final ios = scan.devicesFor(DevicePlatform.ios);
     final android = scan.devicesFor(DevicePlatform.android);
     final discovery = DeviceDiscovery(adbPath: adbPath);
-    final front = android.length == 1 ? await discovery.foregroundPackage(android.single.id) : null;
-    final simulatorApp = locked.isEmpty && front == null ? await discovery.correlate(vmUri, DevicePlatform.ios) : null;
+    final (lockedOrNull, front, simulatorApp, vm) = await (
+      Future.wait([for (final d in ios) const SimControl().isLocked(d.id).then((l) => l == true ? d : null)]),
+      android.length == 1 ? discovery.foregroundPackage(android.single.id) : Future<String?>.value(null),
+      ios.isEmpty
+          ? Future<AppDeviceLink?>.value(null)
+          : discovery.correlate(vmUri, DevicePlatform.ios).then<AppDeviceLink?>((v) => v, onError: (Object _) => null),
+      ios.isEmpty ? Future<VmProcesses?>.value(null) : vmProcesses(vmUri.port).then<VmProcesses?>((v) => v),
+    ).wait.timeout(
+          _diagnosisLimit,
+          onTimeout: () => (const <BootedDevice?>[], null, null, null),
+        );
+    final locked = [
+      for (final d in lockedOrNull)
+        if (d != null) d
+    ];
+    if (locked.isEmpty && front == null && vm != null) {
+      final app = vm.app;
+      if (app != null && vm.appCheck?.life == ProcessLife.stopped) {
+        return _stoppedApp(vmUri, app, vm.appCheck!.state ?? 'T', simulatorApp, vm.appCommand ?? '');
+      }
+      final owner = vm.owner;
+      if (owner != null && owner != app && vm.ownerCheck?.life == ProcessLife.stopped) {
+        return _stoppedOwner(vmUri, owner, vm.ownerCheck!.state ?? 'T', vm.ownerCommand ?? '');
+      }
+      if (vm.stoppedPeer case final peer?) {
+        return _stoppedOwner(vmUri, peer, vm.stoppedPeerState ?? 'T', vm.stoppedPeerCommand ?? '');
+      }
+    }
     return StructuredResponse.error(
       summary: locked.isNotEmpty
           ? '${locked.map((d) => d.name).join(", ")} is locked, so the app is suspended and cannot be attached'

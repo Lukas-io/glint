@@ -32,7 +32,7 @@ Future<({XcTestRunner? runner, StructuredResponse? error})> startXcTestRunner(St
       runner: null,
       error: StructuredResponse.error(
         summary: e.message,
-        errorKind: GlintErrorKind.backendToolError,
+        errorKind: e.errorKind,
         detail: e.detail,
         nextSteps: e.nextSteps,
       ),
@@ -104,9 +104,9 @@ Future<({XcTestRunner? runner, StructuredResponse? error})> _startQuietly(
 Future<({XcTestRunner? runner, StructuredResponse? error})> xcTestRunnerFor(
     GlintSession session, IosSimulator dev, CallToolRequest request) async {
   final own = dev.runner;
-  if (own != null && await own.ping() == expectedRunnerProtocol) return (runner: own, error: null);
+  if (own != null && await own.isCurrent()) return (runner: own, error: null);
   final cached = _runners[dev.udid];
-  if (cached != null && await cached.ping() == expectedRunnerProtocol) return (runner: cached, error: null);
+  if (cached != null && await cached.isCurrent()) return (runner: cached, error: null);
   final token = request.meta?.progressToken;
   final notifier = session.progressNotifier;
   var phase = 'checking the iOS toolchain';
