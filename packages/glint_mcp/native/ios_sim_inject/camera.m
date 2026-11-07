@@ -1,4 +1,5 @@
 #import "siminject.h"
+#import "camera_feed.h"
 #import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
@@ -285,13 +286,16 @@ static CIImage *GCFit(CIImage *scene, CGSize size, BOOL mirror, BOOL cover, CGFl
   return img;
 }
 
+static CIImage *GCFeedScene(GCLens lens, CGSize size, BOOL mirror) {
+  CIImage *scene = GCSourceFor(lens).currentImage;
+  if (!scene) return nil;
+  NSDictionary *spec = [GCFeedConfig.current forLens:lens];
+  CGFloat zoom = [spec[@"zoom"] doubleValue];
+  return GCFit(scene, size, mirror, [spec[@"fit"] isEqual:@"cover"], zoom > 0.05 && zoom <= 1.0 ? zoom : 1.0);
+}
+
 static CVPixelBufferRef GCRender(GCLens lens, CGSize size, BOOL mirror, OSType format) {
-  GCSource *src = GCSourceFor(lens);
-  CIImage *scene = src.currentImage;
-  if (!scene) return NULL;
-  BOOL cover = [[GCFeedConfig.current forLens:lens][@"fit"] isEqual:@"cover"];
-  CGFloat zoom = [[GCFeedConfig.current forLens:lens][@"zoom"] doubleValue];
-  CIImage *fit = GCFit(scene, size, mirror, cover, zoom > 0.05 && zoom <= 1.0 ? zoom : 1.0);
+  CIImage *fit = GCFeedScene(lens, size, mirror);
   if (!fit) return NULL;
   CVPixelBufferRef pb = NULL;
   NSDictionary *attrs = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}, (id)kCVPixelBufferMetalCompatibilityKey : @YES};
@@ -1189,6 +1193,40 @@ static void GCInstallOutputHooks(void) {
   });
 }
 
+NSString *const GCFeedChangedNotification = @"GlintFeedChanged";
+
+BOOL GCFeedActive(void) { return GCActive(); }
+
+BOOL GCFeedHasLens(NSInteger lens) { return [GCFeedConfig.current forLens:lens == 1 ? GCLensFront : GCLensBack] != nil; }
+
+BOOL GCFeedRenderInto(NSInteger lens, CVPixelBufferRef pb, BOOL mirror) {
+  CGSize size = CGSizeMake(CVPixelBufferGetWidth(pb), CVPixelBufferGetHeight(pb));
+  CIImage *fit = GCFeedScene(lens == 1 ? GCLensFront : GCLensBack, size, mirror);
+  if (!fit) return NO;
+  [GCContext() render:fit toCVPixelBuffer:pb];
+  return YES;
+}
+
+CIImage *GCFeedFit(NSInteger lens, CGSize size, BOOL mirror) { return GCFeedScene(lens == 1 ? GCLensFront : GCLensBack, size, mirror); }
+
+CIContext *GCFeedContext(void) { return GCContext(); }
+
+UIImage *GCFeedImage(NSInteger lens, CGSize size, BOOL mirror) {
+  CIImage *fit = GCFeedFit(lens, size, mirror);
+  if (!fit) return nil;
+  CGColorSpaceRef space = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+  CGImageRef cg = [GCContext() createCGImage:fit fromRect:CGRectMake(0, 0, size.width, size.height) format:kCIFormatRGBA8 colorSpace:space];
+  CGColorSpaceRelease(space);
+  if (!cg) return nil;
+  UIImage *result = [UIImage imageWithCGImage:cg];
+  CGImageRelease(cg);
+  return result;
+}
+
+static void GCPostFeedChanged(void) {
+  dispatch_async(dispatch_get_main_queue(), ^{ [NSNotificationCenter.defaultCenter postNotificationName:GCFeedChangedNotification object:nil]; });
+}
+
 @interface GSICameraModule : NSObject <GSIModule>
 @end
 
@@ -1202,11 +1240,14 @@ static void GCInstallOutputHooks(void) {
     GCInstallConnectionHooks();
     GCInstallSessionHooks();
     GCInstallOutputHooks();
+    GCInstallPickerHooks();
   });
   [GCFeedConfig.current setFront:config[@"front"] back:config[@"back"]];
+  GCPostFeedChanged();
 }
 - (void)deactivate {
   [GCFeedConfig.current setFront:nil back:nil];
+  GCPostFeedChanged();
 }
 @end
 

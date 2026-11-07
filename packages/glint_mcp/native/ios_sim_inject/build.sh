@@ -13,7 +13,7 @@ fail() {
 xcrun --sdk iphonesimulator clang -arch arm64 -arch x86_64 -mios-simulator-version-min=15.0 \
   -dynamiclib -fobjc-arc -fmodules \
   -framework Foundation -framework AVFoundation -framework CoreImage -framework UIKit \
-  -framework CoreMedia -framework CoreVideo -framework ImageIO \
+  -framework CoreMedia -framework CoreVideo -framework ImageIO -framework UniformTypeIdentifiers \
   -install_name @rpath/glint-siminject.dylib -o "$tmp" "$here"/*.m >"$log" 2>&1 || fail
 codesign -f -s - "$tmp" >"$log" 2>&1 || fail
 codesign -v "$tmp" >"$log" 2>&1 || fail
