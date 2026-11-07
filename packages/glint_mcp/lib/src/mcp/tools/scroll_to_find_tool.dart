@@ -210,25 +210,6 @@ class ScrollToFindTool extends GlintTool {
       try {
         lastTexts = _visibleTexts(scene.root);
         lastIds = scene.glintIds;
-        final semantic = await session.semanticize(scene, detail: SceneDetail.structural);
-        final snapshot = snapshotOf(semantic);
-        if (i > 0) {
-          final sideEffect = sideEffectOf(previous, snapshot, target.watchedPagedIds);
-          if (sideEffect != null) return _sideEffectReply(criterion, i, sideEffect, target);
-        }
-        final loading = const StateObserver().observe(semantic) == SceneState.loading;
-        Future<void> measureStall() async {
-          if (i == 0 || i == maxScrolls) return;
-          final before = swiped;
-          final moved = before == null
-              ? null
-              : await scrollDisplacement(session, scene, before, horizontal, restSamples: _restSamples);
-          final still = moved != null && !loading && moved <= _stalledBelow(before!, amount, horizontal);
-          stalls = still ? stalls + 1 : 0;
-          endReached = stalls >= _stallsForEnd;
-        }
-
-        previous = snapshot;
         CallProgress.note('scroll $i/$maxScrolls, last seen: ${lastTexts.take(6).map((t) => '"$t"').join(', ')}');
         final hit = targetGlintId != null ? scene.findByGlintId(targetGlintId) : _findTextNode(scene.root, targetText!);
         if (hit != null && hit.glintId != null) {
@@ -269,23 +250,43 @@ class ScrollToFindTool extends GlintTool {
           } on Exception {
             lastSeen = null;
           }
-          await measureStall();
-          target = await scrollTargetFor(session, scene, hit, dir);
-        } else {
-          await measureStall();
-          target = (anchor: await session.scrollAnchorIn(scene, semantic), watchedPagedIds: const <String>{});
         }
-        swiped = target.anchor;
-        firstAnchor ??= swiped;
-        final fixed = firstAnchor?.clip;
-        final fresh = target.anchor;
-        if (fresh != null && fixed != null && fresh.clip != fixed) {
-          target = (
-            anchor: (glintId: fresh.glintId, x: fresh.x, y: fresh.y, clip: fixed),
-            watchedPagedIds: target.watchedPagedIds
-          );
-        } else if (fresh == null && firstAnchor != null) {
-          target = (anchor: firstAnchor, watchedPagedIds: target.watchedPagedIds);
+        if (i < maxScrolls) {
+          final semantic = await session.semanticize(scene, detail: SceneDetail.structural);
+          final snapshot = snapshotOf(semantic);
+          if (i > 0) {
+            final sideEffect = sideEffectOf(previous, snapshot, target.watchedPagedIds);
+            if (sideEffect != null) return _sideEffectReply(criterion, i, sideEffect, target);
+          }
+          final loading = const StateObserver().observe(semantic) == SceneState.loading;
+          Future<void> measureStall() async {
+            if (i == 0 || i == maxScrolls) return;
+            final before = swiped;
+            final moved = before == null
+                ? null
+                : await scrollDisplacement(session, scene, before, horizontal, restSamples: _restSamples);
+            final still = moved != null && !loading && moved <= _stalledBelow(before!, amount, horizontal);
+            stalls = still ? stalls + 1 : 0;
+            endReached = stalls >= _stallsForEnd;
+          }
+
+          previous = snapshot;
+          await measureStall();
+          target = hit != null && hit.glintId != null
+              ? await scrollTargetFor(session, scene, hit, dir)
+              : (anchor: await session.scrollAnchorIn(scene, semantic), watchedPagedIds: const <String>{});
+          swiped = target.anchor;
+          firstAnchor ??= swiped;
+          final fixed = firstAnchor?.clip;
+          final fresh = target.anchor;
+          if (fresh != null && fixed != null && fresh.clip != fixed) {
+            target = (
+              anchor: (glintId: fresh.glintId, x: fresh.x, y: fresh.y, clip: fixed),
+              watchedPagedIds: target.watchedPagedIds
+            );
+          } else if (fresh == null && firstAnchor != null) {
+            target = (anchor: firstAnchor, watchedPagedIds: target.watchedPagedIds);
+          }
         }
       } finally {
         await scene.dispose();

@@ -80,7 +80,7 @@ const _recovery = '''
 ## Recovery
 
 - `unresolvedTarget`: stale id; take the "did you mean".
-- `notHittable`: covered by an overlay or absorber. Dismiss it, retry.
+- `notHittable`: covered by overlay/absorber; dismiss, retry.
 - `offViewport` — scrolled off-screen; `scroll_to_find` it first.
 - `targetNeverReady`: never hittable; dismiss the cover.
 - `targetNotFound`: `scroll_to_find` miss; see `detail`.
@@ -92,11 +92,11 @@ const _recovery = '''
 - `notOwned`: not your app/device; `force:true` only if the user asked.
 - `flutterModeRequired`: device mode; re-attach the app, or use x,y.
 - `unknownApp`: `app:` matched none/several; pick one.
-- `sessionNotAttached` — `attach`.
-- `appNotResumed` — native surface on top; dismiss, retry.
-- `geometryResolveError` — eval failed; retry, else re-`attach`.
+- `sessionNotAttached`: `attach`.
+- `appNotResumed`: native surface on top; dismiss, retry.
+- `geometryResolveError`: eval failed; retry, else re-`attach`.
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
-- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly` / `pickIncomplete` / `toolTimeout`: follow `detail` + `nextSteps`.
+- `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly` / `pickIncomplete` / `toolTimeout` / `budgetExceeded`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
 - `internal` — glint bug. `report_issue` with the user's OK.
 ''';
