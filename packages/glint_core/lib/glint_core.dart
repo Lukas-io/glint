@@ -3,6 +3,7 @@ library;
 
 export 'src/audit_log.dart';
 export 'src/issues.dart';
+export 'src/process.dart';
 export 'src/redaction.dart';
 export 'src/telemetry.dart';
 export 'src/text.dart';

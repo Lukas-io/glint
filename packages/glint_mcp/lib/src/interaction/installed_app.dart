@@ -115,7 +115,7 @@ class InstalledAppLauncher {
       });
       return uri;
     } finally {
-      stream.stop();
+      await stream.stop();
     }
   }
 
@@ -236,17 +236,23 @@ class _IosLogStream {
   static Future<_IosLogStream> start(String udid) async {
     final Process process;
     try {
-      process = await startManaged('xcrun', [
-        'simctl',
-        'spawn',
-        udid,
-        'log',
-        'stream',
-        '--style',
-        'compact',
-        '--predicate',
-        'eventMessage CONTAINS "Dart VM service is listening"',
-      ]);
+      process = await startHelper(
+          'sim-log-stream',
+          'xcrun',
+          [
+            'simctl',
+            'spawn',
+            udid,
+            'log',
+            'stream',
+            '--style',
+            'compact',
+            '--predicate',
+            'eventMessage CONTAINS "Dart VM service is listening"',
+          ],
+          device: udid,
+          owner: 'sim:$udid',
+          life: HelperLife.attachment);
     } on Object catch (e) {
       throw InstalledLaunchError(InstalledLaunchFailure.toolFailed, 'could not start the simulator log stream',
           detail: '$e');
@@ -262,5 +268,5 @@ class _IosLogStream {
     return stream;
   }
 
-  void stop() => _process.kill();
+  Future<void> stop() => killProcessTree(_process);
 }

@@ -12,6 +12,7 @@ export 'src/interaction/emulator_camera.dart';
 export 'src/interaction/system_touches.dart';
 export 'src/interaction/backend.dart';
 export 'src/interaction/bounded_process.dart';
+export 'src/interaction/cache_prune.dart';
 export 'src/interaction/backends/adb_backend.dart';
 export 'src/interaction/backends/flutter_input_backend.dart';
 export 'src/interaction/backends/ios_device_backend.dart';

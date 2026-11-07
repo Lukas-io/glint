@@ -26,15 +26,9 @@ class SimctlRecording implements ScreenRecording {
     required String path,
     Duration startTimeout = const Duration(seconds: 5),
   }) async {
-    final proc = await startManaged('xcrun', [
-      'simctl',
-      'io',
-      udid,
-      'recordVideo',
-      '--codec=h264',
-      '--force',
-      path,
-    ]);
+    final proc = await startHelper(
+        'screen-recording', 'xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', path],
+        device: udid, owner: 'sim:$udid', life: HelperLife.attachment);
     final started = Completer<DateTime>();
     final err = StringBuffer();
     proc.stderr.transform(const SystemEncoding().decoder).listen((chunk) {
@@ -119,7 +113,8 @@ class AdbRecording implements ScreenRecording {
   }) async {
     await runBounded(adbPath, removeArgs(serial),
         timeout: const Duration(seconds: 10), phase: 'adb clearing the old recording');
-    final proc = await startManaged(adbPath, startArgs(serial), label: 'adb screenrecord');
+    final proc = await startHelper('screen-recording', adbPath, startArgs(serial),
+        device: serial, owner: 'android:$serial', life: HelperLife.attachment, label: 'adb screenrecord');
     final deadline = DateTime.now().add(startTimeout);
     while (DateTime.now().isBefore(deadline)) {
       if ((await proc.exitCode.timeout(const Duration(milliseconds: 1), onTimeout: () => -999)) != -999) {

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
+
 import '../version.dart';
 import '../observability/call_progress.dart';
 import 'bounded_process.dart';
@@ -52,16 +54,22 @@ class AndroidServer {
     }
     await runBounded(adbPath, ['-s', serial, 'shell', 'pkill', '-f', _socketName],
         timeout: const Duration(seconds: 10), phase: 'adb pkill of the old server');
-    final process = await startManaged(adbPath, [
-      '-s',
-      serial,
-      'shell',
-      'CLASSPATH=$_deviceDex',
-      'app_process',
-      '/',
-      'dev.glint.server.Server',
-      _socketName,
-    ]);
+    final process = await startHelper(
+        'android-server',
+        adbPath,
+        [
+          '-s',
+          serial,
+          'shell',
+          'CLASSPATH=$_deviceDex',
+          'app_process',
+          '/',
+          'dev.glint.server.Server',
+          _socketName,
+        ],
+        device: serial,
+        owner: 'android:$serial',
+        life: HelperLife.attachment);
     _process = process;
     final stderr = StringBuffer();
     process.stderr.transform(utf8.decoder).listen(stderr.write);
@@ -130,8 +138,9 @@ class AndroidServer {
       // already gone
     }
     socket?.destroy();
-    _process?.kill();
+    final own = _process;
     _process = null;
+    if (own != null) await ProcessRegistry.instance.stop('android-server', device: serial, only: own);
     final port = _port;
     _port = null;
     if (port == null) return;

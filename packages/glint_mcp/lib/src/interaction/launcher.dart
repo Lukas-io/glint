@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
+
 import '../observability/call_progress.dart';
 import 'device.dart';
 import 'phone_apps.dart';
@@ -95,7 +97,8 @@ class AppLauncher {
     final verb = attachTo == null ? 'run' : 'attach';
     final Process proc;
     try {
-      proc = await startManaged(
+      proc = await startHelper(
+        'flutter-run',
         flutterPath,
         [
           verb,
@@ -103,6 +106,8 @@ class AppLauncher {
           deviceId,
           if (attachTo != null) ...['--debug-url', '$attachTo']
         ],
+        device: deviceId,
+        owner: projectDir,
         label: 'flutter $verb',
         workingDirectory: projectDir,
         environment: environment,
@@ -135,7 +140,7 @@ class AppLauncher {
             if (parsed != null) return (uri: parsed, process: proc);
           }
           if (exited || _looksFailed(text)) {
-            proc.kill();
+            await killProcessTree(proc);
             throw LaunchError(
                 'flutter $verb failed: ${failureLine(text) ?? 'see the log tail for what flutter reported'}',
                 logTail: _tail(text),
@@ -148,7 +153,7 @@ class AppLauncher {
             nextUpdate = now.add(progressEvery);
           }
         }
-        proc.kill();
+        await killProcessTree(proc);
         final phase = _phase(out.text);
         final reported = failureLine(out.text);
         throw LaunchError(
@@ -206,6 +211,7 @@ class AppLauncher {
 
   /// Shut down a device: `simctl shutdown` (iOS) / `adb emu kill` (Android); null on success.
   Future<String?> shutdown(DevicePlatform platform, String deviceId, {String adbPath = 'adb'}) async {
+    await ProcessRegistry.instance.stopDevice(deviceId, all: true);
     try {
       final r = platform == DevicePlatform.ios
           ? await runBounded('xcrun', ['simctl', 'shutdown', deviceId],

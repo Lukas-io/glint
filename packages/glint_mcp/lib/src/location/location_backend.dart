@@ -93,15 +93,21 @@ class IosSimulatorLocation extends LocationBackend {
   Future<void> drive(List<LatLng> points, {required double speed, required Duration interval}) async {
     final Process process;
     try {
-      process = await startManaged('xcrun', [
-        'simctl',
-        'location',
-        udid,
-        'start',
-        '--speed=${speed.toStringAsFixed(2)}',
-        '--interval=${(interval.inMilliseconds / 1000).toStringAsFixed(1)}',
-        '-',
-      ]);
+      process = await startHelper(
+          'location-route',
+          'xcrun',
+          [
+            'simctl',
+            'location',
+            udid,
+            'start',
+            '--speed=${speed.toStringAsFixed(2)}',
+            '--interval=${(interval.inMilliseconds / 1000).toStringAsFixed(1)}',
+            '-',
+          ],
+          device: udid,
+          owner: 'sim:$udid',
+          life: HelperLife.attachment);
     } on Object catch (e) {
       throw LocationFailed('could not run xcrun for the route', '$e');
     }

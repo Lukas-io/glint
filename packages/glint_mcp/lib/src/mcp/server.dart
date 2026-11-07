@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dart_mcp/server.dart';
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
 
 import '../instructions/glint_instructions.dart';
 import '../version.dart';
@@ -43,6 +44,7 @@ base class GlintMcpServer extends MCPServer with ToolsSupport, LoggingSupport {
   @override
   Future<void> shutdown() async {
     await session.detachAll();
+    await ProcessRegistry.instance.stopAll();
     session.watches.close();
     session.explore.close();
     await super.shutdown();
