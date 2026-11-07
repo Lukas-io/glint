@@ -3,7 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../../../observability.dart' show CallProgress, SceneState, StateObserver;
 import '../../../perception.dart';
-import '../../../semantic.dart' show kPagedLabels;
+import '../../../semantic.dart' show SemanticScene, kPagedLabels;
 import '../envelope.dart';
 import '../post_action.dart' show ScrollAnchor, SceneSnapshot, scrollDisplacement, sideEffectOf, snapshotOf;
 import '../session.dart';
@@ -210,6 +210,14 @@ class ScrollToFindTool extends GlintTool {
       try {
         lastTexts = _visibleTexts(scene.root);
         lastIds = scene.glintIds;
+        SemanticScene? readSemantic;
+        SceneSnapshot? readSnapshot;
+        if (i > 0) {
+          readSemantic = await session.semanticize(scene, detail: SceneDetail.structural);
+          readSnapshot = snapshotOf(readSemantic);
+          final sideEffect = sideEffectOf(previous, readSnapshot, target.watchedPagedIds);
+          if (sideEffect != null) return _sideEffectReply(criterion, i, sideEffect, target);
+        }
         CallProgress.note('scroll $i/$maxScrolls, last seen: ${lastTexts.take(6).map((t) => '"$t"').join(', ')}');
         final hit = targetGlintId != null ? scene.findByGlintId(targetGlintId) : _findTextNode(scene.root, targetText!);
         if (hit != null && hit.glintId != null) {
@@ -252,12 +260,8 @@ class ScrollToFindTool extends GlintTool {
           }
         }
         if (i < maxScrolls) {
-          final semantic = await session.semanticize(scene, detail: SceneDetail.structural);
-          final snapshot = snapshotOf(semantic);
-          if (i > 0) {
-            final sideEffect = sideEffectOf(previous, snapshot, target.watchedPagedIds);
-            if (sideEffect != null) return _sideEffectReply(criterion, i, sideEffect, target);
-          }
+          final semantic = readSemantic ?? await session.semanticize(scene, detail: SceneDetail.structural);
+          final snapshot = readSnapshot ?? snapshotOf(semantic);
           final loading = const StateObserver().observe(semantic) == SceneState.loading;
           Future<void> measureStall() async {
             if (i == 0 || i == maxScrolls) return;
