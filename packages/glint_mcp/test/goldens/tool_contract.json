@@ -197,7 +197,27 @@
       },
       "stop": {
         "type": "boolean",
-        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed."
+        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed."
+      },
+      "lens": {
+        "type": "string",
+        "description": "camera (iOS): front | back | both. Default both."
+      },
+      "fit": {
+        "type": "string",
+        "description": "camera (iOS): contain (whole picture, black bars) | cover (fills the frame, crops). Default contain."
+      },
+      "zoom": {
+        "type": "number",
+        "description": "camera (iOS): size of the picture inside the frame, 0.1 to 1 (0.75 leaves a margin, as a card held a little back). Default 1."
+      },
+      "force": {
+        "type": "boolean",
+        "description": "camera (iOS): take the camera over from another glint that holds it (changes or stops its feed)."
+      },
+      "relaunch": {
+        "type": "boolean",
+        "description": "camera (iOS): restart an app that started before glint could load into it. Its state is lost."
       },
       "setup": {
         "type": "boolean",
@@ -229,7 +249,7 @@
       },
       "source": {
         "type": "string",
-        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, or testcard. mic: tone (default), speech, or a host audio file."
+        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). mic: tone (default), speech, or a host audio file."
       },
       "name": {
         "type": "string",

@@ -19,11 +19,17 @@ class NativeCrash {
   /// The report file (iOS) or `logcat -b crash` (Android).
   final String? source;
 
-  String get line => '$reason${frames.isEmpty ? '' : ' at ${frames.first}'}';
+  /// Whether glint's injected library is among the top frames: the crash is glint's doing, not the app's.
+  bool get inGlint => frames.any((f) => f.contains('(glint-siminject'));
+
+  String get line => inGlint
+      ? 'inside glint\'s injected library (${frames.firstWhere((f) => f.contains('(glint-siminject')).split(' (').first}): $reason'
+      : '$reason${frames.isEmpty ? '' : ' at ${frames.first}'}';
 
   Map<String, Object?> toJson() => {
         'time': time.toIso8601String(),
         'reason': reason,
+        if (inGlint) 'blame': 'glint',
         if (frames.isNotEmpty) 'frames': frames,
         if (source != null) 'source': source,
       };
