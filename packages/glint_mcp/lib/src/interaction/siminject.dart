@@ -111,30 +111,46 @@ class SimInjector {
   List<InjectedApp> loaded() {
     final dir = Directory('$controlDir/ready');
     if (!dir.existsSync()) return const [];
-    final apps = <InjectedApp>[];
+    final entries = <(File, Map<String, Object?>)>[];
     for (final f in dir.listSync().whereType<File>().where((f) => f.path.endsWith('.json'))) {
       try {
-        final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
-        final pid = j['pid'] as int;
-        if (!_alive(pid)) {
-          f.deleteSync();
-          continue;
-        }
-        apps.add(InjectedApp(
-          pid: pid,
-          bundleId: (j['bundleId'] as String?) ?? '',
-          protocol: (j['protocol'] as int?) ?? 0,
-          modules: ((j['modules'] as List?) ?? const []).cast<String>(),
-          active: ((j['active'] as List?) ?? const []).cast<String>(),
-        ));
+        entries.add((f, jsonDecode(f.readAsStringSync()) as Map<String, Object?>));
       } on Object {
         continue;
       }
     }
+    final alive = _livePids([
+      for (final e in entries)
+        if (e.$2['pid'] is int) e.$2['pid'] as int
+    ]);
+    final apps = <InjectedApp>[];
+    for (final (file, j) in entries) {
+      final pid = j['pid'];
+      if (pid is! int) continue;
+      if (!alive.contains(pid)) {
+        file.deleteSync();
+        continue;
+      }
+      apps.add(InjectedApp(
+        pid: pid,
+        bundleId: (j['bundleId'] as String?) ?? '',
+        protocol: (j['protocol'] as int?) ?? 0,
+        modules: ((j['modules'] as List?) ?? const []).cast<String>(),
+        active: ((j['active'] as List?) ?? const []).cast<String>(),
+      ));
+    }
     return apps;
   }
 
-  bool _alive(int pid) => Process.runSync('kill', ['-0', '$pid']).exitCode == 0;
+  /// Which of [pids] are running, from one `ps` call.
+  Set<int> _livePids(List<int> pids) {
+    if (pids.isEmpty) return const {};
+    final r = Process.runSync('ps', ['-o', 'pid=', '-p', pids.join(',')]);
+    return {
+      for (final line in '${r.stdout}'.split('\n'))
+        if (int.tryParse(line.trim()) != null) int.parse(line.trim())
+    };
+  }
 
   /// The library's path, found, downloaded or compiled, and checked to be signed so dyld never aborts an app launch on it.
   Future<String> dylibPath() async {
@@ -175,7 +191,7 @@ class SimInjector {
   }
 
   /// Gets the library into [appId] (or into every running user app when null): already loaded, loaded at its next launch, loaded into the running process with lldb, or, when [relaunch] allows, by restarting it.
-  Future<InjectReport> ensure({String? appId, bool relaunch = false}) async {
+  Future<InjectReport> ensure({String? appId, bool relaunch = false, String? module}) async {
     final dylib = await dylibPath();
     await setLaunchEnv(dylib);
     final targets = [
@@ -192,7 +208,7 @@ class SimInjector {
     ];
     final stale = [
       for (final t in targets)
-        if (have[t.pid] != null && have[t.pid]!.protocol != siminjectProtocol) t,
+        if (have[t.pid] != null && _staleReason(have[t.pid]!, module) != null) t,
     ];
     if (missing.isEmpty && stale.isEmpty) {
       return InjectReport(
@@ -206,9 +222,7 @@ class SimInjector {
     var load = InjectLoad.lateLoad;
     for (final app in [...missing, ...stale]) {
       final isStale = stale.contains(app);
-      final why = isStale
-          ? 'its loaded copy speaks an older protocol than this glint (needs $siminjectProtocol)'
-          : await _lateLoad(app, dylib);
+      final why = isStale ? _staleReason(have[app.pid]!, module)! : await _lateLoad(app, dylib);
       if (why == null) continue;
       if (!relaunch) throw _relaunchRequired(app, why);
       await _relaunch(app);
@@ -216,6 +230,17 @@ class SimInjector {
       load = InjectLoad.relaunch;
     }
     return InjectReport(load: load, apps: loaded(), waiting: const [], relaunched: relaunched);
+  }
+
+  /// Why the copy of the library an app already holds cannot serve [module], or null when it can.
+  String? _staleReason(InjectedApp app, String? module) {
+    if (app.protocol != siminjectProtocol) {
+      return 'its loaded copy speaks an older protocol than this glint (needs $siminjectProtocol)';
+    }
+    if (module != null && !app.modules.contains(module)) {
+      return 'its loaded copy of the glint library has no `$module` module (an older glint loaded it)';
+    }
+    return null;
   }
 
   SimInjectFailure _relaunchRequired(RunningApp app, String why) => SimInjectFailure(
