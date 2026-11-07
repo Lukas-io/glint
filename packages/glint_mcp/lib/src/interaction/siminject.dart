@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import '../media/host_tools.dart';
 import 'bounded_process.dart';
@@ -19,6 +20,7 @@ class InjectedApp {
     required this.protocol,
     required this.modules,
     required this.active,
+    this.foreground = false,
   });
 
   final int pid;
@@ -26,6 +28,9 @@ class InjectedApp {
   final int protocol;
   final List<String> modules;
   final List<String> active;
+
+  /// Whether the app was in front when it last reported.
+  final bool foreground;
 
   Map<String, Object?> toJson() => {'pid': pid, 'bundleId': bundleId, 'modules': modules, 'active': active};
 }
@@ -35,12 +40,40 @@ typedef RunningApp = ({int pid, String bundleId});
 
 /// What [SimInjector.ensure] did, in the shape every injecting feature returns as `injected`.
 class InjectReport {
-  const InjectReport({required this.load, required this.apps, required this.waiting, required this.relaunched});
+  const InjectReport({
+    required this.load,
+    required this.apps,
+    required this.waiting,
+    required this.relaunched,
+    this.olderLibrary = const [],
+    this.notLoaded = const [],
+    this.target,
+    this.running = const [],
+  });
 
   final InjectLoad load;
   final List<InjectedApp> apps;
   final List<String> waiting;
   final List<String> relaunched;
+
+  /// Other running apps holding a copy of the library that lacks the module; glint left them alone.
+  final List<String> olderLibrary;
+
+  /// Other running apps glint could not load into; they run without it.
+  final List<String> notLoaded;
+
+  /// The app a command should go to: the attached one, else the one in front, else the only running app.
+  final String? target;
+
+  /// Every user app running when the library was loaded.
+  final List<String> running;
+
+  /// Warnings naming [olderLibrary] and [notLoaded], or none.
+  List<String> get warnings => [
+        if (olderLibrary.isNotEmpty)
+          '${olderLibrary.join(', ')} holds an older glint library without this feature and was left alone (restart it to load the current one)',
+        if (notLoaded.isNotEmpty) 'glint could not load into ${notLoaded.join(', ')}, which keeps running without it',
+      ];
 
   Map<String, Object?> toJson({required List<String> modules}) => {
         'modules': modules,
@@ -48,6 +81,8 @@ class InjectReport {
         'apps': [for (final a in apps) a.bundleId],
         if (waiting.isNotEmpty) 'waitingForLaunch': waiting,
         if (relaunched.isNotEmpty) 'relaunched': relaunched,
+        if (olderLibrary.isNotEmpty) 'olderLibrary': olderLibrary,
+        if (notLoaded.isNotEmpty) 'notLoaded': notLoaded,
       };
 }
 
@@ -138,6 +173,7 @@ class SimInjector {
         protocol: (j['protocol'] as int?) ?? 0,
         modules: ((j['modules'] as List?) ?? const []).cast<String>(),
         active: ((j['active'] as List?) ?? const []).cast<String>(),
+        foreground: j['foreground'] == true,
       ));
     }
     return apps;
@@ -209,17 +245,21 @@ class SimInjector {
     await _simctl(['spawn', udid, 'launchctl', 'unsetenv', _launchEnv]);
   }
 
-  /// Gets the library into [appId] (or into every running user app when null): already loaded, loaded at its next launch, loaded into the running process with lldb, or, when [relaunch] allows, by restarting it.
+  /// Gets the library into [appId] (or into every running user app when null): already loaded, loaded at its next launch, loaded into the running process with lldb, or, when [relaunch] allows, by restarting it. With a [module], only the target (the [appId], else the app in front, else the only running app) must succeed and an older copy there is refused; another app that cannot take it is named in the report and left running.
   Future<InjectReport> ensure({String? appId, bool relaunch = false, String? module}) async {
     final dylib = await dylibPath();
     await setLaunchEnv(dylib);
+    final running = await runningApps();
+    final names = [for (final a in running) a.bundleId];
     final targets = [
-      for (final app in await runningApps())
+      for (final app in running)
         if (appId == null || app.bundleId == appId) app,
     ];
     if (appId != null && targets.isEmpty) {
       return InjectReport(load: InjectLoad.launch, apps: loaded(), waiting: [appId], relaunched: const []);
     }
+    var target = appId != null ? targets.first : (module == null ? null : await _frontApp(running));
+    bool strict(RunningApp app) => module == null || appId != null || app == target;
     final have = {for (final a in loaded()) a.pid: a};
     final missing = [
       for (final t in targets)
@@ -229,26 +269,60 @@ class SimInjector {
       for (final t in targets)
         if (have[t.pid] != null && _staleReason(have[t.pid]!, module) != null) t,
     ];
-    if (missing.isEmpty && stale.isEmpty) {
-      return InjectReport(
-        load: targets.isEmpty ? InjectLoad.launch : InjectLoad.already,
-        apps: loaded(),
-        waiting: const [],
-        relaunched: const [],
-      );
-    }
+    final olderLibrary = <String>[];
+    final notLoaded = <String>[];
     final relaunched = <String>[];
-    var load = InjectLoad.lateLoad;
+    var load = missing.isEmpty && stale.isEmpty ? InjectLoad.already : InjectLoad.lateLoad;
     for (final app in [...missing, ...stale]) {
       final isStale = stale.contains(app);
       final why = isStale ? _staleReason(have[app.pid]!, module)! : await _lateLoad(app, dylib);
       if (why == null) continue;
+      if (!strict(app)) {
+        (isStale ? olderLibrary : notLoaded).add(app.bundleId);
+        continue;
+      }
       if (!relaunch) throw _relaunchRequired(app, why);
       await _relaunch(app);
       relaunched.add(app.bundleId);
       load = InjectLoad.relaunch;
     }
-    return InjectReport(load: load, apps: loaded(), waiting: const [], relaunched: relaunched);
+    if (targets.isEmpty) load = InjectLoad.launch;
+    if (module != null && appId == null && target == null) target = await _frontApp(running);
+    final held = {for (final a in loaded()) a.pid};
+    if (targets.isNotEmpty && !targets.any((t) => held.contains(t.pid) || relaunched.contains(t.bundleId))) {
+      throw SimInjectFailure(
+        GlintErrorKind.unsupportedBackendAction,
+        'glint could not be loaded into any running app',
+        'running: ${names.join(', ')}',
+        [
+          'pass appId:"<bundle id>" with relaunch:true to restart one app so glint loads before it starts',
+          'or attach launch:"<bundle id>"',
+        ],
+      );
+    }
+    return InjectReport(
+      load: load,
+      apps: loaded(),
+      waiting: const [],
+      relaunched: relaunched,
+      olderLibrary: olderLibrary,
+      notLoaded: notLoaded,
+      target: target?.bundleId,
+      running: names,
+    );
+  }
+
+  /// The running app whose library says it is in front, else the only running app, else null.
+  Future<RunningApp?> _frontApp(List<RunningApp> running) async {
+    if (running.isEmpty) return null;
+    if (loaded().isNotEmpty) {
+      await notify('glint.siminject.ping');
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      final front = loaded().where((a) => a.foreground).map((a) => a.pid).toSet();
+      final found = running.where((r) => front.contains(r.pid)).firstOrNull;
+      if (found != null) return found;
+    }
+    return running.length == 1 ? running.first : null;
   }
 
   /// Why the copy of the library an app already holds cannot serve [module], or null when it can.
@@ -340,6 +414,78 @@ class SimInjector {
       tmp.renameSync(file.path);
     }
     await notify('glint.siminject.$module');
+  }
+
+  /// Turns [module] on with no command and a new epoch, so no earlier command can replay, after deleting status files of dead processes; false when it was already on.
+  Future<bool> enableModule(String module) async {
+    if (moduleConfig(module) != null) return false;
+    pruneStatuses(module);
+    final epoch =
+        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${Random().nextInt(1 << 32).toRadixString(36)}';
+    await setModule(module, {'epoch': epoch, 'seq': 0});
+    return true;
+  }
+
+  /// The pids of the apps whose ready file says they are alive.
+  Set<int> livePids() => {for (final a in loaded()) a.pid};
+
+  /// The status files a module's apps write, as file names.
+  Set<String> statusFiles(String module) {
+    final dir = Directory('$controlDir/events');
+    if (!dir.existsSync()) return const {};
+    return {
+      for (final f in dir.listSync().whereType<File>())
+        if (RegExp('/$module-\\d+\\.json\$').hasMatch(f.path)) f.uri.pathSegments.last,
+    };
+  }
+
+  /// What the apps among [alive] report in their [module] status files; nothing is deleted.
+  List<Map<String, Object?>> readStatuses(String module, {required Set<int> alive}) {
+    final reports = <Map<String, Object?>>[];
+    for (final name in statusFiles(module)) {
+      try {
+        final j = jsonDecode(File('$controlDir/events/$name').readAsStringSync()) as Map<String, Object?>;
+        if (alive.contains(j['pid'])) reports.add(j);
+      } on Object {
+        continue;
+      }
+    }
+    return reports;
+  }
+
+  /// Deletes the [module] status files of processes that are gone.
+  void pruneStatuses(String module) {
+    final alive = livePids();
+    for (final name in statusFiles(module)) {
+      final file = File('$controlDir/events/$name');
+      try {
+        final j = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+        if (!alive.contains(j['pid'])) file.deleteSync();
+      } on Object {
+        continue;
+      }
+    }
+  }
+
+  /// Turns [module] off, waits for its apps to stop reporting in front, removes what glint left for it and, when no module is left, the launch environment; true when it was on.
+  Future<bool> stopModule(String module) async {
+    final was = moduleConfig(module) != null;
+    await setModule(module, null);
+    final alive = livePids();
+    final deadline = DateTime.now().add(const Duration(seconds: 4));
+    while (
+        DateTime.now().isBefore(deadline) && readStatuses(module, alive: alive).any((j) => j['foreground'] == true)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    for (final name in statusFiles(module)) {
+      File('$controlDir/events/$name').deleteSync();
+    }
+    for (final name in const ['events', 'modules']) {
+      final dir = Directory('$controlDir/$name');
+      if (dir.existsSync() && dir.listSync().isEmpty) dir.deleteSync();
+    }
+    if (activeModules().isEmpty) await clearLaunchEnv();
+    return was;
   }
 
   /// The config [module] runs with, or null when it is off.

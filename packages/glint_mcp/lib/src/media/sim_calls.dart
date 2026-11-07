@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
-
 import '../interaction/result.dart';
 import '../interaction/siminject.dart';
 import 'host_tools.dart';
@@ -103,57 +99,39 @@ class SimCalls {
 
   /// The apps holding the library that report calls state.
   List<CallsApp> apps({Set<int>? alive}) {
-    alive ??= {for (final a in injector.loaded()) a.pid};
-    final dir = Directory('${injector.controlDir}/events');
-    if (!dir.existsSync()) return const [];
-    final apps = <CallsApp>[];
-    for (final f in dir.listSync().whereType<File>().where((f) => RegExp(r'calls-\d+\.json$').hasMatch(f.path))) {
-      try {
-        final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
-        final pid = j['pid'] as int;
-        if (!alive.contains(pid)) {
-          f.deleteSync();
-          continue;
-        }
-        apps.add(
-          CallsApp(
-            pid: pid,
-            bundleId: (j['bundleId'] as String?) ?? '',
-            epoch: (j['epoch'] as String?) ?? '',
-            ack: (j['ack'] as num?)?.toInt() ?? 0,
-            foreground: _flag(j['foreground']),
-            callkitLinked: _flag(j['callkitLinked']),
-            observerPath: (j['observerPath'] as String?) ?? 'ok',
-            calls: [
-              for (final c in (j['calls'] as List? ?? const []).cast<Map<String, Object?>>())
-                (
-                  uuid: '${c['uuid']}',
-                  kind: '${c['kind']}',
-                  name: '${c['name']}',
-                  state: '${c['state']}',
-                  onHold: _flag(c['onHold']),
-                ),
-            ],
-            observers: (j['observers'] as num?)?.toInt() ?? 0,
-            providers: (j['providers'] as num?)?.toInt() ?? 0,
-            interruption: (j['interruption'] as String?) ?? 'none',
-            overlay: _flag(j['overlay']),
-            journal: ((j['journal'] as List?) ?? const []).cast<String>(),
-          ),
-        );
-      } on Object {
-        continue;
-      }
-    }
-    return apps;
+    alive ??= injector.livePids();
+    return [
+      for (final j in injector.readStatuses(_moduleName, alive: alive))
+        CallsApp(
+          pid: j['pid'] as int,
+          bundleId: (j['bundleId'] as String?) ?? '',
+          epoch: (j['epoch'] as String?) ?? '',
+          ack: (j['ack'] as num?)?.toInt() ?? 0,
+          foreground: _flag(j['foreground']),
+          callkitLinked: _flag(j['callkitLinked']),
+          observerPath: (j['observerPath'] as String?) ?? 'ok',
+          calls: [
+            for (final c in (j['calls'] as List? ?? const []).cast<Map<String, Object?>>())
+              (
+                uuid: '${c['uuid']}',
+                kind: '${c['kind']}',
+                name: '${c['name']}',
+                state: '${c['state']}',
+                onHold: _flag(c['onHold']),
+              ),
+          ],
+          observers: (j['observers'] as num?)?.toInt() ?? 0,
+          providers: (j['providers'] as num?)?.toInt() ?? 0,
+          interruption: (j['interruption'] as String?) ?? 'none',
+          overlay: _flag(j['overlay']),
+          journal: ((j['journal'] as List?) ?? const []).cast<String>(),
+        ),
+    ];
   }
 
   /// Turns the module on with no call and a new epoch, so apps' own CallKit calls get the stand-in UI and no earlier command can replay.
   Future<void> enable() async {
-    if (on) return;
-    final epoch =
-        '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}${Random().nextInt(1 << 32).toRadixString(36)}';
-    await injector.setModule(_moduleName, {'epoch': epoch, 'seq': 0});
+    await injector.enableModule(_moduleName);
   }
 
   bool _took(CallsApp a, int seq) => a.epoch == _epoch && a.ack >= seq;
@@ -272,25 +250,5 @@ class SimCalls {
   }
 
   /// Turns the module off and removes what glint left for it; true when it was on.
-  Future<bool> stop() async {
-    final was = on;
-    await injector.setModule(_moduleName, null);
-    final deadline = DateTime.now().add(const Duration(seconds: 4));
-    final alive = {for (final a in injector.loaded()) a.pid};
-    while (DateTime.now().isBefore(deadline) && apps(alive: alive).any((a) => a.foreground)) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    }
-    final events = Directory('${injector.controlDir}/events');
-    if (events.existsSync()) {
-      for (final f in events.listSync().whereType<File>().where((f) => f.path.contains('/calls-'))) {
-        f.deleteSync();
-      }
-    }
-    for (final name in const ['events', 'modules']) {
-      final dir = Directory('${injector.controlDir}/$name');
-      if (dir.existsSync() && dir.listSync().isEmpty) dir.deleteSync();
-    }
-    if (injector.activeModules().isEmpty) await injector.clearLaunchEnv();
-    return was;
-  }
+  Future<bool> stop() => injector.stopModule(_moduleName);
 }

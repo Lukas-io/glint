@@ -15,6 +15,7 @@ import '../../media/emulator_camera.dart';
 import '../../media/emulator_events.dart';
 import '../../media/sim_calls.dart';
 import '../../media/sim_camera.dart';
+import '../../media/sim_speech.dart';
 import '../../interaction/siminject.dart';
 import '../../media/mic_audio.dart';
 import '../../media/media_inspect.dart';
@@ -76,12 +77,14 @@ class MediaTool extends GlintTool {
             'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
             'event (Android emulator: rotate, light, proximity, SMS; calls on Android and iOS simulators: call rings, answerCall, declineCall, endCall; iOS also callkit, which lets an app\'s own CallKit calls ring with an Answer/Decline overlay; replies say synthetic:true; stop:true removes the stand-in), '
             'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation and the system camera picker (image_picker) with no app change; Android needs setup:true once). '
+            'speech (what the user says to an app that listens: iOS simulator, scripted partial and final SFSpeechRecognizer results with authorization granted, no app change; Android: the text is spoken once into the microphone; stop:true removes it; replies are synthetic). '
             'broadcast (iOS simulator: runs the app\'s ReplayKit broadcast upload extension; it gets broadcastStarted, video and app-audio sample buffers, broadcastFinished; action arm (catch the app\'s picker press) | start (default; answers a pending press) | pause | resume | status | stop; source screen (default) | testcard | file; audio tone (default) | none | file; replies label what is synthetic). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
-                description: 'seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast'),
+                description:
+                    'seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast | speech'),
             'extension': Schema.string(
                 description:
                     'broadcast: bundle id of the upload extension. Default: the one the app\'s picker names, else the only one.'),
@@ -90,7 +93,7 @@ class MediaTool extends GlintTool {
                     'broadcast: app audio to deliver, tone (440 Hz, hz sets it), none, or an audio file path. Default tone.'),
             'stop': Schema.bool(
                 description:
-                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop.'),
+                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop. speech: remove the stand-in (iOS) or stop the microphone feed (Android).'),
             'lens': Schema.string(description: 'camera (iOS): front | back | both. Default both.'),
             'fit': Schema.string(
                 description:
@@ -103,7 +106,7 @@ class MediaTool extends GlintTool {
                     'camera, broadcast (iOS): take it over from another glint that holds it (changes or stops its run).'),
             'relaunch': Schema.bool(
                 description:
-                    'camera, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost.'),
+                    'camera, speech, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost.'),
             'setup': Schema.bool(
                 description:
                     'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
@@ -145,8 +148,24 @@ class MediaTool extends GlintTool {
                 Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
             'text': Schema.string(
                 description:
-                    'speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number).'),
-            'voice': Schema.string(description: 'speech: a macOS voice name.'),
+                    'speech: what the user says. seed or mic with source speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number).'),
+            'confidence':
+                Schema.num(description: 'speech (iOS): confidence of the final result, 0 to 1. Default 0.92.'),
+            'wordMs': Schema.int(
+                description: 'speech (iOS): milliseconds between words, so between partial results. Default 280.'),
+            'partials': Schema.bool(
+                description: 'speech (iOS): send a partial result per word before the final. Default true.'),
+            'finalMs': Schema.int(
+                description:
+                    'speech (iOS): pause after the last word before the final result, unless the app ends its audio first. Default 1200.'),
+            'waitMs': Schema.int(
+                description:
+                    'speech (iOS): how long to wait for the app to start listening when it is not yet. Default 5000.'),
+            'error': Schema.string(
+                description:
+                    'speech (iOS): instead of words, fail the listening task: ${simSpeechErrors.keys.join(' | ')}.'),
+            'voice':
+                Schema.string(description: 'speech (Android), seed and mic with source speech: a macOS voice name.'),
             'hz': Schema.num(description: 'tone: frequency. Default 440 (mic: 1000).'),
             'since':
                 Schema.string(description: 'files: lastAction (since the last tap, type, swipe ...) or an ISO time.'),
@@ -188,8 +207,9 @@ class MediaTool extends GlintTool {
         'event' => await _event(session, args, phases),
         'camera' => await _camera(session, args, phases),
         'broadcast' => await _broadcast(session, args, phases),
+        'speech' => await _speech(session, args, phases),
         _ => _bad(
-            'op must be seed, files, inspect, pick, permission, listen, mic, event, camera or broadcast, got ${op ?? 'nothing'}'),
+            'op must be seed, files, inspect, pick, permission, listen, mic, event, camera, broadcast or speech, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -846,8 +866,14 @@ class MediaTool extends GlintTool {
   }
 
   /// Feeds audio into the microphone of every app that records on an Android device, through glint's device server (a loop-back audio policy, shell's own permission); stop:true ends it.
-  Future<StructuredResponse> _mic(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
-    final app = session.active;
+  Future<StructuredResponse> _mic(
+    GlintSession session,
+    Map<String, Object?> args,
+    PhaseReporter phases, {
+    bool once = false,
+  }) async {
+    final wanted = args['device'] as String?;
+    final app = wanted == null ? session.active : session.apps.where((a) => a.device.id == wanted).firstOrNull;
     final dev = app?.device;
     if (dev is! AndroidDevice) {
       return StructuredResponse.error(
@@ -855,7 +881,9 @@ class MediaTool extends GlintTool {
         errorKind: GlintErrorKind.unsupportedBackendAction,
         detail: dev != null && dev.platform == DevicePlatform.ios
             ? 'the iOS simulator records the Mac\'s own microphone, and nothing can feed it without a macOS permission'
-            : 'attach to an Android device first',
+            : wanted != null
+                ? 'no attached device is $wanted'
+                : 'attach to an Android device first',
         nextSteps: const ['run the voice flow on an Android emulator or phone'],
       );
     }
@@ -893,7 +921,8 @@ class MediaTool extends GlintTool {
       return _bad(e.summary,
           nextSteps: [if (e.detail.isNotEmpty) e.detail, 'source: tone (hz), speech (text) or a host audio file']);
     }
-    final seconds = (argNum(args, 'durationSec') ?? 60).clamp(1, 600);
+    final audioMs = audio.pcm.lengthSync() * 1000 ~/ (micSampleRate * 2);
+    final seconds = once ? audioMs / 1000 : (argNum(args, 'durationSec') ?? 60).clamp(1, 600);
     const remote = '/data/local/tmp/glint-mic.pcm';
     final push = await runBounded(
       dev.adbPath,
@@ -907,7 +936,7 @@ class MediaTool extends GlintTool {
           errorKind: GlintErrorKind.backendToolError,
           detail: '${push.stderr}'.trim());
     }
-    final r = await server.call({'cmd': 'micStart', 'path': remote, 'ms': (seconds * 1000).round()});
+    final r = await server.call({'cmd': 'micStart', 'path': remote, 'ms': once ? audioMs : (seconds * 1000).round()});
     if (r['ok'] != true) {
       return StructuredResponse.error(
         summary: 'Android refused the microphone feed',
@@ -917,8 +946,9 @@ class MediaTool extends GlintTool {
       );
     }
     return StructuredResponse(
-      summary:
-          'microphone of ${dev.serial} fed for ${seconds.toStringAsFixed(0)} s: any app that records hears ${audio.label}, looped',
+      summary: once
+          ? 'microphone of ${dev.serial} fed ${audio.label} once (${seconds.toStringAsFixed(1)} s): any app that records hears it'
+          : 'microphone of ${dev.serial} fed for ${seconds.toStringAsFixed(0)} s: any app that records hears ${audio.label}, looped',
       warnings: const ['while the feed runs, apps hear only the feed, not the device\'s real microphone'],
       nextSteps: const [
         'make the app record, then `media op:mic stop:true` to see which app recorded it and for how long'
@@ -1213,6 +1243,7 @@ class MediaTool extends GlintTool {
     return StructuredResponse(
       summary: '$summary${delivered.isEmpty ? '' : ' (${delivered.join(', ')})'}. synthetic:true',
       warnings: [
+        ...?report?.warnings,
         if (kind == 'call' || kind == 'callkit')
           'synthetic: there is no telephony on a simulator, so the audio session is not really taken from the app; an app that must stop its own audio has to do it on the interruption',
         if (apps.any((a) => a.observerPath == 'unavailable'))
@@ -1280,6 +1311,250 @@ class MediaTool extends GlintTool {
       simBooted: _simBooted,
       dormantNote: _dormantLibraryNote,
     );
+  }
+
+  Future<StructuredResponse> _speech(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
+    final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
+    if (id == null) return _bad('no device: attach first, or pass device:"<simulator udid>"');
+    final simulator = MediaDevice.platformOf(id) == DevicePlatform.ios && await const SimControl().status(id) != null;
+    if (!simulator && (MediaDevice.platformOf(id) == DevicePlatform.ios || isPhysicalIosUdid(id))) {
+      return _bad(
+        'speech works on an iOS simulator or an Android device only',
+        detail: isPhysicalIosUdid(id)
+            ? 'a physical iPhone has a real microphone and recognizer, so glint injects nothing there'
+            : '$id is not an iOS simulator on this Mac',
+        nextSteps: const ['pass the UDID of an iOS simulator (attach lists them), or use an Android emulator'],
+      );
+    }
+    if (!simulator) {
+      if (argBool(args, 'stop') == true) return _mic(session, {...args, 'device': id}, phases);
+      final text = args['text'] as String?;
+      if (text == null || text.trim().isEmpty) {
+        return _bad('speech needs text on Android',
+            nextSteps: const ['`media op:speech text:"what the user says"` speaks it into the microphone']);
+      }
+      return _mic(session, {...args, 'device': id, 'source': 'speech'}, phases, once: true);
+    }
+    final down = await _simBooted(id);
+    if (down != null) return down;
+    final text = (args['text'] as String?)?.trim() ?? '';
+    final error = args['error'] as String?;
+    if (error != null && !simSpeechErrors.containsKey(error)) {
+      return _bad('error must be ${simSpeechErrors.keys.join(', ')}, got "$error"');
+    }
+    if (error != null && text.isNotEmpty) return _bad('pass text or error, not both');
+    final confidence = argNum(args, 'confidence') ?? 0.92;
+    if (confidence < 0 || confidence > 1) return _bad('confidence must be between 0 and 1, got $confidence');
+    final wordMs = argInt(args, 'wordMs') ?? 280;
+    if (wordMs < 50 || wordMs > 5000) return _bad('wordMs must be between 50 and 5000, got $wordMs');
+    final finalMs = argInt(args, 'finalMs') ?? 1200;
+    if (finalMs < 0 || finalMs > 20000) return _bad('finalMs must be between 0 and 20000, got $finalMs');
+    final waitMs = argInt(args, 'waitMs') ?? 5000;
+    if (waitMs < 0 || waitMs > 60000) return _bad('waitMs must be between 0 and 60000, got $waitMs');
+    final injector = SimInjector(id, progress: phases);
+    final speech = SimSpeech(injector);
+    final wasOn = speech.on;
+    var enabledHere = false;
+    Future<String> undo() async {
+      if (!enabledHere) return '';
+      enabledHere = false;
+      await speech.stop();
+      return 'glint turned the speech stand-in on for this call and has turned it off again, so nothing is left running';
+    }
+
+    try {
+      if (argBool(args, 'stop') == true) {
+        final was = await speech.stop();
+        final clean = _dormantLibraryNote(injector);
+        return StructuredResponse(
+          summary: was
+              ? 'the speech stand-in is off: listening tasks ended as cancelled, and speech permission and availability are the simulator\'s own again; $clean'
+              : 'the speech stand-in was already off; $clean',
+          nextSteps: const ['`media op:speech` turns it on again'],
+          data: {
+            'device': id,
+            'synthetic': true,
+            'stillLoaded': [for (final a in injector.loaded()) a.bundleId],
+          },
+        );
+      }
+      final primary = _appId(session, MediaDevice(DevicePlatform.ios, id), args);
+      await speech.enable();
+      enabledHere = !wasOn;
+      final report = await injector.ensure(
+        appId: primary,
+        relaunch: argBool(args, 'relaunch') == true,
+        module: 'speech',
+      );
+      final speaking = text.isNotEmpty || error != null;
+      final target = primary ?? report.target;
+      if (speaking && report.waiting.isEmpty && target == null && report.running.isNotEmpty) {
+        throw SimInjectFailure(
+          GlintErrorKind.unknownApp,
+          'glint cannot tell which app should hear it',
+          'running: ${report.running.join(', ')}; none reports being in front',
+          ['repeat the call with appId:"${report.running.first}" (or the app that listens)', 'or attach the app first'],
+        );
+      }
+      if (report.waiting.isNotEmpty && speaking) {
+        throw SimInjectFailure(
+          GlintErrorKind.appNotResumed,
+          'no app is running to listen',
+          '${report.waiting.join(', ')} is not running on $id',
+          ['attach launch:"${report.waiting.first}", then repeat the call'],
+        );
+      }
+      final late = report.load == InjectLoad.lateLoad
+          ? 'the app was already running, so a permission it asked for earlier keeps the answer it got; a recognition task it starts from now on gets glint\'s results'
+          : null;
+      final loaded = report.load == InjectLoad.already ? 'already loaded' : report.load.name;
+      if (!speaking) {
+        enabledHere = false;
+        return StructuredResponse(
+          summary: 'the speech stand-in is on: speech and microphone permission are granted without a prompt and '
+              'recognition is available; a recognition task the app starts gets what `text` says${report.waiting.isEmpty ? '' : '; start the app to load it'}. injected: speech, $loaded.',
+          warnings: [if (late != null) late, ...report.warnings],
+          nextSteps: [
+            if (report.waiting.isNotEmpty)
+              'launch ${report.waiting.first} (attach launch:"${report.waiting.first}"): it loads glint at start',
+            'start listening in the app (tap its microphone button)',
+            '`media op:speech text:"what the user says"` sends the words as partial then final results',
+            '`media op:speech stop:true` turns it off',
+          ],
+          data: {
+            'device': id,
+            'synthetic': true,
+            'injected': report.toJson(modules: const ['speech'])
+          },
+        );
+      }
+      final wordCount = text.isEmpty ? 0 : text.split(RegExp(r'\s+')).length;
+      final partialsWanted = error == null && (argBool(args, 'partials') ?? true);
+      final outcome = await speech.send(
+        error != null
+            ? {'do': 'fail', 'error': error}
+            : {
+                'do': 'say',
+                'text': text,
+                'confidence': confidence,
+                'wordMs': wordMs,
+                'finalMs': finalMs,
+                'partials': partialsWanted,
+              },
+        primary: target,
+        waitMs: waitMs,
+        deliverySeconds: 2 + 0.3 + wordCount * wordMs / 1000 + finalMs / 1000,
+        phases: phases,
+      );
+      final who = outcome.app.bundleId;
+      if (!outcome.taken) {
+        final note = await undo();
+        return StructuredResponse.error(
+          summary: 'no recognition task was listening in $who',
+          errorKind: GlintErrorKind.targetNeverReady,
+          detail:
+              'no SFSpeechRecognizer task was running within ${(waitMs / 1000).toStringAsFixed(1)} s${note.isEmpty ? '' : '; $note'}',
+          nextSteps: const [
+            'start listening in the app (tap its microphone or listen button), then repeat the call',
+            'or pass waitMs to wait longer for the app to start listening',
+            'get_scene to see what the app shows',
+          ],
+        );
+      }
+      final runs = outcome.runs;
+      final partials = runs.fold<int>(0, (n, r) => n + r.partials);
+      final finals = runs.fold<int>(0, (n, r) => n + r.finals);
+      final cancelled = runs.where((r) => r.failure == 'cancelled').toList();
+      final failed = runs.where((r) => r.failure.isNotEmpty && r.failure != 'cancelled').toList();
+      if (error == null && finals == 0 && (cancelled.isNotEmpty || outcome.stopped)) {
+        final plural = partials == 1 ? '' : 's';
+        return StructuredResponse.error(
+          summary:
+              'the recognition task of $who was cancelled after ${outcome.stopped ? 'at least ' : ''}$partials partial result$plural, before the final result',
+          errorKind: GlintErrorKind.targetNeverReady,
+          detail: outcome.stopped
+              ? 'the speech stand-in was turned off while the words were delivered, which cancels the task'
+              : 'the app cancelled the task, so the words were not delivered as a final result',
+          nextSteps: const [
+            'start listening in the app again, then repeat the call',
+            'get_scene to see what the app shows',
+          ],
+        );
+      }
+      if (error == null && finals == 0 && failed.isNotEmpty) {
+        return StructuredResponse.error(
+          summary: 'the recognition task of $who ended with ${failed.first.failure} instead of a final result',
+          errorKind: GlintErrorKind.targetNeverReady,
+          detail: 'the app ended the task before the words became a final result',
+          nextSteps: const ['start listening in the app again, then repeat the call'],
+        );
+      }
+      if (!outcome.settled && partials == 0) {
+        return StructuredResponse.error(
+          summary: 'the words reached the recognition task of $who but no result arrived in the app',
+          errorKind: GlintErrorKind.appUnresponsive,
+          detail: 'the task took the utterance and had delivered no partial or final result when glint stopped waiting',
+          nextSteps: const [
+            'get_scene to see what the app shows; the results may still be on their way',
+            'check the app is not frozen, then repeat the call',
+          ],
+        );
+      }
+      final delivered = finals > 0;
+      final plural = partials == 1 ? '' : 's';
+      final said = error != null
+          ? 'failed the listening task of $who with ${simSpeechErrors[error]}'
+          : delivered
+              ? 'said "$text" to $who: $partials partial result$plural and the final result reached its recognition task'
+              : 'said "$text" to $who: $partials partial result$plural reached its recognition task, the final result is still pending';
+      return StructuredResponse(
+        summary: '$said (synthetic). injected: speech, $loaded.',
+        warnings: [
+          if (late != null) late,
+          ...report.warnings,
+          if (error == null && !delivered)
+            'the final result had not reached the app yet; get_scene shows what it did with the words',
+          if (outcome.silent.isNotEmpty)
+            '${outcome.silent.join(', ')} holds the library but is not the target or not in front, so it ignored the call',
+        ],
+        nextSteps: const [
+          'get_scene to read what the app shows',
+          '`media op:speech text:"..."` after the app listens again says something else',
+          '`media op:speech stop:true` turns the stand-in off',
+        ],
+        data: {
+          'device': id,
+          'synthetic': true,
+          'app': who,
+          if (error != null) 'error': error else 'text': text,
+          'delivered': {
+            'tasks': runs.length,
+            'partialResults': partials,
+            'finalResults': finals,
+            if (failed.isNotEmpty) 'failures': [for (final r in failed) r.failure],
+            'finalReachedApp': delivered,
+          },
+          'grantedWithoutPrompt': {'speech': outcome.app.authRequests, 'microphone': outcome.app.micRequests},
+          'microphone': {
+            'synthetic': true,
+            'engineStartsAnsweredByGlint': outcome.app.fakeEngineStarts,
+            'engineStartsHandedToTheRealEngine': outcome.app.realEngineStarts,
+          },
+          'injected': report.toJson(modules: const ['speech']),
+        },
+      );
+    } on SimInjectFailure catch (e) {
+      final note = await undo();
+      return StructuredResponse.error(
+        summary: e.message,
+        errorKind: e.kind,
+        detail: note.isEmpty ? e.detail : '${e.detail}; $note',
+        nextSteps: e.nextSteps,
+      );
+    } on Object {
+      await undo();
+      rethrow;
+    }
   }
 
   Future<StructuredResponse> _camera(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
@@ -1483,6 +1758,7 @@ class MediaTool extends GlintTool {
         warnings: [
           if (report.load == InjectLoad.lateLoad)
             'the app was already running, so only a camera it opens from now on sees the feed; a list it read earlier stays empty until it asks again',
+          ...report.warnings,
         ],
         nextSteps: [
           if (report.waiting.isNotEmpty)
