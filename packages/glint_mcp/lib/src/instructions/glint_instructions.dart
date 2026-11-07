@@ -98,7 +98,7 @@ const _recovery = '''
 - `inputPartial`: part landed (`data.delivered`/`data.of`); re-read, send the rest.
 - `unsupportedBackendAction` / `backendToolError` / `unsupportedToolchain` / `deviceNotConnected` / `developerImageMissing` / `deviceBusy` / `notOnThisDevice` / `signingFailed` / `modalNotDismissible` / `scrollSideEffect` / `observeOnly` / `pickIncomplete` / `toolTimeout`: follow `detail` + `nextSteps`.
 - `invalidArgument`: fix the arg.
-- `internal` — glint bug. `report_issue` with the user's OK.
+- `internal`: glint bug. `report_issue` with the user's OK; describe the app generically, never name it.
 ''';
 
 const _gotchas = '''

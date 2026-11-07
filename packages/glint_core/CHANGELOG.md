@@ -6,6 +6,7 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ### Added
 
+- `IdentityRedactor`, `RedactionCounts`, `isPublicHost` and `projectIdentityNames`, and `redactForSharing` now takes `appNames`, `deviceNames`, `hosts` and `counts`: known app, device and backend host names become `<app>`, `<device>` and `<host>` (case-insensitive, across separators and camelCase, keeping generic model names and well-known public hosts), and URL hosts in the text are replaced too.
 - `ProcessRegistry`, `killTree`, `ProcessTable` and `watchParentDeath`: one registry of the long-lived child processes glint starts, with owner, one per purpose and device, pid files under `~/.glint/procs`, startup reaping by start time and command, and a tree kill.
 
 ## [0.1.3] - 2026-10-18

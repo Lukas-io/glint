@@ -1,6 +1,14 @@
 import 'package:dart_mcp/server.dart';
 import 'package:glint_core/glint_core.dart'
-    show capDeepLinkBody, composeIssueDeepLink, fileWithGh, issueLabels, issueRepo, kDeepLinkBodyMax, saveFullIssueBody;
+    show
+        RedactionCounts,
+        capDeepLinkBody,
+        composeIssueDeepLink,
+        fileWithGh,
+        issueLabels,
+        issueRepo,
+        kDeepLinkBodyMax,
+        saveFullIssueBody;
 
 import '../../../interaction.dart';
 import '../../../observability.dart';
@@ -34,18 +42,21 @@ class ReportIssueTool extends GlintTool {
             'input setup, mode, other glint process on the device) is always '
             'added. includeContext:true also attaches the last ~30 action-log '
             'entries; typed text is never logged. Uses `gh issue create` when '
-            'available, else a pre-filled GitHub URL. Paths and secrets '
-            '(tokens, keys, passwords) are redacted.',
+            'available, else a pre-filled GitHub URL. Describe the app '
+            'generically (e.g. "a banking app\'s PIN screen"); never name the '
+            'app, company, bundle id, host or device. Known names, paths and '
+            'secrets are redacted.',
         inputSchema: ObjectSchema(
           properties: {
             'type': Schema.string(
               description: 'bug | ux | feature',
             ),
             'title': Schema.string(
-              description: 'One-line summary. Redacted before submission.',
+              description: 'One-line summary, naming no app, company, host or device. Redacted before submission.',
             ),
             'body': Schema.string(
-              description: 'Anything the fields below do not cover. Redacted before submission.',
+              description: 'Anything the fields below do not cover; name no app, company, host or device. '
+                  'Redacted before submission.',
             ),
             'expected': Schema.string(description: 'What should have happened.'),
             'actual': Schema.string(description: 'What happened instead: exact reply text, errorKind, numbers.'),
@@ -95,9 +106,18 @@ class ReportIssueTool extends GlintTool {
       );
     }
 
-    final title = redactForSharing(titleRaw);
+    final identities = sessionIdentities(session);
+    final counts = RedactionCounts();
+    String redact(String text) => redactForSharing(
+          text,
+          appNames: identities.apps,
+          deviceNames: identities.devices,
+          counts: counts,
+        );
+
+    final title = redact(titleRaw);
     final sections = renderIssueSections(fields, session.actionLog);
-    final fullBody = redactForSharing(
+    final fullBody = redact(
       await _composeBody(
         session: session,
         fields: fields,
@@ -111,6 +131,8 @@ class ReportIssueTool extends GlintTool {
             '${session.actionLog.capacity} calls, or cleared); the issue says so',
     ];
     final labels = labelsForType(type);
+    final redactedNote = counts.describe();
+    final redactedData = counts.toJson();
 
     if (dryRun) {
       // The summary already carries the composed body readably; don't ship a
@@ -122,7 +144,8 @@ class ReportIssueTool extends GlintTool {
       );
       final nudges = issueNudges(type, fields, session.actionLog);
       return StructuredResponse(
-        summary: 'dry-run — composed body but did not file:\n\n# '
+        summary:
+            'dry-run: composed body but did not file${redactedNote == null ? '' : ' (redacted $redactedNote)'}:\n\n# '
             '$title\n\n$fullBody'
             '${nudges.isEmpty ? '' : '\n\nstill empty (optional):\n${nudges.map((n) => '- $n').join('\n')}'}',
         data: {
@@ -132,9 +155,12 @@ class ReportIssueTool extends GlintTool {
           'labels': labels,
           'deepLink': deepLink,
           'missingSections': nudges,
+          'redacted': redactedData,
         },
         warnings: seqWarnings,
         nextSteps: [
+          'only names glint knows from this session are redacted; check the draft for any app, company, host or '
+              'device name before approving',
           if (nudges.isNotEmpty) 'fill what you can from the list above and dry-run again; filing as is also works',
           'show the user the issue above; after they approve, call report_issue again without dryRun',
         ],
@@ -152,7 +178,8 @@ class ReportIssueTool extends GlintTool {
       final dropped = filed.droppedLabels;
       return StructuredResponse(
         summary: 'filed: ${filed.url}'
-            '${dropped.isEmpty ? '' : ' (without ${dropped.join(", ")}: not labels of this repo)'}',
+            '${dropped.isEmpty ? '' : ' (without ${dropped.join(", ")}: not labels of this repo)'}'
+            '${redactedNote == null ? '' : ' · redacted $redactedNote'}',
         data: {
           'filed': true,
           'method': 'gh-cli',
@@ -161,6 +188,7 @@ class ReportIssueTool extends GlintTool {
           'title': title,
           'labels': filed.applied,
           if (dropped.isNotEmpty) 'droppedLabels': dropped,
+          'redacted': redactedData,
         },
         warnings: seqWarnings,
         nextSteps: [
@@ -181,7 +209,7 @@ class ReportIssueTool extends GlintTool {
     );
     return StructuredResponse(
       summary: 'gh CLI ${filed.reason}; open this pre-filled URL '
-          'instead:\n\n$deepLink',
+          'instead${redactedNote == null ? '' : ' (redacted $redactedNote)'}:\n\n$deepLink',
       data: {
         'filed': false,
         'method': 'paste-ready',
@@ -192,6 +220,7 @@ class ReportIssueTool extends GlintTool {
         if (saved != null) 'fullBodyPath': saved,
         'deepLink': deepLink,
         'repo': issueRepo,
+        'redacted': redactedData,
       },
       warnings: [
         filed.reason,

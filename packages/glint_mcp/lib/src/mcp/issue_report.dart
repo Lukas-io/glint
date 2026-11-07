@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart' show projectIdentityNames;
+
 import '../../interaction.dart';
 import '../../observability.dart';
 import '../version.dart';
@@ -296,4 +298,41 @@ String _deviceKind(DeviceTarget d) => switch (d) {
       IosSimulator() => 'iOS simulator',
       IosDevice() => 'iPhone (physical)',
       _ => '${d.platform.name} device',
+    };
+
+/// The app and device names this session knows, from live attachments and the attach history, which a public issue must not repeat.
+({List<String> apps, List<String> devices}) sessionIdentities(GlintSession session) {
+  final apps = <String>[];
+  final devices = <String>[];
+  void app(String? name) {
+    if (name != null && name.trim().isNotEmpty) apps.add(name);
+  }
+
+  void device(String? name) {
+    if (name != null && name.trim().isNotEmpty) devices.add(name);
+  }
+
+  for (final a in session.apps) {
+    app(a.package);
+    app(a.displayName);
+    app(a.bundleId);
+    apps.addAll(projectIdentityNames(a.projectDir));
+    device(a.deviceName);
+    device(_hardwareId(a.device));
+  }
+  for (final r in session.attachHistory.load()) {
+    app(r.appKey);
+    app(r.displayName);
+    app(r.bundleId);
+    apps.addAll(projectIdentityNames(r.projectDir));
+    device(r.deviceName);
+    device(r.deviceId);
+  }
+  return (apps: apps, devices: devices);
+}
+
+String? _hardwareId(DeviceTarget d) => switch (d) {
+      IosDevice() => d.udid,
+      AndroidDevice() => d.serial,
+      _ => null,
     };
