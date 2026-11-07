@@ -7,6 +7,7 @@ import 'package:glint_core/glint_core.dart' show ProcessRegistry;
 import '../version.dart';
 import '../observability/call_progress.dart';
 import 'bounded_process.dart';
+import 'cache_prune.dart';
 
 /// Must equal `PROTOCOL` in native/android_server/src/dev/glint/server/Server.java.
 const int expectedAndroidServerProtocol = 2;
@@ -172,7 +173,7 @@ String? locateAndroidServerDex({Map<String, String>? env, String? scriptPath}) {
     dir = parent;
   }
   final cached = cachedAndroidServerPath(env: e);
-  return File(cached).existsSync() ? cached : null;
+  return File(cached).existsSync() ? markHelperUsed(cached) : null;
 }
 
 /// Where the downloaded server for this glint version lives, under `~/.glint/bin`.

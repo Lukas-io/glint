@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../version.dart';
+import 'cache_prune.dart';
 
 /// The glint-iossim bridge path relative to glint's package root.
 const String kDefaultBridgePath = 'native/ios_sim_bridge/.build/debug/glint-iossim';
@@ -41,7 +42,8 @@ BridgeLocation locateIosBridge(String? explicit, {Map<String, String>? env, Stri
   final built = _bridgeUnderGlintRoot(scriptPath);
   if (built != null) return BridgeLocation(built, BridgeSource.build);
   final cached = cachedBridgePath(env: env);
-  return BridgeLocation(cached, File(cached).existsSync() ? BridgeSource.cache : BridgeSource.missing);
+  if (File(cached).existsSync()) return BridgeLocation(markHelperUsed(cached), BridgeSource.cache);
+  return BridgeLocation(cached, BridgeSource.missing);
 }
 
 /// The bridge path [locateIosBridge] picks.

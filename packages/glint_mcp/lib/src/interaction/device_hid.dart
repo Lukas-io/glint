@@ -8,6 +8,7 @@ import '../version.dart';
 import 'bridge_download.dart';
 import 'phone_status.dart';
 import 'result.dart';
+import 'cache_prune.dart';
 
 /// Must equal `PROTOCOL` in native/ios_device_hid/src/main.rs.
 const int expectedDeviceHidProtocol = 7;
@@ -230,7 +231,7 @@ String? locateDeviceHid({Map<String, String>? env, String? scriptPath}) {
     dir = parent;
   }
   final cached = cachedDeviceHidPath(env: e);
-  return File(cached).existsSync() ? cached : null;
+  return File(cached).existsSync() ? markHelperUsed(cached) : null;
 }
 
 /// The helper's path, downloading this version's release asset when no copy exists; throws [DeviceHidError] kind `missing`.

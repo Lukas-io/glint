@@ -29,9 +29,28 @@ class PruneReport {
 /// Seconds between automatic prunes.
 const Duration kPruneEvery = Duration(days: 1);
 
+/// How long a helper must sit unused before another glint version's copy may be pruned.
+const Duration kPruneGrace = Duration(days: 7);
+
+final Map<String, DateTime> _marked = {};
+
+/// Notes that [path] was just used, so a prune from another glint version leaves it alone; throttled to once an hour per path.
+String markHelperUsed(String path) {
+  final now = DateTime.now();
+  final last = _marked[path];
+  if (last != null && now.difference(last) < const Duration(hours: 1)) return path;
+  _marked[path] = now;
+  try {
+    File(path).setLastModifiedSync(now);
+  } on Object {
+    return path;
+  }
+  return path;
+}
+
 final _semver = RegExp(r'-(\d+\.\d+\.\d+)(\.dex)?$');
 
-/// Removes helper binaries of other glint versions from `~/.glint/bin` and runner builds of Xcode versions that are gone from `~/.glint/xctest`, at most once a day unless [force]; nothing a live process runs is touched.
+/// Removes helper binaries of other glint versions from `~/.glint/bin` and runner builds of Xcode versions that are gone from `~/.glint/xctest`, at most once a day unless [force]; nothing a live process runs, or any helper used in the last [kPruneGrace], is touched.
 Future<PruneReport> pruneCaches({bool dryRun = false, bool force = false, String? home, String? version}) async {
   final root = '${home ?? Platform.environment['HOME'] ?? '.'}/.glint';
   final stamp = File('$root/.pruned');
@@ -92,7 +111,7 @@ List<PruneItem> _oldHelpers(String binDir, String version, bool Function(String)
       final family = name.substring(0, name.lastIndexOf('-'));
       reason = identical(newestOfHashed[family], f) ? null : 'an older build of $family';
     }
-    if (reason == null || inUse(f.path)) continue;
+    if (reason == null || inUse(f.path) || DateTime.now().difference(f.lastModifiedSync()) < kPruneGrace) continue;
     out.add(PruneItem(f.path, f.lengthSync(), reason));
   }
   return out;

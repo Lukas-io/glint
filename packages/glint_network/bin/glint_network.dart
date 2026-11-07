@@ -433,7 +433,9 @@ Future<void> _reapLeftovers() async {
       io.stderr
           .writeln('glint_network: stopped ${reaped.length} helper(s) left by an earlier glint: ${reaped.join('; ')}');
     }
-  } catch (_) {/* best effort */}
+  } on Object {
+    return;
+  }
 }
 
 /// Parses a comma-separated allowlist value into a list of trimmed, non-

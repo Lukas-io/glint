@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'shipped_files.dart';
 import 'bounded_process.dart';
+import 'cache_prune.dart';
 
 /// One line of text found on a screenshot, with its box in image pixels.
 typedef OcrLine = ({String text, double x, double y, double w, double h});
@@ -46,7 +47,7 @@ Future<String> _helper() async {
     h = ((h ^ b) * 0x01000193) & 0xffffffff;
   }
   final out = '${Platform.environment['HOME'] ?? '.'}/.glint/bin/glint-ocr-${h.toRadixString(16)}';
-  if (File(out).existsSync()) return out;
+  if (File(out).existsSync()) return markHelperUsed(out);
   Directory(File(out).parent.path).createSync(recursive: true);
   final r = await runBounded('xcrun', ['swiftc', '-O', source, '-o', out],
       timeout: const Duration(minutes: 2), phase: 'compiling the OCR helper');

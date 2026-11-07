@@ -46,6 +46,7 @@ async fn main() {
     let parent = std::os::unix::process::parent_id();
     let mut parent_watch = tokio::time::interval(PARENT_POLL);
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
+    let mut idle_deadline = tokio::time::Instant::now() + IDLE_STREAM;
     loop {
         let line = tokio::select! {
             line = lines.next_line() => line,
@@ -55,12 +56,13 @@ async fn main() {
                 }
                 continue;
             }
-            _ = tokio::time::sleep(IDLE_STREAM), if session.streaming() && !session.recording() => {
+            _ = tokio::time::sleep_until(idle_deadline), if session.streaming() && !session.recording() => {
                 session.stop_stream().await;
                 continue;
             }
         };
         let Ok(Some(line)) = line else { break };
+        idle_deadline = tokio::time::Instant::now() + IDLE_STREAM;
         let Ok(request) = serde_json::from_str::<Value>(&line) else {
             emit(&mut out, &json!({"ok": false, "kind": "badRequest", "error": "not JSON"})).await;
             continue;
@@ -79,6 +81,7 @@ async fn main() {
             Err(e) => failure(&e),
         };
         emit(&mut out, &reply).await;
+        idle_deadline = tokio::time::Instant::now() + IDLE_STREAM;
     }
     session.network_off().await;
     session.stop_stream().await;

@@ -69,20 +69,14 @@ Future<void> main(List<String> args) async {
     if (exiting) return;
     exiting = true;
     stderr.writeln('glint: $reason — shutting down.');
-    Timer(const Duration(seconds: 12), () => exit(0));
-    try {
-      server.session.watches.close();
-    } catch (_) {/* best effort */}
-    try {
-      server.session.explore.close();
-    } catch (_) {/* best effort */}
-    try {
-      await server.session.killLaunchedApps();
-      await ProcessRegistry.instance.stopAll();
-    } catch (_) {/* best effort */}
-    try {
-      await server.session.usageReporter.shipOnExit().timeout(const Duration(seconds: 3));
-    } catch (_) {/* best effort */}
+    Timer(const Duration(seconds: 15), () => exit(0));
+    await _quietly(() => server.session.watches.close());
+    await _quietly(() => server.session.explore.close());
+    await Future.wait([
+      _quietly(() => server.session.killLaunchedApps().timeout(_teardownBudget)),
+      _quietly(() => ProcessRegistry.instance.stopAll(within: _teardownBudget)),
+      _quietly(() => server.session.usageReporter.shipOnExit().timeout(_shipBudget)),
+    ]);
     exit(0);
   }
 
@@ -102,14 +96,23 @@ Future<void> main(List<String> args) async {
   await shutdown('MCP host closed the stdio channel');
 }
 
-/// Startup housekeeping that must never delay the handshake: stop helpers a crashed glint left, and prune old caches.
-Future<void> _tidyUp() async {
+const _teardownBudget = Duration(seconds: 6);
+const _shipBudget = Duration(seconds: 3);
+
+Future<void> _quietly(FutureOr<void> Function() body) async {
   try {
-    final reaped = await ProcessRegistry.instance.reapStale();
-    if (reaped.isNotEmpty) {
-      stderr.writeln('glint: stopped ${reaped.length} helper(s) left by an earlier glint: ${reaped.join('; ')}');
-    }
-    final pruned = await pruneCaches();
-    if (pruned.items.isNotEmpty) stderr.writeln('glint: ${pruned.summary}');
-  } catch (_) {/* best effort */}
+    await body();
+  } on Object {
+    return;
+  }
 }
+
+/// Startup housekeeping that must never delay the handshake: stop helpers a crashed glint left, and prune old caches.
+Future<void> _tidyUp() => _quietly(() async {
+      final reaped = await ProcessRegistry.instance.reapStale();
+      if (reaped.isNotEmpty) {
+        stderr.writeln('glint: stopped ${reaped.length} helper(s) left by an earlier glint: ${reaped.join('; ')}');
+      }
+      final pruned = await pruneCaches();
+      if (pruned.items.isNotEmpty) stderr.writeln('glint: ${pruned.summary}');
+    });
