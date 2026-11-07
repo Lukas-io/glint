@@ -60,6 +60,9 @@ List<SceneNode> _ancestorsOf(SceneNode root, SceneNode target) {
   return visit(root) ? path.reversed.toList() : const [];
 }
 
+/// How a hold on a loading list ended.
+enum _Hold { grew, indicatorGone, capped }
+
 /// Loops `get_scene` + `scroll` until a target (glintId or text content)
 /// is on screen (and hittable for tap:true), or the ceiling is reached. Stops early if already visible.
 class ScrollToFindTool extends GlintTool {
@@ -72,7 +75,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8 (cap 20, a larger value is clamped and the reply says so), amountFraction 0.6; progress every 10 s. It stops early when the list stops moving (end reached). Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen; detail says where it sat), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8 (cap 20, a larger value is clamped and the reply says so), amountFraction 0.6; progress every 10 s. It stops early when the list stops moving (end reached). When it stalls with a loading indicator showing it waits up to 4 s for rows to arrive before deciding it is at the end. Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen; detail says where it sat), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -112,6 +115,13 @@ class ScrollToFindTool extends GlintTool {
   static const _stalledShare = 0.25;
   static const _stalledMaxPx = 40.0;
   static const _settleAfterSwipeMs = 500;
+  static const _loadWait = Duration(seconds: 4);
+  static const _loadPoll = Duration(milliseconds: 400);
+  static const _indicatorCheckEvery = 3;
+  static const _shimmerLabels = {'Shimmer'};
+  static final _loadingFooter = RegExp(
+      r'^(loading|fetching|please wait)( more| next| items| results| page)?\s*(\.{2,3}|…)?$',
+      caseSensitive: false);
 
   @override
   Duration callCeiling(GlintSession session, Map<String, Object?> args) =>
@@ -199,6 +209,8 @@ class ScrollToFindTool extends GlintTool {
     var last = 0;
     var endReached = false;
     var outOfTime = false;
+    var loadGaveUp = false;
+    var loadWaitedMs = 0;
 
     String? tapId;
     StructuredResponse? foundReply;
@@ -239,6 +251,7 @@ class ScrollToFindTool extends GlintTool {
                 data: {
                   'attempts': i,
                   'elapsedMs': clock.elapsedMilliseconds,
+                  if (loadWaitedMs > 0) 'loadWaitMs': loadWaitedMs,
                   'swipes': swipes,
                   'glintId': hit.glintId,
                   'hittable': coord.hittable,
@@ -262,15 +275,19 @@ class ScrollToFindTool extends GlintTool {
         if (i < maxScrolls) {
           final semantic = readSemantic ?? await session.semanticize(scene, detail: SceneDetail.structural);
           final snapshot = readSnapshot ?? snapshotOf(semantic);
-          final loading = const StateObserver().observe(semantic) == SceneState.loading;
+          var holdForLoad = false;
+          String? holdAnchorId;
           Future<void> measureStall() async {
             if (i == 0 || i == maxScrolls) return;
             final before = swiped;
             final moved = before == null
                 ? null
                 : await scrollDisplacement(session, scene, before, horizontal, restSamples: _restSamples);
-            final still = moved != null && !loading && moved <= _stalledBelow(before!, amount, horizontal);
-            stalls = still ? stalls + 1 : 0;
+            final nearlyStill = moved != null && moved <= _stalledBelow(before!, amount, horizontal);
+            holdForLoad = nearlyStill && !loadGaveUp && _loadingOnPage(semantic);
+            holdAnchorId = before?.glintId;
+            if (holdForLoad) return;
+            stalls = nearlyStill ? stalls + 1 : 0;
             endReached = stalls >= _stallsForEnd;
           }
 
@@ -291,6 +308,18 @@ class ScrollToFindTool extends GlintTool {
           } else if (fresh == null && firstAnchor != null) {
             target = (anchor: firstAnchor, watchedPagedIds: target.watchedPagedIds);
           }
+          if (holdForLoad) {
+            final waited = Stopwatch()..start();
+            final held = await _holdForRows(session, scene, holdAnchorId, waited);
+            loadWaitedMs += waited.elapsedMilliseconds;
+            if (held == _Hold.grew) {
+              stalls = 0;
+            } else {
+              stalls += 1;
+              endReached = stalls >= _stallsForEnd;
+              loadGaveUp = held == _Hold.capped;
+            }
+          }
         }
       } finally {
         await scene.dispose();
@@ -299,7 +328,8 @@ class ScrollToFindTool extends GlintTool {
       final spent = iterationClock.elapsed;
       if (spent > worstIteration) worstIteration = spent;
       outOfTime = clock.elapsed + worstIteration > _maxDuration;
-      if (tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt) || endReached || outOfTime) break;
+      final done = tapId != null || i == maxScrolls || (coveredAt != null && i > coveredAt) || endReached || outOfTime;
+      if (done) break;
       final verify = stalls > 0;
       if (!verify) blockedDetail = null;
       final step = await scroller.perform(session, verify ? scrollArgsWithReason : scrollArgs, target: target);
@@ -336,11 +366,15 @@ class ScrollToFindTool extends GlintTool {
       ).mergeData({'reason': 'blocked', 'attempts': last, 'elapsedMs': clock.elapsedMilliseconds});
     }
     final stopped = _whyStopped(endReached: endReached, outOfTime: outOfTime, scrolls: last, maxScrolls: maxScrolls);
+    final loadNote = loadGaveUp
+        ? '; a loading indicator was still showing and no rows arrived in ${_loadWait.inSeconds} s, so if the list loads more later, try again'
+        : '';
     final progress = {
       'attempts': last,
       'elapsedMs': clock.elapsedMilliseconds,
       'swipes': swipes,
       if (endReached) 'endReached': true,
+      if (loadWaitedMs > 0) 'loadWaitMs': loadWaitedMs,
     };
 
     if (covered != null) {
@@ -372,7 +406,8 @@ class ScrollToFindTool extends GlintTool {
       return StructuredResponse.error(
         summary: '$criterion appeared in the tree but was never on screen${tap ? ' and hittable' : ''}: $stopped',
         errorKind: GlintErrorKind.scrollLimitReached,
-        detail: lastSeen == null ? 'it was in the tree but could not be measured' : _whereItSat(lastSeen, dir),
+        detail:
+            '${lastSeen == null ? 'it was in the tree but could not be measured' : _whereItSat(lastSeen, dir)}$loadNote',
         nextSteps: [
           if (!endReached && !outOfTime && last >= maxScrolls && maxScrolls < _maxScrollsCap)
             'raise maxScrolls (currently $maxScrolls, cap $_maxScrollsCap)',
@@ -385,9 +420,10 @@ class ScrollToFindTool extends GlintTool {
     return StructuredResponse.error(
       summary: '$criterion was not found in any scene: $stopped',
       errorKind: GlintErrorKind.targetNotFound,
-      detail: lastTexts.isEmpty
-          ? 'the screen shows no text at all'
-          : 'text visible now: ${lastTexts.map((t) => '"$t"').join(", ")}',
+      detail: (lastTexts.isEmpty
+              ? 'the screen shows no text at all'
+              : 'text visible now: ${lastTexts.map((t) => '"$t"').join(", ")}') +
+          loadNote,
       nextSteps: [
         if (hint != null) hint,
         'try a different `direction` (the target may be above/beside the viewport)',
@@ -431,6 +467,47 @@ class ScrollToFindTool extends GlintTool {
     final clip = anchor.clip;
     final span = clip == null ? 600.0 : (horizontal ? clip.w : clip.h);
     return (span * amount * _stalledShare).clamp(2.0, _stalledMaxPx);
+  }
+
+  /// Holds a stalled list while a loading indicator shows: ends as soon as its scroll extent grows, when the indicator is gone, or after [_loadWait].
+  Future<_Hold> _holdForRows(GlintSession session, Scene scene, String? anchorId, Stopwatch waited) async {
+    final start = (await readScrollPosition(session, scene, anchorId)).position?.$3;
+    for (var poll = 1; waited.elapsed < _loadWait; poll++) {
+      CallProgress.enter(
+          'scroll_to_find: waiting for the list to load more (${waited.elapsed.inSeconds} s of ${_loadWait.inSeconds} s)',
+          key: 'settle');
+      final left = _loadWait - waited.elapsed;
+      await Future<void>.delayed(left < _loadPoll ? left : _loadPoll);
+      final extent = (await readScrollPosition(session, scene, anchorId)).position?.$3;
+      if (start != null && extent != null && extent > start + 1) return _Hold.grew;
+      if (poll % _indicatorCheckEvery == 0 && !await _indicatorShowing(session)) return _Hold.indicatorGone;
+    }
+    return _Hold.capped;
+  }
+
+  Future<bool> _indicatorShowing(GlintSession session) async {
+    final scene = await session.reader.readSummary();
+    try {
+      return _loadingOnPage(await session.semanticize(scene, detail: SceneDetail.structural));
+    } finally {
+      await scene.dispose();
+    }
+  }
+
+  /// Whether the active page or an overlay shows a progress indicator, a shimmer or a short "Loading more" row.
+  static bool _loadingOnPage(SemanticScene semantic) {
+    if (const StateObserver().observe(semantic) == SceneState.loading) return true;
+    final id = semantic.root.glintId;
+    final page = id == null ? null : semantic.sourceFor(id);
+    for (final root in [if (page != null) page, ...semantic.sourceScene.overlayRoots]) {
+      for (final n in root.walk()) {
+        if (n.isOffstage) continue;
+        if (_shimmerLabels.contains(n.baseLabel)) return true;
+        final text = n.textPreview?.trim();
+        if (text != null && _loadingFooter.hasMatch(text)) return true;
+      }
+    }
+    return false;
   }
 
   Future<void> _letScrollRest(GlintSession session) async {

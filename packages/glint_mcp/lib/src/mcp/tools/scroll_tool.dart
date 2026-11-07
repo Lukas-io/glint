@@ -199,27 +199,40 @@ class ScrollTool extends GlintTool {
 
   /// Why a scroll moved nothing, from the scrollable's own position.
   Future<String> _whyStill(GlintSession session, Scene scene, ScrollAnchor? anchor, ScrollDirection dir) async {
-    final node = anchor == null ? null : scene.findByGlintId(anchor.glintId);
-    if (node == null) return 'notScrollable';
-    final raw = await session.runtime.evaluateWithSelection(
-      expression: _positionExpr,
-      inspectorId: node.inspectorId,
-      groupName: scene.groupName,
-    );
-    final parts = raw?.split(',').map(double.tryParse).toList();
-    if (parts == null || parts.length != 3 || parts.contains(null)) {
-      return raw == 'none' ? 'notScrollable' : 'blocked';
-    }
-    final (pixels, min, max) = (parts[0]!, parts[1]!, parts[2]!);
+    final read = await readScrollPosition(session, scene, anchor?.glintId);
+    if (read.position == null) return read.notScrollable ? 'notScrollable' : 'blocked';
+    final (pixels, min, max) = read.position!;
     final forward = dir == ScrollDirection.down || dir == ScrollDirection.right;
     if (forward && pixels >= max - 1) return 'atEnd';
     if (!forward && pixels <= min + 1) return 'atStart';
     return 'blocked';
   }
+}
 
-  static const _positionExpr = "((ScrollPosition? p) => p == null ? 'none' : p.pixels.toString() + ',' + "
-      "p.minScrollExtent.toString() + ',' + p.maxScrollExtent.toString())"
-      '(Scrollable.maybeOf(WidgetInspectorService.instance.selection.currentElement!)?.position)';
+const _positionExpr = "((ScrollPosition? p) => p == null ? 'none' : p.pixels.toString() + ',' + "
+    "p.minScrollExtent.toString() + ',' + p.maxScrollExtent.toString())"
+    '(Scrollable.maybeOf(WidgetInspectorService.instance.selection.currentElement!)?.position)';
+
+/// The pixels, minimum and maximum extent of the scrollable around the node [glintId] in [scene], by one small eval; `position` is null when it cannot be read and [notScrollable] says whether nothing scrolls there.
+Future<({(double, double, double)? position, bool notScrollable})> readScrollPosition(
+    GlintSession session, Scene scene, String? glintId) async {
+  final node = glintId == null ? null : scene.findByGlintId(glintId);
+  if (node == null) return (position: null, notScrollable: true);
+  final String? raw;
+  try {
+    raw = await session.runtime.evaluateWithSelection(
+      expression: _positionExpr,
+      inspectorId: node.inspectorId,
+      groupName: scene.groupName,
+    );
+  } on Object {
+    return (position: null, notScrollable: false);
+  }
+  final parts = raw?.split(',').map(double.tryParse).toList();
+  if (parts == null || parts.length != 3 || parts.contains(null)) {
+    return (position: null, notScrollable: raw == 'none');
+  }
+  return (position: (parts[0]!, parts[1]!, parts[2]!), notScrollable: false);
 }
 
 typedef Rect4 = ({double x, double y, double w, double h});
