@@ -91,7 +91,11 @@ Future<PruneReport> pruneCaches({bool dryRun = false, bool force = false, String
 List<PruneItem> _oldHelpers(String binDir, String version, bool Function(String) inUse) {
   final dir = Directory(binDir);
   if (!dir.existsSync()) return const [];
-  final files = dir.listSync().whereType<File>().where((f) => f.uri.pathSegments.last.startsWith('glint-')).toList();
+  final files = dir
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.uri.pathSegments.last.startsWith('glint-') && !_injectedLibrary(f.path))
+      .toList();
   final newestOfHashed = <String, File>{};
   for (final f in files) {
     final name = f.uri.pathSegments.last;
@@ -116,6 +120,9 @@ List<PruneItem> _oldHelpers(String binDir, String version, bool Function(String)
   }
   return out;
 }
+
+/// A simulator's launch environment may still name this library after glint moved on, and a missing inserted library stops every app launch there.
+bool _injectedLibrary(String path) => path.endsWith('.dylib');
 
 Future<List<PruneItem>> _goneRunnerBuilds(String xctestDir, bool Function(String) inUse) async {
   final dir = Directory(xctestDir);

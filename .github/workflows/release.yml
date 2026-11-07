@@ -53,6 +53,18 @@ jobs:
           cd "$RUNNER_TEMP/assets"
           shasum -a 256 glint-iossim-macos > glint-iossim-macos.sha256
           cat glint-iossim-macos.sha256
+      - name: Build the universal glint-siminject dylib
+        if: steps.tag.outputs.package == 'glint_mcp'
+        working-directory: packages/glint_mcp/native/ios_sim_inject
+        run: |
+          mkdir -p "$RUNNER_TEMP/assets"
+          lib="$RUNNER_TEMP/assets/glint-siminject.dylib"
+          sh build.sh "$lib"
+          lipo "$lib" -verify_arch arm64 x86_64
+          codesign --verify "$lib"
+          cd "$RUNNER_TEMP/assets"
+          shasum -a 256 glint-siminject.dylib > glint-siminject.dylib.sha256
+          cat glint-siminject.dylib.sha256
       - name: Build the universal glint-devicehid helper
         if: steps.tag.outputs.package == 'glint_mcp'
         working-directory: packages/glint_mcp/native/ios_device_hid

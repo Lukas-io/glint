@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'shipped_files.dart';
+import 'swift_helper.dart';
 import 'bounded_process.dart';
-import 'cache_prune.dart';
 
 /// One line of text found on a screenshot, with its box in image pixels.
 typedef OcrLine = ({String text, double x, double y, double w, double h});
@@ -42,20 +41,11 @@ Future<String> _helper() async {
   if (source == null) {
     throw OcrError('the OCR helper source is not part of this glint install', 'looked for $kOcrSource');
   }
-  var h = 0x811c9dc5;
-  for (final b in File(source).readAsBytesSync()) {
-    h = ((h ^ b) * 0x01000193) & 0xffffffff;
+  try {
+    return await swiftHelper(source, 'glint-ocr', phase: 'building the OCR helper');
+  } on SwiftHelperError catch (e) {
+    throw OcrError(e.message, e.detail);
   }
-  final out = '${Platform.environment['HOME'] ?? '.'}/.glint/bin/glint-ocr-${h.toRadixString(16)}';
-  if (File(out).existsSync()) return markHelperUsed(out);
-  Directory(File(out).parent.path).createSync(recursive: true);
-  final r = await runBounded('xcrun', ['swiftc', '-O', source, '-o', out],
-      timeout: const Duration(minutes: 2), phase: 'compiling the OCR helper');
-  if (r.exitCode != 0 || !File(out).existsSync()) {
-    throw OcrError('could not build the OCR helper with the Xcode toolchain',
-        '${r.stderr}'.trim().split('\n').take(3).join(' | '));
-  }
-  return out;
 }
 
 String? _locateSource() => shippedPath(kOcrSource);
