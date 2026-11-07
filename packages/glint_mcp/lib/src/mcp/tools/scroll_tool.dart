@@ -118,15 +118,10 @@ class ScrollTool extends GlintTool {
         if (post != null) {
           final movedPx = post.scrolledPx;
           final merged = mergeScrollSignal(post.changeCategory, movedPx);
-          response = response.mergeData({
-            ...post.toData(),
-            'changed': merged.changed,
-            'changeCategory': merged.category,
-            if (movedPx != null) 'scrolledPx': movedPx.round(),
-          });
+          response = response.mergeData(scrollSignalData(post, merged, movedPx));
           final sideEffect = target == null ? null : sideEffectOf(action.pre, post.snapshot, target.watchedPagedIds);
           if (sideEffect != null) response = response.mergeData({'sideEffect': sideEffect});
-          if (!merged.changed) {
+          if (merged.changed == false) {
             final reason = await _whyStill(session, action.scene, anchor, dir);
             response = response
                 .copyWith(
@@ -145,12 +140,31 @@ class ScrollTool extends GlintTool {
   /// Below this a scroll didn't meaningfully move — treat as no scroll.
   static const _movedThresholdPx = 2.0;
 
+  /// The reply data for a scroll: [post] with the merged signal, dropping `unknownReason` once movement decided `changed`.
+  static Map<String, Object?> scrollSignalData(
+      PostActionState post, ({bool? changed, String category}) merged, double? movedPx) {
+    final data = post.toData();
+    if (merged.changed != null) {
+      data
+        ..['changed'] = merged.changed
+        ..remove('unknownReason');
+    }
+    return {
+      ...data,
+      'changeCategory': merged.category,
+      if (movedPx != null) 'scrolledPx': movedPx.round(),
+    };
+  }
+
   /// Merge the tree-hash change category with physical anchor movement. A
   /// fully-realized scrollable's tree is identical at every offset, so the
   /// hash reports 'nothing' even when content moved — promote that to
   /// 'scrolled' when the anchor physically shifted.
-  static ({bool changed, String category}) mergeScrollSignal(String treeCategory, double? movedPx) {
+  static ({bool? changed, String category}) mergeScrollSignal(String treeCategory, double? movedPx) {
     final moved = movedPx != null && movedPx > _movedThresholdPx;
+    if (treeCategory == 'unknown') {
+      return moved ? (changed: true, category: 'scrolled') : (changed: null, category: treeCategory);
+    }
     if (treeCategory == 'nothing' && moved) {
       return (changed: true, category: 'scrolled');
     }

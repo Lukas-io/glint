@@ -6,6 +6,7 @@ import '../../perception.dart' show InspectorReadError;
 import 'call_diagnostics.dart' show helperFields;
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
+import 'post_action.dart' show shortUnknownReason;
 import 'session.dart';
 import 'tool.dart';
 import 'tools/drag_tool.dart';
@@ -176,8 +177,13 @@ class StepOutcome {
   final DateTime startedAt;
   final int elapsedMs;
 
-  bool? get changed => response.data?['changed'] as bool?;
+  bool? get changed => switch (response.data?['changed']) { final bool b => b, _ => null };
   String? get changeCategory => response.data?['changeCategory'] as String?;
+
+  /// Whether the step's action was delivered but its effect could not be read in time.
+  bool get changeUnknown => response.data?['changed'] == 'unknown';
+
+  String? get unknownReason => response.data?['unknownReason'] as String?;
   bool get isError => response.isError;
 
   /// The per-step reply JSON (batch's fields); [origin] adds firedAtMs relative to it.
@@ -191,6 +197,7 @@ class StepOutcome {
         if (origin != null) 'firedAtMs': startedAt.difference(origin).inMilliseconds,
         'summary': shortSummary(response.summary),
         if (changed != null) 'changed': changed,
+        if (changeUnknown) ...{'changed': 'unknown', 'unknownReason': shortUnknownReason(unknownReason)},
         if (changeCategory != null) 'changeCategory': changeCategory,
         if (isError) 'errorKind': response.data?['errorKind'],
         if (isError && response.data?['detail'] != null) 'detail': response.data?['detail'],
@@ -205,7 +212,7 @@ class StepOutcome {
     return '$index. ${app == null ? '' : '[$app] '}$tool ${stepTarget(args)} → '
         '${isError ? "FAIL ${response.data?['errorKind']}: " : ""}'
         '${shortSummary(response.summary)}'
-        '${changeCategory != null ? " · $changeCategory" : ""}'
+        '${changeUnknown ? " · changed unknown: $unknownReason" : changeCategory != null ? " · $changeCategory" : ""}'
         ' [${elapsedMs}ms]$fired';
   }
 }
@@ -309,7 +316,7 @@ Future<BatchRun> runBatchSteps(
       break;
     }
     final expectsChange = step.args['expectChange'] != false;
-    if (stopOnNoChange && expectsChange && (r.data?['changed'] as bool?) == false) {
+    if (stopOnNoChange && expectsChange && r.data?['changed'] == false) {
       reason = 'noChange';
       stoppedAt = i + 1;
       break;

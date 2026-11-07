@@ -5,6 +5,7 @@ import 'package:dart_mcp/server.dart';
 import '../../../interaction.dart';
 import '../../../perception.dart' show Scene;
 import '../armed.dart';
+import '../coordinate.dart' show withCoordinateChange;
 import '../envelope.dart';
 import '../focus_through_parent.dart';
 import '../post_action.dart';
@@ -81,6 +82,17 @@ class TypeTool extends GlintTool {
     final t = readTargetedArgs(args, session.config);
     if (session.isDeviceMode) {
       return _typeInDeviceMode(session, text, focus, clear, keyDelayMs);
+    }
+
+    if (focus == null && session.sceneMode == SceneMode.native && session.active?.nativeReader != null) {
+      await session.active?.refreshSceneMode();
+      if (session.sceneMode == SceneMode.native) {
+        final verdict = await _coveredTypeVerdict(session);
+        if (verdict.refusal != null) return verdict.refusal!;
+        if (verdict.typeNow) {
+          return _typeWhileCovered(session, text, clear, keyDelayMs, t.returnScene, t.fetchScene);
+        }
+      }
     }
 
     final warnings = <String>[];
@@ -246,16 +258,98 @@ class TypeTool extends GlintTool {
         ],
       );
     }
+    final failed = await _sendKeys(session, text, clear, keyDelayMs, 'in device mode');
+    if (failed != null) return failed;
+    return StructuredResponse(
+      summary: '${clear ? "cleared blind, " : ""}typed ${text.length} chars '
+          '(device mode: no change signal)',
+      data: {'ok': true, 'mode': 'device', 'chars': text.length},
+      nextSteps: const ['device op:screenshot to confirm the text landed'],
+    );
+  }
+
+  /// Whether keys may go to the surface in front: only an app that is `inactive` behind a native surface with a keyboard or focused field showing; a paused, hidden or silent app is refused as not resumed, and a surface with no field is refused.
+  Future<({bool typeNow, StructuredResponse? refusal})> _coveredTypeVerdict(GlintSession session) async {
+    final app = session.active;
+    String? lifecycle;
+    try {
+      lifecycle = await session.lifecycleState().timeout(AppSession.lifecycleProbeTimeout);
+    } on Object {
+      lifecycle = null;
+    }
+    if (app == null || lifecycle == 'resumed') return (typeNow: false, refusal: null);
+    final surface = app.nativeSurfaceName ?? 'a native surface';
+    if (lifecycle != 'inactive') {
+      return (
+        typeNow: false,
+        refusal: StructuredResponse.error(
+          summary: lifecycle == null
+              ? 'not typed: the app does not answer with $surface in front, so it is suspended'
+              : 'not typed: the app is "$lifecycle", not resumed, with $surface in front',
+          errorKind: GlintErrorKind.appNotResumed,
+          nextSteps: const [
+            'call get_scene to read what is in front, then tap its buttons by text or glintId',
+            'or `hardware_button home` and reopen the app',
+          ],
+        ),
+      );
+    }
+    var inputShowing = false;
+    try {
+      final ui = await session.uiState().timeout(AppSession.lifecycleProbeTimeout);
+      inputShowing =
+          ui.keyboardBottomPx > 0 || await session.focusedFieldText().timeout(AppSession.lifecycleProbeTimeout) != null;
+    } on Object {
+      inputShowing = false;
+    }
+    if (inputShowing) return (typeNow: true, refusal: null);
+    return (
+      typeNow: false,
+      refusal: StructuredResponse.error(
+        summary: 'not typed: $surface covers the app and no keyboard or text field is showing',
+        errorKind: GlintErrorKind.appNotResumed,
+        detail: 'the app is inactive behind a native surface, and typed keys would land on nothing',
+        nextSteps: const [
+          'get_scene reads the surface in front; tap its field first, then type again',
+          'or answer the surface by tapping one of its choices',
+        ],
+      ),
+    );
+  }
+
+  /// A native surface covers the app, so its widget tree is not read: the keys go to the device and the change is read from the surface.
+  Future<StructuredResponse> _typeWhileCovered(
+          GlintSession session, String text, bool clear, int? keyDelayMs, bool returnScene, bool fetchScene) =>
+      withCoordinateChange(session, () async {
+        final failed = await _sendKeys(session, text, clear, keyDelayMs, 'while a surface covers the app');
+        if (failed != null) {
+          return failed.copyWith(nextSteps: [
+            ...failed.nextSteps,
+            'get_scene reads the surface in front; tap its field first, then type again',
+          ]);
+        }
+        final input = session.backend.takeInput();
+        return StructuredResponse(
+          summary: 'typed ${text.length} chars into the surface in front of the app'
+              '${input == null ? '' : ' · ${input.label}'}',
+          data: {'ok': true, 'chars': text.length, if (input != null) 'input': input.toJson()},
+        );
+      }, returnScene: returnScene, fetchScene: fetchScene);
+
+  /// Sends [text] (after a blind clear when asked) through the backend; the failure reply, or null when delivered. [where] completes "typing failed ...".
+  Future<StructuredResponse?> _sendKeys(
+      GlintSession session, String text, bool clear, int? keyDelayMs, String where) async {
     try {
       if (clear) {
         await session.backend.selectAll();
         await session.backend.pressKey(KeyName.backspace);
       }
       await session.backend.typeText(text, keyDelayMs: keyDelayMs);
+      return null;
     } on IosToolchainBlocked catch (e) {
       return StructuredResponse.toolchainBlocked(e);
     } on BackendFailure catch (e) {
-      return StructuredResponse.backendError('typing failed in device mode', e);
+      return StructuredResponse.backendError('typing failed $where', e);
     } on UnsupportedBackendAction catch (e) {
       return StructuredResponse.error(
         summary: '${session.backend.label}: typing not supported',
@@ -264,17 +358,11 @@ class TypeTool extends GlintTool {
       );
     } on Object catch (e) {
       return StructuredResponse.error(
-        summary: 'typing failed in device mode',
+        summary: 'typing failed $where',
         errorKind: GlintErrorKind.backendToolError,
         detail: '$e',
       );
     }
-    return StructuredResponse(
-      summary: '${clear ? "cleared blind, " : ""}typed ${text.length} chars '
-          '(device mode: no change signal)',
-      data: {'ok': true, 'mode': 'device', 'chars': text.length},
-      nextSteps: const ['device op:screenshot to confirm the text landed'],
-    );
   }
 
   /// Empties the focused field: select-all + backspace, then per-char backspace and forward delete when text remains. Reads the field before and after in flutter mode; device mode clears blind.

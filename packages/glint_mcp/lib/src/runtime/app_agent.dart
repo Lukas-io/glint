@@ -62,7 +62,8 @@ class AppAgent {
   /// Installs the agent and puts back [showTouches]; an agent already present may still draw touches for an earlier glint, so it hears the setting too.
   Future<void> _install() async {
     final isolateBefore = runtime.flutterIsolateId;
-    final r = await runtime.evaluateIn(_source.replaceAll('\n', ' '), librarySuffix: _agentLibrary);
+    final r = await VmServiceRuntime.withCallLimit(
+        null, () => runtime.evaluateIn(_source.replaceAll('\n', ' '), librarySuffix: _agentLibrary));
     final received = DateTime.now().millisecondsSinceEpoch;
     final reply = (r.valueAsString ?? '').split(' ');
     final status = reply.first;

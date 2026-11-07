@@ -145,6 +145,15 @@ class RuntimeConnectionLostError implements Exception {
   String toString() => 'RuntimeConnectionLostError: $cause';
 }
 
+/// Thrown when the inspector no longer knows an object id it was given: the group was disposed or the widget rebuilt since the id was handed out.
+class RuntimeStaleInspectorIdError implements Exception {
+  RuntimeStaleInspectorIdError(this.inspectorId, this.cause);
+  final String inspectorId;
+  final Object cause;
+  @override
+  String toString() => 'RuntimeStaleInspectorIdError($inspectorId): $cause';
+}
+
 /// Thrown when a VM service call gets no answer within the runtime's deadline: the isolate is not running Dart code (device locked, app suspended, or paused at a breakpoint).
 class RuntimeUnresponsiveError implements Exception {
   RuntimeUnresponsiveError(this.operation, this.timeout);

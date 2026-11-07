@@ -208,6 +208,8 @@ class CoordinateResolver {
         inspectorId: node.inspectorId,
         groupName: scene.groupName,
       );
+    } on RuntimeStaleInspectorIdError catch (e) {
+      throw StaleInspectorIdError('setSelectionById(${node.inspectorId}) failed: $e');
     } on Object catch (e) {
       throw GeometryResolveError(
         'setSelectionById(${node.inspectorId}) failed: $e',
@@ -241,6 +243,8 @@ class CoordinateResolver {
         inspectorId: node.inspectorId,
         groupName: groupName,
       );
+    } on RuntimeStaleInspectorIdError catch (e) {
+      throw StaleInspectorIdError('setSelectionById(${node.inspectorId}) failed: $e');
     } on Object catch (e) {
       throw GeometryResolveError(
         'setSelectionById(${node.inspectorId}) failed: $e',
@@ -254,6 +258,10 @@ class CoordinateResolver {
         break;
       } on RuntimeEvalError catch (e) {
         if (attempt > 0) {
+          if (_defunctSelection.hasMatch(e.message)) {
+            throw StaleInspectorIdError(
+                'evaluate(geometry) found no render object for ${node.inspectorId}: ${e.message}');
+          }
           throw GeometryResolveError('evaluate(geometry) failed: ${e.message}');
         }
         await Future<void>.delayed(const Duration(milliseconds: 150));
@@ -479,6 +487,14 @@ class GeometryResolveError implements Exception {
   final String message;
   @override
   String toString() => 'GeometryResolveError: $message';
+}
+
+/// The geometry eval's failure when the selected element has left the tree: `selection.current!` throws `Null check operator used on a null value`.
+final _defunctSelection = RegExp('Null check operator|not attached|defunct|detached', caseSensitive: false);
+
+/// The inspector id of the target is no longer known to the app, so a fresh read can find it again.
+class StaleInspectorIdError extends GeometryResolveError {
+  StaleInspectorIdError(super.message);
 }
 
 // Single-line Dart expression sent via `evaluate`. CFE rejects newlines, so

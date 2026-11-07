@@ -80,6 +80,8 @@ class BatchTool extends GlintTool {
       }
     }
 
+    final unknownReason = run.outcomes.where((o) => o.changeUnknown).map((o) => o.unknownReason).firstOrNull;
+
     final header = run.stoppedAt == null
         ? 'ran ${steps.length}/${steps.length} step(s)'
         : run.reason == 'error'
@@ -99,6 +101,7 @@ class BatchTool extends GlintTool {
           'read the failing step\'s detail above, fix its args, and resume from step ${run.stoppedAt}',
         if (run.reason == 'noChange')
           'step ${run.stoppedAt} did nothing — re-read the scene (or the scene above) before continuing',
+        if (unknownReason != null) 'a step\'s effect is unknown: $unknownReason',
       ],
       data: {
         'steps': results,

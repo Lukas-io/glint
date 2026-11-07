@@ -360,7 +360,7 @@ class AppSession {
     inspector = insp;
     reader = rd;
     resolver = res;
-    interactor = Interactor(backend: backend, resolver: res);
+    interactor = Interactor(backend: backend, resolver: res)..rereadScene = rd.readSummary;
     semanticizer = sem;
     overlayEnricher = OverlayEnricher(semanticizer: sem);
     inputEnricher = InputEnricher(runtime: rt, inspector: insp);
@@ -447,7 +447,8 @@ class AppSession {
       routed.coveredBySystem = switch (reader) {
         AndroidNativeReader() => ({bool fresh = false}) => _foreignWindowUp(reader),
         RunnerNativeReader() => ({bool fresh = false}) => _systemSurfaceUp(reader, fresh: fresh),
-        _ => null,
+        null => null,
+        _ => ({bool fresh = false}) => fresh || _knownCovered ? _coveredAfterRecheck() : Future.value(false),
       };
     }
   }
@@ -763,8 +764,8 @@ class AppSession {
     captures.clear();
   }
 
-  /// Screenshot this device into the ring. Null on failure; never throws.
-  Future<Capture?> captureNow(String trigger) async {
+  /// Screenshot this device into the ring. Null on failure; never throws, and nothing is recorded when [cancelled] is true once the shot is taken.
+  Future<Capture?> captureNow(String trigger, {bool Function()? cancelled}) async {
     if (_disposed) return null;
     final dir = Directory('${Directory.systemTemp.path}/glint-captures/$id');
     final path = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.png';
@@ -772,6 +773,7 @@ class AppSession {
       if (!dir.existsSync()) dir.createSync(recursive: true);
       final shot = await CallProgress.during('taking a screenshot', () => backend.screenshot(path), key: 'screenshot');
       if (shot.error != null || shot.path == null) return null;
+      if (cancelled?.call() ?? false) return null;
       final c = Capture(
         path: shot.path!,
         takenAt: DateTime.now(),
@@ -798,6 +800,25 @@ class AppSession {
       if (_disposed || lastLifecycle != state) return;
       await captureNow('lifecycle');
     });
+  }
+
+  /// Whether the last lifecycle or scene read showed the app covered or not resumed; a hint that is checked again before input is routed on it.
+  bool get _knownCovered => sceneMode == SceneMode.native || (lastLifecycle != null && lastLifecycle != 'resumed');
+
+  /// Asks the app for its lifecycle again: an answer settles it, and silence from an app last seen not resumed confirms it is suspended; the earlier reading alone never routes input.
+  Future<bool> _coveredAfterRecheck() async {
+    final rt = runtime;
+    final agent = rt == null ? null : AppAgent.of(rt);
+    if (agent == null) return false;
+    try {
+      final now = await agent.call(const {'op': 'lifecycle'}).timeout(coveredProbeTimeout);
+      final state = '${now['state']}';
+      _applyAgentLifecycle(state);
+      return state != 'resumed';
+    } on Object catch (e) {
+      final silent = e is TimeoutException || e is RuntimeUnresponsiveError;
+      return silent && _knownCovered;
+    }
   }
 
   /// Whether a window other than the app's has focus; false when it cannot tell, so the check never blocks input.
@@ -870,6 +891,9 @@ class AppSession {
 
   /// A suspended app (device locked, backgrounded) never answers; a live one answers well inside this.
   static const lifecycleProbeTimeout = Duration(seconds: 2);
+
+  /// The agent's lifecycle answer needs no compile, so before routing input on a covered app it gets this long; silence counts as covered, and a wrong guess only sends the touch through the device.
+  static const coveredProbeTimeout = Duration(milliseconds: 700);
 
   int _backgroundTicks = 0;
 

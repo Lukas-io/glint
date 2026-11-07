@@ -10,6 +10,12 @@ import 'inspector_params.dart';
 /// RPCError code vm_service uses when the WebSocket connection is disposed.
 const _kConnectionClosedCode = -32010;
 
+/// RPCError code a service extension answers with when it throws.
+const _kServerErrorCode = -32000;
+
+/// The inspector's `toObject` throws `FlutterError('Id does not exist.')` for an id it no longer holds (Flutter 3.47, widget_inspector.dart).
+final _unknownIdPattern = RegExp('Id does not exist', caseSensitive: false);
+
 /// The default [FlutterRuntime] backed by `package:vm_service`. Owns one
 /// [VmClient] and centralises every `ext.flutter.inspector.*` and
 /// `evaluate` call site.
@@ -107,9 +113,20 @@ class VmServiceRuntime implements FlutterRuntime {
   /// Longest a single VM service call may take before it is reported as [RuntimeUnresponsiveError].
   static const callTimeout = Duration(seconds: 10);
 
+  static const _callLimitKey = #glintVmCallLimit;
+  static const _evalLimitKey = #glintVmEvalLimit;
+
+  /// Runs [body] with every cheap VM call held to [limit] and every expression evaluate held to [evaluateLimit] (10 s when null, since compiling is legitimate); null [limit] lifts an outer one, and a tree read gets twice as long.
+  static Future<T> withCallLimit<T>(Duration? limit, Future<T> Function() body, {Duration Function()? evaluateLimit}) =>
+      runZoned(body, zoneValues: {_callLimitKey: limit, _evalLimitKey: evaluateLimit});
+
+  static Duration? get _scopedLimit => Zone.current[_callLimitKey] as Duration?;
+
+  static Duration get _evaluateLimit => (Zone.current[_evalLimitKey] as Duration Function()?)?.call() ?? callTimeout;
+
   Future<T> _guard<T>(Future<T> Function() fn, {String op = 'vm service call', Duration? timeout}) async {
     await _vm.ready();
-    final limit = timeout ?? callTimeout;
+    final limit = timeout ?? _scopedLimit ?? callTimeout;
     try {
       try {
         return await fn().timeout(limit);
@@ -167,6 +184,12 @@ class VmServiceRuntime implements FlutterRuntime {
 
   // ── inspector ─────────────────────────────────────────────────────
 
+  /// How long after glint first reads an isolate its tree may be missing, as right after a hot restart or before the first frame.
+  static const treeWarmupLimit = Duration(seconds: 4);
+
+  String? _warmingIsolate;
+  DateTime _warmupEnds = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   Future<InspectorJson> readWidgetTree({
     required String groupName,
@@ -174,24 +197,45 @@ class VmServiceRuntime implements FlutterRuntime {
     bool withPreviews = true,
     bool fullDetails = false,
   }) async {
-    final resp = await _guard(() => _vm.service.callServiceExtension(
-          'ext.flutter.inspector.getRootWidgetTree',
-          isolateId: flutterIsolateId,
-          args: InspectorParams.rootWidgetTree(
-            groupName: groupName,
-            isSummaryTree: isSummaryTree,
-            withPreviews: withPreviews,
-            fullDetails: fullDetails,
-          ),
-        ));
-    final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
-    if (result == null) {
-      throw RuntimeEvalError(
-        'getRootWidgetTree',
-        'response missing `result` map: ${resp.json}',
-      );
+    var isolate = flutterIsolateId;
+    _startWarmup(isolate);
+    final scoped = _scopedLimit;
+    var limit = scoped == null ? null : scoped * 2;
+    while (true) {
+      final resp = await _guard(
+          () => _vm.service.callServiceExtension(
+                'ext.flutter.inspector.getRootWidgetTree',
+                isolateId: flutterIsolateId,
+                args: InspectorParams.rootWidgetTree(
+                  groupName: groupName,
+                  isSummaryTree: isSummaryTree,
+                  withPreviews: withPreviews,
+                  fullDetails: fullDetails,
+                ),
+              ),
+          timeout: limit);
+      final result = (resp.json?['result'] as Map?)?.cast<String, Object?>();
+      if (result != null) {
+        _warmupEnds = DateTime.fromMillisecondsSinceEpoch(0);
+        return result;
+      }
+      if (isolate != flutterIsolateId) {
+        isolate = flutterIsolateId;
+        _startWarmup(isolate);
+      }
+      final remaining = _warmupEnds.difference(DateTime.now());
+      if (remaining <= Duration.zero) {
+        throw RuntimeEvalError('getRootWidgetTree', 'response missing `result` map: ${resp.json}');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      limit = remaining < const Duration(seconds: 1) ? const Duration(seconds: 1) : remaining;
     }
-    return result;
+  }
+
+  void _startWarmup(String isolate) {
+    if (isolate == _warmingIsolate) return;
+    _warmingIsolate = isolate;
+    _warmupEnds = DateTime.now().add(treeWarmupLimit);
   }
 
   @override
@@ -224,14 +268,21 @@ class VmServiceRuntime implements FlutterRuntime {
     required String inspectorId,
     required String groupName,
   }) async {
-    await _guard(
-      () => _vm.service.callServiceExtension(
-        'ext.flutter.inspector.setSelectionById',
-        isolateId: flutterIsolateId,
-        args: InspectorParams.selectionById(inspectorId: inspectorId, groupName: groupName),
-      ),
-      op: 'setSelectionById',
-    );
+    try {
+      await _guard(
+        () => _vm.service.callServiceExtension(
+          'ext.flutter.inspector.setSelectionById',
+          isolateId: flutterIsolateId,
+          args: InspectorParams.selectionById(inspectorId: inspectorId, groupName: groupName),
+        ),
+        op: 'setSelectionById',
+      );
+    } on RPCError catch (e) {
+      if (e.code == _kServerErrorCode && _unknownIdPattern.hasMatch('$e')) {
+        throw RuntimeStaleInspectorIdError(inspectorId, e);
+      }
+      rethrow;
+    }
   }
 
   /// Cleanup is not worth blocking a reply on: a suspended app (device locked) never answers.
@@ -296,6 +347,7 @@ class VmServiceRuntime implements FlutterRuntime {
         final raw = await _guard(
           () => _vm.service.evaluate(isolateId, id, scopeCanary),
           op: 'evaluate',
+          timeout: _evaluateLimit,
         );
         if (raw is InstanceRef && raw.valueAsString != null) {
           _evalLibId = id;
@@ -327,6 +379,7 @@ class VmServiceRuntime implements FlutterRuntime {
         () async => _vm.service.evaluate(
             flutterIsolateId, _evalLibIsolateId == flutterIsolateId ? library : await _evalLibrary(), expression),
         op: 'evaluate',
+        timeout: _evaluateLimit,
       );
     } on RPCError catch (e) {
       // Code 113 = expression compilation error (e.g. platform view context).
@@ -362,6 +415,7 @@ class VmServiceRuntime implements FlutterRuntime {
       raw = await _guard(
         () => _vm.service.evaluate(flutterIsolateId, library, expression, scope: scope),
         op: 'evaluate',
+        timeout: _evaluateLimit,
       );
     } on RPCError catch (e) {
       throw RuntimeEvalError(expression, 'RPCError(${e.code}): ${e.message}');
@@ -403,7 +457,7 @@ class VmServiceRuntime implements FlutterRuntime {
     // pushed geometry JSON past the 128-char preview.
     final id = raw.id;
     if (id == null) return s;
-    final full = await _vm.service.getObject(flutterIsolateId, id);
+    final full = await _guard(() => _vm.service.getObject(flutterIsolateId, id), op: 'getObject');
     if (full is Instance && full.valueAsString != null) {
       return full.valueAsString;
     }

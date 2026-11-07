@@ -7,6 +7,7 @@ import 'package:vm_service/vm_service.dart';
 import '../../../observability.dart' show FlutterErrorEntry;
 
 import '../../../interaction.dart';
+import '../../../runtime.dart' show RuntimeUnresponsiveError;
 import '../error_report.dart';
 import '../envelope.dart';
 import '../session.dart';
@@ -162,30 +163,42 @@ class HotReloadTool extends GlintTool {
   }
 
   /// Services `flutter run` registered on each VM connection, kept from the first subscription because the VM replays them only then.
-  static final _registered = Expando<Map<String, String>>();
+  static final _registered = Expando<_ServiceRegistry>();
 
   /// The method name `flutter run` registered for [name] on this VM (e.g. `s0.hotRestart`), or null when none shows within a second.
   Future<String?> _registeredMethod(VmService service, String name) async {
-    var known = _registered[service];
-    if (known == null) {
-      final map = _registered[service] = <String, String>{};
-      known = map;
-      service.onServiceEvent.listen((e) {
-        final s = e.service;
-        if (s == null) return;
-        if (e.kind == EventKind.kServiceRegistered && e.method != null) map[s] = e.method!;
-        if (e.kind == EventKind.kServiceUnregistered) map.remove(s);
-      });
+    final registry = _registered[service] ??= _ServiceRegistry(service);
+    if (!registry.subscribed) {
       try {
-        await service.streamListen(EventStreams.kService);
+        await service.streamListen(EventStreams.kService).timeout(const Duration(seconds: 10));
+        registry.subscribed = true;
       } on RPCError {
         // another listener subscribed first; its replay is not repeated
+        registry.subscribed = true;
+      } on TimeoutException {
+        throw RuntimeUnresponsiveError('streamListen', const Duration(seconds: 10));
       }
     }
+    final known = registry.methods;
     final deadline = DateTime.now().add(const Duration(seconds: 1));
     while (!known.containsKey(name) && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     return known[name];
   }
+}
+
+/// The services registered on one VM connection, filled by a single listener that outlives a slow `streamListen` so a late replay is not lost.
+class _ServiceRegistry {
+  _ServiceRegistry(VmService service) {
+    service.onServiceEvent.listen((e) {
+      final s = e.service;
+      if (s == null) return;
+      if (e.kind == EventKind.kServiceRegistered && e.method != null) methods[s] = e.method!;
+      if (e.kind == EventKind.kServiceUnregistered) methods.remove(s);
+    });
+  }
+
+  final methods = <String, String>{};
+  bool subscribed = false;
 }

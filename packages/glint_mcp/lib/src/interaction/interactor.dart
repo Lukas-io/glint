@@ -15,6 +15,9 @@ class Interactor {
   final InteractionBackend backend;
   final CoordinateResolver resolver;
 
+  /// Reads the scene again; a target whose inspector id went stale is resolved against it once before the action is refused.
+  Future<Scene> Function()? rereadScene;
+
   /// True refuses any non-hittable target, false never refuses; null (default) refuses only when Flutter's real hit test missed.
   bool? refuseNotHittable;
 
@@ -223,7 +226,7 @@ class Interactor {
         if (scene.findByGlintId(t.glintId) == null) {
           throw UnresolvedTarget('no node with glintId "${t.glintId}" in scene');
         }
-        return CallProgress.during('resolving the target', () => resolver.resolve(scene, t.glintId), key: 'resolve');
+        return CallProgress.during('resolving the target', () => _resolveSymbolic(scene, t.glintId), key: 'resolve');
       case CoordinateTarget():
         return ResolvedCoord(
           glintId: '<coord>',
@@ -235,6 +238,28 @@ class Interactor {
           nearestAncestorVisible: true,
           hittable: true,
         );
+    }
+  }
+
+  Future<ResolvedCoord> _resolveSymbolic(Scene scene, String glintId) async {
+    try {
+      return await resolver.resolve(scene, glintId);
+    } on StaleInspectorIdError {
+      final reread = rereadScene;
+      if (reread == null) rethrow;
+      return _resolveOnFreshScene(reread, glintId);
+    }
+  }
+
+  Future<ResolvedCoord> _resolveOnFreshScene(Future<Scene> Function() reread, String glintId) async {
+    final fresh = await reread();
+    try {
+      if (fresh.findByGlintId(glintId) == null) {
+        throw UnresolvedTarget('no node with glintId "$glintId" in scene after the app rebuilt');
+      }
+      return await resolver.resolve(fresh, glintId);
+    } finally {
+      await fresh.dispose();
     }
   }
 

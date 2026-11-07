@@ -64,6 +64,9 @@ class FlutterInput {
   /// Selects all text in the focused Flutter field; null when delivered.
   Future<FlutterInputMiss?> selectAll() => _call({'op': 'selectAll'});
 
+  /// How long the app has to take an input before glint calls it busy; the agent drops an input that only runs later.
+  static const inputTimeoutMs = 5000;
+
   Future<FlutterInputMiss?> _call(Map<String, String> args, {int extraMs = 0}) async {
     lastError = null;
     lastPartial = null;
@@ -75,7 +78,7 @@ class FlutterInput {
     }
     final Map<String, Object?> reply;
     try {
-      reply = await agent.call(args, timeout: Duration(milliseconds: 10000 + extraMs), dropLate: true);
+      reply = await agent.call(args, timeout: Duration(milliseconds: inputTimeoutMs + extraMs), dropLate: true);
     } on Object catch (e) {
       if (e is RuntimeUnresponsiveError) lastTimeout = e.timeout;
       lastError = '$e'.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => '$e');
