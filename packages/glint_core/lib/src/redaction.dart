@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'identity_redaction.dart';
+
 /// Strips filesystem identity (username, project name, directory layout) from text that leaves the machine; `<home>/…/lib/x.dart` becomes `<project>/lib/x.dart`, `package:` URIs are untouched, and it is idempotent.
 String redactPath(String input, {String? home}) {
   if (input.isEmpty) return input;
@@ -38,8 +40,24 @@ String redactSecrets(String input) {
       .replaceAll(_longHexRegex, '<hex>');
 }
 
-/// [redactPath] and [redactSecrets] together, for anything posted publicly.
-String redactForSharing(String input) => redactSecrets(redactPath(input));
+/// [redactPath], the session's known app, device and host names, and [redactSecrets] together, for anything posted publicly; [counts] receives what was replaced.
+String redactForSharing(
+  String input, {
+  Iterable<String> appNames = const [],
+  Iterable<String> deviceNames = const [],
+  Iterable<String> hosts = const [],
+  RedactionCounts? counts,
+}) {
+  final redactor = IdentityRedactor(appNames: appNames, deviceNames: deviceNames, hosts: hosts);
+  final result = redactSecrets(redactor.redact(redactPath(input)));
+  if (counts != null) {
+    counts
+      ..apps += redactor.counts.apps
+      ..devices += redactor.counts.devices
+      ..hosts += redactor.counts.hosts;
+  }
+  return result;
+}
 
 String? _homeDir() {
   final env = Platform.environment;
