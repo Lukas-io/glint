@@ -1,7 +1,7 @@
 import 'package:dart_mcp/server.dart';
 import 'package:glint_core/glint_core.dart'
     show
-        RedactionCounts,
+        IdentityRedactor,
         capDeepLinkBody,
         composeIssueDeepLink,
         fileWithGh,
@@ -107,13 +107,8 @@ class ReportIssueTool extends GlintTool {
     }
 
     final identities = sessionIdentities(session);
-    final counts = RedactionCounts();
-    String redact(String text) => redactForSharing(
-          text,
-          appNames: identities.apps,
-          deviceNames: identities.devices,
-          counts: counts,
-        );
+    final redactor = IdentityRedactor(appNames: identities.apps, deviceNames: identities.devices);
+    final redact = redactor.forSharing;
 
     final title = redact(titleRaw);
     final sections = renderIssueSections(fields, session.actionLog);
@@ -129,10 +124,11 @@ class ReportIssueTool extends GlintTool {
       if (sections.missingSeqs.isNotEmpty)
         'failureSeqs ${sections.missingSeqs.join(', ')} are not in the action log (older than its last '
             '${session.actionLog.capacity} calls, or cleared); the issue says so',
+      ...redactor.warnings,
     ];
     final labels = labelsForType(type);
-    final redactedNote = counts.describe();
-    final redactedData = counts.toJson();
+    final redactedNote = redactor.counts.describe();
+    final redactedData = redactor.counts.toJson();
 
     if (dryRun) {
       // The summary already carries the composed body readably; don't ship a

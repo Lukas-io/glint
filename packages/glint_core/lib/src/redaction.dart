@@ -40,24 +40,14 @@ String redactSecrets(String input) {
       .replaceAll(_longHexRegex, '<hex>');
 }
 
-/// [redactPath], the session's known app, device and host names, and [redactSecrets] together, for anything posted publicly; [counts] receives what was replaced.
+/// [redactPath], [redactSecrets] and the given app, device and host names together, for anything posted publicly; reports build one [IdentityRedactor] and reuse it.
 String redactForSharing(
   String input, {
   Iterable<String> appNames = const [],
   Iterable<String> deviceNames = const [],
   Iterable<String> hosts = const [],
-  RedactionCounts? counts,
-}) {
-  final redactor = IdentityRedactor(appNames: appNames, deviceNames: deviceNames, hosts: hosts);
-  final result = redactSecrets(redactor.redact(redactPath(input)));
-  if (counts != null) {
-    counts
-      ..apps += redactor.counts.apps
-      ..devices += redactor.counts.devices
-      ..hosts += redactor.counts.hosts;
-  }
-  return result;
-}
+}) =>
+    IdentityRedactor(appNames: appNames, deviceNames: deviceNames, hosts: hosts).forSharing(input);
 
 String? _homeDir() {
   final env = Platform.environment;

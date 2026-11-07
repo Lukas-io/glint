@@ -1,12 +1,12 @@
 import 'dart:io';
 
+import 'redaction.dart';
+
 /// How many names [IdentityRedactor] replaced, by category; the counts say what happened without repeating any name.
 class RedactionCounts {
   int apps = 0;
   int devices = 0;
   int hosts = 0;
-
-  int get total => apps + devices + hosts;
 
   Map<String, int> toJson() => {'apps': apps, 'devices': devices, 'hosts': hosts};
 
@@ -18,6 +18,17 @@ class RedactionCounts {
       if (hosts > 0) '$hosts ${hosts == 1 ? 'host' : 'hosts'}',
     ];
     return parts.isEmpty ? null : parts.join(', ');
+  }
+
+  void _add(_Category c) {
+    switch (c) {
+      case _Category.app:
+        apps++;
+      case _Category.device:
+        devices++;
+      case _Category.host:
+        hosts++;
+    }
   }
 }
 
@@ -40,51 +51,34 @@ class _Rule {
 
   String apply(String input, RedactionCounts counts) => input.replaceAllMapped(pattern, (m) {
         if (!_edgesHold(input, m.start, m.end, edge)) return m[0]!;
-        counts.add(category);
+        counts._add(category);
         return placeholder;
       });
 }
 
-extension on RedactionCounts {
-  void add(_Category c) {
-    switch (c) {
-      case _Category.app:
-        apps++;
-      case _Category.device:
-        devices++;
-      case _Category.host:
-        hosts++;
-    }
-  }
-}
-
-/// Replaces the app, device and backend names a session knows with `<app>`, `<device>` and `<host>`, case-insensitively and across separators and camelCase; [counts] says how many.
+/// Replaces the app, device and host names a session knows with `<app>`, `<device>` and `<host>`; build one per report and reuse it for every field, [counts] and [warnings] accumulate.
 class IdentityRedactor {
   IdentityRedactor({
     Iterable<String> appNames = const [],
     Iterable<String> deviceNames = const [],
     Iterable<String> hosts = const [],
-  }) : this._(
-          _hostRulesFor(hosts),
-          _nameRules(deviceNames, _Category.device, generic: _genericDeviceWords),
-          _nameRules(appNames, _Category.app),
-        );
-
-  IdentityRedactor._(({List<_Rule> exact, List<_Rule> tokens}) host, this._deviceRules, this._appRules)
-      : _hostRules = host.exact,
-        _hostTokenRules = host.tokens {
-    known = _hostRules.length + _hostTokenRules.length + _deviceRules.length + _appRules.length;
+  }) {
+    _hostRules = _hostRulesFor(hosts);
+    _deviceRules = _nameRulesFor(deviceNames, _Category.device, warnings);
+    _appRules = _nameRulesFor(appNames, _Category.app, warnings);
   }
 
-  final List<_Rule> _hostRules;
-  final List<_Rule> _hostTokenRules;
-  final List<_Rule> _deviceRules;
-  final List<_Rule> _appRules;
+  late final List<_Rule> _hostRules;
+  late final List<_Rule> _deviceRules;
+  late final List<_Rule> _appRules;
 
   final RedactionCounts counts = RedactionCounts();
 
-  /// How many patterns the given names produced; 0 means nothing from the session could be redacted.
-  late final int known;
+  /// Names too generic or too short to redact loosely, which the agent should check by hand.
+  final Set<String> warnings = {};
+
+  /// Paths, then secrets, then the known names, so a name inside a token cannot split it.
+  String forSharing(String input) => redact(redactSecrets(redactPath(input)));
 
   String redact(String input) {
     if (input.isEmpty) return input;
@@ -92,30 +86,40 @@ class IdentityRedactor {
     for (final rule in _hostRules) {
       s = rule.apply(s, counts);
     }
-    s = _sweepUrlHosts(s);
+    s = _sweepUrls(s);
     for (final rule in _deviceRules) {
       s = rule.apply(s, counts);
     }
     for (final rule in _appRules) {
       s = rule.apply(s, counts);
     }
-    for (final rule in _hostTokenRules) {
-      s = rule.apply(s, counts);
-    }
-    return s;
+    return _sweepBareHosts(s);
   }
 
-  String _sweepUrlHosts(String input) => input.replaceAllMapped(_urlHostRegex, (m) {
-        final host = m[2]!;
-        if (host.startsWith('[') || isPublicHost(host)) return m[0]!;
+  String _sweepUrls(String input) => input.replaceAllMapped(_urlRegex, (m) {
+        final authority = m[2]!;
+        final at = authority.lastIndexOf('@');
+        final hostPort = at < 0 ? authority : authority.substring(at + 1);
+        final colon = hostPort.startsWith('[') ? -1 : hostPort.indexOf(':');
+        final host = colon < 0 ? hostPort : hostPort.substring(0, colon);
+        final port = colon < 0 ? '' : hostPort.substring(colon);
+        final hide = host.isNotEmpty && !host.startsWith('[') && !isPublicHost(host);
+        if (!hide && at < 0) return m[0]!;
+        if (hide) counts.hosts++;
+        return '${m[1]}${at < 0 ? '' : '<redacted>@'}${hide ? '<host>' : host}$port';
+      });
+
+  String _sweepBareHosts(String input) => input.replaceAllMapped(_bareHostRegex, (m) {
+        final host = m[1]!.toLowerCase();
+        if (!_looksLikeHostname(host) || isPublicHost(host)) return m[0]!;
         counts.hosts++;
-        return '${m[1]}<host>';
+        return '<host>';
       });
 }
 
 /// Whether [host] is a well-known public service or a local address; anything else is treated as private.
 bool isPublicHost(String host) {
-  final h = host.toLowerCase().replaceAll(RegExp(r'\.$'), '');
+  final h = host.toLowerCase().replaceAll(_trailingDot, '');
   if (_localHostRegex.hasMatch(h)) return true;
   for (final entry in _publicHosts) {
     if (h == entry || h.endsWith('.$entry')) return true;
@@ -128,11 +132,11 @@ List<String> projectIdentityNames(String? dir) {
   if (dir == null || dir.isEmpty) return const [];
   final names = <String>[];
   final trimmed = dir.endsWith('/') || dir.endsWith(r'\') ? dir.substring(0, dir.length - 1) : dir;
-  final base = trimmed.split(RegExp(r'[/\\]')).last;
+  final base = trimmed.split(_pathSeparators).last;
   if (base.isNotEmpty) names.add(base);
   try {
     final pubspec = File('$trimmed${Platform.pathSeparator}pubspec.yaml');
-    final name = RegExp(r'^name:\s*(\S+)', multiLine: true).firstMatch(pubspec.readAsStringSync())?.group(1);
+    final name = _pubspecName.firstMatch(pubspec.readAsStringSync())?.group(1);
     if (name != null) names.add(name);
   } on Object {
     return names;
@@ -140,42 +144,55 @@ List<String> projectIdentityNames(String? dir) {
   return names;
 }
 
-({List<_Rule> exact, List<_Rule> tokens}) _hostRulesFor(Iterable<String> hosts) {
-  final exact = <String, _Rule>{};
-  final tokens = <String, _Rule>{};
-  final seen = <String>{};
-  for (final raw in hosts) {
-    final host = raw.trim().toLowerCase();
-    if (host.isEmpty || isPublicHost(host) || !seen.add(host)) continue;
-    exact['0|${host.length.toString().padLeft(4, '0')}|$host'] = _Rule(
-      RegExp(RegExp.escape(host), caseSensitive: false),
-      _Category.host,
-      _Edge.strict,
-    );
-    if (_ipRegex.hasMatch(host)) continue;
-    final labels = host.split('.');
-    for (final label in labels.take(labels.length > 1 ? labels.length - 1 : 1)) {
-      for (final word in _identityWords(label)) {
-        if (!_isDistinctive(word)) continue;
-        tokens['1|${word.length.toString().padLeft(4, '0')}|$word'] = _tokenRule(word, _Category.host);
-      }
-    }
-  }
-  return (exact: _byPriority(exact), tokens: _byPriority(tokens));
+bool _looksLikeHostname(String host) {
+  final labels = host.split('.');
+  final tld = labels.last;
+  final rest = labels.sublist(0, labels.length - 1);
+  if (rest.every(_versionLabel.hasMatch)) return false;
+  if (_fileExtensions.contains(tld)) return false;
+  if (_wantedTlds.contains(tld)) return !_needsDepth.contains(tld) || labels.length >= 3;
+  return _countryTlds.contains(tld) || (_collidingTlds.contains(tld) && labels.length >= 3);
 }
 
-List<_Rule> _nameRules(Iterable<String> names, _Category category, {Set<String> generic = const {}}) {
+List<_Rule> _hostRulesFor(Iterable<String> hosts) {
   final rules = <String, _Rule>{};
+  for (final raw in hosts) {
+    final host = raw.trim().toLowerCase().replaceAll(_trailingDot, '');
+    if (!host.contains('.') || isPublicHost(host)) continue;
+    final names = {host, if (!_ipRegex.hasMatch(host)) _registrableDomain(host.split('.'))};
+    for (final name in names) {
+      if (isPublicHost(name)) continue;
+      rules['${name.length.toString().padLeft(4, '0')}|$name'] = _Rule(
+        RegExp(RegExp.escape(name), caseSensitive: false),
+        _Category.host,
+        _Edge.strict,
+      );
+    }
+  }
+  return _byLength(rules);
+}
+
+String _registrableDomain(List<String> labels) {
+  if (labels.length <= 2) return labels.join('.');
+  final deep = labels.last.length == 2 && _secondLevels.contains(labels[labels.length - 2]);
+  return labels.sublist(labels.length - (deep ? 3 : 2)).join('.');
+}
+
+List<_Rule> _nameRulesFor(Iterable<String> names, _Category category, Set<String> warnings) {
+  final rules = <String, _Rule>{};
+  final label = category == _Category.app ? 'app' : 'device';
+  final generic = category == _Category.device ? _genericDeviceWords : const <String>{};
+  bool common(String w) => _isNumber(w) || _stopWords.contains(w.toLowerCase()) || generic.contains(w.toLowerCase());
   for (final raw in names) {
     final name = raw.trim();
-    if (name.isEmpty) continue;
+    if (name.isEmpty || _glintNames.contains(name.toLowerCase())) continue;
     final words = _identityWords(name);
-    final specific = [
+    final tokens = [
       for (final w in words)
-        if (!generic.contains(w.toLowerCase()) && !_isNumber(w)) w,
+        if (_isDistinctive(w) && !generic.contains(w.toLowerCase())) w,
     ];
-    if (specific.isEmpty) continue;
-    if (words.length >= 2) {
+    final phrase = words.length >= 2 && words.any((w) => !common(w));
+    if (phrase) {
       final source = words.map(RegExp.escape).join(_wordJoiner);
       rules['0|${source.length.toString().padLeft(4, '0')}|$source'] = _Rule(
         RegExp(source, caseSensitive: false),
@@ -183,16 +200,35 @@ List<_Rule> _nameRules(Iterable<String> names, _Category category, {Set<String> 
         _Edge.word,
       );
     }
-    for (final word in specific) {
-      if (!_isDistinctive(word)) continue;
+    for (final word in tokens) {
       rules['1|${word.length.toString().padLeft(4, '0')}|${word.toLowerCase()}'] = _tokenRule(word, category);
     }
+    if (phrase || tokens.isNotEmpty) continue;
+    final everyWordCommon = words.every(common);
+    if (category == _Category.device && words.every((w) => _isNumber(w) || generic.contains(w.toLowerCase()))) {
+      continue;
+    }
+    rules['2|${name.length.toString().padLeft(4, '0')}|$name'] = _Rule(
+      RegExp(RegExp.escape(name)),
+      category,
+      _Edge.strict,
+    );
+    warnings.add(
+      everyWordCommon
+          ? 'the $label name $name is a common word; check the draft'
+          : 'the $label name $name is too short to match loosely; check the draft',
+    );
   }
   return _byPriority(rules);
 }
 
 _Rule _tokenRule(String word, _Category category) =>
     _Rule(RegExp(RegExp.escape(word), caseSensitive: false), category, word.length >= 7 ? _Edge.none : _Edge.word);
+
+List<_Rule> _byLength(Map<String, _Rule> rules) {
+  final keys = rules.keys.toList()..sort((a, b) => b.compareTo(a));
+  return [for (final k in keys) rules[k]!];
+}
 
 List<_Rule> _byPriority(Map<String, _Rule> rules) {
   final keys = rules.keys.toList()
@@ -203,29 +239,20 @@ List<_Rule> _byPriority(Map<String, _Rule> rules) {
   return [for (final k in keys) rules[k]!];
 }
 
-const _wordJoiner = r"(?:['’]s)?[\s._\-'’]*";
-
-final RegExp _camelParts = RegExp(
-  r'\p{Ll}\p{Lu}\p{Ll}+|\p{Ll}\p{Lu}{2,}(?!\p{Ll})|\p{Lu}+(?!\p{Ll})|\p{Lu}?\p{Ll}+|\p{Lo}+|\p{N}+',
-  unicode: true,
-);
-final RegExp _separators = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
-final RegExp _possessive = RegExp(r"['’]s\b");
-
 List<String> _identityWords(String name) => [
       for (final chunk in name.replaceAll(_possessive, '').split(_separators))
         for (final m in _camelParts.allMatches(chunk)) m[0]!,
     ];
 
-bool _isNumber(String word) => RegExp(r'^\p{N}+$', unicode: true).hasMatch(word);
+bool _isNumber(String word) => _digitsOnly.hasMatch(word);
 
 bool _isDistinctive(String word) =>
-    word.length >= 4 && RegExp(r'^\p{L}+$', unicode: true).hasMatch(word) && !_stopWords.contains(word.toLowerCase());
+    word.length >= 4 && _lettersOnly.hasMatch(word) && !_stopWords.contains(word.toLowerCase());
 
-bool _isLetter(String ch) => RegExp(r'\p{L}', unicode: true).hasMatch(ch);
-bool _isLower(String ch) => RegExp(r'\p{Ll}', unicode: true).hasMatch(ch);
-bool _isUpper(String ch) => RegExp(r'\p{Lu}', unicode: true).hasMatch(ch);
-bool _isAlnum(String ch) => RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(ch);
+bool _isLetter(String ch) => _letter.hasMatch(ch);
+bool _isLower(String ch) => _lower.hasMatch(ch);
+bool _isUpper(String ch) => _upper.hasMatch(ch);
+bool _isAlnum(String ch) => _alnum.hasMatch(ch);
 
 bool _edgesHold(String s, int start, int end, _Edge edge) {
   switch (edge) {
@@ -240,11 +267,34 @@ bool _edgesHold(String s, int start, int end, _Edge edge) {
   }
 }
 
-final RegExp _urlHostRegex = RegExp(r'''([A-Za-z][A-Za-z0-9+.\-]*://)([^/\s?#:'"<>()\]]+)''');
+const _wordJoiner = r"(?:['’]s)?[\s._\-'’]*";
+
+final RegExp _camelParts = RegExp(
+  r'\p{Ll}\p{Lu}\p{Ll}+|\p{Ll}\p{Lu}{2,}(?!\p{Ll})|\p{Lu}+(?!\p{Ll})|\p{Lu}?\p{Ll}+|\p{Lo}+|\p{N}+',
+  unicode: true,
+);
+final RegExp _separators = RegExp(r'[^\p{L}\p{N}]+', unicode: true);
+final RegExp _possessive = RegExp(r"['’]s\b");
+final RegExp _digitsOnly = RegExp(r'^\p{N}+$', unicode: true);
+final RegExp _lettersOnly = RegExp(r'^\p{L}+$', unicode: true);
+final RegExp _letter = RegExp(r'\p{L}', unicode: true);
+final RegExp _lower = RegExp(r'\p{Ll}', unicode: true);
+final RegExp _upper = RegExp(r'\p{Lu}', unicode: true);
+final RegExp _alnum = RegExp(r'[\p{L}\p{N}]', unicode: true);
+final RegExp _trailingDot = RegExp(r'\.$');
+final RegExp _pathSeparators = RegExp(r'[/\\]');
+final RegExp _pubspecName = RegExp(r'^name:\s*(\S+)', multiLine: true);
+final RegExp _versionLabel = RegExp(r'^v?\d+$');
+final RegExp _urlRegex = RegExp(r'''\b((?:https?|wss?)://)([^/\s?#'"<>()\]]*)''', caseSensitive: false);
+final RegExp _bareHostRegex = RegExp(
+  r'(?<![A-Za-z0-9_\-./\\])((?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,24})(?![A-Za-z0-9\-]|\.[A-Za-z0-9])',
+);
 final RegExp _ipRegex = RegExp(r'^\d{1,3}(\.\d{1,3}){3}$');
 final RegExp _localHostRegex = RegExp(
   r'^(localhost|0\.0\.0\.0|10\.0\.2\.2|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$',
 );
+
+Set<String> _words(String text) => text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toSet();
 
 const _publicHosts = {
   'googleapis.com',
@@ -264,76 +314,33 @@ const _publicHosts = {
   'npmjs.org',
 };
 
-final Set<String> _genericDeviceWords = {
-  'iphone',
-  'ipad',
-  'ipod',
-  'pro',
-  'max',
-  'plus',
-  'mini',
-  'ultra',
-  'air',
-  'simulator',
-  'emulator',
-  'pixel',
-  'galaxy',
-  'android',
-  'sdk',
-  'built',
-  'for',
-  'gphone',
-  'phone',
-  'tablet',
-  'generation',
-  'gen',
-  'inch',
-  'apple',
-  'watch',
-  'samsung',
-  'google',
-  'xiaomi',
-  'redmi',
-  'oneplus',
-  'huawei',
-  'motorola',
-  'sony',
-  'nokia',
-  'realme',
-  'oppo',
-  'vivo',
-  'honor',
-  'fold',
-  'flip',
-  'lite',
-  'edge',
-  'note',
-  'tab',
-  'arm',
-  'x',
-  'se',
-  'xl',
-  'xr',
-  'the',
-  'mac',
-  'desktop',
-  'chrome',
-  'web',
-  'ios',
-  'cellular',
-  'wifi',
-  'wi',
-  'fi',
-  'a',
-  's',
-  'ram',
-  'gb',
-  'tb',
-};
+const _secondLevels = {'co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne', 'go'};
+
+final Set<String> _wantedTlds = _words(
+  'com net org io co app dev ai info biz xyz tech online cloud site store shop edu gov mil',
+);
+final Set<String> _needsDepth = _words('app');
+final Set<String> _countryTlds = _words('''
+  ng ke za gh tz ug et eg ma dz tn sn ci cm uk de fr nl be ch es pt pl cz se dk fi ie gr tr ru ua cn jp kr tw hk sg
+  ph vn th au nz ca us mx br ar cl pe ve il ae sa pk bd lk eu
+''');
+final Set<String> _collidingTlds = _words('id in it is to no me so do at by my as');
+final Set<String> _fileExtensions = _words('''
+  dart yaml yml json swift kt kts png jpg jpeg gif svg md txt html css js ts tsx jsx py rb rs go sh java cpp xml plist
+  gradle lock log pdf zip mov mp4 mp3 wav ttf otf ipa apk aab dylib so dll exe
+''');
+final Set<String> _glintNames = _words('glint glint_mcp glint_network glint_core');
+
+final Set<String> _genericDeviceWords = _words('''
+  iphone ipad ipod pro max plus mini ultra air simulator emulator pixel galaxy android sdk built for gphone phone
+  tablet generation gen inch apple watch samsung google xiaomi redmi oneplus huawei motorola sony nokia realme oppo
+  vivo honor fold flip lite edge note tab arm x se xl xr the mac desktop chrome web ios cellular wifi wi fi a s ram
+  gb tb medium small large resizable nexus vision api foldable automotive wear tv
+''');
 
 final Set<String> _stopWords = (() {
   const words = '''
-    about above across after again against album also always among another answer anyone anything app apple
+    a an and my new old our the you about above across after again against album also always among another answer anyone anything app apple
     application applications apps around attach attached attaching authentication auto back backend background bank
     banking based because been before being below between bill billing body both bottom bottomsheet browse build
     builds built bundle button buttons call calls camera cancel card cards cart chat check checkout child children

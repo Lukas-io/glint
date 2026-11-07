@@ -64,18 +64,17 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
   }
 
   final known = knownIdentities();
-  final counts = RedactionCounts();
-  String redact(String text) => redactForSharing(
-        text,
-        appNames: known.apps,
-        deviceNames: known.devices,
-        hosts: known.hosts,
-        counts: counts,
-      );
-
-  final title = redact(titleRaw);
-  final body = redact(bodyRaw);
+  final redactor = IdentityRedactor(appNames: known.apps, deviceNames: known.devices, hosts: known.hosts);
+  final title = redactor.forSharing(titleRaw);
+  final body = redactor.forSharing(bodyRaw);
   final labels = labelsForType(type);
+  final counts = redactor.counts;
+  final redactionWarnings = [
+    if (known.hostsUnreadable)
+      'the captured host list is unavailable (database not open or unreadable), so only hosts written as URLs or '
+          'dotted names were redacted; check the draft for hosts',
+    ...redactor.warnings,
+  ];
   final redactedNote = counts.describe();
   final redactedSummary = redactedNote == null ? 'redacted nothing' : 'redacted $redactedNote';
 
@@ -93,6 +92,7 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
       if (dropped.isNotEmpty) 'droppedLabels': dropped,
       'title': title,
       'url': url,
+      if (redactionWarnings.isNotEmpty) 'warnings': redactionWarnings,
       'nextSteps': [
         'Mention the URL to the user: $url',
         if (dropped.isNotEmpty)
@@ -117,8 +117,7 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
     if (saved != null) 'fullBodyPath': saved,
     'url': composeIssueDeepLink(title: title, body: capped, labels: labels),
     'warnings': [
-      if (known.hostsUnreadable)
-        'the captured host list could not be read, so only hosts written as URLs were redacted; check the draft for hosts',
+      ...redactionWarnings,
       if (filed != null && !ghMissing) 'gh issue create ${filed.reason}',
       if (capped.length < body.length)
         'the URL carries the first $kDeepLinkBodyMax chars of the body; the full report is at $saved',
@@ -145,9 +144,8 @@ typedef KnownIdentities = ({List<String> apps, List<String> devices, List<String
 KnownIdentities knownIdentities() {
   final apps = <String>[];
   final devices = <String>[];
-  var hostsUnreadable = false;
+  var hostsUnreadable = true;
   final hosts = <String>[];
-
   void appName(String? name) {
     if (name == null || name.trim().isEmpty) return;
     final parts = dtdAppParts(name);
@@ -160,7 +158,6 @@ KnownIdentities knownIdentities() {
   }
 
   void project(String? path) {
-    if (path == null || !io.File('$path${io.Platform.pathSeparator}pubspec.yaml').existsSync()) return;
     apps.addAll(projectIdentityNames(path));
   }
 
@@ -183,6 +180,7 @@ KnownIdentities knownIdentities() {
         project(row['project_path'] as String?);
       }
       hosts.addAll(db.capturedHosts());
+      hostsUnreadable = false;
     } on Object {
       hostsUnreadable = true;
     }
