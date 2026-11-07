@@ -405,7 +405,8 @@ class ProcessRegistry {
     final stale = <HelperInfo>[];
     final self = await _selfRow();
     for (final h in _readFiles()) {
-      if (h.ownerPid == self?.pid || !table.isSame(h.pid, h.started, h.command)) continue;
+      if (!table.isSame(h.pid, h.started, h.command)) continue;
+      if (self != null && h.ownerPid == self.pid && h.ownerStarted == self.started) continue;
       final info = h.withCpu(table[h.pid]?.cpu);
       (table.isSame(h.ownerPid, h.ownerStarted, h.ownerCommand) ? others : stale).add(info);
     }
@@ -416,10 +417,8 @@ class ProcessRegistry {
   Future<List<ReapedHelper>> reapStale() async {
     final reaped = <ReapedHelper>[];
     final table = await ProcessTable.read();
-    final self = await _selfRow();
     final claimed = <int>{};
     for (final h in _readFiles()) {
-      if (h.ownerPid == self?.pid) continue;
       if (table.isSame(h.ownerPid, h.ownerStarted, h.ownerCommand)) continue;
       final alive = table.isSame(h.pid, h.started, h.command);
       if (alive && h.life != HelperLife.external) {
