@@ -74,7 +74,7 @@ class KillAppTool extends GlintTool {
     // 1. A glint-launched app stops cleanly via its flutter run process.
     final proc = session.launchedAppFor(deviceId);
     if (proc != null) {
-      proc.kill();
+      await killProcessTree(proc);
       session.clearLaunchedApp(deviceId);
       done.add('stopped flutter run');
     }

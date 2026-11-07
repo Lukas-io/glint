@@ -1,4 +1,5 @@
 import 'package:dart_mcp/server.dart';
+import 'package:glint_core/glint_core.dart' show HelperSnapshot, ProcessRegistry;
 
 import '../../../interaction.dart';
 import '../../../observability.dart';
@@ -69,6 +70,7 @@ class SessionTool extends GlintTool {
         final attached = [
           for (final a in apps) _appJson(a, identical(a, active), gone[a.id]),
         ];
+        final helpers = await ProcessRegistry.instance.snapshot();
         return StructuredResponse(
           summary: [
             apps.isEmpty
@@ -76,17 +78,23 @@ class SessionTool extends GlintTool {
                 : 'attached: ${apps.map((a) => '${a.label} on ${a.deviceName ?? a.id}${identical(a, active) ? " (active)" : ""}${_flag(a, gone[a.id])}').join(", ")}',
             run == null ? 'no named run open' : 'run "${run.name}" open since seq=${run.firstSeq}',
             '$seq tool call(s) logged this process',
+            _helpersLine(helpers),
           ].join('\n'),
           nextSteps: [
             for (final a in apps)
               if (gone.containsKey(a.id))
                 'session op:detach app:"${a.id}" drops it, or attach device:"${a.id}" relaunches it',
+            if (helpers.stale.isNotEmpty)
+              'helpers left by a glint that is gone are stopped at the next glint start; `glint` restarts clean',
           ],
           data: {
             'attached': attached,
             'activeApp': active?.id,
             'run': run?.toJson(),
             'calls': seq,
+            'helpers': [for (final h in helpers.mine) h.toReport()],
+            if (helpers.others.isNotEmpty) 'otherGlintHelpers': [for (final h in helpers.others) h.toReport()],
+            if (helpers.stale.isNotEmpty) 'staleHelpers': [for (final h in helpers.stale) h.toReport()],
             if (session.reconnectCount > 0) 'reconnectCount': session.reconnectCount,
           },
         );
@@ -265,4 +273,17 @@ class SessionTool extends GlintTool {
       },
     );
   }
+}
+
+/// One line naming the helpers this glint runs, with age and CPU, and how many others exist.
+String _helpersLine(HelperSnapshot helpers) {
+  if (helpers.mine.isEmpty && helpers.others.isEmpty && helpers.stale.isEmpty) return 'no helper processes running';
+  final mine = helpers.mine.isEmpty
+      ? 'no helper of this glint'
+      : 'helpers: ${helpers.mine.map((h) => '${h.purpose}${h.device == null ? '' : ' on ${h.device}'} pid ${h.pid} ${h.age.inSeconds}s${h.cpu == null ? '' : ' ${h.cpu!.toStringAsFixed(0)}% cpu'}').join(', ')}';
+  return [
+    mine,
+    if (helpers.others.isNotEmpty) '${helpers.others.length} belong to other glint processes',
+    if (helpers.stale.isNotEmpty) '${helpers.stale.length} left by a glint that is gone',
+  ].join('; ');
 }

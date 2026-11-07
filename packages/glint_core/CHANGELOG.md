@@ -4,6 +4,10 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- `ProcessRegistry`, `killTree`, `ProcessTable` and `watchParentDeath`: one registry of the long-lived child processes glint starts, with owner, one per purpose and device, pid files under `~/.glint/procs`, startup reaping by start time and command, and a tree kill.
+
 ## [0.1.3] - 2026-10-18
 
 ### Added

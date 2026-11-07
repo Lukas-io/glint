@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart';
+
+import '../observability/call_progress.dart';
 import 'shipped_files.dart';
 import 'bounded_process.dart';
 
@@ -56,6 +59,21 @@ class XcTestRunner {
 
   Uri _uri(String path) => Uri.parse('http://127.0.0.1:$port$path');
 
+  /// The registry purpose of the runner's xcodebuild.
+  static const String runnerPurpose = 'xctest-runner';
+
+  /// [ping], retried for a runner this process started and still holds, since a busy runner can miss one 2 s ping and must not be replaced for it.
+  Future<int?> pingOwn() async {
+    final first = await ping();
+    if (first != null || ProcessRegistry.instance.find(runnerPurpose, device: udid) == null) return first;
+    for (var i = 0; i < 3; i++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final again = await ping();
+      if (again != null) return again;
+    }
+    return null;
+  }
+
   /// The runner's protocol number when one answers on [port], else null.
   Future<int?> ping() async {
     try {
@@ -88,28 +106,37 @@ class XcTestRunner {
   /// Reuses a runner already answering, else builds (once per Xcode) and starts one; [onPhase] names each slow step.
   Future<void> ensureStarted(
       {void Function(String phase)? onPhase, Duration timeout = const Duration(seconds: 180)}) async {
-    final running = await ping();
+    final running = await pingOwn();
     if (running == expectedRunnerProtocol) return;
     if (running != null) await stop();
     final xctestrun = await build(onPhase: onPhase);
     onPhase?.call('starting the XCTest runner on $udid');
     Directory(cacheDir).createSync(recursive: true);
     final log = File('$cacheDir/runner-$udid.log').openWrite();
-    final process = await Process.start('xcodebuild', [
-      'test-without-building',
-      '-xctestrun',
-      xctestrun,
-      '-destination',
-      'platform=iOS Simulator,id=$udid',
-      '-only-testing:GlintRunnerUITests/RunnerTests/testServe',
-    ], environment: {
-      'TEST_RUNNER_GLINT_RUNNER_PORT': '$port'
-    });
+    final process = await startHelper(
+        runnerPurpose,
+        'xcodebuild',
+        [
+          'test-without-building',
+          '-xctestrun',
+          xctestrun,
+          '-destination',
+          'platform=iOS Simulator,id=$udid',
+          '-only-testing:GlintRunnerUITests/RunnerTests/testServe',
+        ],
+        device: udid,
+        owner: 'sim:$udid',
+        life: HelperLife.attachment,
+        environment: {'TEST_RUNNER_GLINT_RUNNER_PORT': '$port', 'TEST_RUNNER_GLINT_RUNNER_PARENT_PID': '$pid'});
+    CallProgress.release(process);
     _process = process;
     process.stdout.listen(log.add);
     process.stderr.listen(log.add);
     var exited = false;
-    unawaited(process.exitCode.then((_) => exited = true));
+    unawaited(process.exitCode.then((_) {
+      exited = true;
+      log.close().ignore();
+    }));
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if (await ping() == expectedRunnerProtocol) return;
@@ -224,8 +251,9 @@ class XcTestRunner {
     } on Object {
       // already gone
     }
-    _process?.kill();
+    final own = _process;
     _process = null;
+    if (own != null) await ProcessRegistry.instance.stop(runnerPurpose, device: udid, only: own);
   }
 
   static Future<(int, Map<String, Object?>)> _defaultHttp(

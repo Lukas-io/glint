@@ -25,6 +25,7 @@ final class HttpServer {
     private let router: Router
     private let queue = DispatchQueue(label: "glint.runner.http")
     private(set) var stopped = false
+    private(set) var lastRequestAt = Date()
 
     init(port: UInt16, router: Router) throws {
         let params = NWParameters.tcp
@@ -50,6 +51,7 @@ final class HttpServer {
             if let data { buffer.append(data) }
             if let request = Self.parse(buffer) {
                 DispatchQueue.main.async {
+                    self.lastRequestAt = Date()
                     let response = self.router.handle(request)
                     if request.path == "/shutdown" { self.stopped = true }
                     self.send(response, on: conn)

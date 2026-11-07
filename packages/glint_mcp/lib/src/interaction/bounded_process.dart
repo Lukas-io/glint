@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart';
+
 import '../observability/call_progress.dart';
 import '../observability/process_tree.dart';
 import 'backend.dart';
 import 'result.dart';
 
 export '../observability/process_tree.dart' show killProcessTree;
+export 'package:glint_core/glint_core.dart' show HelperLife, OnRunning;
 
 /// The cap for a child process whose site names none.
 const Duration kDefaultProcessTimeout = Duration(seconds: 30);
@@ -59,8 +62,8 @@ Future<ProcessResult> runBounded(
   final command = describeCommand(executable, arguments);
   final label = phase ?? command;
   return CallProgress.during(label, () async {
-    final process =
-        await Process.start(executable, arguments, environment: environment, workingDirectory: workingDirectory);
+    final process = ProcessRegistry.instance.track(
+        await Process.start(executable, arguments, environment: environment, workingDirectory: workingDirectory));
     final call = CallProgress.current;
     call?.registerProcess(process, label);
     process.stdin.close().ignore();
@@ -88,7 +91,7 @@ Future<ProcessResult> runBounded(
   });
 }
 
-/// Starts a long-running child that belongs to the current tool call: it is stopped if the call is abandoned, and forgotten once it exits. Call [CallProgress.release] to hand it over to outlive the call.
+/// Starts a child that belongs to the current tool call: it is stopped if the call is abandoned, and forgotten once it exits. Call [CallProgress.release] to hand it over to outlive the call.
 Future<Process> startManaged(
   String executable,
   List<String> arguments, {
@@ -97,11 +100,43 @@ Future<Process> startManaged(
   String? workingDirectory,
 }) async {
   CallProgress.checkAlive();
-  final process =
-      await Process.start(executable, arguments, environment: environment, workingDirectory: workingDirectory);
+  final process = ProcessRegistry.instance
+      .track(await Process.start(executable, arguments, environment: environment, workingDirectory: workingDirectory));
+  return _ownedByCall(process, label ?? describeCommand(executable, arguments));
+}
+
+/// Starts the long-lived helper for [purpose] on [device] through the process registry: one per purpose and device, stopped with its [life], reaped by a later glint if this one dies. Like [startManaged], an abandoned call stops it until [CallProgress.release] hands it over.
+Future<Process> startHelper(
+  String purpose,
+  String executable,
+  List<String> arguments, {
+  String? device,
+  String? owner,
+  HelperLife life = HelperLife.session,
+  OnRunning onRunning = OnRunning.replace,
+  String? label,
+  Map<String, String>? environment,
+  String? workingDirectory,
+}) async {
+  CallProgress.checkAlive();
+  final process = await ProcessRegistry.instance.start(
+    purpose,
+    executable,
+    arguments,
+    device: device,
+    owner: owner,
+    life: life,
+    onRunning: onRunning,
+    environment: environment,
+    workingDirectory: workingDirectory,
+  );
+  return _ownedByCall(process, label ?? describeCommand(executable, arguments));
+}
+
+Process _ownedByCall(Process process, String label) {
   final call = CallProgress.current;
   if (call != null) {
-    call.registerProcess(process, label ?? describeCommand(executable, arguments));
+    call.registerProcess(process, label);
     unawaited(process.exitCode.then((_) => call.unregisterProcess(process)));
   }
   return process;

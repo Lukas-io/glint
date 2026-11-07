@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart';
+
 import '../version.dart';
 import 'bridge_download.dart';
 import 'phone_status.dart';
 import 'result.dart';
+import 'cache_prune.dart';
 
 /// Must equal `PROTOCOL` in native/ios_device_hid/src/main.rs.
 const int expectedDeviceHidProtocol = 7;
@@ -83,9 +86,12 @@ const String deviceHidBuildDir = 'native/ios_device_hid';
 
 /// glint's resident Device Hub helper for one physical iPhone: real touch, keyboard and button input over the CoreDevice tunnel.
 class DeviceHid {
-  DeviceHid({required this.udid, String? binary}) : _binary = binary;
+  DeviceHid({required this.udid, String? binary, this.purpose = 'devicehid'}) : _binary = binary;
 
   final String udid;
+
+  /// The registry purpose; a second helper on the same phone uses its own so the two are not taken for one.
+  final String purpose;
   final String? _binary;
   Process? _process;
   StreamIterator<String>? _lines;
@@ -103,7 +109,8 @@ class DeviceHid {
     final binary = _binary ?? await ensureDeviceHid();
     final Process process;
     try {
-      process = await Process.start(binary, ['--udid', udid]);
+      process = await ProcessRegistry.instance
+          .start(purpose, binary, ['--udid', udid], device: udid, owner: 'phone:$udid', life: HelperLife.attachment);
     } on ProcessException catch (e) {
       throw DeviceHidError(DeviceHidFailure.missing, 'cannot run $binary: ${e.message}');
     }
@@ -224,7 +231,7 @@ String? locateDeviceHid({Map<String, String>? env, String? scriptPath}) {
     dir = parent;
   }
   final cached = cachedDeviceHidPath(env: e);
-  return File(cached).existsSync() ? cached : null;
+  return File(cached).existsSync() ? markHelperUsed(cached) : null;
 }
 
 /// The helper's path, downloading this version's release asset when no copy exists; throws [DeviceHidError] kind `missing`.

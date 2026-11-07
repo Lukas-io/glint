@@ -33,7 +33,7 @@ Future<String?> answerPhonePrompt(DeviceHid hid, String udid,
 
 /// Watches a phone while a debug build launches and answers the local network prompt it raises, without which the VM service cannot be found.
 class LocalNetworkPromptWatcher {
-  LocalNetworkPromptWatcher(this.udid) : _hid = DeviceHid(udid: udid);
+  LocalNetworkPromptWatcher(this.udid) : _hid = DeviceHid(udid: udid, purpose: 'devicehid-prompts');
 
   final String udid;
   final DeviceHid _hid;

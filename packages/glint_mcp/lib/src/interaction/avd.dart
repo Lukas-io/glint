@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
+
 import 'adb_versions.dart';
 import 'emulator_control.dart';
 import 'result.dart';
@@ -155,6 +157,7 @@ class Avds {
       ],
       mode: ProcessStartMode.detached,
     );
+    await ProcessRegistry.instance.adopt(process.pid, 'emulator', device: 'emulator-$port', owner: avd);
     return _Launched(avd, 'emulator-$port', process.pid, log);
   }
 

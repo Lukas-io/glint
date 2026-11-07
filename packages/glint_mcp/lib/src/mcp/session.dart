@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Process;
 
 import 'package:dart_mcp/server.dart' show ProgressNotification;
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
 
 import '../../interaction.dart';
 import '../../observability.dart';
@@ -125,13 +126,10 @@ class GlintSession {
 
   /// Kills every `flutter run` process glint started. Called from the server
   /// shutdown path so a dying glint never orphans its children.
-  void killLaunchedApps() {
-    for (final process in _launchedApps.values) {
-      try {
-        process.kill();
-      } catch (_) {/* already dead */}
-    }
+  Future<void> killLaunchedApps() async {
+    final launched = _launchedApps.values.toList();
     _launchedApps.clear();
+    await Future.wait([for (final process in launched) killProcessTree(process)]);
   }
 
   // ── active app ────────────────────────────────────────────────────────────
@@ -293,6 +291,7 @@ class GlintSession {
     final target = deviceId != null ? _pool[deviceId] : _active;
     if (target == null) return;
     await _drop(target);
+    await ProcessRegistry.instance.stopDevice(target.id);
     DeviceClaims().release(target.id);
     if (_active == null && _pool.length == 1) _active = _pool.values.single;
   }
@@ -300,6 +299,7 @@ class GlintSession {
   Future<void> detachAll() async {
     for (final app in _pool.values.toList()) {
       await _drop(app);
+      await ProcessRegistry.instance.stopDevice(app.id);
       DeviceClaims().release(app.id);
     }
   }
