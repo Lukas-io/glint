@@ -38,6 +38,9 @@ class BreakpointTool extends GlintTool {
             'caseSensitive': Schema.bool(description: 'op=set: default true.'),
             'id': Schema.string(description: 'op=clear: breakpoint id from set or list. Omit to clear all.'),
             'timeoutMs': Schema.int(description: 'op=wait: 100-120000. Default 60000.'),
+            'force': Schema.bool(
+                description:
+                    'op=resume: also resume a pause glint did not cause (a debugger, --start-paused). Only when the user asked.'),
           },
         ),
       );
@@ -64,7 +67,7 @@ class BreakpointTool extends GlintTool {
       'set' => _set(bps, args),
       'wait' => _wait(session, request, app, args),
       'status' => _status(bps),
-      'resume' => _resume(bps),
+      'resume' => _resume(bps, force: argBool(args, 'force') == true),
       'list' => _list(bps),
       'clear' => _clear(bps, args['id'] as String?),
       _ => StructuredResponse.error(
@@ -195,8 +198,19 @@ class BreakpointTool extends GlintTool {
     );
   }
 
-  Future<StructuredResponse> _resume(LogBreakpoints bps) async {
-    final r = await bps.resume();
+  Future<StructuredResponse> _resume(LogBreakpoints bps, {required bool force}) async {
+    final r = await bps.resume(force: force);
+    if (r.refused) {
+      return StructuredResponse.error(
+        summary: 'the app is paused, but not by glint',
+        errorKind: GlintErrorKind.notOwned,
+        detail: 'paused by a debugger, not by glint: resuming it would continue someone else\'s debugging session',
+        nextSteps: const [
+          'resume it in the debugger or IDE that paused it',
+          'or repeat with force:true if the user asked glint to resume it',
+        ],
+      );
+    }
     if (r.error != null) {
       return StructuredResponse.error(
         summary: 'the app could not be resumed',
@@ -207,7 +221,11 @@ class BreakpointTool extends GlintTool {
     }
     final hit = r.hit;
     return StructuredResponse(
-      summary: hit == null ? 'nothing to resume' : 'resumed after hit ${hit.number} (${hit.breakpoint.id})',
+      summary: hit != null
+          ? 'resumed after hit ${hit.number} (${hit.breakpoint.id})'
+          : r.foreign
+              ? 'resumed the paused UI isolate (something other than a glint breakpoint paused it)'
+              : 'nothing to resume',
       nextSteps: [
         if (bps.ready != null)
           'another hit is queued: breakpoint op:status'

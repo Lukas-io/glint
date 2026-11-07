@@ -108,7 +108,7 @@ class SimCamera {
     final commands = File('${injector.controlDir}/commands/$_moduleName.json');
     if (commands.existsSync()) commands.deleteSync();
     _claims.release(injector.udid);
-    if (injector.activeModules().isEmpty) await injector.clearLaunchEnv();
+    await injector.releaseLaunchEnvIfIdle();
     return was;
   }
 
@@ -119,6 +119,7 @@ class SimCamera {
         timeout: const Duration(seconds: 30), phase: 'checking Mac camera access');
     final statusText = '${status.stdout}'.trim();
     final state = statusText.split(' ').first;
+    final authorized = state == 'authorized';
     if (state == 'denied' || state == 'restricted') {
       throw SimInjectFailure(
         GlintErrorKind.unsupportedBackendAction,
@@ -145,17 +146,27 @@ class SimCamera {
       arguments: ['webcam', _frames],
       label: 'the Mac camera helper',
       waiting: 'opening the Mac camera (macOS may ask once for camera access)',
-      timeout: const Duration(seconds: 60),
+      timeout: authorized ? const Duration(seconds: 20) : const Duration(seconds: 60),
       phases: phases,
-      notReady: (line) => SimInjectFailure(
-        GlintErrorKind.deviceNotConnected,
-        'the Mac camera did not start',
-        line == 'timeout' ? 'no camera frame arrived within 60 s (macOS camera access unanswered?)' : line,
-        [
-          'allow Camera for the app that runs glint (System Settings > Privacy & Security > Camera), then repeat the call',
-          'or feed an image or video file instead',
-        ],
-      ),
+      notReady: (line) => line == 'timeout' && authorized
+          ? SimInjectFailure(
+              GlintErrorKind.deviceNotConnected,
+              'no frames from the Mac camera (lid closed, camera in use by another app, or camera unavailable?)',
+              'the camera helper started with Camera access allowed, but no frame arrived within 20 s',
+              [
+                'feed an image or video file instead, or source:"testcard" (no Mac camera needed)',
+                'or open the lid and close any app using the camera (video calls, Photo Booth), then repeat the call',
+              ],
+            )
+          : SimInjectFailure(
+              GlintErrorKind.deviceNotConnected,
+              'the Mac camera did not start',
+              line == 'timeout' ? 'no camera frame arrived within 60 s (macOS camera access unanswered?)' : line,
+              [
+                'allow Camera for the app that runs glint (System Settings > Privacy & Security > Camera), then repeat the call',
+                'or feed an image or video file instead',
+              ],
+            ),
     );
     return _frames;
   }

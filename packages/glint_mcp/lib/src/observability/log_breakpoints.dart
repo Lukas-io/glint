@@ -208,9 +208,14 @@ class LogBreakpoints {
     return ready;
   }
 
-  /// Resumes the app if paused and consumes the current hit; returns the resume error, if any.
-  Future<({BreakpointHit? hit, String? error})> resume() async {
+  /// Resumes the app if paused and consumes the current hit; a pause glint did not cause (a debugger, start-paused, an exception) is resumed only with [force], else `refused` is true. Returns the resume error, if any.
+  Future<({BreakpointHit? hit, String? error, bool foreign, bool refused})> resume({bool force = false}) async {
     final hit = _pausedFor ?? (_pending.isEmpty ? null : _pending.first);
+    if (hit == null && await isolatePaused()) {
+      if (!force) return (hit: null, error: null, foreign: false, refused: true);
+      final error = await resumeApp();
+      return (hit: null, error: error, foreign: error == null, refused: false);
+    }
     String? error;
     if (_pausedFor != null) {
       error = await resumeApp();
@@ -218,7 +223,7 @@ class LogBreakpoints {
       if (error == null) _pausedFor = null;
     }
     if (error == null && hit != null) _pending.remove(hit);
-    return (hit: hit, error: error);
+    return (hit: hit, error: error, foreign: false, refused: false);
   }
 
   /// Drops the pause record when the isolate is no longer paused; used after the runtime reconnects.

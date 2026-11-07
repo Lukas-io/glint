@@ -4,7 +4,10 @@ import 'dart:io';
 import 'dart:math';
 
 import '../media/host_tools.dart';
+import '../observability/call_progress.dart';
+import '../observability/telemetry/phase_key.dart';
 import 'bounded_process.dart';
+import 'process_state.dart';
 import 'result.dart';
 import 'siminject_download.dart';
 import 'siminject_locator.dart';
@@ -47,6 +50,7 @@ class InjectReport {
     required this.relaunched,
     this.olderLibrary = const [],
     this.notLoaded = const [],
+    this.unreachable = const [],
     this.target,
     this.running = const [],
   });
@@ -62,6 +66,9 @@ class InjectReport {
   /// Other running apps glint could not load into; they run without it.
   final List<String> notLoaded;
 
+  /// Other running apps that were stopped or had exited when glint tried to load; glint left them alone.
+  final List<String> unreachable;
+
   /// The app a command should go to: the attached one, else the one in front, else the only running app.
   final String? target;
 
@@ -73,6 +80,8 @@ class InjectReport {
         if (olderLibrary.isNotEmpty)
           '${olderLibrary.join(', ')} holds an older glint library without this feature and was left alone (restart it to load the current one)',
         if (notLoaded.isNotEmpty) 'glint could not load into ${notLoaded.join(', ')}, which keeps running without it',
+        if (unreachable.isNotEmpty)
+          '${unreachable.join(', ')} could not be loaded into and was left alone (resume or relaunch it)',
       ];
 
   Map<String, Object?> toJson({required List<String> modules}) => {
@@ -83,6 +92,7 @@ class InjectReport {
         if (relaunched.isNotEmpty) 'relaunched': relaunched,
         if (olderLibrary.isNotEmpty) 'olderLibrary': olderLibrary,
         if (notLoaded.isNotEmpty) 'notLoaded': notLoaded,
+        if (unreachable.isNotEmpty) 'unreachable': unreachable,
       };
 }
 
@@ -231,18 +241,45 @@ class SimInjector {
     return r.exitCode == 0;
   }
 
-  /// Makes every app the simulator launches from now on load the library (it stays dormant until a module is turned on).
-  Future<void> setLaunchEnv(String dylib) async {
-    final r = await _simctl(['spawn', udid, 'launchctl', 'setenv', _launchEnv, dylib]);
+  Future<List<String>> _launchEnvPaths() async {
+    final r = await _simctl(['spawn', udid, 'launchctl', 'getenv', _launchEnv]);
+    return r.ok ? r.text.trim().split(':').where((p) => p.isNotEmpty).toList() : const [];
+  }
+
+  static bool _isGlintLibrary(String path) => path.split('/').last.startsWith('glint-siminject');
+
+  Future<void> _writeLaunchEnv(List<String> paths) async {
+    final r = paths.isEmpty
+        ? await _simctl(['spawn', udid, 'launchctl', 'unsetenv', _launchEnv])
+        : await _simctl(['spawn', udid, 'launchctl', 'setenv', _launchEnv, paths.join(':')]);
     if (!r.ok) {
-      throw SimInjectFailure(GlintErrorKind.backendToolError, 'could not set the launch environment on $udid',
+      throw SimInjectFailure(GlintErrorKind.backendToolError, 'could not change the launch environment on $udid',
           r.errTail(), ['check the simulator is booted (xcrun simctl list devices booted), then retry']);
     }
   }
 
-  /// Stops the simulator loading the library into apps it launches next.
+  /// Makes every app the simulator launches from now on load the library (it stays dormant until a module is turned on), keeping any other library already in the launch environment.
+  Future<void> setLaunchEnv(String dylib) async {
+    final others = [
+      for (final p in await _launchEnvPaths())
+        if (!_isGlintLibrary(p)) p
+    ];
+    await _writeLaunchEnv([...others, dylib]);
+  }
+
+  /// Takes glint's library out of the launch environment, leaving any other entry there untouched.
   Future<void> clearLaunchEnv() async {
-    await _simctl(['spawn', udid, 'launchctl', 'unsetenv', _launchEnv]);
+    final paths = await _launchEnvPaths();
+    final others = [
+      for (final p in paths)
+        if (!_isGlintLibrary(p)) p
+    ];
+    if (others.length != paths.length) await _writeLaunchEnv(others);
+  }
+
+  /// Removes the launch environment entry once no module is on; the one place every module's stop goes through.
+  Future<void> releaseLaunchEnvIfIdle() async {
+    if (activeModules().isEmpty) await clearLaunchEnv();
   }
 
   /// Gets the library into [appId] (or into every running user app when null): already loaded, loaded at its next launch, loaded into the running process with lldb, or, when [relaunch] allows, by restarting it. With a [module], only the target (the [appId], else the app in front, else the only running app) must succeed and an older copy there is refused; another app that cannot take it is named in the report and left running.
@@ -271,17 +308,25 @@ class SimInjector {
     ];
     final olderLibrary = <String>[];
     final notLoaded = <String>[];
+    final unreachable = <String>[];
     final relaunched = <String>[];
     var load = missing.isEmpty && stale.isEmpty ? InjectLoad.already : InjectLoad.lateLoad;
     for (final app in [...missing, ...stale]) {
       final isStale = stale.contains(app);
-      final why = isStale ? _staleReason(have[app.pid]!, module)! : await _lateLoad(app, dylib);
-      if (why == null) continue;
+      final outcome =
+          isStale ? (fate: LoadFate.failed, why: _staleReason(have[app.pid]!, module)) : await _lateLoad(app, dylib);
+      if (outcome.fate == LoadFate.loaded) continue;
+      final why = outcome.why!;
       if (!strict(app)) {
-        (isStale ? olderLibrary : notLoaded).add(app.bundleId);
+        switch (outcome.fate) {
+          case LoadFate.stopped || LoadFate.gone:
+            unreachable.add('${app.bundleId} (${outcome.fate.name})');
+          case _:
+            (isStale ? olderLibrary : notLoaded).add(app.bundleId);
+        }
         continue;
       }
-      if (!relaunch) throw _relaunchRequired(app, why);
+      if (!relaunch) throw _unloadable(app, outcome.fate, why);
       await _relaunch(app);
       relaunched.add(app.bundleId);
       load = InjectLoad.relaunch;
@@ -307,6 +352,7 @@ class SimInjector {
       relaunched: relaunched,
       olderLibrary: olderLibrary,
       notLoaded: notLoaded,
+      unreachable: unreachable,
       target: target?.bundleId,
       running: names,
     );
@@ -336,15 +382,32 @@ class SimInjector {
     return null;
   }
 
-  SimInjectFailure _relaunchRequired(RunningApp app, String why) => SimInjectFailure(
-        GlintErrorKind.unsupportedBackendAction,
-        '${app.bundleId} started before glint could load into it',
-        why,
-        [
-          'repeat the call with relaunch:true to restart ${app.bundleId} (its state is lost and the VM connection drops)',
-          'or kill_app, then attach launch:"${app.bundleId}"',
-        ],
-      );
+  SimInjectFailure _unloadable(RunningApp app, LoadFate fate, String why) => switch (fate) {
+        LoadFate.stopped => SimInjectFailure(
+            GlintErrorKind.appUnresponsive,
+            '${app.bundleId} is stopped, so glint cannot load into it',
+            why,
+            [
+              'repeat the call with relaunch:true: it terminates the stopped app and starts it again with glint loaded (its state is lost and the VM connection drops)',
+              'or resume it first (continue in the debugger, or `kill -CONT ${app.pid}`) and repeat the call',
+            ],
+          ),
+        LoadFate.gone => SimInjectFailure(
+            GlintErrorKind.connectionLost,
+            '${app.bundleId} is no longer running',
+            why,
+            ['start it again: attach launch:"${app.bundleId}"', 'then repeat the call'],
+          ),
+        _ => SimInjectFailure(
+            GlintErrorKind.unsupportedBackendAction,
+            '${app.bundleId} started before glint could load into it',
+            why,
+            [
+              'repeat the call with relaunch:true to restart ${app.bundleId} (its state is lost and the VM connection drops)',
+              'or kill_app, then attach launch:"${app.bundleId}"',
+            ],
+          ),
+      };
 
   /// Whether a debugger may attach without macOS asking for an administrator.
   Future<bool> _debuggerPromptFree() async {
@@ -358,24 +421,122 @@ class SimInjector {
     return '${groups.stdout}'.split(RegExp(r'\s+')).contains('_developer');
   }
 
-  /// Loads the library into the running [app] with lldb; null on success, else why it could not.
-  Future<String?> _lateLoad(RunningApp app, String dylib) async {
-    final lldb = findHostBinary('lldb');
-    if (lldb == null) return 'lldb is not installed, so glint cannot load into a running app';
-    if (!await _debuggerPromptFree()) {
-      return 'attaching a debugger needs the Developer Tools permission, which would raise an administrator dialog, so glint skipped it';
+  /// Longest the lldb attach and load may take before glint detaches the app and moves on.
+  static const lateLoadLimit = Duration(seconds: 45);
+
+  /// The whole lldb session in the root zone, so abandoning the tool call neither kills lldb nor skips the detach and the check that the app runs.
+  Future<_LldbOutcome> _lldbSession(String lldb, RunningApp app, String dylib) => Zone.root.run(() async {
+        final load = await _loadWithLldb(lldb, app, dylib);
+        var after = await checkAfterResume(app.pid);
+        if (after.life == ProcessLife.stopped) after = await _resumeStopped(lldb, app);
+        return (timedOut: load.timedOut, output: load.output, after: after);
+      });
+
+  /// Runs one lldb session that loads [dylib] into [app]; on timeout it interrupts lldb, asks it to detach and continue the app, then ends only that lldb.
+  Future<({bool timedOut, String output})> _loadWithLldb(String lldb, RunningApp app, String dylib) async {
+    final process = await startManaged(
+        lldb, ['-b', '-p', '${app.pid}', '-o', 'process load $dylib', '-o', 'process detach'],
+        label: 'lldb loading glint into pid ${app.pid}');
+    final output = StringBuffer();
+    final reading = [
+      consume(process.stdout.transform(utf8.decoder), output.write),
+      consume(process.stderr.transform(utf8.decoder), output.write),
+    ];
+    var timedOut = false;
+    try {
+      await process.exitCode.timeout(lateLoadLimit);
+    } on TimeoutException {
+      timedOut = true;
+      await _detachAndEnd(process);
     }
-    final run = await runBounded(lldb, ['-b', '-p', '${app.pid}', '-o', 'process load $dylib', '-o', 'detach'],
-        timeout: const Duration(seconds: 120), phase: 'loading glint into ${app.bundleId} (pid ${app.pid})');
-    if (run.exitCode != 0 && !'${run.stdout}'.contains('Image 0 loaded')) {
-      return 'lldb could not load into the running process';
+    await settleOutput(reading);
+    return (timedOut: timedOut, output: output.toString());
+  }
+
+  /// One more short lldb attach that detaches, which resumes an app a lost debugger left stopped; returns the app's check after.
+  Future<ProcessCheck> _resumeStopped(String lldb, RunningApp app) async {
+    await runBounded(lldb, ['-b', '-p', '${app.pid}', '-o', 'process detach'],
+            timeout: const Duration(seconds: 15), phase: 'resuming ${app.bundleId} (pid ${app.pid})')
+        .then<void>((_) {}, onError: (Object _) {});
+    return checkAfterResume(app.pid);
+  }
+
+  Future<void> _detachAndEnd(Process lldb) async {
+    try {
+      lldb.kill(ProcessSignal.sigint);
+      lldb.stdin
+        ..writeln('process detach')
+        ..writeln('process continue')
+        ..writeln('quit');
+      await lldb.stdin.flush();
+    } on Object {
+      await killProcessTree(lldb);
+      return;
+    }
+    try {
+      await lldb.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      await killProcessTree(lldb);
+    }
+  }
+
+  /// Loads the library into the running [app] with lldb and says what became of the app; never throws, so [ensure] decides what each outcome means for the target and for other apps.
+  Future<LateLoad> _lateLoad(RunningApp app, String dylib) async {
+    final lldb = findHostBinary('lldb');
+    if (lldb == null) {
+      return (fate: LoadFate.failed, why: 'lldb is not installed, so glint cannot load into a running app');
+    }
+    if (!await _debuggerPromptFree()) {
+      return (
+        fate: LoadFate.failed,
+        why:
+            'attaching a debugger needs the Developer Tools permission, which would raise an administrator dialog, so glint skipped it',
+      );
+    }
+    final before = await checkProcess(app.pid);
+    if (before.life == ProcessLife.stopped) {
+      return (fate: LoadFate.stopped, why: 'ps shows pid ${app.pid} in state ${before.state} before glint attached');
+    }
+    if (before.life == ProcessLife.gone) {
+      return (fate: LoadFate.gone, why: 'ps finds no process ${app.pid}; the app exited before glint attached');
+    }
+    final label = 'loading glint into ${app.bundleId} (pid ${app.pid})';
+    final session =
+        await CallProgress.during(label, () => _lldbSession(lldb, app, dylib), key: usageProcessKey(lldb, null));
+    final ran = session.timedOut ? 'ran past ${lateLoadLimit.inSeconds}s and was detached' : 'ended';
+    switch (session.after.life) {
+      case ProcessLife.gone:
+        return (
+          fate: LoadFate.gone,
+          why: 'ps finds no process ${app.pid} after the lldb session $ran; the app exited or crashed',
+        );
+      case ProcessLife.stopped:
+        return (
+          fate: LoadFate.stopped,
+          why:
+              'ps shows pid ${app.pid} in state ${session.after.state} after the lldb session $ran; the Mac is probably under heavy load',
+        );
+      case ProcessLife.running || ProcessLife.unknown:
+        break;
+    }
+    final imageLoaded = RegExp(r'Image \d+ loaded').hasMatch(session.output) ||
+        loaded().any((a) => a.pid == app.pid && a.protocol == siminjectProtocol);
+    if (!imageLoaded) {
+      return (
+        fate: LoadFate.failed,
+        why: session.timedOut
+            ? 'lldb did not finish within ${lateLoadLimit.inSeconds}s and was detached; the app runs without the library'
+            : 'lldb could not load into the running process',
+      );
     }
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (DateTime.now().isBefore(deadline)) {
-      if (loaded().any((a) => a.pid == app.pid && a.protocol == siminjectProtocol)) return null;
+      if (loaded().any((a) => a.pid == app.pid && a.protocol == siminjectProtocol)) {
+        return (fate: LoadFate.loaded, why: null);
+      }
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
-    return 'the library loaded but did not report ready';
+    return (fate: LoadFate.failed, why: 'the library loaded but did not report ready');
   }
 
   Future<void> _relaunch(RunningApp app) async {
@@ -484,7 +645,7 @@ class SimInjector {
       final dir = Directory('$controlDir/$name');
       if (dir.existsSync() && dir.listSync().isEmpty) dir.deleteSync();
     }
-    if (activeModules().isEmpty) await clearLaunchEnv();
+    await releaseLaunchEnvIfIdle();
     return was;
   }
 
@@ -518,3 +679,10 @@ class SimInjector {
     }
   }
 }
+
+typedef _LldbOutcome = ({bool timedOut, String output, ProcessCheck after});
+
+/// What became of one late load: loaded, failed with a reason, or the app was found stopped or gone.
+enum LoadFate { loaded, failed, stopped, gone }
+
+typedef LateLoad = ({LoadFate fate, String? why});

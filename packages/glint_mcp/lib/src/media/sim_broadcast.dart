@@ -512,7 +512,7 @@ class SimBroadcast {
     final kept = await _retireLinks(appId);
     final claim = File('${injector.controlDir}/broadcast-claims/${injector.udid}.json');
     if (claim.existsSync()) claim.deleteSync();
-    if (injector.activeModules().isEmpty) await injector.clearLaunchEnv();
+    await injector.releaseLaunchEnvIfIdle();
     return (end: end, linksKept: kept);
   }
 

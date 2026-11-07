@@ -16,7 +16,7 @@ final class Router {
             case ("GET", "/status"):
                 // UIScreen.main inside the runner reports a legacy 320x480; SpringBoard's frame is the real screen in points
                 let screen = app(springboardId).frame.size
-                return .ok(["runner": runnerProtocol, "os": UIDevice.current.systemVersion, "screen": [screen.width, screen.height]])
+                return .ok(["runner": runnerProtocol, "stamp": ProcessInfo.processInfo.environment["GLINT_RUNNER_STAMP"] ?? "", "os": UIDevice.current.systemVersion, "screen": [screen.width, screen.height]])
             case ("GET", "/frontmost"):
                 let candidates = (request.query["apps"] ?? "").split(separator: ",").map(String.init)
                 guard let front = candidates.first(where: { app($0).state == .runningForeground }) else { return .ok([:]) }
