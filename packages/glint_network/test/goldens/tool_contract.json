@@ -955,11 +955,11 @@
       },
       "title": {
         "type": "string",
-        "description": "One-line summary. Redacted before submission."
+        "description": "One-line summary, naming no app, company, host or device. Redacted before submission."
       },
       "body": {
         "type": "string",
-        "description": "Issue body (markdown): what broke, what you expected, the failing tool call. Redacted before submission."
+        "description": "Issue body (markdown): what broke, what you expected, the failing tool call; name no app, company, host or device. Redacted before submission."
       },
       "auto": {
         "type": "boolean",

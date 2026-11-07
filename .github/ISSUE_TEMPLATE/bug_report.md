@@ -4,6 +4,8 @@ about: A glint or glint_network tool returned wrong output, crashed, or didn't d
 labels: bug
 ---
 
+> **Please do not name your app, company, hosts or devices.** Describe them generically (for example, "a banking app's PIN screen").
+
 > **Filing this is dead simple — agents are the recommended channel.**
 > If you have Claude Code, Cursor, or another MCP-capable agent open right now, just say
 > *"file a bug for this"* and it should open this template, fill the Quick report section,

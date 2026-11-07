@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `report_issue` no longer names the app, its devices or its backends. Before an issue is drafted or filed, the app and package names, user-named devices, project folder names and every host captured so far are replaced with `<app>`, `<device>` and `<host>` (case-insensitive, across separators and camelCase), as are URL hosts and dotted hostnames that are not well-known public services (a host is redacted whole, with its registrable domain). The reply warns when the captured host list could not be read. The reply carries `summary` and `redacted` (counts by category) and the tool description tells agents to describe the app generically.
 - The native log stream (`simctl log stream`, `adb logcat`) is stopped as a whole tree on detach and on exit, the server exits when the process that started it is gone, and helpers an earlier glint left behind are stopped at startup.
 
 ## [0.13.1] - 2026-10-15

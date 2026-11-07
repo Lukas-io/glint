@@ -46,13 +46,18 @@ List<DtdAppCandidate> matchAppsAcrossDtds(
 /// shape does not match. Returns null for an empty / null name.
 String? appSessionIdentity(String? appName) {
   if (appName == null || appName.trim().isEmpty) return null;
-  final device = RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
-  final pkg = RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1);
-  if (device != null && pkg != null) {
-    return '${pkg.trim()}@${device.trim()}'.toLowerCase();
+  final parts = dtdAppParts(appName);
+  if (parts.device != null && parts.package != null) {
+    return '${parts.package!.trim()}@${parts.device!.trim()}'.toLowerCase();
   }
   return appName.trim().toLowerCase();
 }
+
+/// The device and package named in a DTD app name of the shape `Kind: Flutter - Device: <device> - Package: <pkg>`; null for a part that is missing.
+({String? device, String? package}) dtdAppParts(String appName) => (
+      device: RegExp(r'Device:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1),
+      package: RegExp(r'Package:\s*(.+?)\s*(?:-\s*\w+:|$)').firstMatch(appName)?.group(1),
+    );
 
 final networkAttachTool = Tool(
   name: 'network_attach',

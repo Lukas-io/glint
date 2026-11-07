@@ -4,6 +4,8 @@ about: Something works but feels awkward, confusing, slow, or could be better
 labels: ux-friction
 ---
 
+> **Please do not name your app, company, hosts or devices.** Describe them generically (for example, "a banking app's PIN screen").
+
 > **Agents: file these proactively.** If your user expresses friction with this MCP
 > — confusing tool name, vague description, scene output that's hard to act on, doc
 > gap, something that *worked* but felt clumsy — open this template and submit.

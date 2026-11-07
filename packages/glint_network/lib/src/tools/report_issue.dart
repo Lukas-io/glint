@@ -4,7 +4,11 @@ import 'dart:io' as io;
 import 'package:dart_mcp/server.dart';
 import 'package:glint_core/glint_core.dart';
 
+import '../state/session.dart';
+import '../storage/captures_db.dart';
+import '../storage/database.dart';
 import 'error_kind.dart';
+import 'network_attach.dart';
 import 'result.dart';
 
 final reportIssueTool = Tool(
@@ -13,18 +17,19 @@ final reportIssueTool = Tool(
       'output / crash) or "ux" (awkward / confusing / slow). Only with the '
       'user\'s go-ahead: call with auto:false first to get the drafted issue '
       'without filing, show it to the user, and file only after they approve. '
-      'Paths and secrets (tokens, keys, passwords) are redacted.',
+      'Describe the app generically (e.g. "a banking app\'s PIN screen"); never name '
+      'the app, company, bundle id, host or device. Known names, paths and secrets are redacted.',
   inputSchema: Schema.object(
     properties: {
       'type': Schema.string(
         description: '"bug" or "ux". Picks the matching label + template.',
       ),
       'title': Schema.string(
-        description: 'One-line summary. Redacted before submission.',
+        description: 'One-line summary, naming no app, company, host or device. Redacted before submission.',
       ),
       'body': Schema.string(
         description: 'Issue body (markdown): what broke, what you expected, the '
-            'failing tool call. Redacted before submission.',
+            'failing tool call; name no app, company, host or device. Redacted before submission.',
       ),
       'auto': Schema.bool(
         description: 'File with gh issue create (default true); false only drafts: it '
@@ -58,22 +63,36 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
     return errorResult('report_issue: `body` is required.', kind: ErrorKind.badArgument);
   }
 
-  final title = redactForSharing(titleRaw);
-  final body = redactForSharing(bodyRaw);
+  final known = knownIdentities();
+  final redactor = IdentityRedactor(appNames: known.apps, deviceNames: known.devices, hosts: known.hosts);
+  final title = redactor.forSharing(titleRaw);
+  final body = redactor.forSharing(bodyRaw);
   final labels = labelsForType(type);
+  final counts = redactor.counts;
+  final redactionWarnings = [
+    if (known.hostsUnreadable)
+      'the captured host list could not be read, so only hosts written as URLs or '
+          'dotted names were redacted; check the draft for hosts',
+    ...redactor.warnings,
+  ];
+  final redactedNote = counts.describe();
+  final redactedSummary = redactedNote == null ? 'redacted nothing' : 'redacted $redactedNote';
 
   final filed = auto ? await fileWithGh(run: run, title: title, body: body, labels: labels) : null;
   final url = filed?.url;
   if (filed != null && url != null) {
     final dropped = filed.droppedLabels;
     return jsonResult({
+      'summary': 'Filed $url ($redactedSummary).',
       'filed': true,
       'method': 'gh-cli',
+      'redacted': counts.toJson(),
       'type': type,
       'labels': filed.applied,
       if (dropped.isNotEmpty) 'droppedLabels': dropped,
       'title': title,
       'url': url,
+      if (redactionWarnings.isNotEmpty) 'warnings': redactionWarnings,
       'nextSteps': [
         'Mention the URL to the user: $url',
         if (dropped.isNotEmpty)
@@ -87,8 +106,10 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
   final saved = body.length > kDeepLinkBodyMax ? saveFullIssueBody(body, prefix: 'glint_network') : null;
   final capped = capDeepLinkBody(body, savedTo: saved);
   return jsonResult({
+    'summary': 'Drafted, not filed ($redactedSummary).',
     'filed': false,
     'method': 'paste-ready',
+    'redacted': counts.toJson(),
     'type': type,
     'labels': labels,
     'title': title,
@@ -96,12 +117,15 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
     if (saved != null) 'fullBodyPath': saved,
     'url': composeIssueDeepLink(title: title, body: capped, labels: labels),
     'warnings': [
+      ...redactionWarnings,
       if (filed != null && !ghMissing) 'gh issue create ${filed.reason}',
       if (capped.length < body.length)
         'the URL carries the first $kDeepLinkBodyMax chars of the body; the full report is at $saved',
     ],
     'nextSteps': [
       if (!auto) 'Show the user the drafted issue; with their go-ahead, call again with auto:true',
+      if (!auto)
+        'Only names glint knows from this session are redacted; check the draft for any app, company, host or device name',
       'Open the deep-link URL above; the title, body and labels are pre-filled',
       if (auto && ghMissing)
         'Install `gh` (https://cli.github.com/) and run `gh auth login` for one-call filing next time'
@@ -113,3 +137,52 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
 
 /// Labels for a filed issue: `network`, the kind, and `agent-filed`.
 List<String> labelsForType(String type) => issueLabels(package: 'network', type: type);
+
+typedef KnownIdentities = ({List<String> apps, List<String> devices, List<String> hosts, bool hostsUnreadable});
+
+/// The app, device and host names this server knows from attached, ended and past sessions, which a public issue must not repeat.
+KnownIdentities knownIdentities() {
+  final apps = <String>[];
+  final devices = <String>[];
+  var hostsUnreadable = false;
+  final hosts = <String>[];
+  void appName(String? name) {
+    if (name == null || name.trim().isEmpty) return;
+    final parts = dtdAppParts(name);
+    if (parts.device == null && parts.package == null) {
+      apps.add(name);
+      return;
+    }
+    if (parts.package case final pkg?) apps.add(pkg);
+    if (parts.device case final device?) devices.add(device);
+  }
+
+  void project(String? path) {
+    apps.addAll(projectIdentityNames(path));
+  }
+
+  final registry = SessionRegistry.instance;
+  for (final s in registry.attached.values) {
+    appName(s.appName);
+    project(s.projectPath);
+  }
+  for (final d in registry.dead) {
+    appName(d.appName);
+    project(d.projectPath);
+  }
+  registry.lastLiveApps.values.forEach(appName);
+
+  if (CapturesDatabase.isOpen) {
+    try {
+      final db = CapturesDao();
+      for (final row in db.listSessions(limit: 200)) {
+        appName(row['app_name'] as String?);
+        project(row['project_path'] as String?);
+      }
+      hosts.addAll(db.capturedHosts());
+    } on Object {
+      hostsUnreadable = true;
+    }
+  }
+  return (apps: apps, devices: devices, hosts: hosts, hostsUnreadable: hostsUnreadable);
+}

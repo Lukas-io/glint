@@ -2,6 +2,7 @@
 library;
 
 export 'src/audit_log.dart';
+export 'src/identity_redaction.dart';
 export 'src/issues.dart';
 export 'src/process.dart';
 export 'src/redaction.dart';
