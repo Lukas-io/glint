@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dart_mcp/server.dart';
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
 
 import '../../interaction.dart';
 import '../../observability.dart';
@@ -275,6 +276,7 @@ abstract class GlintTool {
     CallToolRequest request,
   ) async {
     final start = DateTime.now();
+    final helpersBefore = ProcessRegistry.instance.startedCount;
     final invalid = checkArguments(registeredDefinition, request);
     if (invalid != null) {
       logCall(session, request, invalid, start);
@@ -356,8 +358,20 @@ abstract class GlintTool {
     response = _warnSharedDevice(app, response);
     response = _warnLifecycleChecks(app, response);
     response = _warnSlept(start, response);
+    response = _noteHelpers(helpersBefore, response);
     logCall(session, request, response, start, app: app, call: call);
     return response.toCallResult();
+  }
+
+  /// Says so when the call started a long-lived helper process, since it keeps running after the reply.
+  static StructuredResponse _noteHelpers(int before, StructuredResponse response) {
+    final started = ProcessRegistry.instance.startedSince(before);
+    if (started.isEmpty) return response;
+    final line =
+        'started helper process: ${started.map((h) => '${h.purpose}${h.device == null ? '' : ' on ${h.device}'} (pid ${h.pid})').join(', ')}; `session` lists them, detach or exit stops them';
+    return response.copyWith(summary: '${response.summary}\n$line').mergeData({
+      'helpersStarted': [for (final h in started) h.toReport()]
+    });
   }
 
   /// Says so when the machine slept during the call, since the wall-clock time is then not the call's own.
