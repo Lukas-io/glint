@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:vm_service/vm_service.dart';
 
+import '../observability/call_progress.dart';
 import '../vm/vm_client.dart';
 import 'flutter_runtime.dart';
 import 'inspector_params.dart';
@@ -113,12 +114,14 @@ class VmServiceRuntime implements FlutterRuntime {
       try {
         return await fn().timeout(limit);
       } on SentinelException {
+        CallProgress.noteVmRetry();
         await _reselectIsolate(op);
         return await fn().timeout(limit);
       }
     } on SentinelException catch (e) {
       throw RuntimeConnectionLostError(e);
     } on TimeoutException {
+      CallProgress.noteVmTimeout();
       throw RuntimeUnresponsiveError(op, limit);
     } on StateError catch (e) {
       throw RuntimeConnectionLostError(e);

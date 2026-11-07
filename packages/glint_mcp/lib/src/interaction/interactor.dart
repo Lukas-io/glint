@@ -19,7 +19,7 @@ class Interactor {
   bool? refuseNotHittable;
 
   Future<ActionResult> run(Scene scene, Action action) async {
-    CallProgress.enter('delivering ${action.runtimeType}');
+    CallProgress.enter('delivering ${action.runtimeType}', key: 'deliver');
     try {
       final result = await _dispatch(scene, action);
       final input = backend.takeInput();
@@ -223,7 +223,7 @@ class Interactor {
         if (scene.findByGlintId(t.glintId) == null) {
           throw UnresolvedTarget('no node with glintId "${t.glintId}" in scene');
         }
-        return resolver.resolve(scene, t.glintId);
+        return CallProgress.during('resolving the target', () => resolver.resolve(scene, t.glintId), key: 'resolve');
       case CoordinateTarget():
         return ResolvedCoord(
           glintId: '<coord>',

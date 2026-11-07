@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:glint_core/glint_core.dart';
 
 import '../observability/call_progress.dart';
+import '../observability/telemetry/phase_key.dart';
 import '../observability/process_tree.dart';
 import 'backend.dart';
 import 'result.dart';
@@ -61,7 +62,7 @@ Future<ProcessResult> runBounded(
   CallProgress.checkAlive();
   final command = describeCommand(executable, arguments);
   final label = phase ?? command;
-  return CallProgress.during(label, () async {
+  return CallProgress.during(label, key: usageProcessKey(executable, phase), () async {
     final process = ProcessRegistry.instance.track(
         await Process.start(executable, arguments, environment: environment, workingDirectory: workingDirectory));
     final call = CallProgress.current;

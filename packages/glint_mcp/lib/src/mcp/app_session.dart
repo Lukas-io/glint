@@ -167,6 +167,7 @@ class AppSession {
   String? displayName;
   String? _bundleId;
   String? deviceName;
+  String? osVersion;
   int? _processId;
 
   String? get bundleId => _bundleId;
@@ -769,7 +770,7 @@ class AppSession {
     final path = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}.png';
     try {
       if (!dir.existsSync()) dir.createSync(recursive: true);
-      final shot = await backend.screenshot(path);
+      final shot = await CallProgress.during('taking a screenshot', () => backend.screenshot(path), key: 'screenshot');
       if (shot.error != null || shot.path == null) return null;
       final c = Capture(
         path: shot.path!,

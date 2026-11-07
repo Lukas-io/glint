@@ -345,7 +345,7 @@ class GlintSession {
     Future<T> Function(SemanticScene scene) use, {
     SceneDetail detail = SceneDetail.full,
   }) async {
-    CallProgress.enter('reading the scene');
+    CallProgress.enter('reading the scene', key: 'read');
     if (await active?.notResumed() case final lifecycle?) throw AppNotResumedError(lifecycle);
     final scene = await reader.readSummary();
     try {

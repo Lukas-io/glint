@@ -3,6 +3,7 @@ import 'package:dart_mcp/server.dart';
 import '../../interaction.dart';
 import '../../observability.dart' show CallAbandoned, CallProgress;
 import '../../perception.dart' show InspectorReadError;
+import 'call_diagnostics.dart' show helperFields;
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
@@ -219,6 +220,8 @@ class BatchRun {
   int get completed => stoppedAt == null ? outcomes.length : (reason == 'error' ? stoppedAt! - 1 : stoppedAt!);
 }
 
+int _batchSeq = 0;
+
 /// Runs [steps] in order with batch's arg defaults, logging each under its own tool name; a step with `expectChange:false` never stops the run on `changed:false`. Rethrows [SessionNotAttachedError].
 Future<BatchRun> runBatchSteps(
   GlintSession session,
@@ -230,12 +233,15 @@ Future<BatchRun> runBatchSteps(
   final outcomes = <StepOutcome>[];
   String? reason;
   int? stoppedAt;
+  CallProgress.current?.batchId = 'b${++_batchSeq}';
   for (var i = 0; i < steps.length; i++) {
-    CallProgress.enter('batch step ${i + 1} of ${steps.length}: ${steps[i].tool}');
+    CallProgress.enter('batch step ${i + 1} of ${steps.length}: ${steps[i].tool}', key: 'batch');
     final step = steps[i];
     onStepStart?.call(i + 1, step.tool);
     final tool = kBatchStepTools[step.tool]!;
     final start = DateTime.now();
+    final since = CallProgress.current?.mark();
+    Object? failure;
     final own = CallToolRequest(
         name: step.tool,
         arguments: {...step.args}
@@ -280,13 +286,15 @@ Future<BatchRun> runBatchSteps(
     } on InspectorReadError catch (e) {
       r = await tool.noFrameResponse(session, e);
     } on Object catch (e) {
+      failure = e;
       r = StructuredResponse.error(
         summary: '${step.tool} failed',
         errorKind: GlintErrorKind.internal,
         detail: '$e',
       );
     }
-    tool.logCall(session, request, r, start, app: app, call: call);
+    tool.logCall(session, request, r, start,
+        app: app, call: call, failure: failure, since: since, batchStep: i + 1, helpers: await helperFields(start));
     outcomes.add(StepOutcome(
       index: i + 1,
       tool: step.tool,

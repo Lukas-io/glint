@@ -185,6 +185,12 @@ class ProcessRegistry {
   /// How many helpers this process has started; compare before and after a tool call to see what it started.
   int get startedCount => _startedCount;
 
+  /// Pids of the helpers this process started and still holds a handle on, never adopted or external ones; read from memory with no `ps`.
+  List<int> get livePids => [
+        for (final l in _live.values)
+          if (!l.exited && l.process != null) l.info.pid
+      ];
+
   /// The helpers started after [count] (a past [startedCount]) that are still running.
   List<HelperInfo> startedSince(int count) {
     final fresh = _startLog.skip(count.clamp(0, _startLog.length)).toList();
