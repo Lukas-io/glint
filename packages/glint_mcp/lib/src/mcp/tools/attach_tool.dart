@@ -639,13 +639,19 @@ class AttachTool extends GlintTool {
       // ── 8. Gather post-attach context ─────────────────────────────────────
       final caps = session.backend.capabilities;
       final ui = await session.uiState();
-      final lifecycle = await session.lifecycleState();
+      var lifecycle = await session.lifecycleState();
       final simStatus = platform == DevicePlatform.ios ? await const SimControl().status(deviceId) : null;
-      final covered = lifecycle != null && lifecycle != 'resumed';
+      var covered = lifecycle != null && lifecycle != 'resumed';
       NativeSurface? surface;
       if (covered) {
         surface = await _readCover(session.active!, nativeStart, onProgress);
-        warnings.add(_coveredWarning(lifecycle, surface, skipped: awaitSettle || returnScene));
+        lifecycle = await session.lifecycleState() ?? lifecycle;
+        covered = lifecycle != 'resumed';
+        if (covered) {
+          warnings.add(_coveredWarning(lifecycle, surface, skipped: awaitSettle || returnScene));
+        } else {
+          surface = null;
+        }
       }
       final deviceName = simStatus?.name ?? info?.name;
       final osVersion = simStatus?.osVersion ?? info?.osVersion;
@@ -746,15 +752,15 @@ class AttachTool extends GlintTool {
             '${projectDir != null ? " from ${_tildePath(projectDir)}" : ""} '
             'at $vmUri'
             '${others.isNotEmpty ? " · ${others.length} other app(s) still attached" : ""}'
-            '${surface == null ? '' : '\n${surface.line}'}'
+            '${surface.replyLine}'
             '${frontedAppId != null ? "\n$frontedAppId was already running: brought it to the front and attached to it" : ""}'
             '${openedAppId != null ? "\nopened installed $openedAppId without a rebuild: this is the installed build, not the current source" : ""}'
             '\ninput: ${device.route.name} · ${input.line}'
             '${device.abilities.line == null ? '' : '\nnot on this device: ${device.abilities.line}'}',
         warnings: warnings,
         nextSteps: [
-          if (surface != null && surface.choices.isNotEmpty)
-            'answer it by text, e.g. tap text:"${surface.choices.last.text}" (choices: ${surface.choices.map((c) => c.text).join(' | ')})'
+          if (surface?.answerStep case final answer?)
+            answer
           else if (covered)
             'call `get_scene` to read what is over the app, then tap its buttons by text',
           if (!returnScene && !covered) 'call `get_scene` to read the current screen',
@@ -1009,6 +1015,7 @@ class AttachTool extends GlintTool {
   /// Reply for an instant switch to an already-attached app.
   Future<StructuredResponse> _switched(GlintSession session, AppSession app, {required bool returnScene}) async {
     String? sceneText;
+    if (!app.deviceMode) await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
     final covered = !app.deviceMode && app.sceneMode == SceneMode.native;
     final surface = covered ? await app.readNativeSurface() : null;
     if (returnScene && !app.deviceMode && !covered) {
@@ -1021,10 +1028,10 @@ class AttachTool extends GlintTool {
     return StructuredResponse(
       summary: 'switched to ${app.label} on ${app.deviceName ?? app.id}'
           '${app.deviceMode ? " (device mode)" : ""}'
-          '${surface == null ? '' : '\n${surface.line}'}',
+          '${surface.replyLine}',
       nextSteps: [
-        if (surface != null && surface.choices.isNotEmpty)
-          'answer it by text, e.g. tap text:"${surface.choices.last.text}" (choices: ${surface.choices.map((c) => c.text).join(' | ')})'
+        if (surface?.answerStep case final answer?)
+          answer
         else if (covered)
           'call `get_scene` to read what is over the app, then tap its buttons by text',
         if (!returnScene && !app.deviceMode && !covered) 'call `get_scene` to read the current screen',
@@ -1475,33 +1482,36 @@ class AttachTool extends GlintTool {
   /// How long attach waits for the XCTest runner to read a system surface over the app before it answers without one.
   static const _coverRunnerWait = Duration(seconds: 30);
 
-  /// The system surface over a not-resumed app; waits for a runner that is still starting, reporting progress, since the bridge reader cannot see an alert.
+  static const _coverPoll = Duration(seconds: 2);
+
+  /// The system surface over a not-resumed app, polled until one with content reads; waits at most [_coverRunnerWait] while the XCTest runner starts, reporting progress, since the bridge reader cannot see an alert.
   Future<NativeSurface?> _readCover(
       AppSession app, NativeRunnerStart? start, void Function(int, String?)? onProgress) async {
-    await app.refreshSceneMode();
-    var surface = await app.readNativeSurface();
     final waited = Stopwatch()..start();
     var nextUpdate = const Duration(seconds: 15);
-    while (surface == null && start != null && !start.done && waited.elapsed < _coverRunnerWait) {
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+    while (true) {
+      await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
+      final surface = await app.readNativeSurface();
+      if (surface != null || app.sceneMode != SceneMode.native) return surface;
+      if (start == null || waited.elapsed >= _coverRunnerWait) return null;
+      if (start.done) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
+        return app.readNativeSurface();
+      }
       if (waited.elapsed >= nextUpdate) {
         onProgress?.call(
             waited.elapsed.inSeconds, 'waiting for the XCTest runner to read the system surface (${start.phase})');
         nextUpdate += const Duration(seconds: 15);
       }
+      await Future<void>.delayed(_coverPoll);
     }
-    if (surface == null && start != null) {
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      await app.refreshSceneMode();
-      surface = await app.readNativeSurface();
-    }
-    return surface;
   }
 
   String _coveredWarning(String lifecycle, NativeSurface? surface, {required bool skipped}) =>
       'the app is $lifecycle: ${surface == null ? 'a system surface or another app' : 'a system surface'} is over it'
-      '${skipped ? ', so awaitSettle and returnScene were skipped' : ''}; '
-      '${surface == null ? 'get_scene reads it, then ' : ''}tap its button by text (tap text:"Allow") to dismiss it';
+      '${skipped ? ', so awaitSettle and returnScene were skipped' : ''}'
+      '${surface == null ? '; get_scene reads it, then tap its button by text' : ''}';
 
   Future<String> _renderScene(GlintSession session) =>
       session.withScene((s) async => const PlainTextSceneRenderer().render(s));

@@ -346,6 +346,7 @@ class GlintSession {
     SceneDetail detail = SceneDetail.full,
   }) async {
     CallProgress.enter('reading the scene');
+    if (await active?.notResumed() case final lifecycle?) throw AppNotResumedError(lifecycle);
     final scene = await reader.readSummary();
     try {
       return await use(await semanticize(scene, detail: detail));

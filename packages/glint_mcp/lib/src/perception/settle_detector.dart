@@ -1,6 +1,7 @@
 import '../observability/call_progress.dart';
 import '../runtime/app_agent.dart';
 import '../runtime/flutter_runtime.dart';
+import 'inspector_client.dart' show AppNotResumedError;
 import 'scene_reader.dart';
 
 /// Widget labels that mean "still loading" while they are in the tree.
@@ -24,6 +25,7 @@ class SettleDetector {
     required this.reader,
     this.pollIntervalMs = 100,
     this.stabilityGapMs = 250,
+    this.notResumed,
   });
 
   final FlutterRuntime runtime;
@@ -31,12 +33,16 @@ class SettleDetector {
   final int pollIntervalMs;
   final int stabilityGapMs;
 
+  /// Names the lifecycle when the app is not resumed; settling then throws [AppNotResumedError] instead of waiting on frames that never come.
+  final Future<String?> Function()? notResumed;
+
   Future<SettleResult> awaitSettle({
     int ceilingMs = 5000,
     int quietFramesNeeded = 3,
     bool checkLoadingAffordances = true,
     int quietGraceMs = 1500,
   }) async {
+    if (await notResumed?.call() case final lifecycle?) throw AppNotResumedError(lifecycle);
     final quick = await _agentSettle(ceilingMs.clamp(0, quietGraceMs), quietFramesNeeded);
     if (quick != null) {
       if (!checkLoadingAffordances) return SettleResult.settled(elapsedMs: quick);

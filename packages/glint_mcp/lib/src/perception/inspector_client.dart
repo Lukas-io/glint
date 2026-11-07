@@ -136,6 +136,12 @@ class InspectorReadError implements Exception {
   String toString() => 'InspectorReadError: $message';
 }
 
+/// A frame-bound read refused because the app is not resumed, e.g. a system prompt covers it.
+class AppNotResumedError extends InspectorReadError {
+  AppNotResumedError(this.lifecycle) : super('the app is $lifecycle, so it draws no frames to read');
+  final String lifecycle;
+}
+
 /// The VM timeout behind [e] when the VM did not answer in time (busy or blocked), else null.
 RuntimeUnresponsiveError? appBusyCause(Object e) => switch (e) {
       RuntimeUnresponsiveError() => e,
