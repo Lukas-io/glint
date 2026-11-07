@@ -1,5 +1,5 @@
 import '../../interaction.dart' show screensDiffer;
-import '../../observability.dart' show StateObserver;
+import '../../observability.dart' show CallProgress, StateObserver;
 import '../../perception.dart';
 import '../../runtime.dart' show AppAgent;
 import '../../semantic.dart';
@@ -452,6 +452,12 @@ Future<PostActionState> _awaitLateChange(
     GlintSession session, PostActionState state, Future<PostActionState> Function() readOnce) async {
   final agent = AppAgent.of(session.runtime);
   if (agent == null) return state;
+  return CallProgress.during('waiting for a late change', () => _readLateChange(session, state, readOnce, agent),
+      key: 'late_change');
+}
+
+Future<PostActionState> _readLateChange(
+    GlintSession session, PostActionState state, Future<PostActionState> Function() readOnce, AppAgent agent) async {
   try {
     final reply = await agent.call(
       {'op': 'awaitBuild', 'ms': '${_lateChangeWindow.inMilliseconds}'},

@@ -126,6 +126,7 @@ class AppLauncher {
 
     return CallProgress.during(
       attachTo == null ? 'flutter run: building and launching the app' : 'flutter attach: connecting to the app',
+      key: 'launch',
       () async {
         final start = DateTime.now();
         final deadline = start.add(timeout);

@@ -48,7 +48,7 @@ class SettleDetector {
       if (!checkLoadingAffordances) return SettleResult.settled(elapsedMs: quick);
       if ((await _findLoadingAffordances()).isEmpty) return SettleResult.settled(elapsedMs: quick);
     }
-    CallProgress.enter('waiting for the screen to settle');
+    CallProgress.enter('waiting for the screen to settle', key: 'settle');
     final start = DateTime.now();
     var consecutiveQuiet = 0;
     var stabilityChecked = false;

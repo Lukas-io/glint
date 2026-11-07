@@ -36,7 +36,7 @@ class ReadinessGate {
     var suggestions = const <String>[];
     RuntimeUnresponsiveError? busy;
 
-    CallProgress.enter('waiting for the target to be ready and hittable');
+    CallProgress.enter('waiting for the target to be ready and hittable', key: 'ready');
     while (true) {
       CallProgress.checkAlive();
       attempts++;

@@ -151,7 +151,7 @@ class ScrollToFindTool extends GlintTool {
     StructuredResponse? foundReply;
     for (var i = 0; i <= maxScrolls; i++) {
       last = i;
-      CallProgress.enter('scroll_to_find: reading the scene before scroll ${i + 1}');
+      CallProgress.enter('scroll_to_find: reading the scene before scroll ${i + 1}', key: 'read');
       final scene = await session.reader.readSummary();
       try {
         lastTexts = _visibleTexts(scene.root);

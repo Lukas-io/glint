@@ -617,12 +617,13 @@ class AttachTool extends GlintTool {
           );
       }
 
-      final input = describeSetup(device is IosDevice
+      final setup = device is IosDevice
           ? await readIosDeviceSetup(info?.osVersion)
           : platform == DevicePlatform.ios
               ? await readIosSetup(deviceId, toolchain?.xcode.major,
                   transport: runner != null ? 'xctest' : iosTransport)
-              : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb'));
+              : await readAndroidSetup(deviceId, adbPath, transport: androidServer != null ? 'server' : 'adb');
+      final input = describeSetup(setup);
       warnings.addAll(input.warnings);
 
       // ── 7. Hand the resolved target to the session ────────────────────────
@@ -691,6 +692,7 @@ class AttachTool extends GlintTool {
         ..displayName = displayName
         ..bundleId = bundleId
         ..deviceName = deviceName
+        ..osVersion = osVersion ?? (platform == DevicePlatform.android ? setup.runtime : null)
         ..inputSetup = input.line.replaceFirst('setup: ', '')
         ..projectDir = projectDir
         ..observeOnly = observe;
@@ -1345,6 +1347,7 @@ class AttachTool extends GlintTool {
     final caps = session.backend.capabilities;
     final simStatus = target.platform == DevicePlatform.ios ? await const SimControl().status(target.id) : null;
     bound.deviceName = simStatus?.name ?? target.name;
+    bound.osVersion = simStatus?.osVersion ?? target.osVersion;
 
     return StructuredResponse(
       summary: 'attached (device mode) to ${simStatus?.name ?? target.name} '
@@ -1489,7 +1492,8 @@ class AttachTool extends GlintTool {
     final waited = Stopwatch()..start();
     while (true) {
       CallProgress.enter(
-          'reading the system surface over the app${start == null || start.done ? '' : ' (${start.phase})'}');
+          'reading the system surface over the app${start == null || start.done ? '' : ' (${start.phase})'}',
+          key: 'attach');
       await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
       final surface = await app.readNativeSurface();
       if (surface != null || app.sceneMode != SceneMode.native) return surface;

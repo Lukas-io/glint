@@ -7,6 +7,7 @@ import '../../interaction.dart';
 import '../../observability.dart';
 import '../../perception.dart' show InspectorReadError, SurfaceReplyLine, appBusyCause, suggestIds;
 import '../../runtime.dart';
+import 'call_diagnostics.dart';
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
 import 'session.dart';
@@ -276,6 +277,7 @@ abstract class GlintTool {
     CallToolRequest request,
   ) async {
     final start = DateTime.now();
+    Object? failure;
     final helpersBefore = ProcessRegistry.instance.startedCount;
     final invalid = checkArguments(registeredDefinition, request);
     if (invalid != null) {
@@ -344,6 +346,7 @@ abstract class GlintTool {
         nextSteps: ['pass ${e.key} as ${e.expected}'],
       );
     } catch (e, st) {
+      failure = e;
       response = looksLikeConnectionLoss(e)
           ? await _connectionLostResponse(session, e)
           : StructuredResponse.error(
@@ -359,7 +362,8 @@ abstract class GlintTool {
     response = _warnLifecycleChecks(app, response);
     response = _warnSlept(start, response);
     response = _noteHelpers(helpersBefore, response);
-    logCall(session, request, response, start, app: app, call: call);
+    logCall(session, request, response, start,
+        app: app, call: call, failure: failure, helpers: await helperFields(start));
     return response.toCallResult();
   }
 
@@ -645,14 +649,42 @@ abstract class GlintTool {
     DateTime start, {
     AppSession? app,
     ExploreCall? call,
+    Object? failure,
+    CallMark? since,
+    int? batchStep,
+    Map<String, Object?> helpers = const {},
   }) {
-    if (CallProgress.current?.abandoned ?? false) return;
-    final slept = CallProgress.current?.sleptSince(start) ?? 0;
-    final elapsedMs = DateTime.now().difference(start).inMilliseconds - slept;
+    final running = CallProgress.current;
+    if (running?.abandoned ?? false) return;
+    final slept = running?.sleptSince(start) ?? 0;
+    final wallMs = DateTime.now().difference(start).inMilliseconds;
+    final elapsedMs = wallMs - slept;
+    final diagnostics = callDiagnostics(
+      args: request.arguments,
+      data: response.data,
+      app: app ?? session.active,
+      appCount: session.apps.length,
+      wallMs: wallMs,
+      call: running,
+      base: since ?? const CallMark(),
+      failure: response.data?['errorKind'] == GlintErrorKind.internal.name ? failure : null,
+      batchId: running?.batchId,
+      batchStep: batchStep,
+    );
     if (call != null) session.explore.completeCall(app, call, definition.name, request.arguments, response);
     final seq = session.actionLog.allocateSequence();
     final argKeys = UsageRecorder.argKeysFrom(request.arguments);
     final resultBytes = _resultBytes(response);
+    void recordUsage({required ToolOutcome outcome, String? errorKind}) => session.usage.record(
+          tool: definition.name,
+          outcome: outcome,
+          argKeys: argKeys,
+          durationMs: elapsedMs,
+          resultBytes: resultBytes,
+          errorKind: errorKind,
+          diagnostics: {...diagnostics, ...helpers},
+        );
+
     if (!response.isError) {
       session.actionLog.record(SuccessEntry(
         sequence: seq,
@@ -663,16 +695,7 @@ abstract class GlintTool {
         args: _scrubArgs(request.arguments),
         armed: response.data?['armed'] as Map<String, Object?>?,
       ));
-      session.usage.record(
-        tool: definition.name,
-        outcome: UsageRecorder.outcomeFrom(
-          isError: false,
-          structured: response.data,
-        ),
-        argKeys: argKeys,
-        durationMs: elapsedMs,
-        resultBytes: resultBytes,
-      );
+      recordUsage(outcome: UsageRecorder.outcomeFrom(isError: false, structured: response.data));
       return;
     }
     final kindName = response.data?['errorKind'] as String?;
@@ -687,14 +710,7 @@ abstract class GlintTool {
       detail: response.data?['detail'] as String?,
       args: _scrubArgs(request.arguments),
     ));
-    session.usage.record(
-      tool: definition.name,
-      outcome: ToolOutcome.error,
-      argKeys: argKeys,
-      durationMs: elapsedMs,
-      resultBytes: resultBytes,
-      errorKind: errorKind.name,
-    );
+    recordUsage(outcome: ToolOutcome.error, errorKind: errorKind.name);
   }
 
   /// `app:` named none or several attached apps: list what is attached.

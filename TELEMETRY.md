@@ -4,7 +4,7 @@ glint sends nothing anywhere unless you turn sharing on.
 
 ## What stays on your machine
 
-Every tool call adds one line to `~/.glint/usage-events.jsonl`: the time, the tool name, the outcome (ok, empty or error), the names of the arguments used (never their values), how long the call took, the size of the reply and, on failure, the error kind. `telemetry op:report` summarizes it for you. Set `GLINT_NO_USAGE=true` or `GLINT_NO_TELEMETRY=true` to stop recording it.
+Every tool call adds one line to `~/.glint/usage-events.jsonl`: the time, the tool name, the outcome (ok, empty or error), the names of the arguments used (never their values), how long the call took, the size of the reply and, on failure, the error kind. `telemetry op:report` summarizes it for you. The same line also holds diagnostic fields that stay on your machine and are never part of what is shared: glint version, process id, platform and device kind, phase timings (`phases` is inclusive: a nested phase is also counted in the one around it, and `proc:*` entries are subsets), request-size buckets and the class name of an internal error. `os_version` is left empty where glint does not already know it (Android in device mode). When the file grows past 5 MB, older lines are compressed into `~/.glint/usage-archive/` (at most 20 MB). Set `GLINT_NO_USAGE=true` or `GLINT_NO_TELEMETRY=true` to stop recording it.
 
 ## What is sent if you opt in
 

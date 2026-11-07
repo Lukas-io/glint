@@ -116,6 +116,7 @@ class IosSimulatorLocation extends LocationBackend {
     final errText = process.stderr.transform(const SystemEncoding().decoder).join();
     final code = await CallProgress.during(
       'simctl location: driving the route',
+      key: 'location',
       () => process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () async {
         await killProcessTree(process);
         return -1;
