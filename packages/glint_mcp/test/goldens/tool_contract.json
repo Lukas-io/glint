@@ -193,7 +193,7 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast"
+        "description": "seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast | speech"
       },
       "extension": {
         "type": "string",
@@ -205,7 +205,7 @@
       },
       "stop": {
         "type": "boolean",
-        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop."
+        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop. speech: remove the stand-in (iOS) or stop the microphone feed (Android)."
       },
       "lens": {
         "type": "string",
@@ -225,7 +225,7 @@
       },
       "relaunch": {
         "type": "boolean",
-        "description": "camera, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost."
+        "description": "camera, speech, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost."
       },
       "setup": {
         "type": "boolean",
@@ -293,11 +293,35 @@
       },
       "text": {
         "type": "string",
-        "description": "speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number)."
+        "description": "speech: what the user says. seed or mic with source speech: what to say. event sms: the message. event call (iOS): the caller name shown (default the number)."
+      },
+      "confidence": {
+        "type": "number",
+        "description": "speech (iOS): confidence of the final result, 0 to 1. Default 0.92."
+      },
+      "wordMs": {
+        "type": "integer",
+        "description": "speech (iOS): milliseconds between words, so between partial results. Default 280."
+      },
+      "partials": {
+        "type": "boolean",
+        "description": "speech (iOS): send a partial result per word before the final. Default true."
+      },
+      "finalMs": {
+        "type": "integer",
+        "description": "speech (iOS): pause after the last word before the final result, unless the app ends its audio first. Default 1200."
+      },
+      "waitMs": {
+        "type": "integer",
+        "description": "speech (iOS): how long to wait for the app to start listening when it is not yet. Default 5000."
+      },
+      "error": {
+        "type": "string",
+        "description": "speech (iOS): instead of words, fail the listening task: noSpeech | siriDisabled | interrupted."
       },
       "voice": {
         "type": "string",
-        "description": "speech: a macOS voice name."
+        "description": "speech (Android), seed and mic with source speech: a macOS voice name."
       },
       "hz": {
         "type": "number",

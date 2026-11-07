@@ -1,4 +1,5 @@
 #import "siminject.h"
+#import <UIKit/UIKit.h>
 #import <notify.h>
 #import <unistd.h>
 
@@ -53,18 +54,42 @@ static NSDictionary *GSIReadJSON(NSString *path) {
   return [json isKindOfClass:NSDictionary.class] ? json : nil;
 }
 
+static NSNumber *GSIForeground;
+
+static void GSIWriteReady(void);
+
+static void GSISetForeground(BOOL foreground) {
+  GSIForeground = @(foreground);
+  GSIWriteReady();
+}
+
+static void GSIObserveLifecycle(void) {
+  NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+  NSOperationQueue *main = NSOperationQueue.mainQueue;
+  [center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:main usingBlock:^(NSNotification *n) { GSISetForeground(YES); }];
+  [center addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:main usingBlock:^(NSNotification *n) { GSISetForeground(NO); }];
+  [center addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil queue:main usingBlock:^(NSNotification *n) { GSISetForeground(NO); }];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (GSIForeground) return;
+    UIApplicationState state = UIApplication.sharedApplication.applicationState;
+    if (state == UIApplicationStateActive) GSISetForeground(YES);
+    if (state == UIApplicationStateBackground) GSISetForeground(NO);
+  });
+}
+
 static void GSIWriteReady(void) {
   NSString *dir = [GSIControlDir() stringByAppendingPathComponent:@"ready"];
   [NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
   NSArray *active;
   @synchronized(GSIActive()) { active = [GSIActive().allObjects sortedArrayUsingSelector:@selector(compare:)]; }
-  NSDictionary *info = @{
+  NSMutableDictionary *info = [@{
     @"pid" : @(getpid()),
     @"protocol" : @(GSI_PROTOCOL),
     @"bundleId" : NSBundle.mainBundle.bundleIdentifier ?: @"",
     @"modules" : [GSIModules().allKeys sortedArrayUsingSelector:@selector(compare:)],
     @"active" : active,
-  };
+  } mutableCopy];
+  if (GSIForeground) info[@"foreground"] = GSIForeground;
   NSData *data = [NSJSONSerialization dataWithJSONObject:info options:0 error:nil];
   [data writeToFile:[dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%d.json", getpid()]] atomically:YES];
 }
@@ -102,5 +127,6 @@ __attribute__((constructor(200))) static void GSIStart(void) {
   }
   for (NSString *name in names) GSIWire(name);
   GSIObserve(@"glint.siminject.ping", ^{ GSIWriteReady(); });
+  GSIObserveLifecycle();
   GSIWriteReady();
 }
