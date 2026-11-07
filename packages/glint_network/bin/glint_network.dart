@@ -1,7 +1,8 @@
-import 'dart:async' show runZonedGuarded, unawaited;
+import 'dart:async' show Timer, runZonedGuarded, unawaited;
 import 'dart:io' as io;
 
 import 'package:args/args.dart';
+import 'package:glint_core/glint_core.dart' show ProcessRegistry, watchParentDeath;
 import 'package:glint_network/src/auto_attach.dart';
 import 'package:glint_network/src/config/auto_attach_config.dart';
 import 'package:glint_network/src/config/capabilities.dart';
@@ -398,16 +399,19 @@ Future<void> _runMain(List<String> args) async {
 /// [io.exit] is the point — lingering timers and sockets do not get a vote.
 void _installLifecycleGuard(FlutterNetworkMcpServer server) {
   var exiting = false;
-  Never shutdown(String reason) {
-    if (!exiting) {
-      exiting = true;
-      io.stderr.writeln('glint_network: $reason — shutting down.');
-      try {
-        CapturesDatabase.instance.close();
-      } catch (_) {/* already closed or never opened */}
-    }
-    io.exit(0);
+  void shutdown(String reason) {
+    if (exiting) io.exit(0);
+    exiting = true;
+    io.stderr.writeln('glint_network: $reason — shutting down.');
+    try {
+      CapturesDatabase.instance.close();
+    } catch (_) {/* already closed or never opened */}
+    Timer(const Duration(seconds: 8), () => io.exit(0));
+    ProcessRegistry.instance.stopAll().whenComplete(() => io.exit(0));
   }
+
+  watchParentDeath(() => shutdown('the process that started glint_network exited'));
+  unawaited(_reapLeftovers());
 
   unawaited(
     server.done.then((_) => shutdown('MCP host closed the stdio channel')),
@@ -419,6 +423,17 @@ void _installLifecycleGuard(FlutterNetworkMcpServer server) {
       // sigterm cannot be watched on Windows; stdin EOF still covers it.
     }
   }
+}
+
+/// Stops helpers an earlier glint_network or glint left behind, without delaying startup.
+Future<void> _reapLeftovers() async {
+  try {
+    final reaped = await ProcessRegistry.instance.reapStale();
+    if (reaped.isNotEmpty) {
+      io.stderr
+          .writeln('glint_network: stopped ${reaped.length} helper(s) left by an earlier glint: ${reaped.join('; ')}');
+    }
+  } catch (_) {/* best effort */}
 }
 
 /// Parses a comma-separated allowlist value into a list of trimmed, non-

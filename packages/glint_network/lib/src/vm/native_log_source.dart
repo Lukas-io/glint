@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 
+import 'package:glint_core/glint_core.dart' show HelperLife, ProcessRegistry;
+
 import '../state/log_buffer.dart';
 import '../storage/captures_db.dart';
 import 'log_stream.dart' show OccurrenceCounter, logDedupHash;
@@ -12,6 +14,7 @@ import 'log_stream.dart' show OccurrenceCounter, logDedupHash;
 /// the same ring and table as Dart records with `source: "native"`.
 class NativeLogSource {
   io.Process? _proc;
+  String? _helperDevice;
   StreamSubscription<String>? _sub;
   StreamSubscription<String>? _errSub;
 
@@ -65,7 +68,10 @@ class NativeLogSource {
             ? 'adb logcat on $serial, pid $pid'
             : 'adb logcat on $serial, unfiltered (no process found for "$package")';
       }
-      final proc = await io.Process.start(cmd.first, cmd.sublist(1));
+      final helperDevice = '${platform == 'ios' ? cmd[3] : cmd[2]}:${package ?? 'all'}';
+      final proc = await ProcessRegistry.instance.start('native-log', cmd.first, cmd.sublist(1),
+          device: helperDevice, owner: package, life: HelperLife.attachment);
+      _helperDevice = helperDevice;
       _proc = proc;
       final dao = CapturesDao();
       final occurrences = OccurrenceCounter();
@@ -120,12 +126,10 @@ class NativeLogSource {
     _errSub = null;
     final p = _proc;
     _proc = null;
-    if (p != null) {
-      try {
-        p.kill();
-      } on Object {
-        // already gone
-      }
+    final helperDevice = _helperDevice;
+    _helperDevice = null;
+    if (p != null && helperDevice != null) {
+      await ProcessRegistry.instance.stop('native-log', device: helperDevice, only: p);
     }
   }
 

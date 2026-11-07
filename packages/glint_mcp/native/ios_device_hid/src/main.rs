@@ -12,6 +12,9 @@ const PROTOCOL: u32 = 7;
 /// The display stream that unlocks input is dropped after this long without a command.
 const IDLE_STREAM: Duration = Duration::from_secs(120);
 
+/// How often the helper checks that the glint that started it is still its parent; it exits when that changes.
+const PARENT_POLL: Duration = Duration::from_secs(2);
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -40,10 +43,18 @@ async fn main() {
     }
     emit(&mut out, &json!({"ready": PROTOCOL})).await;
 
+    let parent = std::os::unix::process::parent_id();
+    let mut parent_watch = tokio::time::interval(PARENT_POLL);
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     loop {
         let line = tokio::select! {
             line = lines.next_line() => line,
+            _ = parent_watch.tick() => {
+                if std::os::unix::process::parent_id() != parent {
+                    break;
+                }
+                continue;
+            }
             _ = tokio::time::sleep(IDLE_STREAM), if session.streaming() && !session.recording() => {
                 session.stop_stream().await;
                 continue;

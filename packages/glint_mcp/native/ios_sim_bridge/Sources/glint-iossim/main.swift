@@ -9,6 +9,17 @@
 
 import Foundation
 
+/// Exits when the glint that started this process is gone, so no command outlives its parent.
+let parentWatch: DispatchSourceTimer? = {
+    let parent = getppid()
+    guard parent > 1 else { return nil }
+    let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+    timer.schedule(deadline: .now() + 2, repeating: 2)
+    timer.setEventHandler { if getppid() != parent { exit(0) } }
+    timer.resume()
+    return timer
+}()
+
 /// SimulatorKit's IndigoHIDButton enum case → integer code passed to
 /// IndigoHIDMessageForButton. Codes empirically calibrated for Xcode 26;
 /// per-release updates land in source-of-truth §13.
