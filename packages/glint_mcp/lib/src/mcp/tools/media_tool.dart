@@ -73,7 +73,7 @@ class MediaTool extends GlintTool {
             'listen (Android emulator: record what the app plays; stop:true returns a WAV with peak, loudness and silences), '
             'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
             'event (Android emulator: rotate, light, proximity, incoming call, endCall, SMS), '
-            'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation with no app change; Android needs setup:true once). '
+            'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation and the system camera picker (image_picker) with no app change; Android needs setup:true once). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
