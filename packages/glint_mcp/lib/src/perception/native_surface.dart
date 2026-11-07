@@ -54,6 +54,26 @@ class NativeSurface {
     return 'surface: $name${parts.isEmpty ? '' : ' · ${parts.join(' · ')}'}';
   }
 
+  /// The choice that grants or confirms, by its label; null when none is clearly affirmative, so a prompt is never steered to a deny.
+  SurfaceChoice? get affirmative {
+    for (final label in _affirmativeOrder) {
+      for (final c in choices) {
+        if (c.text.toLowerCase() == label) return c;
+      }
+    }
+    return null;
+  }
+
+  /// The next step that answers this surface by text, naming every choice; null when it offers none.
+  String? get answerStep {
+    if (choices.isEmpty) return null;
+    final all = choices.map((c) => c.text).join(' | ');
+    final yes = affirmative;
+    return yes == null
+        ? 'answer it by tapping one of its choices by text (choices: $all)'
+        : 'answer it by text, e.g. tap text:"${yes.text}" (choices: $all)';
+  }
+
   Map<String, Object?> toJson() => {
         'kind': kind.name,
         if (title != null) 'title': title,
@@ -64,6 +84,23 @@ class NativeSurface {
         if (texts.isNotEmpty) 'texts': texts.take(_maxTexts).toList(),
         if (owner != null) 'owner': owner,
       };
+}
+
+/// Labels that grant or confirm, best first.
+const _affirmativeOrder = [
+  'allow while using app',
+  'allow',
+  'allow full access',
+  'ok',
+  'continue',
+  'open',
+  'allow once',
+  'yes'
+];
+
+/// A reply summary with the surface's line on its own row, or unchanged when there is none.
+extension SurfaceReplyLine on NativeSurface? {
+  String get replyLine => this == null ? '' : '\n${this!.line}';
 }
 
 /// Words that label a choice on iOS and Android system dialogs.

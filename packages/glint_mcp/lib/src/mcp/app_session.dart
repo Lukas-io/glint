@@ -376,7 +376,7 @@ class AppSession {
     navEnricher = NavigationEnricher(runtime: rt);
     pagedEnricher = PagedViewportEnricher(resolver: res);
     readinessGate = ReadinessGate(reader: rd, resolver: res);
-    settleDetector = SettleDetector(runtime: rt, reader: rd);
+    settleDetector = SettleDetector(runtime: rt, reader: rd, notResumed: notResumed);
     final dev = device;
     nativeReader = switch (dev) {
       IosSimulator() when (dev.runner ?? nativeRunner) != null =>
@@ -818,6 +818,42 @@ class AppSession {
       return nativeSurfaceName != null || reader.appBackgrounded;
     } on Object {
       return false;
+    }
+  }
+
+  /// How long a native surface read may take before it counts as unreadable.
+  static const surfaceReadTimeout = Duration(seconds: 5);
+
+  /// The native surface over the app as data, reusing [shot] when the reader works from screenshots; null when it cannot be read in [surfaceReadTimeout] or says nothing.
+  Future<NativeSurface?> readNativeSurface({String? shot}) async {
+    final reader = nativeReader;
+    if (reader == null) return null;
+    try {
+      final scene = await (reader is OcrNativeReader && shot != null ? reader.readFrom(shot) : reader.readSnapshot())
+          .timeout(surfaceReadTimeout);
+      if (scene.root.glintId == '_native_surface') return null;
+      final surface = classifySurface(scene, owner: nativeSurfaceName);
+      return surface.hasContent || surface.owner != null ? surface : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// The lifecycle when the app is not resumed, so a read that waits on frames cannot finish; null when it is resumed or unknown.
+  Future<String?> notResumed() async {
+    final cached = lastLifecycle;
+    final rt = runtime;
+    if (cached == null || cached == 'resumed' || rt == null) return null;
+    try {
+      final live =
+          await rt.evaluateString('WidgetsBinding.instance.lifecycleState?.name ?? ""').timeout(lifecycleProbeTimeout);
+      if (live == 'resumed') {
+        _onLifecycle(live);
+        return null;
+      }
+      return live == null || live.isEmpty ? cached : live;
+    } on Object {
+      return cached;
     }
   }
 

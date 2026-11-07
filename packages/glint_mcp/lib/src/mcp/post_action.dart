@@ -406,7 +406,7 @@ Future<PostActionState?> readPostActionState(
           differ = capture == null ? null : await screensDiffer(before!, capture.path);
         }
         final unchanged = differ == false;
-        final surface = await _readSurface(app, capture?.path);
+        final surface = await app.readNativeSurface(shot: capture?.path);
         return PostActionState(
           changed: wasNative ? differ : true,
           changeCategory: unchanged ? 'nothing' : 'nativeSurface',
@@ -467,19 +467,6 @@ Future<PostActionState> _awaitLateChange(
     return late.changeCategory == 'nothing' ? state : late.changedLate((reply['ms'] as num).toInt());
   } on Object {
     return state;
-  }
-}
-
-/// The native surface over [app] as data, reusing [shot] when the reader works from screenshots; null when it cannot be read.
-Future<NativeSurface?> _readSurface(AppSession app, String? shot) async {
-  final reader = app.nativeReader;
-  if (reader == null) return null;
-  try {
-    final scene = reader is OcrNativeReader && shot != null ? await reader.readFrom(shot) : await reader.readSnapshot();
-    if (scene.root.glintId == '_native_surface') return null;
-    return classifySurface(scene, owner: app.nativeSurfaceName);
-  } on Object {
-    return null;
   }
 }
 
