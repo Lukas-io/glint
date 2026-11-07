@@ -39,6 +39,20 @@ dart test
 
 If your change touches attaching, input or the iOS bridge, also run the device check against a simulator or emulator (see [MAINTAINING.md](./MAINTAINING.md#checks)), or say in the PR that you couldn't.
 
+## Helper processes and the leak check
+
+Every long-lived child glint starts goes through `ProcessRegistry` (`glint_core`): `startHelper(purpose, ...)` in glint_mcp, `ProcessRegistry.instance.start(...)` elsewhere. Short children of a tool call use `runBounded` or `startManaged`. Never call `Process.start` for a helper directly. A helper needs an owner (device or app), a `HelperLife` (stopped on detach, stopped at exit, or recorded only), one per purpose and device, and, if it is a binary glint ships, a parent-death exit (poll `getppid`) so it ends if glint is killed.
+
+Any PR that starts, stops or changes a process runs the leak check from `packages/glint_mcp` and says so in the PR:
+
+```bash
+dart run tool/leak_check.dart run -- <the command or scenario you ran>
+dart run tool/leak_check.dart snapshot --out before.json   # then, after a manual session:
+dart run tool/leak_check.dart compare before.json
+```
+
+It lists glint-owned processes (helpers, runners, glint servers, `flutter run`) with their CPU, waits up to 8 s for teardown, and exits 1 when a process or its CPU outlived the run. `--under <pid>` scopes it to one glint server's tree plus orphans, so other agents' sessions do not count.
+
 ## Opening the PR
 
 - Title it with the package: `glint_mcp: Keep focus when the keyboard covers the field`.

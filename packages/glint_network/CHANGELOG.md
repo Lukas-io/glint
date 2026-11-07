@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The native log stream (`simctl log stream`, `adb logcat`) is stopped as a whole tree on detach and on exit, the server exits when the process that started it is gone, and helpers an earlier glint left behind are stopped at startup.
+
 ## [0.13.1] - 2026-10-15
 
 ### Changed
