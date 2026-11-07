@@ -821,6 +821,20 @@ class AppSession {
     }
   }
 
+  /// The native surface over the app as data, reusing [shot] when the reader works from screenshots; null when it cannot be read.
+  Future<NativeSurface?> readNativeSurface({String? shot}) async {
+    final reader = nativeReader;
+    if (reader == null) return null;
+    try {
+      final scene =
+          reader is OcrNativeReader && shot != null ? await reader.readFrom(shot) : await reader.readSnapshot();
+      if (scene.root.glintId == '_native_surface') return null;
+      return classifySurface(scene, owner: nativeSurfaceName);
+    } on Object {
+      return null;
+    }
+  }
+
   /// Re-read the lifecycle now instead of waiting for the next poll tick, so a
   /// read right after a native dialog closes does not report a stale mode.
   Future<void> refreshSceneMode() async {

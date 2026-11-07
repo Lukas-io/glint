@@ -4,7 +4,7 @@ import 'package:dart_mcp/server.dart';
 
 import '../../interaction.dart';
 import '../../observability.dart';
-import '../../perception.dart' show InspectorReadError, appBusyCause, suggestIds;
+import '../../perception.dart' show InspectorReadError, NativeSurface, SurfaceChoice, appBusyCause, suggestIds;
 import '../../runtime.dart';
 import 'envelope.dart';
 import 'explore/recorder.dart' show ExploreCall;
@@ -511,17 +511,26 @@ abstract class GlintTool {
     }
     await session.active?.refreshSceneMode();
     final covered = lifecycle != null && lifecycle != 'resumed';
-    return StructuredResponse.error(
+    final surface = covered ? await _surfaceOver(session) : null;
+    final choices = surface?.choices ?? const <SurfaceChoice>[];
+    return StructuredResponse(
       summary: covered
           ? 'the app is "$lifecycle", not resumed, so there is no Flutter frame to read: '
-              'a system dialog or another app is in front'
+              'a system dialog or another app is in front${surface == null ? '' : '\n${surface.line}'}'
           : 'the app has no widget tree yet: it has not drawn its first frame '
               '(still starting, or waiting on something before runApp)',
-      errorKind: GlintErrorKind.appNotResumed,
-      detail: e.toString(),
+      isError: true,
+      data: {
+        'errorKind': GlintErrorKind.appNotResumed.name,
+        'detail': e.toString(),
+        if (surface != null) 'surface': surface.toJson(),
+      },
       nextSteps: covered
-          ? const [
-              'call get_scene to read what is in front, then tap its buttons by text or glintId',
+          ? [
+              if (choices.isNotEmpty)
+                'answer it by text, e.g. tap text:"${choices.last.text}" (choices: ${choices.map((c) => c.text).join(' | ')})'
+              else
+                'call get_scene to read what is in front, then tap its buttons by text or glintId',
               'or `hardware_button home` and reopen the app',
             ]
           : const [
@@ -529,6 +538,14 @@ abstract class GlintTool {
               'otherwise give the app a moment to start, then retry',
             ],
     );
+  }
+
+  Future<NativeSurface?> _surfaceOver(GlintSession session) async {
+    try {
+      return await session.active?.readNativeSurface().timeout(const Duration(seconds: 5));
+    } on Object {
+      return null;
+    }
   }
 
   /// The app's newest native crash from the last minute, if the VM dropped because it crashed.
