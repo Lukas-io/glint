@@ -11,3 +11,8 @@ CIImage *GCFeedFit(NSInteger lens, CGSize size, BOOL mirror);
 CIContext *GCFeedContext(void);
 UIImage *GCFeedImage(NSInteger lens, CGSize size, BOOL mirror);
 void GCInstallPickerHooks(void);
+
+@interface GCSource : NSObject
+- (instancetype)initWithSpec:(NSDictionary *)spec;
+- (CIImage *)currentImage;
+@end

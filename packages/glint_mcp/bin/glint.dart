@@ -10,6 +10,7 @@ import 'package:args/args.dart';
 import 'package:dart_mcp/stdio.dart';
 import 'package:glint_core/glint_core.dart';
 import 'package:glint_mcp/glint.dart';
+import 'package:glint_mcp/src/media/sim_broadcast.dart' show sweepBroadcastState;
 
 Future<void> main(List<String> args) async {
   final parser = ArgParser()
@@ -77,6 +78,7 @@ Future<void> main(List<String> args) async {
       _quietly(() => ProcessRegistry.instance.stopAll(within: _teardownBudget)),
       _quietly(() => server.session.usageReporter.shipOnExit().timeout(_shipBudget)),
     ]);
+    await _quietly(() => sweepBroadcastState(ownedBy: pid).timeout(_teardownBudget));
     exit(0);
   }
 
@@ -113,6 +115,7 @@ Future<void> _tidyUp() => _quietly(() async {
       if (reaped.isNotEmpty) {
         stderr.writeln('glint: stopped ${reaped.length} helper(s) left by an earlier glint: ${reaped.join('; ')}');
       }
+      await sweepBroadcastState();
       final pruned = await pruneCaches();
       if (pruned.items.isNotEmpty) stderr.writeln('glint: ${pruned.summary}');
     });

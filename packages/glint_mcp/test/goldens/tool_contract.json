@@ -193,11 +193,19 @@
     "properties": {
       "op": {
         "type": "string",
-        "description": "seed | files | inspect | pick | permission | listen | mic | event | camera"
+        "description": "seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast"
+      },
+      "extension": {
+        "type": "string",
+        "description": "broadcast: bundle id of the upload extension. Default: the one the app's picker names, else the only one."
+      },
+      "audio": {
+        "type": "string",
+        "description": "broadcast: app audio to deliver, tone (440 Hz, hz sets it), none, or an audio file path. Default tone."
       },
       "stop": {
         "type": "boolean",
-        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in."
+        "description": "listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop."
       },
       "lens": {
         "type": "string",
@@ -213,11 +221,11 @@
       },
       "force": {
         "type": "boolean",
-        "description": "camera (iOS): take the camera over from another glint that holds it (changes or stops its feed)."
+        "description": "camera, broadcast (iOS): take it over from another glint that holds it (changes or stops its run)."
       },
       "relaunch": {
         "type": "boolean",
-        "description": "camera, event call (iOS): restart an app that started before glint could load into it. Its state is lost."
+        "description": "camera, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost."
       },
       "setup": {
         "type": "boolean",
@@ -237,7 +245,7 @@
       },
       "action": {
         "type": "string",
-        "description": "permission: grant | deny | reset (ask again) | limited (photos, Android 14+)."
+        "description": "permission: grant | deny | reset (ask again) | limited (photos, Android 14+). broadcast: arm | start | pause | resume | status | stop. Default start."
       },
       "device": {
         "type": "string",
@@ -249,7 +257,7 @@
       },
       "source": {
         "type": "string",
-        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). mic: tone (default), speech, or a host audio file."
+        "description": "seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). broadcast: screen (default), testcard, or an image or video path. mic: tone (default), speech, or a host audio file."
       },
       "name": {
         "type": "string",
@@ -269,7 +277,7 @@
       },
       "size": {
         "type": "string",
-        "description": "testcard: WxH, even. Default 1080x1920."
+        "description": "testcard: WxH, even. Default 1080x1920. broadcast: delivered frame size, default the source size."
       },
       "durationSec": {
         "type": "number",
@@ -277,7 +285,7 @@
       },
       "fps": {
         "type": "integer",
-        "description": "testcard video: frames per second. Default 30."
+        "description": "testcard video: frames per second. Default 30. broadcast: frames delivered per second, 1 to 60, default 15."
       },
       "rotation": {
         "type": "integer",

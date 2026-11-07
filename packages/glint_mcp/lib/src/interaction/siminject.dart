@@ -71,6 +71,7 @@ class SimInjector {
   final String udid;
   final PhaseReporter? progress;
   final String _home;
+  String? _dylib;
 
   static const _launchEnv = 'DYLD_INSERT_LIBRARIES';
 
@@ -145,21 +146,39 @@ class SimInjector {
   /// Which of [pids] are running, from one `ps` call.
   Set<int> _livePids(List<int> pids) {
     if (pids.isEmpty) return const {};
-    final r = Process.runSync('ps', ['-o', 'pid=', '-p', pids.join(',')]);
-    return {
-      for (final line in '${r.stdout}'.split('\n'))
-        if (int.tryParse(line.trim()) != null) int.parse(line.trim())
-    };
+    final r = Process.runSync('ps', ['-o', 'pid=,comm=', '-p', pids.join(',')]);
+    return parseProcessNames('${r.stdout}').keys.toSet();
+  }
+
+  /// The executable path of each of [pids] that is running, from one bounded `ps` call (a simulator process is a Mac process with the same pid).
+  Future<Map<int, String>> processNames(Iterable<int> pids) async {
+    final list = pids.toSet().toList();
+    if (list.isEmpty) return const {};
+    final r = await runBounded('ps', ['-o', 'pid=,comm=', '-p', list.join(',')],
+        timeout: const Duration(seconds: 10), phase: 'checking which processes are running');
+    return parseProcessNames('${r.stdout}');
+  }
+
+  /// Reads `pid command` lines from `ps -o pid=,comm=`.
+  static Map<int, String> parseProcessNames(String text) {
+    final names = <int, String>{};
+    for (final line in text.split('\n')) {
+      final match = RegExp(r'^\s*(\d+)\s+(.*\S)\s*$').firstMatch(line);
+      if (match != null) names[int.parse(match.group(1)!)] = match.group(2)!;
+    }
+    return names;
   }
 
   /// The library's path, found, downloaded or compiled, and checked to be signed so dyld never aborts an app launch on it.
   Future<String> dylibPath() async {
+    final known = _dylib;
+    if (known != null) return known;
     try {
       final path = await ensureSimInject(phases: progress);
-      if (await _signed(path)) return path;
+      if (await _signed(path)) return _dylib = path;
       File(path).deleteSync();
       final rebuilt = await ensureSimInject(phases: progress);
-      if (await _signed(rebuilt)) return rebuilt;
+      if (await _signed(rebuilt)) return _dylib = rebuilt;
       throw SimInjectFailure(
           GlintErrorKind.unsupportedToolchain,
           'the glint simulator library is not validly signed',
