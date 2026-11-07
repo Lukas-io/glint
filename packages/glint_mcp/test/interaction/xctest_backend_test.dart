@@ -37,9 +37,11 @@ void main() {
       expect(XcTestRunner.portFor('A1F74AA6-3A01-40E9-8EA8-AFA4F2A5F242'), isNot(a));
     });
 
-    test('a runner already answering with this protocol is reused, not rebuilt', () async {
+    test('a runner already answering with this protocol and stamp is reused, not rebuilt', () async {
       final calls = <_Call>[];
-      final runner = _runner(calls, reply: {'runner': expectedRunnerProtocol});
+      final reply = <String, Object?>{'runner': expectedRunnerProtocol};
+      final runner = _runner(calls, reply: reply);
+      reply['stamp'] = runner.identity;
       await runner.ensureStarted();
       expect(calls.map((c) => c.$2), ['/status']);
     });
