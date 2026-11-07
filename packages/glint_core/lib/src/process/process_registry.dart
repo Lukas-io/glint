@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'process_table.dart';
 
+int get ownProcessId => pid;
+
 /// How long a helper outlives the thing that asked for it.
 enum HelperLife {
   /// Stopped when the app or device it serves is detached.
@@ -49,7 +51,7 @@ class HelperInfo {
         ownerPid: (j['ownerPid'] as num).toInt(),
         ownerStarted: j['ownerStarted'] as String,
         ownerCommand: j['ownerCommand'] as String,
-        life: HelperLife.values.byName(j['life'] as String),
+        life: HelperLife.values.where((l) => l.name == j['life']).firstOrNull ?? HelperLife.external,
       );
 
   final String id;
@@ -255,8 +257,11 @@ class ProcessRegistry {
   /// Stops the helper for [purpose] on [device]; with [only] it acts just when that is the registered process, so a stale holder cannot stop its replacement.
   Future<void> stop(String purpose, {String? device, Process? only}) async {
     final live = _live[_key(purpose, device)];
-    if (live == null || (only != null && !identical(live.process, only))) return;
-    await _stopLive(live);
+    if (live != null && (only == null || identical(live.process, only))) {
+      await _stopLive(live);
+    } else if (only != null && (live == null || !identical(live.process, only))) {
+      await killTree(only.pid, handle: only);
+    }
   }
 
   /// Stops this process's helpers for [device]: only the attachment ones on a detach, every one but external on [all] (device shutdown).
@@ -269,9 +274,16 @@ class ProcessRegistry {
   Future<int> stopAll({Duration within = const Duration(seconds: 6)}) async {
     final transient = _transient.toList();
     _transient.clear();
-    final count =
-        await _stopWhere((h) => h.life != HelperLife.external).timeout(within, onTimeout: () => 0).catchError((_) => 0);
-    await Future.wait([for (final p in transient) killTree(p.pid)]).timeout(within, onTimeout: () => const []);
+    var count = 0;
+    try {
+      final counts = await Future.wait([
+        _stopWhere((h) => h.life != HelperLife.external),
+        for (final p in transient) killTree(p.pid, handle: p).then((_) => 0),
+      ]).timeout(within);
+      count = counts.first;
+    } on Object {
+      count = 0;
+    }
     for (final live in _live.values.where((l) => l.info.life == HelperLife.external).toList()) {
       _forget(live);
     }
@@ -288,8 +300,11 @@ class ProcessRegistry {
   }
 
   Future<void> _stopLive(_Live live) async {
-    _forget(live);
-    await killTree(live.info.pid, started: live.info.started, command: live.info.command);
+    live.exited = true;
+    final key = _key(live.info.purpose, live.info.device);
+    if (identical(_live[key], live)) _live.remove(key);
+    final gone = await killTree(live.info.pid, started: live.info.started, handle: live.process);
+    if (gone) _delete(live.info);
   }
 
   void _forget(_Live live) {
@@ -308,27 +323,31 @@ class ProcessRegistry {
     required Process? process,
   }) async {
     final self = await _selfRow();
-    final row = (await ProcessTable.read(pids: [pid]))[pid];
-    if (self == null || row == null) return null;
+    ProcRow? row;
+    for (var attempt = 0; attempt < 4 && row == null; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(const Duration(milliseconds: 100));
+      row = (await ProcessTable.read(pids: [pid]))[pid];
+    }
+    if (row == null && process == null) return null;
     final info = HelperInfo(
-      id: '${self.pid}-$pid',
+      id: '${self?.pid ?? ownProcessId}-$pid',
       purpose: purpose,
       device: device,
       owner: owner,
       pid: pid,
-      started: row.started,
-      command: row.command,
+      started: row?.started ?? '',
+      command: row?.command ?? '',
       startedAtMs: DateTime.now().millisecondsSinceEpoch,
-      ownerPid: self.pid,
-      ownerStarted: self.started,
-      ownerCommand: self.command,
+      ownerPid: self?.pid ?? ownProcessId,
+      ownerStarted: self?.started ?? '',
+      ownerCommand: self?.command ?? '',
       life: life,
     );
     final live = _Live(info, process);
     _live[_key(purpose, device)] = live;
     _startLog.add(info);
     _startedCount++;
-    _write(info);
+    if (row != null && self != null) _write(info);
     return live;
   }
 
@@ -378,11 +397,7 @@ class ProcessRegistry {
       try {
         out.add(HelperInfo.fromJson((jsonDecode(f.readAsStringSync()) as Map).cast<String, Object?>()));
       } on Object {
-        try {
-          f.deleteSync();
-        } on Object {
-          continue;
-        }
+        continue;
       }
     }
     return out;
@@ -405,26 +420,27 @@ class ProcessRegistry {
     final stale = <HelperInfo>[];
     final self = await _selfRow();
     for (final h in _readFiles()) {
-      if (!table.isSame(h.pid, h.started, h.command)) continue;
+      if (!table.isSame(h.pid, h.started)) continue;
       if (self != null && h.ownerPid == self.pid && h.ownerStarted == self.started) continue;
       final info = h.withCpu(table[h.pid]?.cpu);
-      (table.isSame(h.ownerPid, h.ownerStarted, h.ownerCommand) ? others : stale).add(info);
+      (table.isSame(h.ownerPid, h.ownerStarted) ? others : stale).add(info);
     }
     return HelperSnapshot(mine: mine, others: others, stale: stale, inFlight: _transient.length);
   }
 
-  /// Stops helpers recorded by glint processes that are gone, and glint's own helpers found with the launchd parent. A process is touched only when its start time and command still match what glint recorded.
+  /// Stops helpers recorded by glint processes that are gone, and glint's own helpers found with the launchd parent. A process is touched only when its pid and start time still match what glint recorded.
   Future<List<ReapedHelper>> reapStale() async {
     final reaped = <ReapedHelper>[];
     final table = await ProcessTable.read();
     final claimed = <int>{};
     for (final h in _readFiles()) {
-      if (table.isSame(h.ownerPid, h.ownerStarted, h.ownerCommand)) continue;
-      final alive = table.isSame(h.pid, h.started, h.command);
+      if (table.isSame(h.ownerPid, h.ownerStarted)) continue;
+      final alive = table.isSame(h.pid, h.started);
       if (alive && h.life != HelperLife.external) {
-        await killTree(h.pid, started: h.started, command: h.command);
+        final gone = await killTree(h.pid, started: h.started);
         reaped.add(ReapedHelper(h.purpose, h.pid, 'its glint (pid ${h.ownerPid}) is gone'));
         claimed.add(h.pid);
+        if (!gone) continue;
       }
       _delete(h);
     }
@@ -432,7 +448,7 @@ class ProcessRegistry {
     for (final row in after.rows) {
       if (row.ppid != 1 || claimed.contains(row.pid)) continue;
       if (!orphanSignatures.any((s) => s.hasMatch(row.command))) continue;
-      await killTree(row.pid, started: row.started, command: row.command);
+      await killTree(row.pid, started: row.started);
       reaped.add(ReapedHelper(_purposeOf(row.command), row.pid, 'orphaned (parent gone)'));
     }
     return reaped;
@@ -444,39 +460,61 @@ class ProcessRegistry {
   }
 }
 
-/// Stops [pid] and everything below it: polite first, forceful after [grace]. With [started] and [command] it acts only if the pid is still that process.
-Future<void> killTree(
+/// Stops [pid] and everything below it: polite first, forceful after [grace]; true once the process is confirmed gone. With [started] it acts only if the pid still has that start time, and a [handle] that Dart still holds is stopped even when `ps` cannot list it. A pid is never signalled again once it is gone.
+Future<bool> killTree(
   int pid, {
   String? started,
-  String? command,
+  Process? handle,
   Duration grace = const Duration(seconds: 2),
 }) async {
   final table = await ProcessTable.read();
   final root = table[pid];
-  if (root == null) return;
-  if (started != null && command != null && !root.sameProcessAs(started, command)) return;
+  if (root == null) return handle == null ? true : await _stopHandle(handle, grace);
+  if (started != null && started.isNotEmpty && !root.sameProcessAs(started)) return true;
   final victims = [...table.descendantsOf(pid), pid];
+  final identity = {for (final v in victims) v: table[v]!.started};
   for (final v in victims) {
-    _signal(v, ProcessSignal.sigterm);
+    _signal(v, ProcessSignal.sigterm, handle: v == pid ? handle : null);
   }
   final deadline = DateTime.now().add(grace);
   while (DateTime.now().isBefore(deadline)) {
     await Future<void>.delayed(const Duration(milliseconds: 150));
-    final now = await ProcessTable.read(pids: victims);
-    if (victims.every((v) => !(now[v]?.sameProcessAs(table[v]!.started, table[v]!.command) ?? false))) return;
+    if (_allGone(await ProcessTable.read(pids: victims), identity)) return true;
   }
   final now = await ProcessTable.read(pids: victims);
   for (final v in victims) {
-    final before = table[v];
-    if (before != null && (now[v]?.sameProcessAs(before.started, before.command) ?? false)) {
-      _signal(v, ProcessSignal.sigkill);
-    }
+    if (now.isSame(v, identity[v]!)) _signal(v, ProcessSignal.sigkill, handle: v == pid ? handle : null);
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  return _allGone(await ProcessTable.read(pids: victims), identity);
+}
+
+bool _allGone(ProcessTable now, Map<int, String> identity) =>
+    identity.entries.every((e) => !now.isSame(e.key, e.value));
+
+Future<bool> _stopHandle(Process handle, Duration grace) async {
+  handle.kill();
+  try {
+    await handle.exitCode.timeout(grace);
+    return true;
+  } on TimeoutException {
+    handle.kill(ProcessSignal.sigkill);
+  }
+  try {
+    await handle.exitCode.timeout(const Duration(seconds: 1));
+    return true;
+  } on TimeoutException {
+    return false;
   }
 }
 
-void _signal(int pid, ProcessSignal signal) {
+void _signal(int pid, ProcessSignal signal, {Process? handle}) {
   try {
-    Process.killPid(pid, signal);
+    if (handle != null) {
+      handle.kill(signal);
+    } else {
+      Process.killPid(pid, signal);
+    }
   } on Object {
     return;
   }

@@ -81,7 +81,7 @@ Future<Snapshot> takeSnapshot({int? under}) async {
     for (final e in _ownedBy.entries) {
       if (e.value.hasMatch(command)) {
         procs.add(
-            Proc(pid, int.parse(m.group(2)!), double.tryParse(m.group(3)!.replaceAll(',', '.')) ?? 0, e.key, command));
+            Proc(id, int.parse(m.group(2)!), double.tryParse(m.group(3)!.replaceAll(',', '.')) ?? 0, e.key, command));
         break;
       }
     }

@@ -2,8 +2,5 @@ import 'dart:io';
 
 import 'package:glint_core/glint_core.dart';
 
-/// Kills [process] and everything below it: polite first, forceful after two seconds.
-Future<void> killProcessTree(Process process) async {
-  await killTree(process.pid);
-  process.kill(ProcessSignal.sigkill);
-}
+/// Stops [process] and everything below it: polite first, forceful after two seconds, and no signal once it is gone.
+Future<void> killProcessTree(Process process) => killTree(process.pid, handle: process);

@@ -14,11 +14,13 @@ class ProcRow {
   final int ppid;
   final double cpu;
 
-  /// The start time as `ps` prints it (`Sat Nov  8 12:34:56 2026`): with [command], what tells a process from a later one that reused its pid.
+  /// The start time as `ps` prints it (`Sat Nov  8 12:34:56 2026`): it survives exec, so with the pid it tells a process from a later one that reused the number.
   final String started;
+
+  /// The command line now; an exec can change it, so it is for display and signatures, never for identity.
   final String command;
 
-  bool sameProcessAs(String startedAt, String commandLine) => started == startedAt && command == commandLine;
+  bool sameProcessAs(String startedAt) => started == startedAt;
 }
 
 /// A snapshot of the process table, read with one `ps` call.
@@ -70,8 +72,8 @@ class ProcessTable {
 
   ProcRow? operator [](int pid) => _rows[pid];
 
-  /// Whether [pid] is still the process that started at [started] with [command], not a later one that reused the number.
-  bool isSame(int pid, String started, String command) => _rows[pid]?.sameProcessAs(started, command) ?? false;
+  /// Whether [pid] is still the process that started at [started], not a later one that reused the number.
+  bool isSame(int pid, String started) => _rows[pid]?.sameProcessAs(started) ?? false;
 
   /// Every process below [pid], deepest first, so signalling in order stops children before their parents.
   List<int> descendantsOf(int pid) {
