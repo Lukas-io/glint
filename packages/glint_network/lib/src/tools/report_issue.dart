@@ -71,7 +71,7 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
   final counts = redactor.counts;
   final redactionWarnings = [
     if (known.hostsUnreadable)
-      'the captured host list is unavailable (database not open or unreadable), so only hosts written as URLs or '
+      'the captured host list could not be read, so only hosts written as URLs or '
           'dotted names were redacted; check the draft for hosts',
     ...redactor.warnings,
   ];
@@ -123,9 +123,9 @@ FutureOr<CallToolResult> reportIssue(CallToolRequest request, {CommandRunner run
         'the URL carries the first $kDeepLinkBodyMax chars of the body; the full report is at $saved',
     ],
     'nextSteps': [
+      if (!auto) 'Show the user the drafted issue; with their go-ahead, call again with auto:true',
       if (!auto)
         'Only names glint knows from this session are redacted; check the draft for any app, company, host or device name',
-      if (!auto) 'Show the user the drafted issue; with their go-ahead, call again with auto:true',
       'Open the deep-link URL above; the title, body and labels are pre-filled',
       if (auto && ghMissing)
         'Install `gh` (https://cli.github.com/) and run `gh auth login` for one-call filing next time'
@@ -144,7 +144,7 @@ typedef KnownIdentities = ({List<String> apps, List<String> devices, List<String
 KnownIdentities knownIdentities() {
   final apps = <String>[];
   final devices = <String>[];
-  var hostsUnreadable = true;
+  var hostsUnreadable = false;
   final hosts = <String>[];
   void appName(String? name) {
     if (name == null || name.trim().isEmpty) return;
@@ -180,7 +180,6 @@ KnownIdentities knownIdentities() {
         project(row['project_path'] as String?);
       }
       hosts.addAll(db.capturedHosts());
-      hostsUnreadable = false;
     } on Object {
       hostsUnreadable = true;
     }
