@@ -3,7 +3,16 @@ import 'scene_node.dart';
 import 'scene_reader.dart';
 
 /// What kind of native surface covers the app.
-enum SurfaceKind { permissionPrompt, alert, picker, otherApp, unknown }
+enum SurfaceKind {
+  permissionPrompt,
+  alert,
+  picker,
+
+  /// A native screen or sheet with controls but no alert structure, such as a camera whose only control is Cancel.
+  sheet,
+  otherApp,
+  unknown,
+}
 
 /// One tappable choice on a native surface, at its center in logical points.
 typedef SurfaceChoice = ({String text, String id, double x, double y});
@@ -43,6 +52,7 @@ class NativeSurface {
       SurfaceKind.permissionPrompt => 'permission prompt',
       SurfaceKind.alert => 'alert',
       SurfaceKind.picker => 'photo picker',
+      SurfaceKind.sheet => 'native screen',
       SurfaceKind.otherApp => 'another app${owner == null ? '' : ' ($owner)'}',
       SurfaceKind.unknown => 'native surface',
     };
@@ -198,7 +208,9 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
       : isPicker
           ? SurfaceKind.picker
           : choices.isNotEmpty
-              ? SurfaceKind.alert
+              ? (_hasAlertStructure(texts, choices)
+                  ? SurfaceKind.alert
+                  : (owner != null ? SurfaceKind.otherApp : SurfaceKind.sheet))
               : owner != null
                   ? SurfaceKind.otherApp
                   : SurfaceKind.unknown;
@@ -206,6 +218,23 @@ NativeSurface classifySurface(Scene scene, {String? owner}) {
   return NativeSurface(
       kind: kind, title: title, choices: choices, texts: texts.where((t) => t != title).toList(), owner: owner);
 }
+
+/// An alert is a short row of buttons under a title or message; a surface whose only other text is control labels (camera modes, zoom steps) is a toolbar.
+bool _hasAlertStructure(List<String> texts, List<SurfaceChoice> choices) =>
+    choices.length <= _longestButtonRow && texts.any((t) => !_isControlLabel(t));
+
+const _longestButtonRow = 3;
+
+/// Short all-caps labels (PHOTO, VIDEO, PORTRAIT) and zoom steps (0.5, 2x) are mode and segment controls, not a title or message.
+bool _isControlLabel(String t) {
+  final label = t.trim();
+  final letters = label.replaceAll(RegExp(r'[^A-Za-z]'), '');
+  final allCaps = letters.isNotEmpty && label == label.toUpperCase();
+  final zoom = RegExp(r'^\d+(\.\d+)?x?$').hasMatch(label);
+  return label.length <= _longestControlLabel && (allCaps || zoom);
+}
+
+const _longestControlLabel = 14;
 
 Iterable<SceneNode> _walk(SceneNode n) sync* {
   yield n;

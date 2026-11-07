@@ -80,6 +80,9 @@ enum GlintErrorKind {
 
   /// A tool call or one of its commands ran past its time ceiling and was cancelled; `data.phase` names where it stood, `data.elapsedMs` how long.
   toolTimeout,
+
+  /// A batch used up its time budget and stopped before its next step; `data.completedSteps` ran.
+  budgetExceeded,
   // bug bucket — should never happen; if it does, it's on us
   internal,
 }

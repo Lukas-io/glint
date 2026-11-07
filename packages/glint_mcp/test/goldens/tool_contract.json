@@ -871,7 +871,7 @@
       },
       "maxScrolls": {
         "type": "integer",
-        "description": "Attempt ceiling. Default 8."
+        "description": "Scroll ceiling, 0-20. Default 8."
       },
       "amountFraction": {
         "type": "number",
@@ -1004,7 +1004,7 @@
       },
       "timeoutMs": {
         "type": "integer",
-        "description": "How long to wait, 100-120000. Default 15000."
+        "description": "How long to wait, 100-60000. Default 15000."
       }
     }
   },
@@ -1230,6 +1230,10 @@
       "returnScene": {
         "type": "boolean",
         "description": "Append the final scene text. Default true."
+      },
+      "budgetMs": {
+        "type": "integer",
+        "description": "Total time for all steps, 5000-300000. Default 120000. When it runs out the batch stops before the next step and says which steps ran."
       }
     },
     "required": [
