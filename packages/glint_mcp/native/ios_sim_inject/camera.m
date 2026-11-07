@@ -130,11 +130,6 @@ static BOOL GCActive(void) {
 }
 @end
 
-@interface GCSource : NSObject
-- (instancetype)initWithSpec:(NSDictionary *)spec;
-- (CIImage *)currentImage;
-@end
-
 @implementation GCSource {
   NSDictionary *_spec;
   CIImage *_still;
@@ -239,7 +234,7 @@ static BOOL GCActive(void) {
         return f;
       }
       if (_lastChange == 0) _lastChange = now;
-      return now - _lastChange < 1.5 ? _current : nil;
+      return now - _lastChange < ([_spec[@"staleSec"] doubleValue] ?: 1.5) ? _current : nil;
     }
     return nil;
   }

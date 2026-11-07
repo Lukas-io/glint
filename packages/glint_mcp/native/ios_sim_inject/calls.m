@@ -106,7 +106,6 @@ static NSString *GCStatusPath(void) {
   return dir ? [NSString stringWithFormat:@"%@/events/calls-%d.json", dir, getpid()] : nil;
 }
 
-#pragma mark - hooks
 
 typedef struct {
   Class cls;
@@ -134,7 +133,6 @@ static void GCUnhookAll(void) {
   GCHookCount = 0;
 }
 
-#pragma mark - delivery
 
 static id GCSend(id target, SEL sel) { return ((id(*)(id, SEL))objc_msgSend)(target, sel); }
 
@@ -212,7 +210,6 @@ static void GCPostInterruption(BOOL began) {
   GCNote(began ? @"interruption began" : @"interruption ended");
 }
 
-#pragma mark - overlay
 
 @interface GCOverlay : NSObject
 + (void)refresh;
@@ -322,7 +319,6 @@ static UIWindow *window;
 }
 @end
 
-#pragma mark - call state
 
 static GCCall *GCFind(NSUUID *uuid) {
   for (GCCall *c in GCCalls()) {
@@ -427,7 +423,6 @@ static void GCRing(NSString *number, NSString *name) {
   GCWriteStatus();
 }
 
-#pragma mark - CallKit hooks
 
 static IMP GCOriginalCalls;
 static IMP GCOriginalObserverDelegate;
@@ -615,7 +610,6 @@ static void GCInstallHooks(void) {
   }
 }
 
-#pragma mark - status
 
 static BOOL GCForeground(void) {
   if (GCForegroundOverride >= 0) return GCForegroundOverride == 1;
@@ -653,7 +647,6 @@ static void GCWriteStatus(void) {
   [data writeToFile:path atomically:YES];
 }
 
-#pragma mark - module
 
 static GCCall *GCTarget(NSString *uuid, NSString *verb) {
   if (uuid.length) return GCFind([[NSUUID alloc] initWithUUIDString:uuid]);

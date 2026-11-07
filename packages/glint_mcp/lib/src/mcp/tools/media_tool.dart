@@ -29,6 +29,7 @@ import '../../perception/runner_native_reader.dart';
 import '../../media/seed_ledger.dart';
 import '../../media/testcard_generator.dart';
 import '../envelope.dart';
+import 'media_broadcast.dart';
 import '../session.dart';
 import '../tool.dart';
 import '../tool_args.dart';
@@ -75,14 +76,21 @@ class MediaTool extends GlintTool {
             'mic (Android: feed a tone, speech or audio file into the microphone of every app that records, for durationSec; stop:true reports who recorded it), '
             'event (Android emulator: rotate, light, proximity, SMS; calls on Android and iOS simulators: call rings, answerCall, declineCall, endCall; iOS also callkit, which lets an app\'s own CallKit calls ring with an Answer/Decline overlay; replies say synthetic:true; stop:true removes the stand-in), '
             'camera (iOS simulator or Android emulator: what the cameras see, an image, video, testcard or the Mac webcam; lens front, back or both; stop:true removes it; on iOS apps see it through AVFoundation and the system camera picker (image_picker) with no app change; Android needs setup:true once). '
+            'broadcast (iOS simulator: runs the app\'s ReplayKit broadcast upload extension; it gets broadcastStarted, video and app-audio sample buffers, broadcastFinished; action arm (catch the app\'s picker press) | start (default; answers a pending press) | pause | resume | status | stop; source screen (default) | testcard | file; audio tone (default) | none | file; replies label what is synthetic). '
             'Generators and inspect need ffmpeg. errorKind: invalidArgument, unsupportedToolchain, deviceGone, backendToolError.',
         inputSchema: ObjectSchema(
           properties: {
             'op': Schema.string(
-                description: 'seed | files | inspect | pick | permission | listen | mic | event | camera'),
+                description: 'seed | files | inspect | pick | permission | listen | mic | event | camera | broadcast'),
+            'extension': Schema.string(
+                description:
+                    'broadcast: bundle id of the upload extension. Default: the one the app\'s picker names, else the only one.'),
+            'audio': Schema.string(
+                description:
+                    'broadcast: app audio to deliver, tone (440 Hz, hz sets it), none, or an audio file path. Default tone.'),
             'stop': Schema.bool(
                 description:
-                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in.'),
+                    'listen: end the recording and report it. mic: stop feeding and report what was fed. camera: remove the feed. event (iOS calls): end any call and remove the stand-in. broadcast: same as action:stop.'),
             'lens': Schema.string(description: 'camera (iOS): front | back | both. Default both.'),
             'fit': Schema.string(
                 description:
@@ -92,10 +100,10 @@ class MediaTool extends GlintTool {
                     'camera (iOS): size of the picture inside the frame, 0.1 to 1 (0.75 leaves a margin, as a card held a little back). Default 1.'),
             'force': Schema.bool(
                 description:
-                    'camera (iOS): take the camera over from another glint that holds it (changes or stops its feed).'),
+                    'camera, broadcast (iOS): take it over from another glint that holds it (changes or stops its run).'),
             'relaunch': Schema.bool(
                 description:
-                    'camera, event call (iOS): restart an app that started before glint could load into it. Its state is lost.'),
+                    'camera, event call, broadcast (iOS): restart an app that started before glint could load into it. Its state is lost.'),
             'setup': Schema.bool(
                 description:
                     'camera: true lets glint feed the AVD cameras (one emulator restart), false restores them.'),
@@ -108,14 +116,15 @@ class MediaTool extends GlintTool {
             ),
             'permission': Schema.string(description: 'permission: camera | microphone | photos.'),
             'action': Schema.string(
-                description: 'permission: grant | deny | reset (ask again) | limited (photos, Android 14+).'),
+                description:
+                    'permission: grant | deny | reset (ask again) | limited (photos, Android 14+). broadcast: arm | start | pause | resume | status | stop. Default start.'),
             'device': Schema.string(description: 'Simulator UDID or adb serial. Default: the attached device.'),
             'kind': Schema.string(
                 description:
                     'seed: photo | video | audio. Default: from source, else video. event: rotate | light | proximity | call | answerCall | declineCall | endCall | callkit (iOS) | sms.'),
             'source': Schema.string(
                 description:
-                    'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). mic: tone (default), speech, or a host audio file.'),
+                    'seed: a host file path, or testcard | speech | tone. Default: testcard (tone for audio). camera: an image or video path, testcard, or webcam (iOS: the Mac camera, macOS asks once for access). broadcast: screen (default), testcard, or an image or video path. mic: tone (default), speech, or a host audio file.'),
             'name': Schema.string(
                 description:
                     'seed: asset name (also the file name). clear:true with name removes just that one. pick: a seeded asset to choose.'),
@@ -123,11 +132,15 @@ class MediaTool extends GlintTool {
             'count': Schema.int(description: 'seed testcard photo: how many photos. Default 1.'),
             'clear':
                 Schema.bool(description: 'seed: remove what glint seeded on this device, nothing else. Android only.'),
-            'size': Schema.string(description: 'testcard: WxH, even. Default 1080x1920.'),
+            'size': Schema.string(
+                description:
+                    'testcard: WxH, even. Default 1080x1920. broadcast: delivered frame size, default the source size.'),
             'durationSec': Schema.num(
                 description:
                     'testcard video or tone: seconds. Default 6. mic: how long the feed runs, up to 600. Default 60.'),
-            'fps': Schema.int(description: 'testcard video: frames per second. Default 30.'),
+            'fps': Schema.int(
+                description:
+                    'testcard video: frames per second. Default 30. broadcast: frames delivered per second, 1 to 60, default 15.'),
             'rotation':
                 Schema.int(description: 'testcard video: rotation tag 0 | 90 | 180 | 270 (clockwise). Default 0.'),
             'text': Schema.string(
@@ -174,7 +187,9 @@ class MediaTool extends GlintTool {
         'mic' => await _mic(session, args, phases),
         'event' => await _event(session, args, phases),
         'camera' => await _camera(session, args, phases),
-        _ => _bad('op must be seed, files, inspect, pick, permission, listen, event or camera, got ${op ?? 'nothing'}'),
+        'broadcast' => await _broadcast(session, args, phases),
+        _ => _bad(
+            'op must be seed, files, inspect, pick, permission, listen, mic, event, camera or broadcast, got ${op ?? 'nothing'}'),
       };
     } on MissingHostTool catch (e) {
       return _missingTool(e, op);
@@ -1238,6 +1253,32 @@ class MediaTool extends GlintTool {
         if (outcome.silent.isNotEmpty) 'notReached': outcome.silent,
         if (report != null) 'injected': report.toJson(modules: const ['calls']),
       },
+    );
+  }
+
+  Future<StructuredResponse> _broadcast(GlintSession session, Map<String, Object?> args, PhaseReporter phases) async {
+    final id = (args['device'] as String?) ?? (session.isAttached ? session.device.id : null);
+    if (id == null) return _bad('no device: attach first, or pass device:"<simulator udid>"');
+    final simulator = MediaDevice.platformOf(id) == DevicePlatform.ios && await const SimControl().status(id) != null;
+    if (!simulator) {
+      return StructuredResponse.error(
+        summary: 'broadcast runs an iOS upload extension on a simulator only',
+        errorKind: GlintErrorKind.unsupportedBackendAction,
+        detail: isPhysicalIosUdid(id)
+            ? 'a physical iPhone has the real ReplayKit and replayd, so the app\'s own broadcast works there'
+            : id.startsWith('emulator-')
+                ? 'on Android, screen sharing is MediaProjection: `device op:privacy permission:screen-capture` answers its consent'
+                : '$id is not an iOS simulator on this Mac',
+        nextSteps: const ['pass the UDID of an iOS simulator (attach lists them)'],
+      );
+    }
+    return mediaBroadcast(
+      args,
+      phases,
+      id: id,
+      appId: _appId(session, MediaDevice(DevicePlatform.ios, id), args),
+      simBooted: _simBooted,
+      dormantNote: _dormantLibraryNote,
     );
   }
 

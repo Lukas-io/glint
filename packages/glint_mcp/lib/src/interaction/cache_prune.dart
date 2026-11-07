@@ -50,6 +50,9 @@ String markHelperUsed(String path) {
 
 final _semver = RegExp(r'-(\d+\.\d+\.\d+)(\.dex)?$');
 
+/// Helper families a later glint replaced; no build of them is chosen any more.
+const _retiredHelpers = {'glint-webcam', 'glint-screen'};
+
 /// Removes helper binaries of other glint versions from `~/.glint/bin` and runner builds of Xcode versions that are gone from `~/.glint/xctest`, at most once a day unless [force]; nothing a live process runs, or any helper used in the last [kPruneGrace], is touched.
 Future<PruneReport> pruneCaches({bool dryRun = false, bool force = false, String? home, String? version}) async {
   final root = '${home ?? Platform.environment['HOME'] ?? '.'}/.glint';
@@ -113,7 +116,11 @@ List<PruneItem> _oldHelpers(String binDir, String version, bool Function(String)
       reason = m.group(1) == version ? null : 'helper of glint ${m.group(1)}, this is $version';
     } else {
       final family = name.substring(0, name.lastIndexOf('-'));
-      reason = identical(newestOfHashed[family], f) ? null : 'an older build of $family';
+      reason = _retiredHelpers.contains(family)
+          ? 'a helper glint no longer uses ($family became glint-frames)'
+          : identical(newestOfHashed[family], f)
+              ? null
+              : 'an older build of $family';
     }
     if (reason == null || inUse(f.path) || DateTime.now().difference(f.lastModifiedSync()) < kPruneGrace) continue;
     out.add(PruneItem(f.path, f.lengthSync(), reason));

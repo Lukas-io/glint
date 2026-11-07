@@ -1,20 +1,16 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:glint_core/glint_core.dart' show HelperLife, ProcessRegistry;
+import 'package:glint_core/glint_core.dart' show ProcessRegistry;
 
 import '../interaction/bounded_process.dart';
 import '../interaction/device_claims.dart';
 import '../interaction/result.dart';
-import '../interaction/shipped_files.dart';
 import '../interaction/siminject.dart';
-import '../interaction/swift_helper.dart';
-import '../observability/call_progress.dart';
+import 'frame_helper.dart';
 import 'host_tools.dart';
 
 const _imagePattern = r'\.(png|jpe?g|webp|heic|bmp|gif)$';
-const _webcamSource = 'native/ios_sim_inject/mac/webcam.swift';
 const _moduleName = 'camera';
 
 /// The lenses a feed can name.
@@ -25,9 +21,6 @@ bool isImagePath(String path) => RegExp(_imagePattern, caseSensitive: false).has
 
 /// What one lens shows: an image, a video or the Mac camera, fitted `contain` (whole picture) or `cover` (fills the frame), at `zoom` (1 = fitted, 0.75 = three quarters of that, leaving a margin).
 typedef LensFeed = ({String kind, String path, String label, String fit, double zoom});
-
-/// The protocol the Mac camera helper must report; a different one is refused.
-const int webcamProtocol = 1;
 
 /// glint's camera for an iOS simulator: front and back cameras that apps read through AVFoundation, fed an image, a video or the Mac camera, through the injected library's `camera` module.
 class SimCamera {
@@ -121,8 +114,8 @@ class SimCamera {
 
   /// Starts the Mac camera pump and returns the frame file the library reads; asks macOS for camera access when it was never asked.
   Future<String> startWebcam(PhaseReporter? phases) async {
-    final helper = await _webcamHelper(phases);
-    final status = await runBounded(helper, ['--status'],
+    final helper = await frameHelperBinary(phases);
+    final status = await runBounded(helper, ['webcam', '--status'],
         timeout: const Duration(seconds: 30), phase: 'checking Mac camera access');
     final statusText = '${status.stdout}'.trim();
     final state = statusText.split(' ').first;
@@ -145,40 +138,25 @@ class SimCamera {
     injector.prepareControlDir();
     final marker = File('$_frames.read');
     if (marker.existsSync()) marker.deleteSync();
-    final process = await startHelper('webcam', helper, [_frames],
-        device: injector.udid, life: HelperLife.session, label: 'the Mac camera helper');
-    unawaited(process.stderr.drain<void>());
-    final ready = Completer<String>();
-    process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
-      if (!ready.isCompleted) ready.complete(line.trim());
-    });
-    unawaited(process.exitCode.then((code) {
-      if (!ready.isCompleted) ready.complete(code == 3 ? 'denied' : 'exited $code');
-    }));
-    Future<String> firstLine() => ready.future.timeout(const Duration(seconds: 60), onTimeout: () => 'timeout');
-    final first = await (phases?.during('opening the Mac camera (macOS may ask once for camera access)', firstLine) ??
-        firstLine());
-    if (!first.startsWith('ready')) {
-      await ProcessRegistry.instance.stop('webcam', device: injector.udid);
-      throw SimInjectFailure(
+    await startFrameHelper(
+      binary: helper,
+      purpose: 'webcam',
+      device: injector.udid,
+      arguments: ['webcam', _frames],
+      label: 'the Mac camera helper',
+      waiting: 'opening the Mac camera (macOS may ask once for camera access)',
+      timeout: const Duration(seconds: 60),
+      phases: phases,
+      notReady: (line) => SimInjectFailure(
         GlintErrorKind.deviceNotConnected,
         'the Mac camera did not start',
-        first == 'timeout' ? 'no camera frame arrived within 60 s (macOS camera access unanswered?)' : first,
+        line == 'timeout' ? 'no camera frame arrived within 60 s (macOS camera access unanswered?)' : line,
         [
           'allow Camera for the app that runs glint (System Settings > Privacy & Security > Camera), then repeat the call',
           'or feed an image or video file instead',
         ],
-      );
-    }
-    final reported = RegExp(r'protocol=(\d+)').firstMatch(first)?.group(1);
-    if (reported != '$webcamProtocol') {
-      await ProcessRegistry.instance.stop('webcam', device: injector.udid);
-      throw SimInjectFailure(GlintErrorKind.unsupportedToolchain, 'the Mac camera helper speaks another protocol',
-          'helper reports ${reported ?? 'none'}, this glint needs $webcamProtocol', [
-        'remove ~/.glint/bin/glint-webcam-* and repeat the call, or update glint',
-      ]);
-    }
-    CallProgress.release(process);
+      ),
+    );
     return _frames;
   }
 
@@ -188,20 +166,6 @@ class SimCamera {
     for (final name in const ['webcam.frames', 'webcam.frames.read', 'webcam.frames.tmp']) {
       final file = File('${injector.controlDir}/$name');
       if (file.existsSync()) file.deleteSync();
-    }
-  }
-
-  Future<String> _webcamHelper(PhaseReporter? phases) async {
-    final source = shippedPath(_webcamSource);
-    if (source == null) {
-      throw SimInjectFailure(GlintErrorKind.unsupportedToolchain,
-          'the Mac camera helper is not part of this glint install', 'looked for $_webcamSource', ['reinstall glint']);
-    }
-    try {
-      return await swiftHelper(source, 'glint-webcam', phase: 'building the Mac camera helper');
-    } on SwiftHelperError catch (e) {
-      throw SimInjectFailure(GlintErrorKind.unsupportedToolchain, e.message, e.detail,
-          ['install Xcode and its command line tools (xcode-select --install), then retry']);
     }
   }
 }
