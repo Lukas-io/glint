@@ -644,7 +644,7 @@ class AttachTool extends GlintTool {
       var covered = lifecycle != null && lifecycle != 'resumed';
       NativeSurface? surface;
       if (covered) {
-        surface = await _readCover(session.active!, nativeStart, onProgress);
+        surface = await _readCover(session.active!, nativeStart);
         lifecycle = await session.lifecycleState() ?? lifecycle;
         covered = lifecycle != 'resumed';
         if (covered) {
@@ -1484,12 +1484,12 @@ class AttachTool extends GlintTool {
 
   static const _coverPoll = Duration(seconds: 2);
 
-  /// The system surface over a not-resumed app, polled until one with content reads; waits at most [_coverRunnerWait] while the XCTest runner starts, reporting progress, since the bridge reader cannot see an alert.
-  Future<NativeSurface?> _readCover(
-      AppSession app, NativeRunnerStart? start, void Function(int, String?)? onProgress) async {
+  /// The system surface over a not-resumed app, polled until one with content reads; waits at most [_coverRunnerWait] while the XCTest runner starts, since the bridge reader cannot see an alert.
+  Future<NativeSurface?> _readCover(AppSession app, NativeRunnerStart? start) async {
     final waited = Stopwatch()..start();
-    var nextUpdate = const Duration(seconds: 15);
     while (true) {
+      CallProgress.enter(
+          'reading the system surface over the app${start == null || start.done ? '' : ' (${start.phase})'}');
       await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
       final surface = await app.readNativeSurface();
       if (surface != null || app.sceneMode != SceneMode.native) return surface;
@@ -1498,11 +1498,6 @@ class AttachTool extends GlintTool {
         await Future<void>.delayed(const Duration(milliseconds: 500));
         await app.refreshSceneMode().timeout(AppSession.surfaceReadTimeout, onTimeout: () {});
         return app.readNativeSurface();
-      }
-      if (waited.elapsed >= nextUpdate) {
-        onProgress?.call(
-            waited.elapsed.inSeconds, 'waiting for the XCTest runner to read the system surface (${start.phase})');
-        nextUpdate += const Duration(seconds: 15);
       }
       await Future<void>.delayed(_coverPoll);
     }
