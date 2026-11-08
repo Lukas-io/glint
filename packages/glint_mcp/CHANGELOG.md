@@ -4,6 +4,10 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- The changelog is one line per change.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added
