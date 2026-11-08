@@ -24,19 +24,19 @@ All notable changes to glint are documented here. The format follows [Keep a Cha
 
 ### Changed
 
-- `report_issue` no longer names the app or the device; both become `<app>` and `<device>`.
+- `report_issue` no longer names the app or the device; both become `<app>` and `<device>`. (#320)
 - The server instructions tell agents to hand a step to a person with `watch` (PIN, 2FA, sign-in, real-money confirms). (#298)
 - `wait_for` says which way it is waiting and what it matched, and its `timeoutMs` is capped at 60 s. (#299)
-- `scroll_to_find` is cheaper per scroll, capped at 20 `maxScrolls`, and stops when the list really ends.
-- `batch` has a time budget (`budgetMs`) and always answers, with `errorKind: budgetExceeded` when it runs out.
-- Guessed argument names (`fromX`, `amount` and similar) are accepted, with a warning naming the right one.
+- `scroll_to_find` is cheaper per scroll, capped at 50 `maxScrolls`, and stops when the list really ends. (#327, #331)
+- `batch` has a time budget (`budgetMs`) and always answers, with `errorKind: budgetExceeded` when it runs out. (#327)
+- Guessed argument names (`fromX`, `amount` and similar) are accepted, with a warning naming the right one. (#327)
 
 ### Fixed
 
-- `scroll_to_find` no longer flings past its target.
-- `scroll_to_find` waits for the next page of a paginated list, and an iOS runner built by another glint version is no longer thrown away.
+- `scroll_to_find` no longer flings past its target. (#331)
+- `scroll_to_find` waits for the next page of a paginated list, and an iOS runner built by another glint version is no longer thrown away. (#330)
 - A native screen with only a toolbar is no longer called an alert in `get_scene`.
-- Attach and the iOS native helpers no longer hang silently; builds and helper calls time out with `toolTimeout`.
+- Attach and the iOS native helpers no longer hang silently; builds and helper calls time out with `toolTimeout`. (#328)
 - glint no longer leaves helper processes behind, and old helper binaries and runner builds are pruned (`glint --prune-cache --dry-run` lists them).
 - No tool call blocks forever or silently any more; every subprocess has a cap and a reason when it expires.
 - `media op:pick` no longer says a photo was chosen when the picker is still open or unreadable. (#255)
