@@ -4,7 +4,7 @@ import 'flutter_runtime.dart';
 import 'vm_service_runtime.dart';
 
 /// The service extension the agent registers; the version suffix makes a newer glint install its own beside an older one.
-const String kAgentExtension = 'ext.flutter.glintAgent11';
+const String kAgentExtension = 'ext.flutter.glintAgent12';
 
 /// The Flutter library the agent is compiled in: it sees the binding, gestures, focus, editing and `characters`.
 const String _agentLibrary = 'widgets/editable_text.dart';
@@ -297,6 +297,7 @@ const String _source = r'''
       final t0 = DateTime.now().microsecondsSinceEpoch;
       final clock = Stopwatch()..start();
       Duration at(double ms) => Duration(microseconds: t0 + (ms * 1000).round());
+      var travelled = false;
       for (var i = 0; i < pts.length; i++) {
         final q = pts[i];
         final wait = q[2] - clock.elapsedMicroseconds / 1000;
@@ -306,7 +307,8 @@ const String _source = r'''
           b.handlePointerEvent(PointerDownEvent(viewId: view.viewId, pointer: pointer, kind: PointerDeviceKind.touch, position: pos, timeStamp: at(0)));
         } else {
           final prev = Offset(pts[i - 1][0], pts[i - 1][1]);
-          if (pos != prev) b.handlePointerEvent(PointerMoveEvent(viewId: view.viewId, pointer: pointer, kind: PointerDeviceKind.touch, position: pos, delta: pos - prev, timeStamp: at(q[2])));
+          if (pos != prev) travelled = true;
+          if (travelled) b.handlePointerEvent(PointerMoveEvent(viewId: view.viewId, pointer: pointer, kind: PointerDeviceKind.touch, position: pos, delta: pos - prev, timeStamp: at(q[2])));
         }
         if (i == pts.length - 1) b.handlePointerEvent(PointerUpEvent(viewId: view.viewId, pointer: pointer, kind: PointerDeviceKind.touch, position: pos, timeStamp: at(q[2])));
       }
@@ -448,7 +450,7 @@ const String _source = r'''
     return {'status': 'unknownOp'};
   }
   try {
-    b.registerServiceExtension(name: 'glintAgent11', callback: handle);
+    b.registerServiceExtension(name: 'glintAgent12', callback: handle);
   } catch (e) {
     return 'present ' + DateTime.now().millisecondsSinceEpoch.toString();
   }
