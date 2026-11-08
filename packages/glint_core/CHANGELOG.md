@@ -8,39 +8,39 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ### Added
 
-- `ProcessRegistry.livePids`: the pids of the helpers this process holds, read from memory with no `ps`.
-- `IdentityRedactor`, `RedactionCounts`, `isPublicHost` and `projectIdentityNames`, and `redactForSharing` now takes `appNames`, `deviceNames`, `hosts` and `counts`: known app, device and backend host names become `<app>`, `<device>` and `<host>` (case-insensitive, across separators and camelCase, keeping generic model names and well-known public hosts), and URL hosts (userinfo becomes `<redacted>`) and dotted hostnames ending in a real TLD are replaced too. A name too generic or too short to match loosely is redacted only as an exact whole word and listed in `IdentityRedactor.warnings`; build one `IdentityRedactor` per report and call `forSharing`.
-- `ProcessRegistry`, `killTree`, `ProcessTable` and `watchParentDeath`: one registry of the long-lived child processes glint starts, with owner, one per purpose and device, pid files under `~/.glint/procs`, startup reaping by start time and command, and a tree kill.
+- `ProcessRegistry.livePids` returns the pids of the helpers this process holds, with no `ps`.
+- `IdentityRedactor`, `RedactionCounts`, `isPublicHost` and `projectIdentityNames`; `redactForSharing` takes `appNames`, `deviceNames`, `hosts` and `counts` and replaces them with `<app>`, `<device>` and `<host>`.
+- `ProcessRegistry`, `killTree`, `ProcessTable` and `watchParentDeath` track the helper processes glint starts, reap stale ones at startup and kill a whole tree.
 
 ## [0.1.3] - 2026-10-18
 
 ### Added
 
-- `latestPubVersion`, `cachedPubVersion` and `isNewerVersion`: a package's latest version on pub.dev, asked at most once a day and cached, for the packages' update notices.
+- `latestPubVersion`, `cachedPubVersion` and `isNewerVersion` look up a package's latest pub.dev version, at most once a day, for update notices.
 
 ## [0.1.2] - 2026-10-15
 
 ### Changed
 
-- An example (`example/glint_core_example.dart`), the package's own analysis options and `dart format` across the package, so it scores fully on pub.dev.
+- An example, analysis options and `dart format` so the package scores fully on pub.dev.
 
 ## [0.1.1] - 2026-09-27
 
 ### Added
 
 - `editDistance`, the Levenshtein distance both packages' suggestions use.
-- Dart VM connection: `connectVmService` (connect timeout, then a `getVersion` probe that fails fast on a stale DDS), `vmServiceWsUri`, `canonicalVmServiceUri`, and `instanceText` (refetches strings the VM cut at 128 characters, asks other objects for `toString()`, and says how much was cut when it can't).
-- Agent-filed issues: `fileWithGh` (keeps only labels the repo has, retries once without labels), `issueLabels`, `composeIssueDeepLink`, `capDeepLinkBody`, `saveFullIssueBody`, `existingLabels`, `selectApplicableLabels`, `isMissingLabelError`, and the `issueRepo` all packages file into.
-- Usage rollups: `summarizeUsage`, `buildUsagePayload`, `UsageShipper` (watermark, audit log first, then the collector; daily auto-ship and ship-on-exit), the `UsageEventSource` interface each package's store implements, `TurnTracker`, `usageOutcome`, `usageArgKeys` and `estimateTokens`.
+- `connectVmService`, `vmServiceWsUri`, `canonicalVmServiceUri` and `instanceText` connect to the Dart VM and read full strings.
+- `fileWithGh`, `issueLabels`, `composeIssueDeepLink`, `capDeepLinkBody`, `saveFullIssueBody`, `existingLabels`, `selectApplicableLabels` and `isMissingLabelError` file agent-reported issues.
+- `summarizeUsage`, `buildUsagePayload`, `UsageShipper`, `UsageEventSource`, `TurnTracker`, `usageOutcome`, `usageArgKeys` and `estimateTokens` roll up and ship usage.
 
 ## [0.1.0] - 2026-09-26
 
 ### Added
 
-- Redaction: `redactPath`, `redactStackHead`, `redactSecrets` and `redactForSharing`, moved from glint_mcp and glint_network. Secret masking uses the stricter of the two copies, which also catches `access_token=` and `refresh_token=` values.
-- `AuditLog`: the hash-chained telemetry audit log both packages already wrote in the same format.
-- Telemetry basics: `installId`, `osDescriptor`, `dartVersion`, `truthyEnv`, `postToCollector`, and `TelemetrySwitches` for the opt-in variables under a package's prefix.
+- `redactPath`, `redactStackHead`, `redactSecrets` and `redactForSharing`, moved from glint_mcp and glint_network; secret masking also catches `access_token=` and `refresh_token=`.
+- `AuditLog`, the hash-chained telemetry audit log both packages write.
+- `installId`, `osDescriptor`, `dartVersion`, `truthyEnv`, `postToCollector` and `TelemetrySwitches` for opt-in telemetry.
 
 ### Fixed
 
-- `AuditLog.append` holds an exclusive file lock and writes at the file's current end, so servers appending at the same moment no longer fork the chain or overwrite each other's lines (four concurrent writers used to lose up to 7 of 100 entries). `verify` treats a line that links to an earlier entry as a fork from that old race, counted in `forks`, instead of as tampering.
+- `AuditLog.append` no longer forks the chain or loses entries when servers append at the same moment; `verify` counts old forks in `forks` instead of flagging tampering.
