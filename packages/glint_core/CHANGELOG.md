@@ -4,6 +4,8 @@ All notable changes to glint_core are documented here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
 ### Added
 
 - `ProcessRegistry.livePids`: the pids of the helpers this process holds, read from memory with no `ps`.
