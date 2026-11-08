@@ -4,6 +4,8 @@ Versions follow semver; before 1.0 a minor bump may break things.
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-11-08
+
 - Shortens the changelog to one row per change.
 
 ## [0.13.2] - 2026-11-08
