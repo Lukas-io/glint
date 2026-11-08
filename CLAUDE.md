@@ -7,6 +7,10 @@
 
 **MCP tools are synchronous — there is no async tool, so feedback IS the UX.** Whenever you create, modify, or update a tool, design its feedback structure deliberately: (1) success — say what happened, return the data the agent needs next; (2) failure — a branchable `errorKind`, a real `detail`, and actionable `nextSteps`; (3) slow/long work (boot, build, install, anything multi-second) — emit `notifications/progress` on a ~15s cadence with the current phase, so the agent is never left blind during a blocking call. Never let a tool block silently or fail without a reason the agent can act on.
 
+## Changelog rule (glint)
+
+**One line per CHANGELOG entry: what the user gets, the public name in backticks, then `(#PR)`.** Under 250 characters, no mechanism, no limitation lists, no benchmarks. Details go in the PR. Use the `changelog` skill.
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 
