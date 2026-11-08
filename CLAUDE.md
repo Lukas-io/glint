@@ -9,7 +9,7 @@
 
 ## Changelog rule (glint)
 
-**One line per CHANGELOG entry: what the user gets, the public name in backticks, then `(#PR)`.** Under 250 characters, no mechanism, no limitation lists, no benchmarks. Details go in the PR. Use the `changelog` skill.
+**One verb-first row per change (under 100 characters), a flat list, about 10 rows per version, `(#PR)` at the end.** No mechanism, limitation lists or benchmarks; details go in the PR. Use the `changelog` skill.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

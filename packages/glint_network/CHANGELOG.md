@@ -1,641 +1,388 @@
 # Changelog
 
-All notable changes to glint_network (called flutter_network_mcp up to 0.11.0) are documented here.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Versions follow semver; before 1.0 a minor bump may break things.
 
 ## [Unreleased]
 
+- Shortens the changelog to one row per change.
+
 ## [0.13.2] - 2026-11-08
 
-### Fixed
-
-- `report_issue` no longer names your app, devices or backend hosts; the reply carries `summary` and `redacted` counts.
-- The native log stream and helpers are stopped on detach and exit, and the server exits when its parent process is gone.
+- Fixes `report_issue` naming your app, devices or backend hosts.
+- Fixes native log streams and helpers lingering after detach and exit.
 
 ## [0.13.1] - 2026-10-15
 
-### Changed
-
-- Added an example and cleaned up formatting so the package scores fully on pub.dev.
+- Improves pub.dev scoring with an example and cleaner formatting.
 
 ## [0.13.0] - 2026-10-15
 
-### Changed
-
-- glint_network installs from pub.dev: `dart pub global activate glint_network`. `glint_network update` and the daily update check use the newest pub.dev release (a git install moves over).
-- `glint_network install` also builds from a pub.dev install.
-- Guides moved from `docs/` to `doc/`; the `glint-network://docs/...` resource URIs are unchanged.
-- Usage rollups count older rows toward `avgEstimatedTokens` and `totalEstimatedTokens`, and a ship after an event store reset starts from the first event.
-
-### Fixed
-
-- HTTP made right after a hot restart is captured again instead of being lost for about 20 seconds. (#116)
-- Attaching to a VM service that never answers (a suspended or backgrounded app) now fails after 8 seconds instead of waiting forever.
-- `report_issue` no longer builds a pre-filled URL too long to open; the full report is saved to a file named in `fullBodyPath`, and the draft asks for the user's go-ahead.
-- `glint_network audit verify` no longer calls a log broken when two servers appended at the same moment.
+- Adds install from pub.dev with `dart pub global activate glint_network`.
+- Changes `update` and the daily update check to follow the newest pub.dev release.
+- Changes guides to `doc/`; the `glint-network://docs/...` URIs are unchanged.
+- Fixes HTTP made right after a hot restart being lost for about 20 seconds. (#116)
+- Fixes `network_attach` waiting forever on a VM service that never answers.
+- Fixes `report_issue` URLs too long to open; the full report goes to `fullBodyPath`.
+- Fixes `glint_network audit verify` calling a log broken after simultaneous appends.
+- Fixes usage rollups after an event store reset.
 
 ## [0.12.0] - 2026-09-26
 
-### Added
-
-- Guided move off the old names, which stop working on 2026-12-26: installs still using them get one notice with the steps left (MCP instructions, `network_status` warnings, stderr).
-- `update` takes over the `flutter_network_mcp` command with `--overwrite` and removes the old package.
-- `install` builds from either repository layout and puts the native binary behind both commands.
-
-### Changed
-
-- **Breaking:** flutter_network_mcp is now glint_network and lives in the glint repo; install with `dart pub global activate -s git https://github.com/Lukas-io/glint.git --git-path packages/glint_network`, then `glint_network install`.
-- **Breaking:** the command is `glint_network` and `setup` registers the server as `glint-network` (tools appear as `glint-network__<tool>`); `flutter_network_mcp` stays as an alias until 2026-12-26.
-- **Breaking:** environment variables are `GLINT_NETWORK_*`; the old `FLUTTER_NETWORK_MCP_*` names still work with a startup warning and are listed by `network_status`.
-- Doc resources are now `glint-network://docs/...`, and `report_issue` files to `Lukas-io/glint` with the `network` label.
-- Data directory, tool names, arguments and the telemetry endpoint are unchanged, so existing captures and settings carry over.
+- Adds a one-time notice for installs still on the old names, which stop working on 2026-12-26.
+- Adds `update --overwrite` to take over the `flutter_network_mcp` command.
+- Adds `install` from either repository layout.
+- Changes docs resources to `glint-network://docs/...` and `report_issue` to file to the glint repo.
+- **Breaking:** Renames flutter_network_mcp to glint_network; reinstall from the glint repo.
+- **Breaking:** Renames the command to `glint_network` and the server to `glint-network`.
+- **Breaking:** Renames environment variables to `GLINT_NETWORK_*`; old names still warn.
 
 ## [0.11.0] - 2026-09-25
 
-### Added
-
-- `ws_list` and `ws_get` capture WebSocket connections (state, close code, message and byte counts, event timeline) with nothing added to the app; needs Dart 3.13+ and message contents are not captured.
-- Older-Dart apps are detected at attach, and `ws_list` says why it is empty. New capability `websockets`.
-- `session_configure bodyDecryption` reads AES-CTR app-encrypted bodies (`aes-256-ctr`, `aes-128-ctr`) as plaintext; the key stays in memory and is never stored. (#110, #111)
-- Body reads, search, correlate, diff and drift work on decrypted bodies; replay and HAR export keep the original bytes. (#111)
-- Automatic backup of `captures.db` before a schema upgrade (`captures.db.pre-v<N>.bak`, old copies deleted after 14 days); skip with `FLUTTER_NETWORK_MCP_NO_MIGRATION_BACKUP=true`.
-- Alerts from non-attached sessions expire after 14 days (`FLUTTER_NETWORK_MCP_ALERT_RETENTION_DAYS`, `0` keeps all, or `alerts_config set:{retentionDays:N}`).
-
-### Changed
-
-- Secret header values (authorization, cookies, API keys, `redacted_headers`) are stored as `<redacted>`; `FLUTTER_NETWORK_MCP_STORE_SECRETS=true` keeps them for local replay. (#121)
-- **Breaking:** `session_export` redacts by default and masks tokens, JWTs, keys and passwords in bodies; pass `redact:false` for a local-only file. (#121)
-- `network_query` masks secret header values and token or password patterns in every text cell. (#121)
-- `report_issue` drafts first with `auto:false` and files only with the user's OK, and paths, secrets and crash telemetry messages are redacted. (#121)
-- `network_replay redact:false` names the headers that were masked at capture. (#121)
-- **Breaking:** telemetry is opt-in: crash reports and usage summaries are sent only with `FLUTTER_NETWORK_MCP_TELEMETRY=on`, and the install id is now random. (#122)
-- The license is now Apache-2.0 instead of MIT.
-- Added `docs/configuration.md`, `SECURITY.md` and a "Limits today" README section (#124), and refreshed the per-tool guides with new ones for the 0.9.x tools.
-
-### Fixed
-
-- An older build exits with code 78 instead of writing to a newer database. (#123)
-- Scope errors carry `errorKind` (`no_session`, `bad_argument`), and every `network_attach` error does too (`bad_argument`, `not_found`, `unresponsive_vm`, `timeout`, `internal`).
-- `logs_tail` honours `maxResponseTokens`, takes its own `maxTokens` and reports `budget.dropped`.
-- An unknown `severityMin` is `bad_argument` and severities compare case-insensitively.
-- `alerts_config` reports `applied` and `rejected` values instead of dropping bad ones silently.
-- `network_summarize`, `network_report` and `network_diff_session` no longer count in-flight requests as errors.
-- `network_clear` and `socket_clear` fail with `cleared:false` when nothing was cleared and mark partial clears with `partial:true`.
-- `set-cookie` is a built-in redacted header, so `session_export redact:true` masks response cookies.
-- `network_report` and `network_correlate` hints are corrected (no bogus `hostContains`, earlier request named as likely originator), and several tool descriptions now match the code.
-- The same app can no longer be attached twice under two URI spellings; re-attaching returns `alreadyAttached: true`. (#108)
-- `network_wait_for_app` returns at once when several apps match or the session cap is hit, treats an attached app as success, and no longer reads a failed DTD probe as the app exiting. (#108)
-- A pending body read from a history view is called unrecoverable only after its session has ended. (#108)
-- `logs_tail` keeps `developer.log` messages, logger names, errors and stack traces whole; `messageTruncateBytes` counts characters (64 to 65536). (#109)
-- A session now ends only when the last server process capturing into it leaves, and `network_detach` sets `stillCapturedByOtherProcess`. (#107)
-- Log records are de-duplicated across server processes, and two processes opening the same database no longer fail with `database is locked`. (#107)
-- The body flush on detach or app exit keeps to its 3 second deadline. (#106)
-- `network_attach` warns when the app was running before attach and returns `preAttachUptimeMs`, since earlier traffic is not recorded.
-- Re-evaluating the same source no longer inflates an alert's occurrence count.
+- Adds `ws_list` and `ws_get` for WebSocket capture with nothing added to the app.
+- Adds `session_configure bodyDecryption` to read AES-CTR encrypted bodies. (#110, #111)
+- Adds a `captures.db` backup before a schema upgrade, and 14-day expiry for old alerts.
+- Changes secret headers to be stored as `<redacted>`, and `network_query` to mask secrets. (#121)
+- Changes `report_issue` to draft first and redact paths and secrets. (#121)
+- Changes the license to Apache-2.0.
+- Fixes duplicate attaches, `database is locked` and early session ends. (#107, #108, #106, #123)
+- Fixes `logs_tail` dropping `developer.log` details, and its token budget. (#109)
+- Fixes replies and errorKinds of `alerts_config`, `network_clear` and `network_summarize`.
+- **Breaking:** Redacts `session_export` by default; pass `redact:false` to keep it. (#121)
+- **Breaking:** Makes telemetry opt-in with `FLUTTER_NETWORK_MCP_TELEMETRY=on`. (#122)
 
 ## [0.10.0] - 2026-07-02
 
-### Added
-
-- `network_list before:<µs>` pages older results, and `nextCursor` now feeds it.
-- `network_get` shows `response.redirects`, and HAR export fills `redirectURL`.
-- `session_export redact:true` writes a scrubbed HAR or NDJSON.
-- Tool guides and `RESPONSE_CONTRACT.md` are served as MCP resources (`flutter-network://docs/...`), and the `network_query` description embeds the table and column schema.
-- Session liveness is live, ended or interrupted in `session_open` and `session_list`, so crashed captures no longer read as live.
-- `pendingAlerts` and `network_query` report `scope` (`session` or `all-sessions`).
-- `network_attach reattach:true` that matches no earlier session reports `reattachRequested`, `reattachMatched` and `reattachMissReason`.
-- `http_anomaly` can be toggled in `alerts_config`.
-
-### Changed
-
-- **Breaking:** `network_replay` defaults to `redact:true` again, since the curl often lands in a transcript; `network_get` redacts auth headers by default (`redact:false` to debug auth) and `network_diff` always does.
-- Guidance follows session state: ended and interrupted sessions say "this is its complete capture" instead of "drive the app".
-- An agent-initiated attach closes an open `session_open` view with a warning, and scoped reads under a shadowing view say they are reading history.
-- `network_summarize` covers the whole session for ended or interrupted sessions instead of the last hour.
-- `network_correlate` previews the first 10 matches per session (`matchesShown`, `matchesTotal`).
-- URL search also matches the percent-decoded form, so `ÜMLAUT` finds `%C3%9CMLAUT`.
-- `network_status` rediscovers a live DTD when the startup URI is stale, and a failed connect points to `network_discover_dtd`.
-- Alert titles drop the meaningless `:0` and default ports, and `alerts_config` always matches the real rule set.
-
-### Fixed
-
-- A successful WebSocket upgrade (101) no longer raises a phantom `http_error`.
-- A session that attached mid-boot recovers within about 20 seconds instead of staying degraded.
-- One bad request no longer drops the rest of a poll's requests.
-- A healthy VM answering "no such id" returns `not_found` instead of `unresponsive_vm`.
-- Empty `network_list` hints are cursor-aware, and `network_get` paging after semantic truncation points at `offset:0`.
-- `updateAvailable` no longer advertises an update to an older version than the one running.
+- Adds `network_list before:` paging, `response.redirects` and `session_export redact:true`.
+- Adds tool guides as MCP resources and the table schema in the `network_query` description.
+- Adds live, ended and interrupted session states to `session_open` and `session_list`.
+- Adds `scope` to `pendingAlerts` and `network_query`, and `http_anomaly` to `alerts_config`.
+- Changes guidance, `network_summarize` and `network_correlate` to follow session state.
+- Improves URL search and `network_status` recovery from a stale DTD.
+- Fixes phantom `http_error` on WebSocket upgrades and slow recovery of mid-boot attaches.
+- Fixes `not_found` reported as `unresponsive_vm` and several empty-result hints.
+- **Breaking:** Defaults `network_replay` and `network_get` to `redact:true`.
 
 ## [0.9.18] - 2026-07-02
 
-### Fixed
-
-- `ignored_hosts` and `capture_allow` changes now reach every attached session, not just a single one.
+- Fixes `ignored_hosts` and `capture_allow` changes reaching only one attached session.
 
 ## [0.9.17] - 2026-07-02
 
-### Fixed
-
-- Captured durations measure the whole exchange instead of only the upload, so `http_slow` fires and p50/p95 in summarize, report and `network_diff_session` are right.
-- Every request is searchable (about 14% of historical rows were never indexed), and the no-match warning reports real index coverage.
-- A killed app now ends its session (shown as `recentlyEnded` in `network_status`) instead of leaving a zombie attach.
-- The server exits when its MCP host closes stdin or sends SIGTERM, instead of leaking orphaned processes.
+- Fixes captured durations, so `http_slow` and p50/p95 are right.
+- Fixes about 14% of historical requests never being searchable.
+- Fixes a killed app leaving a zombie attach.
+- Fixes the server leaking processes when its MCP host closes.
 
 ## [0.9.16] - 2026-06-30
 
-### Added
-
-- `capture_allow` tool (`list`, `add`, `remove`) manages the capture allowlist mid-session, with no restart. (#64)
+- Adds the `capture_allow` tool to manage the capture allowlist mid-session. (#64)
 
 ## [0.9.15] - 2026-06-30
 
-### Security
-
-- The `ignored_hosts action:add` row count now uses a parameterized query.
+- Fixes `ignored_hosts action:add` row counts to use a parameterized query.
 
 ## [0.9.14] - 2026-06-30
 
-### Added
-
-- `--no-persist` (or `FLUTTER_NETWORK_MCP_NO_PERSIST=true`) keeps captures in memory only and writes nothing to disk; `db_stats` reports `ephemeral:true`. (#64)
+- Adds `--no-persist` to keep captures in memory only. (#64)
 
 ## [0.9.13] - 2026-06-30
 
-### Added
-
-- `ignored_hosts` entries with a `/` are `host/path` globs, so one noisy path can be silenced without dropping the whole host. (#64)
-- Opt-in allowlist `FLUTTER_NETWORK_MCP_CAPTURE_ALLOW` captures only matching requests; deny still wins, and `ignored_hosts action:list` shows `captureAllowlist`. (#64)
-
-### Fixed
-
-- `ignored_hosts` is documented as a denylist, not an allowlist.
+- Adds `host/path` globs to `ignored_hosts`, and an opt-in capture allowlist. (#64)
+- Fixes `ignored_hosts` being documented as an allowlist.
 
 ## [0.9.12] - 2026-06-29
 
-### Added
-
-- `captures.db` has a default ~2 GB cap (`FLUTTER_NETWORK_MCP_MAX_DB_BYTES`, `0` or `off` disables) and evicts oldest bodies, then logs, then sessions, never an attached session; `db_stats` reports `sizeCap` and `lastEviction`. (#58)
+- Adds a default ~2 GB cap on `captures.db` that evicts oldest data first. (#58)
 
 ## [0.9.11] - 2026-06-29
 
-### Changed
-
-- **Breaking:** `network_replay` defaulted `redact` to false so auth debugging shows real tokens; it warns before the curl is shared. (#57)
-- `session_export` warns that the file holds unredacted auth headers, cookies and bodies. (#57)
+- Changes `session_export` to warn that the file holds unredacted data. (#57)
+- **Breaking:** Defaults `network_replay` to `redact:false` and warns before sharing. (#57)
 
 ## [0.9.10] - 2026-06-29
 
-### Added
-
-- `network_body_query` searches inside one body with `grep` (regex with context) or `jsonPath` (such as `$.data[*].symbol`) and returns only the matching slices. (#61)
+- Adds `network_body_query` to search inside one body by `grep` or `jsonPath`. (#61)
 
 ## [0.9.9] - 2026-06-29
 
-### Added
-
-- `network_body_outline` returns a large body's structure (keys, types, array lengths, per-branch byte sizes) without values. (#60)
+- Adds `network_body_outline` to show a large body's structure without values. (#60)
 
 ## [0.9.8] - 2026-06-29
 
-### Fixed
-
-- `network_get` and `network_list` show an unknown size as `sizeKnown:false` instead of a raw `-1`. (#62)
+- Fixes `network_get` and `network_list` showing an unknown size as `-1`. (#62)
 
 ## [0.9.7] - 2026-06-29
 
-### Fixed
-
-- Bodies carry `bodyStatus` (`stored`, `empty`, `pending`, `unavailable`), so a lost body is no longer mistaken for an empty one. (#59)
+- Fixes lost bodies being mistaken for empty ones with `bodyStatus`. (#59)
 
 ## [0.9.6] - 2026-06-25
 
-### Fixed
-
-- `network_drift` samples both ends of the timeline, takes a `sinceMs` window and reports `matchedTotal`, so early drift is no longer missed on busy sessions.
+- Fixes `network_drift` missing early drift on busy sessions.
 
 ## [0.9.5] - 2026-06-25
 
-### Added
-
-- `network_report` triages a session in one call: worst error endpoints, slowest endpoints, pending alerts and a recommended next action.
+- Adds `network_report` to triage a session in one call.
 
 ## [0.9.4] - 2026-06-25
 
-### Added
-
-- `network_replay_as_test` turns a captured request into a runnable Dart test that asserts its status code.
+- Adds `network_replay_as_test` to turn a request into a runnable Dart test.
 
 ## [0.9.3] - 2026-06-25
 
-### Added
-
-- `network_drift` detects when an endpoint's response JSON shape changes mid-session (fields added, removed or retyped, plus `firstDriftAt`).
+- Adds `network_drift` to detect an endpoint's response shape changing mid-session.
 
 ## [0.9.2] - 2026-06-25
 
-### Added
-
-- `network_diff_session` compares a session against a baseline by endpoint: new, gone and changed (error rate or p95 latency).
+- Adds `network_diff_session` to compare a session against a baseline by endpoint.
 
 ## [0.9.1] - 2026-06-25
 
-### Added
-
-- `network_list` takes a `maxTokens` budget (or a sticky `session_configure maxResponseTokens`) and trims newest-first to fit.
+- Adds a `maxTokens` budget to `network_list`.
 
 ## [0.9.0] - 2026-06-25
 
-### Added
-
-- `usage_stats` shows recovery paths (what the agent does after an error) and `selfCorrection` rates per tool.
+- Adds recovery paths and `selfCorrection` rates to `usage_stats`.
 
 ## [0.8.15] - 2026-06-25
 
-### Added
-
-- `usage_stats` breaks errors down by `errorKinds`, counts `degraded` calls and ships estimated tokens to the collector.
+- Adds `errorKinds`, `degraded` counts and estimated tokens to `usage_stats`.
 
 ## [0.8.14] - 2026-06-14
 
-### Added
-
-- `usage_stats` reports `avgEstimatedTokens` and `totalEstimatedTokens` per tool.
+- Adds token estimates per tool to `usage_stats`.
 
 ## [0.8.13] - 2026-06-13
 
-### Changed
-
-- Tool and parameter descriptions are shorter and consistent, cutting the `tools/list` handshake by about a third.
+- Improves tool descriptions, cutting the `tools/list` handshake by about a third.
 
 ## [0.8.12] - 2026-06-12
 
-### Changed
-
-- The telemetry collector is live: crash reports and usage rollups are sent to it; opt out with `FLUTTER_NETWORK_MCP_NO_TELEMETRY=true` (or `FLUTTER_NETWORK_MCP_NO_USAGE=true` for usage only).
+- Changes telemetry to send crash reports and usage rollups to the live collector.
 
 ## [0.8.11] - 2026-06-12
 
-### Fixed
-
-- `network_list` no longer says "No HTTP captured yet" when the cursor has advanced; it says "No NEW HTTP" and suggests `since:0`.
+- Fixes `network_list` saying "No HTTP captured yet" when the cursor has advanced.
 
 ## [0.8.10] - 2026-06-12
 
-### Added
-
-- A session id stays stable across a hot restart without calling `network_attach reattach:true`; opt out with `FLUTTER_NETWORK_MCP_NO_AUTO_MIGRATE=true`. (#16)
-- `network_status.attached[]` shows `reattachCount`, `lastReattachAtMs` and `previousVmServiceUri`.
+- Adds session ids that stay stable across a hot restart without `reattach:true`. (#16)
+- Adds `reattachCount` and `previousVmServiceUri` to `network_status.attached[]`.
 
 ## [0.8.9] - 2026-06-12
 
-### Added
-
-- `session_configure` sets sticky default filters that `logs_tail` and `network_list` inherit when an argument is omitted. (#18)
+- Adds `session_configure` sticky default filters for `logs_tail` and `network_list`. (#18)
 
 ## [0.8.8] - 2026-06-12
 
-### Added
-
-- `logs_tail messageContains` accepts a list of tags, OR-matched. (#15)
+- Adds a list of tags to `logs_tail messageContains`. (#15)
 
 ## [0.8.7] - 2026-06-12
 
-### Added
-
-- `session_list appNameContains` scopes to one app, and a warning names the apps when a result mixes several. (#27)
-
-### Changed
-
-- Issue templates require the plugin version.
+- Adds `session_list appNameContains` to scope to one app. (#27)
+- Changes issue templates to require the plugin version.
 
 ## [0.8.6] - 2026-06-12
 
-### Added
-
-- Usage rollups (per-tool counts, outcomes, latency, tool transitions; no URLs, bodies or argument values) are written to the audit log and auto-shipped at most daily; `flutter_network_mcp usage ship` ships on demand (`--dry-run`, `--json`). (#79)
+- Adds daily auto-shipped usage rollups and `usage ship` to send them on demand. (#79)
 
 ## [0.8.5] - 2026-06-12
 
-### Added
-
-- `usage_stats` shows per-tool counts, error and empty rates, p50/p95 latency and the busiest tool-to-next-tool pairs (`sinceMs`, `topTransitions`). (#79)
+- Adds `usage_stats` with per-tool counts, error rates and p50/p95 latency. (#79)
 
 ## [0.8.4] - 2026-06-12
 
-### Added
-
-- Local usage capture of tool calls (tool name, argument names only, outcome, duration, size), with nothing shipped; `FLUTTER_NETWORK_MCP_NO_USAGE=true` turns it off. (#79)
-- `flutter_network_mcp usage` shows what is stored (`--show`, `--since 7d`, `--json`). (#79)
+- Adds local usage capture of tool calls, with nothing shipped. (#79)
+- Adds the `usage` command to show what is stored. (#79)
 
 ## [0.8.3] - 2026-06-11
 
-### Added
-
-- `correlate_at` returns the log records and HTTP requests within `±windowMs` of a timestamp, sorted nearest-first with a signed `deltaMs`. (#18)
+- Adds `correlate_at` to find logs and requests near a timestamp. (#18)
 
 ## [0.8.2] - 2026-06-11
 
-### Added
-
-- `network_attach reattach:true` keeps one stable `sessionId` for the same app and device across hot restarts, and `network_status.attached[]` shows `lastReattachAtMs`. (#16)
+- Adds `network_attach reattach:true` to keep one `sessionId` across hot restarts. (#16)
 
 ## [0.8.1] - 2026-06-11
 
-### Added
-
-- `logs_tail messageContains` filters by message text on the server. (#15)
-- The log ring buffer size is configurable (`FLUTTER_NETWORK_MCP_LOG_BUFFER`, 50 to 10000, default 500, or `network_attach logBufferSize`), and `network_status.attached[]` shows `logBufferUsed` and `logBufferCapacity`. (#21)
-
-### Changed
-
-- The server instructions now say when and how an agent should offer to file feedback. (#20)
+- Adds `logs_tail messageContains` to filter by message text. (#15)
+- Adds a configurable log buffer size and its usage in `network_status.attached[]`. (#21)
+- Changes the server instructions to say when to offer filing feedback. (#20)
 
 ## [0.8.0] - 2026-06-11
 
-### Changed
-
-- `network_attach` and `network_status.attached[]` report per-session capability health, with `degraded` listing capabilities that failed to start. (#17)
-
-### Fixed
-
-- Chunked and gzip response bodies are no longer stranded as `response: null`, and `network_search` can see them. (#13)
-- `network_attach appNameContains` resolves across all discovered DTDs instead of only the default one. (#14)
+- Adds per-session capability health, with `degraded` listing failed capabilities. (#17)
+- Fixes chunked and gzip bodies stranded as `response: null`. (#13)
+- Fixes `network_attach appNameContains` resolving only the default DTD. (#14)
 
 ## [0.7.4] - 2026-06-04
 
-### Added
-
-- `auto_attach_config` (`list`, `add`, `remove`, `clear`) persists the auto-attach allow and deny lists to `<data-dir>/auto-attach.json`; env vars and flags still override it, and the agent must ask the user first.
-- `flutter_network_mcp setup` is an interactive first-run wizard that scaffolds the Claude Code MCP entry, offers auto-attach for running apps and offers `install`.
+- Adds `auto_attach_config` to persist the auto-attach allow and deny lists.
+- Adds `setup`, an interactive first-run wizard for the MCP entry and `install`.
 
 ## [0.7.3] - 2026-06-04
 
-### Added
-
-- `http_anomaly` and `http_anomaly_errors` alerts flag an endpoint whose p95 latency doubles or error rate jumps against its own recent baseline; turn off with `alerts_config rules.http_anomaly:false`.
-- `network_status` shows a `continuation` block and a reattach `nextStep` after a host restart, from a saved `last-session.json`; an explicit detach clears it.
+- Adds `http_anomaly` alerts for p95 latency or error rate jumping against a baseline.
+- Adds a `continuation` block to `network_status` after a host restart.
 
 ## [0.7.2] - 2026-06-04
 
-### Added
-
-- `report_issue` files a `bug` or `ux` issue against this MCP (via `gh`, or a pre-filled URL), labelled `agent-filed` and with paths redacted.
-- `alerts_drain` and `alerts_peek` show `priorOccurrences`: past sessions where the same alert fired, with their notes.
+- Adds `report_issue` to file a `bug` or `ux` issue against this MCP.
+- Adds `priorOccurrences` to `alerts_drain` and `alerts_peek`.
 
 ## [0.7.1] - 2026-06-04
 
-### Added
-
-- Crash telemetry is on by default and recorded first in a hash-chained local audit log; opt out with `FLUTTER_NETWORK_MCP_NO_TELEMETRY=true`. Payloads hold no paths, URLs, bodies or tokens.
-- `flutter_network_mcp audit verify` checks the log chain (exit code 70 if broken), and `audit show` prints entries (`--since 7d`, `--signature`).
-- The binary writes the audit log but does not send reports yet, since no collector is configured.
+- Adds crash telemetry in a hash-chained local audit log, with opt-out.
+- Adds `audit verify` and `audit show` to check and print the log.
 
 ## [0.7.0] - 2026-06-04
 
-### Added
-
-- `network_summarize` gives one digest row per endpoint (`method`, `host`, ids collapsed): count, status distribution, p50/p95 latency and error rate (`sinceMs`, `hostContains`, `limit`, `minCount`).
-- `network_get` truncates JSON (arrays past 5 elements, long strings) and HTML (scripts, styles) by structure, reports `truncationMode`, and keeps the byte cap; `network_diff`, `network_body` and HAR export stay byte-exact.
+- Adds `network_summarize`, one digest row per endpoint.
+- Improves `network_get` by truncating JSON and HTML by structure.
 
 ## [0.6.3] - 2026-06-04
 
-### Added
-
-- Alerts are deduplicated by signature: a burst of the same issue is one alert with `occurrenceCount`, `firstSeenMs`, `lastSeenMs`, `lastSourceId` and `signature`, at the highest severity seen. Draining resets the count.
-
-### Changed
-
-- `network_status.alerts` shows `pendingTotal` (distinct alerts) and `pendingEvents` (raw event count).
+- Adds alert deduplication by signature with `occurrenceCount`.
+- Changes `network_status.alerts` to show `pendingTotal` and `pendingEvents`.
 
 ## [0.6.2] - 2026-06-03
 
-### Added
-
-- DTD auto-discovery at startup from the standard `package:dtd` discovery files, so no URI needs pasting; disable with `FLUTTER_NETWORK_MCP_AUTO_DISCOVER_DTD=false` or `--no-auto-discover-dtd`.
-- `network_discover_dtd` lists live DTDs ranked by relevance (`cwdMatch`, `includeStale`, `limit`) with a recommended URI.
-- `flutter_network_mcp install` replaces the slow JIT wrapper with a native binary, and `update` re-runs activation and the native build; `FLUTTER_NETWORK_MCP_NO_JIT_NUDGE=true` silences the JIT hint.
-- `network_status.knownApps` lists apps across every running DTD, each with `dtdUri` and `workspaceRoot`, and auto-attach works across DTDs.
-- A daily startup version check prints one stderr nudge when a newer release exists (`FLUTTER_NETWORK_MCP_NO_UPDATE_CHECK=true` skips it).
-- `network_status` carries an `mcp` block with `version`, `commit`, `isAot`, `upgradeCommand` and `updateAvailable`.
-- `network_attach` returns `autoAttachSuggestion` for apps not on the auto-attach allowlist, and the agent must ask the user before changing anything.
-
-### Changed
-
-- Auto-attach evaluates already-running apps against the allowlist on its first tick instead of skipping them.
-- `network_status` nextSteps use DTD discovery instead of asking the user for a URI.
-- The README explains that every CLI flag has an environment-variable fallback, so no `claude mcp remove` and `add` cycle is needed.
+- Adds DTD auto-discovery at startup and `network_discover_dtd` to list live DTDs.
+- Adds `knownApps` to `network_status` and auto-attach across every running DTD.
+- Adds `install` for a native binary and `update` to re-run activation.
+- Adds a daily update check and an `mcp` block with `updateAvailable`.
+- Adds `autoAttachSuggestion` to `network_attach`.
+- Changes auto-attach to evaluate running apps on its first tick.
 
 ## [0.6.1] - 2026-05-28
 
-### Fixed
-
-- Auto-attach is hardened: overlapping ticks no longer race, a failing tick no longer stops the watcher, and the known-URI set is bounded.
-- A database that fails to open exits with code 70 and a `--data-dir` recovery hint instead of a raw stack trace.
-- Log stream errors are logged to stderr instead of killing the logging subsystem.
-
-### Security
-
-- **Breaking:** `--auto-attach` and `FLUTTER_NETWORK_MCP_AUTO_ATTACH` now require a comma-separated allowlist of app name substrings (`--auto-attach=app1,app2`), and the bare boolean form no longer enables anything.
-- `--auto-attach-deny` and `FLUTTER_NETWORK_MCP_AUTO_ATTACH_DENY` exclude apps or devices even when the allowlist admits them (deny wins).
+- Fixes auto-attach races, a failing tick stopping the watcher, and an unbounded URI set.
+- Fixes a database that fails to open exiting with a stack trace.
+- Fixes log stream errors killing the logging subsystem.
+- Adds `--auto-attach-deny` to exclude apps even when the allowlist admits them.
+- **Breaking:** Requires `--auto-attach` to take an allowlist (`--auto-attach=app1,app2`).
 
 ## [0.6.0] - 2026-05-28
 
-### Added
-
-- Multi-attach: hold several attached sessions at once (`FLUTTER_NETWORK_MCP_MAX_ATTACH`, default 4, 1 to 32); read tools take `sessionId` or `appNameContains`, and with 2+ attached and no scope they list the sessions to pick from.
-- `network_detach` takes `sessionId`, `appNameContains` or `all:true`, and `network_status.attached` is a list with `attachedCount` and per-session pending alerts.
-- `--auto-attach` (or `FLUTTER_NETWORK_MCP_AUTO_ATTACH`, poll interval `FLUTTER_NETWORK_MCP_AUTO_ATTACH_POLL_MS`) attaches apps that start after the server, and respects manual detach and the attach cap.
-- HTTP, sockets and logs are captured from every isolate of an app, tagged with `isolateId`, and read tools accept an `isolateId` filter.
-- `network_correlate` pairs a request in one session with its webhook in another by shared content (`sessionIds`, `pattern`, `timeWindowMs`).
-
-### Changed
-
-- **Breaking:** `network_attach` drops `force:true`; the same app cannot be attached twice, but different apps coexist.
-- **Breaking:** `alerts_clear` is scoped to one session instead of all sessions.
-- `pendingAlerts` on a response counts only the calling tool's session.
+- Adds multi-attach of several sessions, with `sessionId` or `appNameContains` scoping.
+- Adds `network_detach` scoping by `sessionId`, `appNameContains` or `all:true`.
+- Adds `--auto-attach` for apps that start after the server.
+- Adds capture from every isolate of an app, with an `isolateId` filter.
+- Adds `network_correlate` to pair a request with its webhook in another session.
+- Changes `pendingAlerts` to count only the calling tool's session.
+- **Breaking:** Drops `force:true` from `network_attach`; the same app cannot attach twice.
+- **Breaking:** Scopes `alerts_clear` to one session instead of all sessions.
 
 ## [0.5.18] - 2026-05-24
 
-### Added
-
-- The README tool table has a when-to-use line per tool, and issue templates are lighter with a new UX friction template.
-
-### Changed
-
-- Descriptions of eight tools (including `network_status`, `network_attach`, `network_search`, `network_diff`, `network_query`, `network_body`, `logs_tail`, `db_stats`) now lead with when to use them.
+- Adds a when-to-use line per tool in the README and a UX friction issue template.
+- Improves eight tool descriptions to lead with when to use them.
 
 ## [0.5.17] - 2026-05-24
 
-### Added
-
-- The server instructions tell agents to file a bug report or hand the user a paste-ready body when they hit a bug or confusing output.
+- Adds server instructions to file a bug report on bugs or confusing output.
 
 ## [0.5.16] - 2026-05-24
 
-### Added
-
-- `FLUTTER_NETWORK_MCP_DATA_DIR` sets the data directory, like `--data-dir`.
-
-### Changed
-
-- The macOS default data directory is now `~/Library/Application Support/flutter_network_mcp`; existing data moves there once, automatically.
-
-### Fixed
-
-- A fresh install no longer crashes when the default data directory is unwritable: it falls back to the next writable location, or exits with code 73 and one actionable line.
+- Adds `FLUTTER_NETWORK_MCP_DATA_DIR` to set the data directory.
+- Changes the macOS data directory to `~/Library/Application Support/flutter_network_mcp`.
+- Fixes a fresh install crashing when the default data directory is unwritable.
 
 ## [0.5.15] - 2026-05-22
 
-### Changed
-
-- Every successful tool response carries `pendingAlerts: {count, critical?}` when undrained alerts exist, so agents no longer poll `network_status` for them.
+- Adds `pendingAlerts` to every successful tool reply when alerts are undrained.
 
 ## [0.5.14] - 2026-05-22
 
-### Changed
-
-- `docs/tools/` is reorganized into 11 use-case folders, each with its own README.
+- Improves `docs/tools/` with 11 use-case folders.
 
 ## [0.5.13] - 2026-05-22
 
-### Changed
-
-- Corrected stale README details, restructured `docs/README.md` by use case, and added an "agent-facing contract" README section and a bug-report issue template.
+- Improves the README and `docs/README.md`, and adds a bug-report issue template.
 
 ## [0.5.12] - 2026-05-22
 
-### Changed
-
-- `network_query`, `ignored_hosts`, `redacted_headers`, `db_stats`, `db_vacuum` and `bodies_purge` replies gain `summary`, `warnings` and `nextSteps`, and `bodies_purge` dry-run reports `wouldPurgeRows` and `wouldPurgeBytes`.
+- Adds `summary`, `warnings` and `nextSteps` to `network_query` and the storage tools.
 
 ## [0.5.11] - 2026-05-22
 
-### Changed
-
-- The six session tools reply with `summary`, `warnings` and `nextSteps`, and the `session_delete` dry-run lists per-type counts.
-
-### Fixed
-
-- `session_delete` dry-run and `session_export` no longer report every per-session count as 0.
+- Adds `summary`, `warnings` and `nextSteps` to the six session tools.
+- Fixes `session_delete` dry-run and `session_export` reporting every count as 0.
 
 ## [0.5.10] - 2026-05-22
 
-### Changed
-
-- **Breaking:** `alerts_clear` with `drainedOnly:false` now requires `confirm:true`, and reports `remainingPending`.
-- `alerts_drain`, `alerts_peek`, `alerts_config` and `alert_patterns` replies gain per-severity summaries, `warnings` and `nextSteps`, and errors carry concrete recovery steps.
+- Adds summaries, `warnings` and `nextSteps` to the alert tools.
+- **Breaking:** Requires `confirm:true` for `alerts_clear` with `drainedOnly:false`.
 
 ## [0.5.9] - 2026-05-22
 
-### Changed
-
-- `logs_tail` reports `severeCount`, filters in its summary, and warnings for rotation and no matches; `logs_clear` reports `clearedCount`.
+- Adds `severeCount`, filters and warnings to `logs_tail`, and `clearedCount` to `logs_clear`.
 
 ## [0.5.8] - 2026-05-22
 
-### Changed
-
-- `socket_list`, `socket_get` and `socket_clear` replies gain `summary`, `warnings` and `nextSteps`, and errors carry recovery steps.
+- Adds `summary`, `warnings` and `nextSteps` to the socket tools.
 
 ## [0.5.7] - 2026-05-22
 
-### Changed
-
-- `network_body`, `network_clear`, `network_diff`, `network_replay`, `network_detach` and `network_search` replies gain `summary`, `warnings` and `nextSteps`, and errors share one `{error, nextSteps}` shape.
-- `network_diff` omits unchanged `statusDiff`, `methodDiff` and `urlDiff` and rejects `idA == idB`.
-- `network_detach` reports the rows captured in the session it ended.
+- Adds `summary`, `warnings` and `nextSteps` to six network tools, with one error shape.
+- Changes `network_diff` to omit unchanged diffs and reject `idA == idB`.
+- Changes `network_detach` to report the rows captured in the session.
 
 ## [0.5.6] - 2026-05-22
 
-### Changed
-
-- `network_get` gains `summary`, capability-aware `nextSteps`, `warnings` and recovery steps on errors, and omits null fields.
-- **Breaking:** the lifecycle `events` array in `network_get` is now opt-in with `includeEvents:true` and capped at 50 entries.
+- Adds `summary`, `nextSteps` and `warnings` to `network_get`.
+- **Breaking:** Makes `events` in `network_get` opt-in with `includeEvents:true`.
 
 ## [0.5.5] - 2026-05-22
 
-### Changed
-
-- `network_list` gains `summary`, capability-aware `nextSteps` and `warnings`, and omits null fields per row.
+- Adds `summary`, `nextSteps` and `warnings` to `network_list`.
 
 ## [0.5.4] - 2026-05-22
 
-### Changed
-
-- `network_attach` gains `summary` and `warnings`, suggests only enabled tools, skips disabled capture paths, and its no-DTD-URI error asks the user for the URI.
-
-### Removed
-
-- `network_attach` no longer returns `httpProfilingEnabled`, `logStreamActive` or `capturesDbPath`.
+- Adds `summary` and `warnings` to `network_attach`, which now suggests only enabled tools.
+- Removes `httpProfilingEnabled`, `logStreamActive` and `capturesDbPath` from `network_attach`.
 
 ## [0.5.3] - 2026-05-22
 
-### Changed
-
-- `network_attach appNameContains` filters apps by name when DTD has several.
-- **Breaking:** `network_attach` while already attached now errors with `currentApp` and `liveSessionId`; pass `force:true` for the old behaviour.
-- `network_status attachIfOne` auto-attaches when exactly one app is visible, and attach errors carry `nextSteps`.
+- Adds `network_attach appNameContains` and `network_status attachIfOne`.
+- **Breaking:** Errors `network_attach` when already attached; `force:true` restores the old way.
 
 ## [0.5.2] - 2026-05-22
 
-### Fixed
-
-- `dart pub global activate` no longer fails with "Could not find bin/flutter_network_mcp.dart".
+- Fixes `dart pub global activate` failing with "Could not find bin/flutter_network_mcp.dart".
 
 ## [0.5.1] - 2026-05-22
 
-### Changed
-
-- `network_status` connects to DTD on the first call (`connectDtd:false` for passive checks), shows `dbPath` and `sessionCount`, and gives context-aware `nextSteps`.
-- `network_status` splits alert counts into `pendingCurrent`, `pendingTotal` and `critical`, and reports capabilities as `"all"` when every category is on.
+- Improves `network_status` with a first-call DTD connect, `dbPath` and context-aware `nextSteps`.
+- Changes `network_status` to split alert counts into `pendingCurrent` and `pendingTotal`.
 
 ## [0.5.0] - 2026-05-21
 
-### Added
-
-- Storage tools `session_delete` (cascade, dry-run), `bodies_purge`, `db_stats`, `db_vacuum` and `alerts_clear`.
-- `redacted_headers` extends the replay redaction set, and `alert_patterns` adds custom regex alert rules.
-- `FLUTTER_NETWORK_MCP_POLL_MS` (50 to 60000) and `FLUTTER_NETWORK_MCP_LOG_BUFFER` (50 to 10000) startup knobs.
-
-### Changed
-
-- `network_get` takes `headerTruncateBytes` (default 256) and `network_diff` takes `maxLineLength` (default 2000).
-- `network_replay` truncates the body by default (`bodyTruncateBytes`, default 4096) and uses the runtime redacted-header set.
-- `network_query` no longer collides with a user `LIMIT`, and returns BLOB and long string cells as size summaries.
-- `network_search` indexes more JSON content types.
+- Adds `session_delete`, `bodies_purge`, `db_stats`, `db_vacuum` and `alerts_clear`.
+- Adds `redacted_headers` and `alert_patterns` for custom redaction and alert rules.
+- Adds `FLUTTER_NETWORK_MCP_POLL_MS` and `FLUTTER_NETWORK_MCP_LOG_BUFFER` startup settings.
+- Adds `headerTruncateBytes` to `network_get` and `maxLineLength` to `network_diff`.
+- Improves `network_replay` and `network_query` with truncated bodies and size summaries.
 
 ## [0.4.0] - 2026-05-21
 
-### Added
-
-- `network_search` full-text search over URLs and bodies with BM25 ranking and highlighted snippets.
-- Live alerts: `alerts_drain`, `alerts_peek` and `alerts_config` with `http_5xx`, `http_4xx`, `http_error`, `http_slow`, `log_keyword` and `flutter_error` rules.
-- `--capabilities` allowlist and `--disable` denylist hide tools and capture paths by category.
-- `network_diff`, `network_replay` (curl with auth redaction), `session_note` and `ignored_hosts`.
-- Per-tool docs in `docs/tools/` and a `network_status` report of active capabilities and pending alerts.
-- `network_attach` times out after 5 seconds on a stale DTD with a clear error instead of hanging.
+- Adds `network_search`, full-text search over URLs and bodies.
+- Adds live alerts: `alerts_drain`, `alerts_peek` and `alerts_config`.
+- Adds `--capabilities` and `--disable` to hide tools and capture paths.
+- Adds `network_diff`, `network_replay`, `session_note` and `ignored_hosts`.
+- Fixes `network_attach` hanging on a stale DTD.
 
 ## [0.3.0] - 2026-05-21
 
-### Added
-
-- Captures persist in SQLite (`captures.db`, `--data-dir` to move it): HTTP with bodies, socket events and logs.
-- Read tools query the live VM, or the database after `session_open`.
-- `session_list`, `session_open`, `session_close` and `session_export` (HAR 1.2 or NDJSON).
-- `network_query` runs read-only `SELECT` queries with a 500-row cap.
+- Adds persistent captures in SQLite (`captures.db`) with HTTP bodies, sockets and logs.
+- Adds `session_list`, `session_open`, `session_close` and `session_export`.
+- Adds `network_query` for read-only `SELECT` queries.
 
 ## [0.2.0] - 2026-05-21
 
-### Added
-
-- `network_list` cursors and filters (`since`, `method[]`, `hostContains`, `statusMin`, `statusMax`, `limit`).
-- `network_get` truncates bodies (`bodyTruncateBytes`, default 4 KB), and `network_body` fetches byte ranges with `nextOffset` paging.
-- Socket tools `socket_list`, `socket_get` and `socket_clear`.
-- Log stream capture with `logs_tail` and `logs_clear`.
+- Adds `network_list` cursors and filters, and `network_body` byte-range paging.
+- Adds `socket_list`, `socket_get` and `socket_clear`.
+- Adds log capture with `logs_tail` and `logs_clear`.
 
 ## [0.1.0] - 2026-05-21
 
-### Added
-
-- Initial stdio MCP server with `network_status`, `network_attach`, `network_list`, `network_get` and `network_detach`.
+- Adds a stdio MCP server with `network_status`, `network_attach`, `network_list` and `network_get`.
