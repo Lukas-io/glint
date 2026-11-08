@@ -4,6 +4,7 @@ typedef TouchPoint = ({int x, int y, int ms});
 /// A straight drag from ([x1], [y1]) to ([x2], [y2]) over [durationMs] in frame-sized steps, then resting at the end for [holdMs] so the lift starts no fling.
 List<TouchPoint> dragPath(int x1, int y1, int x2, int y2, {required int durationMs, int holdMs = 0, int frameMs = 16}) {
   final steps = (durationMs / frameMs).ceil().clamp(2, 400);
+  final rests = holdMs > 0 ? (holdMs / frameMs).ceil().clamp(1, 400) : 0;
   return [
     (x: x1, y: y1, ms: 0),
     for (var i = 1; i <= steps; i++)
@@ -12,6 +13,6 @@ List<TouchPoint> dragPath(int x1, int y1, int x2, int y2, {required int duration
         y: (y1 + (y2 - y1) * i / steps).round(),
         ms: (durationMs * i / steps).round(),
       ),
-    for (var held = frameMs; held <= holdMs; held += frameMs) (x: x2, y: y2, ms: durationMs + held),
+    for (var i = 1; i <= rests; i++) (x: x2, y: y2, ms: durationMs + (holdMs * i / rests).round()),
   ];
 }

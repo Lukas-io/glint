@@ -75,7 +75,7 @@ class ScrollToFindTool extends GlintTool {
   Tool get definition => Tool(
         name: 'scroll_to_find',
         description:
-            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8 (cap 20, a larger value is clamped and the reply says so), amountFraction 0.6; progress every 10 s. It stops early when the list stops moving (end reached). When it stalls with a loading indicator showing it waits up to 4 s for rows to arrive before deciding it is at the end. Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen; detail says where it sat), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
+            'Scroll until a target is on screen, then return its glintId (tap:true also taps it, so it must also be hittable). Match targetGlintId (exact id) or targetTextContent (substring of any text), not both. direction default down, maxScrolls 8 (cap 50, a larger value is clamped and the reply says so), amountFraction 0.6; progress every 10 s. It stops early when the list stops moving (end reached). When it stalls with a loading indicator showing it waits up to 4 s for rows to arrive before deciding it is at the end. Swipes the nearest scrollable around the target on that axis, and stops if the route or an outer PageView page changes. errorKind: targetNotFound (never appeared), scrollLimitReached (appeared, never on screen; detail says where it sat), notHittable (tap:true, on screen but covered), unresolvedTarget (inside a modal, not scrollable content), scrollSideEffect (route or outer page changed), flutterModeRequired (device mode).',
         inputSchema: ObjectSchema(
           properties: {
             'targetGlintId': Schema.string(
@@ -106,7 +106,7 @@ class ScrollToFindTool extends GlintTool {
         ),
       );
 
-  static const _maxScrollsCap = 20;
+  static const _maxScrollsCap = 50;
   static const _maxDuration = Duration(seconds: 90);
   static const _stallsForEnd = 2;
   static const _restSamples = 3;
