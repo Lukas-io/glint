@@ -66,6 +66,7 @@ It works by reading the **live state of your running app** (via the Dart VM serv
 - **Shows its touches**: `attach showTouches:true` draws each tap, swipe and drag on the app, so people watching the simulator or a recording can follow along.
 - **Scrolls to find**: virtualized lists only build what's near the viewport — glint will scroll to bring an off-screen item into the tree as a first-class action.
 - **Location and maps**: `location` sets the GPS position or plays a route in the background (points, GPX, KML or a polyline), sets or answers location permissions, and waits for arrival. `get_scene` reads a Google map's camera, markers, routes and areas, with the screen point of each marker, and `map` taps markers, pans and zooms like a finger.
+- **Camera flows** (selfie, liveness, document scan): on an Android emulator, `media op:camera` shows an image, a video or a test card to both cameras, and `attach camera:"webcam"` boots an AVD with the Mac camera as its front camera. The iOS simulator has no camera at all and Apple offers no way to give it one, so run camera flows on an Android emulator (or a real phone); on iOS, `media op:seed` a photo and pick it from the gallery instead.
 
 ## Two devices at once (rider and driver)
 
